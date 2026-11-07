@@ -1,0 +1,93 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>`extends` — מחלקה שמרחיבה מחלקה אחרת.</li>
+      <li>סוגי שגיאות משלך — השימוש הכי נפוץ בירושה ב־Backend.</li>
+      <li>"העדף הרכבה על ירושה" — ולמה.</li>
+    </ul>
+  </div>
+
+  <h2>1. שגיאות משלך</h2>
+```ts run
+class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class NotFoundError extends AppError {
+  constructor(entity: string, id: number | string) {
+    super(`${entity} ${id} לא נמצא`, 404, "NOT_FOUND");
+  }
+}
+
+class ValidationError extends AppError {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message, 400, "VALIDATION");
+    this.field = field;
+  }
+}
+
+function handle(err: unknown): string {
+  if (err instanceof ValidationError) {
+    return `400 — ${err.field}: ${err.message}`;
+  }
+  if (err instanceof AppError) {
+    return `${err.status} — ${err.message}`;
+  }
+  return "500 — שגיאה פנימית";
+}
+
+console.log(handle(new NotFoundError("הזמנה", 77)));
+console.log(handle(new ValidationError("email", "אימייל לא תקין")));
+console.log(handle(new TypeError("x is undefined")));
+```
+```out
+404 — הזמנה 77 לא נמצא
+400 — email: אימייל לא תקין
+500 — שגיאה פנימית
+```
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td>`class AppError extends Error`</td><td>AppError "היא" Error — עם כל מה שיש ל־Error (message, stack), ועוד</td></tr>
+    <tr><td>`super(message)`</td><td>קריאה ל־constructor של מחלקת האב. <strong>חובה</strong> לפני כל שימוש ב־`this`</td></tr>
+    <tr><td>`this.name = new.target.name`</td><td>שם המחלקה בפועל ("NotFoundError"), כך שהוא מופיע ב־stack trace</td></tr>
+    <tr><td>`err instanceof ValidationError`</td><td>בודק אם השגיאה נוצרה מהמחלקה הזו (או ממחלקה שיורשת ממנה). גם מצמצם טיפוס ב־TypeScript</td></tr>
+  </table></div>
+  <p>זה בדיוק `toHttpResponse` מפרק 8 — אבל במקום לבדוק שדות, כל סוג שגיאה "יודע" את ה־status שלו. NestJS מגיע עם מחלקות כאלה מוכנות (`NotFoundException`, `BadRequestException`).</p>
+  <p>שים לב לסדר ב־`handle`: הבדיקה הספציפית (`ValidationError`) לפני הכללית (`AppError`), כי כל ValidationError היא גם AppError — בדיוק כמו בסדר של `else if` בפרק 3.</p>
+
+  <h2>2. ירושה: כלי חזק, להשתמש בזהירות</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="ירושה מול הרכבה">
+      <g style="stroke-width:2">
+        <rect x="390" y="20" width="310" height="160" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="20" width="350" height="160" rx="12" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <text x="545" y="50" text-anchor="middle" direction="rtl" style="font-size:16px;font-weight:700">הרכבה: "יש לו"</text>
+      <text x="195" y="50" text-anchor="middle" direction="rtl" style="font-size:16px;font-weight:700">ירושה: "הוא סוג של"</text>
+      <g class="mono" style="font-size:13px">
+        <text x="410" y="85">class OrderService {</text>
+        <text x="430" y="107">repo: OrderRepository</text>
+        <text x="430" y="129">payments: PaymentGateway</text>
+        <text x="410" y="151">}</text>
+        <text x="40" y="85">NotFoundError extends AppError</text>
+        <text x="40" y="107">AppError extends Error</text>
+      </g>
+      <text x="195" y="150" text-anchor="middle" direction="rtl" style="font-size:13px">מתאים כשהקשר באמת "סוג של"</text>
+      <text x="545" y="172" text-anchor="middle" direction="rtl" style="font-size:13px">ברירת המחדל לשירותים</text>
+    </svg>
+    <figcaption>איור 1: ירושה — "NotFoundError היא סוג של AppError". הרכבה — "OrderService משתמש ב־repository ובשער תשלומים".</figcaption>
+  </figure>
+  <p>הבעיה עם ירושה עמוקה (`AdminUser extends PremiumUser extends User`): שינוי במחלקת אב שובר את כל הילדים, וקשה לדעת מאיפה מגיעה כל התנהגות. הכלל המקובל: <strong>"העדף הרכבה על ירושה"</strong>. ירושה — בעיקר להיררכיות קטנות ויציבות, כמו שגיאות. כל השאר — אובייקט שמחזיק אובייקטים אחרים (שיעור 3).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P12-E03">E03</a> · <a href="exercises.html#P12-E09">E09</a> · <a href="exercises.html#P12-E10">E10</a> · <a href="exercises.html#P12-E14">E14</a> · <a href="exercises.html#P12-E21">E21</a></p>
+  </div>

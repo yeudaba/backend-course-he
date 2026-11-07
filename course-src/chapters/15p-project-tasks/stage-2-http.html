@@ -1,0 +1,37 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>לחבר את הלב ל־HTTP: `errors.ts`, `validate.ts`, `tasks.routes.ts` ו־`app.ts`. בסוף: `npm run check PR2-API -- --dir ~/dev/tasks-api` עובר, והשרת עונה ל־`requests.http`.</p>
+  </div>
+
+  <h2>1. `errors.ts`</h2>
+  <p>כמו P15-E10, עם תוספת אחת: אם ל־`HttpError` יש `details` — הם נכנסים לתשובה: `{ error: { code, message, details } }`. בלי details — בלי השדה (לא `details: undefined`).</p>
+
+  <h2>2. `middleware/validate.ts`</h2>
+  <p>כמו P15-E15, בהבדל אחד: בכישלון לא עונים ישירות אלא <strong>זורקים</strong> `new HttpError(400, "VALIDATION_ERROR", "קלט לא תקין", details)`. כך יש מקום אחד בלבד (errorHandler) שבונה תשובות שגיאה. ה־paths: `"body.title"`, `"query.limit"`, `"params.id"`.</p>
+
+  <h2>3. `tasks.routes.ts`</h2>
+```ts
+router.get("/:id", validate({ params: idParamsSchema }), async (req, res) => {
+  res.json(await service.get(res.locals.params.id));
+});
+```
+  <p>כל route ככה: validate ← קריאה ל־service ← status. בלי try/catch (Express 5 מעביר שגיאות async ל־errorHandler). ממש את כל ששת ה־routes מהטבלה בשלב 0; ל־`GET /` ול־`/stats` — חיבור ל־`service.list` / `service.stats` (את המימוש שלהם תכתוב בשלב 3; עד אז הם יחזירו 500, וזה בסדר).</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ סדר</span>
+    <p>`router.get("/stats")` חייב להיות <strong>לפני</strong> `router.get("/:id")`. אחרת "stats" ייתפס כ־id, ו־idParamsSchema יחזיר 400. (זוכר את P15-E01?)</p>
+  </div>
+
+  <h2>4. `app.ts`</h2>
+  <p>הסדר: `express.json()` ← `logger(log)` (רק אם קיבלת `log`) ← `GET /health` ← `app.use("/tasks", createTasksRouter(new TasksService(repository, now)))` ← `notFound` ← `errorHandler`.</p>
+  <p>ה־repository וה־now מגיעים מבחוץ, עם ברירות מחדל. הבדיקות מעבירות שעון קבוע; `server.ts` מעביר `log: console.log`; ובפרק 19 תעביר repository של PostgreSQL.</p>
+
+  <h2>5. בדיקה ידנית ואוטומטית</h2>
+  <ol class="steps">
+    <li>`npm run dev`, ופתח את `requests.http`. שלח כל בקשה לפי הסדר, וודא שמה שחוזר הגיוני — כולל הבקשה האחרונה (שגיאת ולידציה): האם ה־details עוזרים להבין מה לתקן?</li>
+    <li>שים לב לשורות הלוג ב־Terminal של השרת: `POST /tasks 201 3ms`.</li>
+    <li>`npm run check PR2-API -- --dir ~/dev/tasks-api`.</li>
+    <li>commit: "Add HTTP layer with validation and error handling".</li>
+  </ol>
+  <details><summary>💡 רמז: PR2-API נכשל על "repository מוזרק ולוג"</summary>
+    <p>הבדיקה מעבירה `log` ומצפה לשורה `GET /health 200 3ms`. ודא ש־`app.use(logger(log))` נמצא <em>לפני</em> `GET /health` (middleware שנרשם אחרי route לא רץ על בקשות שה־route ענה להן).</p>
+  </details>

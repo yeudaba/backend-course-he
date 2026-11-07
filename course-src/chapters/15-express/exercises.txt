@@ -1,0 +1,1277 @@
+@@ P15-E01 | 1 | איזה route יענה? | 10 | שיעור 1
+@task
+<p>האפליקציה:</p>
+```ts
+app.get("/products", A);
+app.get("/products/new", B);
+app.get("/products/:id", C);
+app.post("/products", D);
+app.get("/products/:id/reviews", E);
+```
+<p>מי יטפל בכל בקשה, ומה יהיו <code>req.params</code> ו־<code>req.query</code>? (1) <code>GET /products?sort=price</code> (2) <code>GET /products/new</code> (3) <code>GET /products/42</code> (4) <code>POST /products/42</code> (5) <code>GET /products/42/reviews?page=2</code> (6) <code>GET /products/42/reviews/7</code>. ומה ישתנה ב־(2) אם נחליף את הסדר של B ו־C?</p>
+@hint1
+<p>Express בודק לפי סדר הרישום, והראשון שמתאים — מנצח.</p>
+@hint2
+<p>query לא משפיע על ההתאמה.</p>
+@solution
+<ol><li>A; params <code>{}</code>; query <code>{ sort: "price" }</code></li><li>B; <code>{}</code></li><li>C; <code>{ id: "42" }</code> (מחרוזת!)</li><li>אף אחד — 404 (אין <code>POST /products/:id</code>)</li><li>E; <code>{ id: "42" }</code>; <code>{ page: "2" }</code></li><li>אף אחד — 404 (מספר החלקים לא מתאים)</li></ol>
+<p>אם C לפני B: <code>/products/new</code> יגיע ל־C עם <code>id: "new"</code>. לכן כתובות קבועות לפני כתובות עם פרמטרים.</p>
+@mistakes
+<ul><li>לחשוב ש־<code>req.params.id</code> הוא מספר — תמיד מחרוזת.</li></ul>
+
+@@ P15-E02 | 1 | מאפיון ל־routes | 10 | שיעור 1
+@task
+<p>כתוב את שורות ה־route (רק <code>router.METHOD("path", ...)</code>) ל־API של ספרייה, כש־router מחובר ב־<code>app.use("/books", router)</code>:</p>
+<ol><li>רשימת ספרים, עם סינון לפי מחבר.</li><li>ספר אחד.</li><li>הוספת ספר.</li><li>שינוי רק של מספר העותקים.</li><li>מחיקת ספר.</li><li>השאלת ספר (פעולה, לא CRUD).</li><li>כל ההשאלות של ספר.</li></ol>
+@hint1
+<p>בתוך router, ה־path יחסי לקידומת.</p>
+@hint2
+<p>סינון — ב־query, לא בכתובת.</p>
+@solution
+```ts
+router.get("/", list);                 // GET /books?author=עגנון
+router.get("/:id", getOne);            // GET /books/7
+router.post("/", create);              // POST /books
+router.patch("/:id", update);          // PATCH /books/7  { "copies": 3 }
+router.delete("/:id", remove);         // DELETE /books/7
+router.post("/:id/loans", lend);       // POST /books/7/loans  — יוצר השאלה
+router.get("/:id/loans", listLoans);   // GET /books/7/loans
+```
+<p>השאלה כ־<code>POST /books/7/loans</code>: "יוצרים משאב השאלה תחת הספר". גם <code>POST /books/7/lend</code> מקובל.</p>
+@mistakes
+<ul><li><code>router.get("/books/:id")</code> בתוך router שכבר מחובר ל־<code>/books</code> ← הכתובת האמיתית תהיה <code>/books/books/7</code>.</li></ul>
+
+@@ P15-E03 | 1 | מה הלקוח מקבל? | 10 | שיעור 1
+@task
+<p>לכל handler — איזה status, איזה Content-Type ואיזה גוף יקבל הלקוח?</p>
+```ts
+(req, res) => { res.json({ ok: true }); }                         // 1
+(req, res) => { res.status(201).json({ id: 5 }); }                // 2
+(req, res) => { res.sendStatus(204); }                            // 3
+(req, res) => { res.send("שלום"); }                               // 4
+(req, res) => { res.status(404); }                                // 5
+(req, res) => { res.json(null); }                                 // 6
+```
+@hint1
+<p>אחת מהן לא מסיימת את התשובה.</p>
+@hint2
+<p><code>res.send</code> עם מחרוזת שולח HTML.</p>
+@solution
+<ol><li>200, <code>application/json</code>, <code>{"ok":true}</code></li><li>201, JSON, <code>{"id":5}</code></li><li>204, בלי Content-Type, בלי גוף</li><li>200, <code>text/html; charset=utf-8</code>, <code>שלום</code></li><li><strong>שום דבר</strong> — <code>status</code> רק קובע מספר, לא שולח. הבקשה נתקעת עד timeout.</li><li>200, JSON, <code>null</code> — תקין, אבל ל"לא נמצא" עדיף 404.</li></ol>
+@mistakes
+<ul><li>(5) הוא באג נפוץ מאוד אחרי שינויים בקוד: מישהו מחק את ה־<code>.json(...)</code>.</li></ul>
+
+@@ P15-E04 | 1 | סדר middleware | 10 | שיעור 2
+@task
+<p>מה יודפס, ומה יקבל הלקוח, לבקשה <code>GET /admin/stats</code>? ואחר כך ל־<code>GET /public</code>?</p>
+```ts
+app.use((req, res, next) => { console.log("A"); next(); });
+app.get("/public", (req, res) => { console.log("B"); res.json("public"); });
+app.use("/admin", (req, res, next) => {
+  console.log("C");
+  if (req.get("x-admin") !== "yes") { res.status(403).json("אסור"); return; }
+  next();
+});
+app.get("/admin/stats", (req, res) => { console.log("D"); res.json("stats"); });
+app.use((req, res) => { console.log("E"); res.status(404).json("לא נמצא"); });
+```
+@hint1
+<p><code>app.use("/admin", fn)</code> רץ על כל כתובת שמתחילה ב־<code>/admin</code>.</p>
+@hint2
+<p>ה־header לא נשלח בבקשה.</p>
+@solution
+<p><code>GET /admin/stats</code> (בלי header): מודפס <code>A</code>, <code>C</code>; הלקוח מקבל 403 <code>"אסור"</code>. D ו־E לא רצים. עם <code>x-admin: yes</code>: <code>A C D</code>, 200 <code>"stats"</code>.</p>
+<p><code>GET /public</code>: <code>A B</code>; 200. ה־middleware של admin לא רץ — הוא רשום אחרי, וגם לא מתאים לכתובת.</p>
+@mistakes
+<ul><li>לחשוב ש־middleware שנרשם אחרי route "עוטף" אותו — לא; הוא רץ רק אם בקשה מגיעה אליו.</li></ul>
+
+@@ P15-E05 | 1 | לתקן API לא־REST | 10 | שיעור 3
+@task
+<p>תכנן מחדש לפי REST (method, כתובת, status בהצלחה):</p>
+<ol><li><code>GET /getUserById?id=5</code></li><li><code>POST /users/5/delete</code></li><li><code>GET /createOrder?product=7&amp;qty=2</code></li><li><code>POST /updateUserEmail</code> עם <code>{ "id": 5, "email": "..." }</code></li><li><code>GET /orders/all/byUser/5</code></li><li><code>GET /searchProducts/cheap</code></li></ol>
+@hint1
+<p>שמות עצם ברבים; הפעולה ב־method.</p>
+@hint2
+<p>"זול" הוא סינון — query.</p>
+@solution
+<ol><li><code>GET /users/5</code> ← 200</li><li><code>DELETE /users/5</code> ← 204</li><li><code>POST /orders</code> עם גוף <code>{ "productId": 7, "quantity": 2 }</code> ← 201. GET שיוצר הזמנה — מסוכן (דפדפן יכול לשלוח שוב, סורק יכול "ללחוץ").</li><li><code>PATCH /users/5</code> עם <code>{ "email": "..." }</code> ← 200</li><li><code>GET /users/5/orders</code> (או <code>GET /orders?userId=5</code>) ← 200</li><li><code>GET /products?maxPrice=50&amp;sort=price</code> ← 200</li></ol>
+@mistakes
+<ul><li>להשאיר id בגוף ב־PATCH — המשאב מזוהה בכתובת.</li></ul>
+
+@@ P15-E06 | 2 | שלום Express 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>15-express/starter/P15-E06.ts</code> השלם <code>createApp()</code> שמחזירה אפליקציית Express:</p>
+<ul><li><code>GET /hello</code> ← <code>{ "message": "שלום אורח" }</code>; עם <code>?name=דנה</code> ← <code>"שלום דנה"</code>.</li><li><code>GET /add/:a/:b</code> ← <code>{ "sum": a + b }</code> (כמספרים). אם אחד מהם לא מספר ← 400 <code>{ "error": "a ו־b חייבים להיות מספרים" }</code>.</li></ul>
+@hint1
+<p><code>req.query.name</code> יכול להיות <code>undefined</code> (או מערך, אם נשלח פעמיים). <code>typeof req.query.name === "string"</code>.</p>
+@hint2
+<p><code>Number.isFinite(Number(x))</code> — ושים לב ש־<code>Number("")</code> הוא 0.</p>
+@solution
+```ts save=solutions/P15-E06.ts
+// P15-E06
+import express from "express";
+
+export function createApp() {
+  const app = express();
+
+  app.get("/hello", (req, res) => {
+    const name = typeof req.query.name === "string" && req.query.name !== "" ? req.query.name : "אורח";
+    res.json({ message: `שלום ${name}` });
+  });
+
+  app.get("/add/:a/:b", (req, res) => {
+    const a = Number(req.params.a);
+    const b = Number(req.params.b);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) {
+      res.status(400).json({ error: "a ו־b חייבים להיות מספרים" });
+      return;
+    }
+    res.json({ sum: a + b });
+  });
+
+  return app;
+}
+```
+<p>להרצה ידנית: <code>node -e "import('./15-express/solutions/P15-E06.ts').then(m =&gt; m.createApp().listen(3000))"</code>, או קובץ <code>server.ts</code> קטן כמו בשיעור 1.</p>
+@mistakes
+<ul><li><code>req.params.a + req.params.b</code> ← <code>"23"</code> במקום 5.</li></ul>
+
+@@ P15-E07 | 2 | קריאת מוצרים 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>15-express/starter/P15-E07.ts</code> השלם <code>createApp(products)</code> (המוצרים מועברים מבחוץ):</p>
+<ul><li><code>GET /products</code> ← כל המוצרים; עם <code>?maxPrice=100</code> ← רק עד המחיר.</li><li><code>GET /products/:id</code> ← המוצר, או 404 <code>{ "error": { "code": "NOT_FOUND", "message": "המוצר לא נמצא" } }</code>.</li></ul>
+@hint1
+<p><code>products.find((p) =&gt; p.id === Number(req.params.id))</code></p>
+@hint2
+<p>maxPrice לא נשלח ← <code>req.query.maxPrice === undefined</code>.</p>
+@solution
+```ts save=solutions/P15-E07.ts
+// P15-E07
+import express from "express";
+
+export interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+export function createApp(products: Product[]) {
+  const app = express();
+
+  app.get("/products", (req, res) => {
+    const max = req.query.maxPrice;
+    res.json(typeof max === "string" ? products.filter((p) => p.price <= Number(max)) : products);
+  });
+
+  app.get("/products/:id", (req, res) => {
+    const product = products.find((p) => p.id === Number(req.params.id));
+    if (!product) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "המוצר לא נמצא" } });
+      return;
+    }
+    res.json(product);
+  });
+
+  return app;
+}
+```
+<p>(<code>?maxPrice=abc</code> כאן יחזיר רשימה ריקה — בתרגיל E14 נבדוק את ה־query כמו שצריך.)</p>
+@mistakes
+<ul><li><code>p.id === req.params.id</code> — מספר מול מחרוזת, תמיד 404.</li></ul>
+
+@@ P15-E08 | 2 | יצירה ומחיקה 🤖 | 20 | שיעור 1
+@task
+<p>בקובץ <code>15-express/starter/P15-E08.ts</code> השלם <code>createApp()</code> עם רשימת מוצרים בזיכרון (מתחילה ריקה, ids מ־1):</p>
+<ul><li><code>GET /products</code> ← הרשימה.</li><li><code>POST /products</code> <code>{ name, price }</code> ← 201, המוצר עם id, ו־<code>Location: /products/&lt;id&gt;</code>. <code>name</code> חייב להיות מחרוזת לא ריקה (אחרי trim) ו־<code>price</code> מספר חיובי, אחרת 400 <code>{ "error": "..." }</code>. JSON שבור ← 400 (רמז: error handler קטן).</li><li><code>DELETE /products/:id</code> ← 204, או 404.</li></ul>
+@hint1
+<p>אל תשכח <code>app.use(express.json())</code>. ואם הגוף לא נשלח בכלל — <code>req.body</code> הוא <code>undefined</code>.</p>
+@hint2
+<p>JSON שבור: <code>app.use((err, req, res, next) =&gt; ...)</code> בסוף, עם <code>err.type === "entity.parse.failed"</code>.</p>
+@solution
+```ts save=solutions/P15-E08.ts
+// P15-E08
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const products: { id: number; name: string; price: number }[] = [];
+  let nextId = 1;
+
+  app.get("/products", (req, res) => {
+    res.json(products);
+  });
+
+  app.post("/products", (req, res) => {
+    const { name, price } = req.body ?? {};
+    if (typeof name !== "string" || name.trim() === "" || typeof price !== "number" || !(price > 0)) {
+      res.status(400).json({ error: "name (מחרוזת) ו־price (מספר חיובי) חובה" });
+      return;
+    }
+    const product = { id: nextId++, name: name.trim(), price };
+    products.push(product);
+    res.status(201).location(`/products/${product.id}`).json(product);
+  });
+
+  app.delete("/products/:id", (req, res) => {
+    const index = products.findIndex((p) => p.id === Number(req.params.id));
+    if (index === -1) {
+      res.status(404).json({ error: "המוצר לא נמצא" });
+      return;
+    }
+    products.splice(index, 1);
+    res.sendStatus(204);
+  });
+
+  app.use((err: { type?: string }, req: Request, res: Response, next: NextFunction) => {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "JSON לא תקין" });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}
+```
+<p>שים לב: ה־products וה־nextId נוצרים <em>בתוך</em> <code>createApp</code>, כך שכל אפליקציה (וכל בדיקה) מתחילה נקייה. משתנה ברמת הקובץ היה משותף לכולם.</p>
+@mistakes
+<ul><li><code>!price</code> כבדיקה — מחרוזת <code>"5"</code> עוברת, ו־0 נדחה מסיבה לא ברורה. בדוק טיפוס במפורש.</li></ul>
+
+@@ P15-E09 | 2 | middleware לוג 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>15-express/starter/P15-E09.ts</code> השלם <code>createLogger(write)</code> שמחזירה middleware. אחרי שכל תשובה נשלחה, הוא קורא ל־<code>write</code> עם שורה:</p>
+<pre class="terminal">GET /products?page=2 200 3ms</pre>
+<p>method, הכתובת המלאה (כולל query — <code>req.originalUrl</code>), status, ומשך במילישניות שלמות. (הבדיקה מעבירה <code>write</code> משלה במקום <code>console.log</code> — זו הזרקת תלות.)</p>
+@hint1
+<p><code>res.on("finish", () =&gt; ...)</code></p>
+@hint2
+<p><code>Math.round(performance.now() - start)</code></p>
+@solution
+```ts save=solutions/P15-E09.ts
+// P15-E09
+import type { Request, Response, NextFunction } from "express";
+
+export function createLogger(write: (line: string) => void = console.log) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const start = performance.now();
+    res.on("finish", () => {
+      write(`${req.method} ${req.originalUrl} ${res.statusCode} ${Math.round(performance.now() - start)}ms`);
+    });
+    next();
+  };
+}
+```
+@mistakes
+<ul><li>לכתוב את השורה לפני <code>next()</code> — ה־status עוד 200 תמיד, והזמן תמיד 0.</li><li><code>req.path</code> במקום <code>req.originalUrl</code> — בתוך router הוא רק החלק היחסי, ובלי query.</li></ul>
+
+@@ P15-E10 | 2 | שגיאות במקום אחד 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>15-express/starter/P15-E10.ts</code> (המחלקה <code>HttpError</code> כתובה) השלם:</p>
+<ul><li><code>notFound</code> ← 404 <code>{ error: { code: "NOT_FOUND", message: `אין כתובת ${method} ${path}` } }</code>.</li><li><code>errorHandler</code>: <code>HttpError</code> ← ה־status שלה עם <code>{ error: { code, message } }</code>; JSON שבור ← 400 <code>INVALID_JSON</code> / <code>"JSON לא תקין"</code>; כל השאר ← 500 <code>INTERNAL</code> / <code>"שגיאה פנימית"</code>, וקריאה ל־<code>console.error(err)</code>.</li></ul>
+<p>הבדיקה בונה אפליקציה עם routes שזורקים (גם async), ומחברת את שתי הפונקציות שלך בסוף.</p>
+@hint1
+<p>error handler — חייב 4 פרמטרים.</p>
+@hint2
+<p><code>err instanceof HttpError</code></p>
+@solution
+```ts save=solutions/P15-E10.ts
+// P15-E10
+import type { Request, Response, NextFunction } from "express";
+
+export class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function notFound(req: Request, res: Response) {
+  res.status(404).json({ error: { code: "NOT_FOUND", message: `אין כתובת ${req.method} ${req.path}` } });
+}
+
+export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
+  if (err instanceof HttpError) {
+    res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return;
+  }
+  if (typeof err === "object" && err !== null && "type" in err && err.type === "entity.parse.failed") {
+    res.status(400).json({ error: { code: "INVALID_JSON", message: "JSON לא תקין" } });
+    return;
+  }
+  console.error(err);
+  res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+}
+```
+@mistakes
+<ul><li><code>res.status(500).json({ error: err.message })</code> — חושף פרטים פנימיים ללקוח.</li></ul>
+
+@@ P15-E11 | 2 | סכמת מוצר 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E11.ts</code> השלם:</p>
+<ul><li><code>productSchema</code>: <code>name</code> — מחרוזת, אחרי trim 2–80 תווים; <code>price</code> — מספר חיובי עד 100,000; <code>tags</code> — מערך מחרוזות, עד 5, ברירת מחדל <code>[]</code>; <code>inStock</code> — boolean, ברירת מחדל <code>true</code>.</li><li><code>parseProduct(input)</code> ← <code>{ ok: true, data }</code> או <code>{ ok: false, errors: [{ path, message }] }</code> (<code>path</code> כמחרוזת: <code>"tags.2"</code>).</li><li>הטיפוס <code>Product</code> — מ־<code>z.infer</code>.</li></ul>
+@hint1
+<p><code>z.array(z.string()).max(5).default([])</code></p>
+@hint2
+<p><code>issue.path.join(".")</code></p>
+@solution
+```ts run save=solutions/P15-E11.ts
+// P15-E11
+import { z } from "zod";
+
+export const productSchema = z.object({
+  name: z.string().trim().min(2, "לפחות 2 תווים").max(80, "עד 80 תווים"),
+  price: z.number().positive("חייב להיות חיובי").max(100_000, "יקר מדי"),
+  tags: z.array(z.string()).max(5, "עד 5 תגיות").default([]),
+  inStock: z.boolean().default(true),
+});
+
+export type Product = z.infer<typeof productSchema>;
+
+export function parseProduct(input: unknown) {
+  const result = productSchema.safeParse(input);
+  if (result.success) return { ok: true as const, data: result.data };
+  return {
+    ok: false as const,
+    errors: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+  };
+}
+
+console.log(JSON.stringify(parseProduct({ name: " מסך ", price: 899 })));
+console.log(JSON.stringify(parseProduct({ name: "x", price: -1, tags: ["a", "b", 3] })));
+```
+```out
+{"ok":true,"data":{"name":"מסך","price":899,"tags":[],"inStock":true}}
+{"ok":false,"errors":[{"path":"name","message":"לפחות 2 תווים"},{"path":"price","message":"חייב להיות חיובי"},{"path":"tags.2","message":"Invalid input: expected string, received number"}]}
+```
+<p><code>as const</code> גורם ל־<code>ok</code> להיות הטיפוס <code>true</code>/<code>false</code> (ולא <code>boolean</code>), כך ש־TypeScript יודע: אחרי <code>if (r.ok)</code> יש <code>data</code> (פרק 11 — discriminated union).</p>
+@mistakes
+<ul><li><code>.default([])</code> לפני <code>.max(5)</code> — סדר השרשור משנה. כתוב קודם את הבדיקות, ובסוף default.</li></ul>
+
+@@ P15-E12 | 2 | סכמת query 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E12.ts</code> השלם <code>listQuerySchema</code> ל־query של רשימה (כל הערכים מגיעים כמחרוזות):</p>
+<ul><li><code>page</code> — שלם ≥ 1, ברירת מחדל 1.</li><li><code>limit</code> — שלם 1–50, ברירת מחדל 10.</li><li><code>sort</code> — אחד מ־<code>"price"</code>, <code>"-price"</code>, <code>"name"</code>, <code>"-name"</code>, לא חובה.</li><li><code>inStock</code> — <code>"true"</code> או <code>"false"</code> ← boolean, לא חובה. <strong>לא</strong> <code>z.coerce.boolean()</code> (נסה ותראה למה).</li></ul>
+@hint1
+<p><code>z.coerce.boolean()</code> הופך כל מחרוזת לא ריקה ל־true — גם <code>"false"</code>.</p>
+@hint2
+<p><code>z.enum(["true", "false"]).transform((v) =&gt; v === "true")</code></p>
+@solution
+```ts run save=solutions/P15-E12.ts
+// P15-E12
+import { z } from "zod";
+
+export const listQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+  sort: z.enum(["price", "-price", "name", "-name"]).optional(),
+  inStock: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+});
+
+export type ListQuery = z.infer<typeof listQuerySchema>;
+
+console.log(JSON.stringify(listQuerySchema.parse({ page: "3", inStock: "false" })));
+console.log(z.coerce.boolean().parse("false"));
+```
+```out
+{"page":3,"limit":10,"inStock":false}
+true
+```
+@mistakes
+<ul><li><code>z.number()</code> בלי coerce — כל query ייכשל, כי <code>"3"</code> הוא מחרוזת.</li></ul>
+
+@@ P15-E13 | 3 | רשימה עם pagination 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>15-express/starter/P15-E13.ts</code> השלם:</p>
+<ul><li><code>paginate(items, page, limit)</code> ← <code>{ data, meta: { page, limit, total, totalPages } }</code>. רשימה ריקה ← <code>totalPages: 0</code>.</li><li><code>createApp(products)</code> עם <code>GET /products?page&amp;limit</code>: page ≥ 1 (ברירת מחדל 1), limit 1–50 (ברירת מחדל 10) — עם Zod. query לא תקין ← 400 <code>{ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details: [{ path, message }] } }</code>. עמוד מעבר לסוף ← 200 עם <code>data: []</code>.</li></ul>
+@hint1
+<p><code>Math.ceil(total / limit)</code></p>
+@hint2
+<p><code>schema.safeParse(req.query)</code></p>
+@solution
+```ts save=solutions/P15-E13.ts
+// P15-E13
+import express from "express";
+import { z } from "zod";
+
+export function paginate<T>(items: T[], page: number, limit: number) {
+  const start = (page - 1) * limit;
+  return {
+    data: items.slice(start, start + limit),
+    meta: { page, limit, total: items.length, totalPages: Math.ceil(items.length / limit) },
+  };
+}
+
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export function createApp(products: unknown[]) {
+  const app = express();
+  app.get("/products", (req, res) => {
+    const q = querySchema.safeParse(req.query);
+    if (!q.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "קלט לא תקין",
+          details: q.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+        },
+      });
+      return;
+    }
+    res.json(paginate(products, q.data.page, q.data.limit));
+  });
+  return app;
+}
+```
+@mistakes
+<ul><li>להחזיר 404 לעמוד ריק — העמוד "קיים", פשוט אין בו פריטים. הלקוח רואה <code>totalPages</code> ויודע לעצור.</li></ul>
+
+@@ P15-E14 | 3 | סינון ומיון 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E14.ts</code> השלם <code>createApp(products)</code> עם <code>GET /products</code> שמקבל:</p>
+<ul><li><code>q</code> — חיפוש בשם, בלי תלות באותיות גדולות/קטנות.</li><li><code>minPrice</code>, <code>maxPrice</code> — מספרים ≥ 0. אם שניהם נשלחו ו־min &gt; max ← 400 (עם <code>path: "minPrice"</code>).</li><li><code>sort</code> — <code>price</code>, <code>-price</code>, <code>name</code>, <code>-name</code>. בלי sort ← לפי id.</li></ul>
+<p>query לא תקין ← 400 במבנה של E13. התשובה: מערך (בלי pagination). <strong>אל תשנה</strong> את המערך שהתקבל.</p>
+@hint1
+<p><code>.refine((q) =&gt; ..., { message: "...", path: ["minPrice"] })</code> על כל האובייקט.</p>
+@hint2
+<p>מיון: <code>[...list].sort(...)</code>. לשמות: <code>a.name.localeCompare(b.name)</code>.</p>
+@solution
+```ts save=solutions/P15-E14.ts
+// P15-E14
+import express from "express";
+import { z } from "zod";
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+const querySchema = z
+  .object({
+    q: z.string().trim().optional(),
+    minPrice: z.coerce.number().min(0).optional(),
+    maxPrice: z.coerce.number().min(0).optional(),
+    sort: z.enum(["price", "-price", "name", "-name"]).optional(),
+  })
+  .refine((q) => q.minPrice === undefined || q.maxPrice === undefined || q.minPrice <= q.maxPrice, {
+    message: "minPrice גדול מ־maxPrice",
+    path: ["minPrice"],
+  });
+
+const comparators = {
+  price: (a: Product, b: Product) => a.price - b.price,
+  name: (a: Product, b: Product) => a.name.localeCompare(b.name),
+};
+
+export function createApp(products: Product[]) {
+  const app = express();
+  app.get("/products", (req, res) => {
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "קלט לא תקין",
+          details: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+        },
+      });
+      return;
+    }
+    const { q, minPrice, maxPrice, sort } = parsed.data;
+    let list = products.filter(
+      (p) =>
+        (!q || p.name.toLowerCase().includes(q.toLowerCase())) &&
+        (minPrice === undefined || p.price >= minPrice) &&
+        (maxPrice === undefined || p.price <= maxPrice)
+    );
+    if (sort) {
+      const desc = sort.startsWith("-");
+      const compare = comparators[desc ? (sort.slice(1) as "price" | "name") : (sort as "price" | "name")];
+      list = [...list].sort((a, b) => (desc ? -compare(a, b) : compare(a, b)));
+    } else {
+      list = [...list].sort((a, b) => a.id - b.id);
+    }
+    res.json(list);
+  });
+  return app;
+}
+```
+<p>מיון רק מרשימה סגורה (enum) הוא גם עניין של אבטחה: כשנעבור ל־SQL (פרק 16), שם עמודה שמגיע מהלקוח ישר לשאילתה הוא פרצה.</p>
+@mistakes
+<ul><li><code>products.sort(...)</code> — ממיין את המערך המקורי, והבקשה הבאה בלי sort תקבל אותו ממוין.</li></ul>
+
+@@ P15-E15 | 3 | middleware בדיקה כללי 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E15.ts</code> השלם <code>validate({ body?, query?, params? })</code> — מקבל סכמות Zod ומחזיר middleware:</p>
+<ul><li>בודק כל חלק שקיבל סכמה עבורו. נכשל ← 400 <code>{ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } }</code>, כאשר כל <code>path</code> מתחיל בשם החלק: <code>"body.title"</code>, <code>"query.page"</code>, <code>"params.id"</code>. כל השגיאות מכל החלקים — יחד.</li><li>הצליח: <code>req.body</code> ← הערך הנקי. query ו־params (שאי אפשר לדרוס ב־Express 5) ← <code>res.locals.query</code> ו־<code>res.locals.params</code>.</li></ul>
+@hint1
+<p>לולאה על <code>["body", "query", "params"]</code>, ולכל אחד <code>safeParse(req[part])</code>.</p>
+@hint2
+<p><code>[part, ...issue.path].join(".")</code></p>
+@solution
+```ts save=solutions/P15-E15.ts
+// P15-E15
+import type { Request, Response, NextFunction } from "express";
+import type { ZodType } from "zod";
+
+type Part = "body" | "query" | "params";
+
+export function validate(schemas: Partial<Record<Part, ZodType>>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const details: { path: string; message: string }[] = [];
+    const clean: Partial<Record<Part, unknown>> = {};
+    for (const part of ["body", "query", "params"] as const) {
+      const schema = schemas[part];
+      if (!schema) continue;
+      const result = schema.safeParse(req[part]);
+      if (result.success) clean[part] = result.data;
+      else for (const i of result.error.issues) details.push({ path: [part, ...i.path].join("."), message: i.message });
+    }
+    if (details.length > 0) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } });
+      return;
+    }
+    if ("body" in clean) req.body = clean.body;
+    if ("query" in clean) res.locals.query = clean.query;
+    if ("params" in clean) res.locals.params = clean.params;
+    next();
+  };
+}
+```
+<p>שימוש: <code>router.patch("/:id", validate({ params: idSchema, body: updateSchema }), handler)</code>. זה הדפוס שתראה בכל פרויקט Express רציני (ו־NestJS עושה את זה עם "pipes" — פרק 20).</p>
+@mistakes
+<ul><li>לעצור בשגיאה הראשונה — הלקוח מתקן שדה, שולח שוב, ומגלה עוד שגיאה. החזר הכול בבת אחת.</li></ul>
+
+@@ P15-E16 | 3 | Router ושכבות 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>15-express/starter/P15-E16.ts</code> כבר כתובים <code>InMemoryUsersRepository</code> ו־<code>HttpError</code>. השלם:</p>
+<ul><li><code>UsersService</code> (מקבל repository ב־constructor): <code>list()</code>, <code>get(id)</code> (לא קיים ← <code>HttpError(404, "USER_NOT_FOUND", ...)</code>), <code>create({ name, email })</code> (אימייל קיים — בלי תלות באותיות ← <code>HttpError(409, "EMAIL_TAKEN", ...)</code>), <code>remove(id)</code> (לא קיים ← 404).</li><li><code>createUsersRouter(service)</code>: <code>GET /</code>, <code>GET /:id</code>, <code>POST /</code> (201; בדיקה עם Zod: name 1–50, email תקין ← אחרת 400 VALIDATION_ERROR), <code>DELETE /:id</code> (204).</li><li><code>createApp(service?)</code>: router על <code>/users</code>, ו־error handler שמתרגם <code>HttpError</code> ל־<code>{ error: { code, message } }</code>.</li></ul>
+@hint1
+<p>ה־service לא מכיר את req/res — רק זורק <code>HttpError</code>. ה־router לא מכיר את המערך — רק קורא ל־service.</p>
+@hint2
+<p><code>constructor(repo: InMemoryUsersRepository) { this.repo = repo; }</code> — בלי <code>private repo</code> בפרמטר (Node לא תומך ב־TypeScript הזה בלי קומפילציה).</p>
+@solution
+```ts save=solutions/P15-E16.ts
+// P15-E16
+import express, { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+
+export class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export class InMemoryUsersRepository {
+  #users: User[] = [];
+  #nextId = 1;
+  findAll(): User[] {
+    return [...this.#users];
+  }
+  findById(id: number): User | undefined {
+    return this.#users.find((u) => u.id === id);
+  }
+  findByEmail(email: string): User | undefined {
+    return this.#users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  }
+  insert(data: Omit<User, "id">): User {
+    const user = { id: this.#nextId++, ...data };
+    this.#users.push(user);
+    return user;
+  }
+  delete(id: number): boolean {
+    const before = this.#users.length;
+    this.#users = this.#users.filter((u) => u.id !== id);
+    return this.#users.length < before;
+  }
+}
+
+export class UsersService {
+  repo: InMemoryUsersRepository;
+  constructor(repo: InMemoryUsersRepository) {
+    this.repo = repo;
+  }
+  list() {
+    return this.repo.findAll();
+  }
+  get(id: number) {
+    const user = this.repo.findById(id);
+    if (!user) throw new HttpError(404, "USER_NOT_FOUND", "המשתמש לא נמצא");
+    return user;
+  }
+  create(data: { name: string; email: string }) {
+    if (this.repo.findByEmail(data.email)) throw new HttpError(409, "EMAIL_TAKEN", "האימייל כבר רשום");
+    return this.repo.insert(data);
+  }
+  remove(id: number) {
+    if (!this.repo.delete(id)) throw new HttpError(404, "USER_NOT_FOUND", "המשתמש לא נמצא");
+  }
+}
+
+const createUserSchema = z.object({ name: z.string().trim().min(1).max(50), email: z.email() });
+
+export function createUsersRouter(service: UsersService) {
+  const router = Router();
+  router.get("/", (req, res) => {
+    res.json(service.list());
+  });
+  router.get("/:id", (req, res) => {
+    res.json(service.get(Number(req.params.id)));
+  });
+  router.post("/", (req, res) => {
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } });
+      return;
+    }
+    const user = service.create(parsed.data);
+    res.status(201).location(`/users/${user.id}`).json(user);
+  });
+  router.delete("/:id", (req, res) => {
+    service.remove(Number(req.params.id));
+    res.sendStatus(204);
+  });
+  return router;
+}
+
+export function createApp(service = new UsersService(new InMemoryUsersRepository())) {
+  const app = express();
+  app.use(express.json());
+  app.use("/users", createUsersRouter(service));
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof HttpError) {
+      res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      return;
+    }
+    next(err);
+  });
+  return app;
+}
+```
+<p>שים לב: <code>service.get</code> זורק, וה־route לא תופס — השגיאה "עולה" ל־error handler. בגלל זה ה־routes קצרים כל כך.</p>
+@mistakes
+<ul><li>לבדוק אימייל כפול ב־router במקום ב־service — אז כל ממשק אחר (CLI, תור) ידלג על החוק.</li></ul>
+
+@@ P15-E17 | 3 | PATCH נכון 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E17.ts</code> השלם <code>createApp()</code> עם משימות בזיכרון (שתי משימות התחלתיות כתובות בקובץ) ו־<code>PATCH /tasks/:id</code>:</p>
+<ul><li>שדות אפשריים: <code>title</code> (1–100 אחרי trim), <code>done</code> (boolean), <code>priority</code> (<code>low</code>/<code>medium</code>/<code>high</code>) — כולם לא חובה, אבל <strong>לפחות אחד</strong>.</li><li>שדה לא מוכר (<code>{"id": 99}</code>, <code>{"owner": "x"}</code>) ← 400, לא התעלמות.</li><li>id לא מספר שלם חיובי ← 400. משימה לא קיימת ← 404. הצלחה ← 200 עם המשימה המעודכנת.</li><li>400 במבנה VALIDATION_ERROR (כמו E13).</li></ul>
+@hint1
+<p><code>z.strictObject({...}).partial()</code></p>
+@hint2
+<p>"לפחות אחד": <code>.refine((o) =&gt; Object.keys(o).length &gt; 0, "צריך לפחות שדה אחד")</code>.</p>
+@solution
+```ts save=solutions/P15-E17.ts
+// P15-E17
+import express, { type Response } from "express";
+import { z } from "zod";
+
+const updateSchema = z
+  .strictObject({
+    title: z.string().trim().min(1).max(100),
+    done: z.boolean(),
+    priority: z.enum(["low", "medium", "high"]),
+  })
+  .partial()
+  .refine((o) => Object.keys(o).length > 0, "צריך לפחות שדה אחד");
+
+const idSchema = z.coerce.number().int().positive();
+
+function badRequest(res: Response, issues: z.core.$ZodIssue[]) {
+  const details = issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+  res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } });
+}
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const tasks = [
+    { id: 1, title: "לקנות חלב", done: false, priority: "medium" },
+    { id: 2, title: "לסיים את פרק 15", done: false, priority: "high" },
+  ];
+
+  app.patch("/tasks/:id", (req, res) => {
+    const id = idSchema.safeParse(req.params.id);
+    if (!id.success) return badRequest(res, id.error.issues);
+    const body = updateSchema.safeParse(req.body);
+    if (!body.success) return badRequest(res, body.error.issues);
+    const task = tasks.find((t) => t.id === id.data);
+    if (!task) {
+      res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "המשימה לא נמצאה" } });
+      return;
+    }
+    Object.assign(task, body.data);
+    res.json(task);
+  });
+
+  return app;
+}
+```
+<p>למה strict ב־PATCH? כי לקוח שכותב <code>{"titel": "..."}</code> (שגיאת כתיב) יקבל 200 ויחשוב שעדכן — כשבפועל כלום לא השתנה. 400 עם "Unrecognized key" חוסך לו שעה של דיבוג. ובבקשה <code>{"id": 99}</code> — זה גם מונע שינוי שדות מוגנים.</p>
+@mistakes
+<ul><li><code>Object.assign(task, req.body)</code> — מעתיק כל דבר שהלקוח שלח, כולל <code>id</code>.</li></ul>
+
+@@ P15-E18 | 3 | מפתח API 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>15-express/starter/P15-E18.ts</code> השלם <code>requireApiKey(keys)</code> — <code>keys</code> הוא <code>Map</code> ממפתח לשם לקוח. ה־middleware:</p>
+<ul><li>אין header <code>X-Api-Key</code> ← 401 <code>{ error: { code: "MISSING_API_KEY", ... } }</code>, ו־header <code>WWW-Authenticate: ApiKey</code>.</li><li>מפתח לא מוכר ← 403 <code>INVALID_API_KEY</code>.</li><li>תקין ← <code>res.locals.client = &lt;שם הלקוח&gt;</code> וממשיך.</li></ul>
+<p>והשלם <code>createApp(keys)</code>: <code>GET /public</code> פתוח לכולם (<code>{ "ok": true }</code>); כל מה שתחת <code>/api</code> מוגן; <code>GET /api/me</code> ← <code>{ "client": ... }</code>.</p>
+@hint1
+<p><code>app.use("/api", requireApiKey(keys))</code> לפני ה־routes של <code>/api</code>.</p>
+@hint2
+<p><code>req.get("x-api-key")</code></p>
+@solution
+```ts save=solutions/P15-E18.ts
+// P15-E18
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function requireApiKey(keys: Map<string, string>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = req.get("x-api-key");
+    if (!key) {
+      res.status(401).set("WWW-Authenticate", "ApiKey").json({ error: { code: "MISSING_API_KEY", message: "חסר X-Api-Key" } });
+      return;
+    }
+    const client = keys.get(key);
+    if (!client) {
+      res.status(403).json({ error: { code: "INVALID_API_KEY", message: "מפתח לא מוכר" } });
+      return;
+    }
+    res.locals.client = client;
+    next();
+  };
+}
+
+export function createApp(keys: Map<string, string>) {
+  const app = express();
+  app.get("/public", (req, res) => {
+    res.json({ ok: true });
+  });
+  app.use("/api", requireApiKey(keys));
+  app.get("/api/me", (req, res) => {
+    res.json({ client: res.locals.client });
+  });
+  return app;
+}
+```
+<p>מפתחות API מתאימים לשרת־מול־שרת. למשתמשים (שם וסיסמה, טוקנים) — פרק 21. ומפתחות אמיתיים נשמרים כ־hash ולא כטקסט — גם על זה בפרק 21.</p>
+@mistakes
+<ul><li>403 גם כשאין מפתח בכלל — 401 אומר "תזדהה", 403 "הזדהית ואסור".</li></ul>
+
+@@ P15-E19 | 3 | שירות חיצוני 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>15-express/starter/P15-E19.ts</code> השלם <code>createApp({ getForecast })</code>. <code>getForecast(city)</code> היא פונקציה async (שירות מזג אוויר חיצוני, שהבדיקה מזריקה): מחזירה <code>{ tempC, summary }</code>, או <code>null</code> אם העיר לא מוכרת, או זורקת כשהשירות נופל.</p>
+<p><code>GET /weather/:city</code>:</p>
+<ul><li>הצליח ← 200 <code>{ city, tempC, summary }</code>.</li><li><code>null</code> ← 404 <code>CITY_NOT_FOUND</code>.</li><li>זרק ← 502 <code>{ error: { code: "UPSTREAM_ERROR", message: "שירות מזג האוויר לא זמין" } }</code> — לא 500: הבעיה לא בקוד שלנו.</li><li>לקח יותר מ־1000ms ← 504 <code>UPSTREAM_TIMEOUT</code>.</li></ul>
+@hint1
+<p>handler יכול להיות <code>async</code>. timeout: <code>Promise.race</code> עם Promise שנדחה אחרי זמן (פרק 10).</p>
+@hint2
+<p>סמן את שגיאת ה־timeout (למשל מחלקה משלה) כדי להבדיל אותה משגיאת השירות.</p>
+@solution
+```ts save=solutions/P15-E19.ts
+// P15-E19
+import express from "express";
+
+type Forecast = { tempC: number; summary: string };
+
+class TimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TimeoutError()), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export function createApp({ getForecast }: { getForecast: (city: string) => Promise<Forecast | null> }) {
+  const app = express();
+  app.get("/weather/:city", async (req, res) => {
+    const city = req.params.city;
+    let forecast: Forecast | null;
+    try {
+      forecast = await withTimeout(getForecast(city), 1000);
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        res.status(504).json({ error: { code: "UPSTREAM_TIMEOUT", message: "שירות מזג האוויר לא ענה בזמן" } });
+        return;
+      }
+      console.error(err);
+      res.status(502).json({ error: { code: "UPSTREAM_ERROR", message: "שירות מזג האוויר לא זמין" } });
+      return;
+    }
+    if (!forecast) {
+      res.status(404).json({ error: { code: "CITY_NOT_FOUND", message: "עיר לא מוכרת" } });
+      return;
+    }
+    res.json({ city, ...forecast });
+  });
+  return app;
+}
+```
+<p><code>clearTimeout</code> ב־<code>finally</code> חשוב: בלעדיו, כל בקשה משאירה טיימר פתוח לשנייה, וגם מונעת מבדיקות להסתיים מהר.</p>
+@mistakes
+<ul><li>להחזיר 500 על כל שגיאה של שירות חיצוני — הניטור יצביע על הקוד שלך, כשהבעיה אצל הספק.</li></ul>
+
+@@ P15-E20 | 4 | הסדר הפוך 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>15-express/starter/P15-E20.ts</code> שלוש תקלות: (1) כל בקשה — גם <code>GET /tasks</code> — מקבלת 404; (2) אחרי שמזיזים את ה־404, <code>POST /tasks</code> נכשל כי <code>req.body</code> הוא <code>undefined</code>; (3) <code>GET /tasks/boom</code> מחזיר דף HTML של Express עם stack trace, במקום JSON 500. תקן <strong>רק</strong> את הסדר (אל תשנה את תוכן הפונקציות).</p>
+@hint1
+<p>כתוב לעצמך את הסדר שהבקשה עוברת, תחנה אחר תחנה.</p>
+@hint2
+<p>json ← routes ← 404 ← error handler.</p>
+@solution
+```ts save=solutions/P15-E20.ts
+// P15-E20: מתוקן — רק הסדר השתנה
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function createApp() {
+  const app = express();
+  const tasks: { id: number; title: string }[] = [];
+
+  app.use(express.json());
+
+  app.get("/tasks", (req, res) => {
+    res.json(tasks);
+  });
+  app.post("/tasks", (req, res) => {
+    const task = { id: tasks.length + 1, title: String(req.body.title) };
+    tasks.push(task);
+    res.status(201).json(task);
+  });
+  app.get("/tasks/boom", () => {
+    throw new Error("באג");
+  });
+
+  app.use((req: Request, res: Response) => {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "לא נמצא" } });
+  });
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    console.error(err);
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+  });
+
+  return app;
+}
+```
+<p>(שים לב גם לבאג שלא ביקשנו לתקן: <code>/tasks/boom</code> רשום <em>אחרי</em> route שיכול היה לבלוע אותו? כאן לא — אין <code>/tasks/:id</code>. אבל אילו היה, הסדר היה חשוב גם שם.)</p>
+@mistakes
+<ul><li>error handler לפני ה־routes — הוא פשוט לא רץ: שגיאה "קופצת" רק <em>קדימה</em> בשרשרת.</li></ul>
+
+@@ P15-E21 | 4 | Cannot set headers 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>15-express/starter/P15-E21.ts</code>: (1) <code>GET /products/abc</code> כותב ביומן <code>Cannot set headers after they are sent</code>; (2) <code>GET /products/1</code> מחזיר 404 למרות שהמוצר קיים; (3) ה־middleware של זמן התגובה מוסיף header — אבל לפעמים זה זורק את אותה שגיאה ולפעמים ה־header חסר. תקן את שלושתם; ה־header <code>X-Response-Time</code> צריך להופיע בכל תשובה (ערך כמו <code>"3ms"</code>).</p>
+@hint1
+<p>אחרי <code>res.json</code> הקוד ממשיך לרוץ. ומתי נשלחים ה־headers?</p>
+@hint2
+<p>header חייב להיקבע <em>לפני</em> שהתשובה נשלחת. אפשר לקבוע אותו מיד בהתחלה... או: <code>res.on("finish")</code> מאוחר מדי.</p>
+@solution
+```ts save=solutions/P15-E21.ts
+// P15-E21: מתוקן
+import express from "express";
+
+const products = [{ id: 1, name: "מקלדת" }];
+
+export function createApp() {
+  const app = express();
+
+  app.use((req, res, next) => {
+    const start = performance.now();
+    const originalJson = res.json.bind(res);
+    res.json = (body) => {
+      res.set("X-Response-Time", `${Math.round(performance.now() - start)}ms`);
+      return originalJson(body);
+    };
+    next();
+  });
+
+  app.get("/products/:id", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "id חייב להיות מספר" });
+      return;
+    }
+    const product = products.find((p) => p.id === id);
+    if (!product) {
+      res.status(404).json({ error: "לא נמצא" });
+      return;
+    }
+    res.json(product);
+  });
+
+  return app;
+}
+```
+<p>בעיה 3 קלאסית: header אחרי <code>finish</code> זורק, ו־header אחרי <code>next()</code> מגיע מאוחר אם ה־handler כבר ענה. הפתרון כאן עוטף את <code>res.json</code>, כך שה־header נקבע ברגע האחרון <em>לפני</em> השליחה. (ספריות כמו <code>response-time</code> משתמשות ב־<code>on-headers</code> לאותה מטרה.)</p>
+@mistakes
+<ul><li>להוסיף <code>if (!res.headersSent)</code> — משתיק את השגיאה, אבל ה־header עדיין חסר.</li></ul>
+
+@@ P15-E22 | 4 | ולידציה שלא עובדת 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>15-express/starter/P15-E22.ts</code>, <code>GET /products?page=2&amp;limit=5</code>: (1) תמיד מחזיר שגיאה, גם לקלט תקין; (2) כשהקלט לא תקין — 500 במקום 400; (3) אחרי ש"מתקנים" את 1 ו־2 — זה זורק <code>Cannot set property query</code>. תקן; התשובה: <code>{ data, meta: { page, limit, total } }</code>, וקלט לא תקין ← 400 <code>VALIDATION_ERROR</code>.</p>
+@hint1
+<p>מה הטיפוס של <code>req.query.page</code>?</p>
+@hint2
+<p><code>z.coerce</code>, <code>safeParse</code>, ו־<code>res.locals</code> (או משתנה מקומי).</p>
+@solution
+```ts save=solutions/P15-E22.ts
+// P15-E22: מתוקן
+import express from "express";
+import { z } from "zod";
+
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+const products = Array.from({ length: 23 }, (_, i) => ({ id: i + 1, name: `מוצר ${i + 1}` }));
+
+export function createApp() {
+  const app = express();
+
+  app.use("/products", (req, res, next) => {
+    const result = querySchema.safeParse(req.query);
+    if (!result.success) {
+      const details = result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } });
+      return;
+    }
+    res.locals.query = result.data;
+    next();
+  });
+
+  app.get("/products", (req, res) => {
+    const { page, limit } = res.locals.query as z.infer<typeof querySchema>;
+    const start = (page - 1) * limit;
+    res.json({ data: products.slice(start, start + limit), meta: { page, limit, total: products.length } });
+  });
+
+  return app;
+}
+```
+@mistakes
+<ul><li>לתקן את 2 עם try/catch סביב <code>parse</code> שמחזיר 400 — עובד, אבל <code>safeParse</code> ברור יותר ולא משתמש בחריגות לזרימה רגילה.</li></ul>
+
+@@ P15-E23 | 4 | ה־Promise שהפך ל־{} 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>15-express/starter/P15-E23.ts</code>, ה־repository הוא async (כמו שיהיה מול מסד נתונים). (1) <code>GET /orders/1</code> מחזיר <code>{}</code>; (2) <code>GET /orders/1/total</code> מחזיר <code>{ "total": 0 }</code> במקום 85; (3) <code>GET /orders/99</code> — הבקשה נתקעת (או השרת קורס), במקום 404. תקן.</p>
+@hint1
+<p><code>JSON.stringify(Promise.resolve(5))</code> הוא <code>"{}"</code>.</p>
+@hint2
+<p><code>forEach</code> לא מחכה ל־callback async. ושגיאה בתוך <code>.then</code> שאף אחד לא מחזיר — אף אחד לא תופס.</p>
+@solution
+```ts save=solutions/P15-E23.ts
+// P15-E23: מתוקן
+import express, { type Request, type Response, type NextFunction } from "express";
+
+class NotFoundError extends Error {}
+
+const orders = new Map([[1, { id: 1, itemIds: [10, 11, 10] }]]);
+const prices = new Map([[10, 30], [11, 25]]);
+const delay = () => new Promise((r) => setTimeout(r, 5));
+
+export const repo = {
+  async findOrder(id: number) {
+    await delay();
+    const order = orders.get(id);
+    if (!order) throw new NotFoundError(`הזמנה ${id} לא נמצאה`);
+    return order;
+  },
+  async priceOf(itemId: number) {
+    await delay();
+    return prices.get(itemId) ?? 0;
+  },
+};
+
+export function createApp() {
+  const app = express();
+
+  app.get("/orders/:id", async (req, res) => {
+    const order = await repo.findOrder(Number(req.params.id));
+    res.json(order);
+  });
+
+  app.get("/orders/:id/total", async (req, res) => {
+    const order = await repo.findOrder(Number(req.params.id));
+    const itemPrices = await Promise.all(order.itemIds.map((id) => repo.priceOf(id)));
+    res.json({ total: itemPrices.reduce((a, b) => a + b, 0) });
+  });
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof NotFoundError) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: err.message } });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}
+```
+<p>Express 5 מעביר ל־error handler רק Promise <em>שה־handler מחזיר</em>. <code>repo.findOrder(...).then(...)</code> בלי <code>return</code> (או בלי <code>async</code>/<code>await</code>) — השגיאה "יתומה", והבקשה נשארת בלי תשובה.</p>
+@mistakes
+<ul><li>להוסיף <code>await</code> לפני <code>order.itemIds.forEach(async ...)</code> — forEach מחזיר undefined, אין למה לחכות. צריך <code>Promise.all</code> + <code>map</code>.</li></ul>
+
+@@ P15-E24 | 5 | אתגר: API לספרייה 🤖 | 60 | כל הפרק
+@task
+<p>בקובץ <code>15-express/starter/P15-E24.ts</code> בנה <code>createApp({ now = () =&gt; new Date() } = {})</code> — API לספרייה, בזיכרון, עם שכבות, Zod ו־error handler. כל שגיאה במבנה <code>{ error: { code, message, details? } }</code>.</p>
+<div class="table-wrap"><table><tr><th>בקשה</th><th>התנהגות</th></tr>
+<tr><td><code>POST /books</code> <code>{ title, author, copies }</code></td><td>title ו־author 1–200 תווים, copies שלם 1–100. ← 201 <code>{ id, title, author, copies, available }</code> (available = copies)</td></tr>
+<tr><td><code>GET /books?author=&amp;available=true&amp;page=&amp;limit=</code></td><td>author — חלק מהשם, בלי תלות באותיות; available=true — רק ספרים עם עותק פנוי. pagination (limit עד 50, ברירת מחדל 10) ← <code>{ data, meta: { page, limit, total, totalPages } }</code></td></tr>
+<tr><td><code>GET /books/:id</code></td><td>200 / 404 <code>BOOK_NOT_FOUND</code></td></tr>
+<tr><td><code>POST /books/:id/loans</code> <code>{ member }</code></td><td>member 1–100 תווים. אין עותק פנוי ← 409 <code>NO_COPIES</code>. אותו member כבר מחזיק את הספר ← 409 <code>ALREADY_BORROWED</code>. ← 201 <code>{ id, bookId, member, loanedAt, dueAt, returnedAt: null }</code> (dueAt = 14 יום אחרי, ISO)</td></tr>
+<tr><td><code>POST /loans/:id/return</code></td><td>200 עם <code>returnedAt</code>. כבר הוחזר ← 409 <code>ALREADY_RETURNED</code>. לא קיים ← 404 <code>LOAN_NOT_FOUND</code></td></tr>
+<tr><td><code>GET /loans/overdue</code></td><td>השאלות שלא הוחזרו ו־<code>dueAt</code> עבר (לפי <code>now()</code>)</td></tr></table></div>
+<p>וגם: id לא תקין ← 400; JSON שבור ← 400 <code>INVALID_JSON</code>; כתובת לא קיימת ← 404 <code>NOT_FOUND</code>; ids של ספרים ושל השאלות — כל אחד מ־1.</p>
+@hint1
+<p>התחל מה־service (בלי Express בכלל): <code>createBook</code>, <code>lend</code>, <code>returnLoan</code>, <code>overdue</code>. אחר כך routes דקים.</p>
+@hint2
+<p>שים לב ש־<code>/loans/overdue</code> צריך להירשם לפני כל route עם <code>/loans/:id</code>.</p>
+@solution
+```ts save=solutions/P15-E24.ts
+// P15-E24
+import express, { Router, type Request, type Response, type NextFunction } from "express";
+import { z, type ZodType } from "zod";
+
+class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+interface Book { id: number; title: string; author: string; copies: number; available: number }
+interface Loan { id: number; bookId: number; member: string; loanedAt: string; dueAt: string; returnedAt: string | null }
+
+const DAY = 24 * 60 * 60 * 1000;
+
+class LibraryService {
+  books: Book[] = [];
+  loans: Loan[] = [];
+  now: () => Date;
+  constructor(now: () => Date) {
+    this.now = now;
+  }
+  createBook(data: { title: string; author: string; copies: number }) {
+    const book = { id: this.books.length + 1, ...data, available: data.copies };
+    this.books.push(book);
+    return book;
+  }
+  listBooks({ author, available }: { author?: string; available?: boolean }) {
+    return this.books.filter(
+      (b) => (!author || b.author.toLowerCase().includes(author.toLowerCase())) && (!available || b.available > 0)
+    );
+  }
+  getBook(id: number) {
+    const book = this.books.find((b) => b.id === id);
+    if (!book) throw new HttpError(404, "BOOK_NOT_FOUND", "הספר לא נמצא");
+    return book;
+  }
+  lend(bookId: number, member: string) {
+    const book = this.getBook(bookId);
+    if (this.loans.some((l) => l.bookId === bookId && l.member === member && !l.returnedAt)) {
+      throw new HttpError(409, "ALREADY_BORROWED", "החבר כבר מחזיק את הספר");
+    }
+    if (book.available === 0) throw new HttpError(409, "NO_COPIES", "אין עותק פנוי");
+    book.available--;
+    const at = this.now();
+    const loan = {
+      id: this.loans.length + 1,
+      bookId,
+      member,
+      loanedAt: at.toISOString(),
+      dueAt: new Date(at.getTime() + 14 * DAY).toISOString(),
+      returnedAt: null,
+    };
+    this.loans.push(loan);
+    return loan;
+  }
+  returnLoan(id: number) {
+    const loan = this.loans.find((l) => l.id === id);
+    if (!loan) throw new HttpError(404, "LOAN_NOT_FOUND", "ההשאלה לא נמצאה");
+    if (loan.returnedAt) throw new HttpError(409, "ALREADY_RETURNED", "הספר כבר הוחזר");
+    loan.returnedAt = this.now().toISOString();
+    this.getBook(loan.bookId).available++;
+    return loan;
+  }
+  overdue() {
+    const t = this.now().getTime();
+    return this.loans.filter((l) => !l.returnedAt && Date.parse(l.dueAt) < t);
+  }
+}
+
+function parse<T>(schema: ZodType<T>, value: unknown): T {
+  const r = schema.safeParse(value);
+  if (!r.success) {
+    const err = new HttpError(400, "VALIDATION_ERROR", "קלט לא תקין");
+    Object.assign(err, { details: r.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) });
+    throw err;
+  }
+  return r.data;
+}
+
+const idSchema = z.coerce.number().int().positive();
+const bookSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  author: z.string().trim().min(1).max(200),
+  copies: z.number().int().min(1).max(100),
+});
+const listSchema = z.object({
+  author: z.string().optional(),
+  available: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+const loanSchema = z.object({ member: z.string().trim().min(1).max(100) });
+
+export function createApp({ now = () => new Date() }: { now?: () => Date } = {}) {
+  const service = new LibraryService(now);
+  const app = express();
+  app.use(express.json());
+
+  const books = Router();
+  books.post("/", (req, res) => {
+    const book = service.createBook(parse(bookSchema, req.body));
+    res.status(201).location(`/books/${book.id}`).json(book);
+  });
+  books.get("/", (req, res) => {
+    const { page, limit, ...filters } = parse(listSchema, req.query);
+    const all = service.listBooks(filters);
+    const data = all.slice((page - 1) * limit, page * limit);
+    res.json({ data, meta: { page, limit, total: all.length, totalPages: Math.ceil(all.length / limit) } });
+  });
+  books.get("/:id", (req, res) => {
+    res.json(service.getBook(parse(idSchema, req.params.id)));
+  });
+  books.post("/:id/loans", (req, res) => {
+    const { member } = parse(loanSchema, req.body);
+    res.status(201).json(service.lend(parse(idSchema, req.params.id), member));
+  });
+
+  const loans = Router();
+  loans.get("/overdue", (req, res) => {
+    res.json(service.overdue());
+  });
+  loans.post("/:id/return", (req, res) => {
+    res.json(service.returnLoan(parse(idSchema, req.params.id)));
+  });
+
+  app.use("/books", books);
+  app.use("/loans", loans);
+  app.use((req, res) => {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "לא נמצא" } });
+  });
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof HttpError) {
+      const { details } = err as HttpError & { details?: unknown };
+      res.status(err.status).json({ error: { code: err.code, message: err.message, ...(details ? { details } : {}) } });
+      return;
+    }
+    if (typeof err === "object" && err !== null && "type" in err && err.type === "entity.parse.failed") {
+      res.status(400).json({ error: { code: "INVALID_JSON", message: "JSON לא תקין" } });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+  });
+  return app;
+}
+```
+<p>שים לב ל־<code>parse(schema, value)</code>: פונקציה שזורקת <code>HttpError</code> של ולידציה, כך שה־routes נשארים שורה או שתיים. ול־<code>now</code> המוזרק — בלעדיו, אי אפשר לבדוק "השאלה שעברו 14 יום" בלי לחכות שבועיים.</p>
+@mistakes
+<ul><li>לבדוק <code>NO_COPIES</code> לפני <code>ALREADY_BORROWED</code> — חבר שמחזיק את העותק האחרון ומנסה שוב יקבל הודעה מטעה.</li></ul>
+
+@@ P15-E25 | 5 | אתגר: Idempotency-Key 🤖 | 40 | כל הפרק
+@task
+<p>לקוח לחץ "הזמן", הרשת נפלה, והאפליקציה שלחה שוב. האם נוצרו שתי הזמנות? בקובץ <code>15-express/starter/P15-E25.ts</code> בנה <code>idempotency()</code> — middleware לבקשות POST:</p>
+<ul><li>בלי header <code>Idempotency-Key</code> ← 400 <code>MISSING_IDEMPOTENCY_KEY</code>.</li><li>מפתח חדש ← הבקשה ממשיכה כרגיל, וה־status והגוף של התשובה נשמרים (יחד עם הגוף <em>של הבקשה</em>).</li><li>אותו מפתח ואותו גוף בקשה ← אותה תשובה בדיוק (status + גוף), <strong>בלי</strong> להריץ שוב את ה־handler, ועם header <code>Idempotent-Replayed: true</code>.</li><li>אותו מפתח, גוף אחר ← 422 <code>IDEMPOTENCY_KEY_REUSED</code>.</li><li>בקשה שנייה עם אותו מפתח <em>בזמן שהראשונה עוד רצה</em> ← 409 <code>REQUEST_IN_PROGRESS</code>.</li></ul>
+<p>והשלם <code>createApp()</code> עם <code>POST /orders</code> (מוגן, יוצר <code>{ id, ...body }</code> ← 201, אחרי המתנה של 50ms שמדמה מסד נתונים) ו־<code>GET /orders</code>.</p>
+@hint1
+<p>כדי "לתפוס" את התשובה — עטוף את <code>res.json</code> (כמו ב־E21).</p>
+@hint2
+<p>Map ממפתח ל־<code>{ bodyHash, status: "running" | "done", response? }</code>. להשוואת גופים — <code>JSON.stringify(req.body)</code> מספיק כאן.</p>
+@solution
+```ts save=solutions/P15-E25.ts
+// P15-E25
+import express, { type Request, type Response, type NextFunction } from "express";
+
+type Entry = { requestBody: string; state: "running" | "done"; status?: number; body?: unknown };
+
+export function idempotency() {
+  const store = new Map<string, Entry>();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = req.get("idempotency-key");
+    if (!key) {
+      res.status(400).json({ error: { code: "MISSING_IDEMPOTENCY_KEY", message: "חסר Idempotency-Key" } });
+      return;
+    }
+    const requestBody = JSON.stringify(req.body ?? null);
+    const existing = store.get(key);
+    if (existing) {
+      if (existing.requestBody !== requestBody) {
+        res.status(422).json({ error: { code: "IDEMPOTENCY_KEY_REUSED", message: "המפתח שומש לבקשה אחרת" } });
+        return;
+      }
+      if (existing.state === "running") {
+        res.status(409).json({ error: { code: "REQUEST_IN_PROGRESS", message: "הבקשה המקורית עדיין מעובדת" } });
+        return;
+      }
+      res.status(existing.status!).set("Idempotent-Replayed", "true").json(existing.body);
+      return;
+    }
+
+    const entry: Entry = { requestBody, state: "running" };
+    store.set(key, entry);
+    const originalJson = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode >= 500) store.delete(key); // תקלה זמנית — מותר לנסות שוב
+      else Object.assign(entry, { state: "done", status: res.statusCode, body });
+      return originalJson(body);
+    };
+    next();
+  };
+}
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const orders: Record<string, unknown>[] = [];
+
+  app.get("/orders", (req, res) => {
+    res.json(orders);
+  });
+  app.post("/orders", idempotency(), async (req, res) => {
+    await new Promise((r) => setTimeout(r, 50));
+    const order = { id: orders.length + 1, ...req.body };
+    orders.push(order);
+    res.status(201).json(order);
+  });
+  return app;
+}
+```
+<p>זה בדיוק המנגנון של Stripe ושל רוב ספקי התשלומים. בפרויקט הדגל נבנה אותו מעל מסד נתונים — כי Map בזיכרון נמחק באתחול, ולא משותף בין שני עותקים של השרת.</p>
+@mistakes
+<ul><li>לשמור את התשובה רק בסוף, בלי מצב "running" — שתי בקשות שמגיעות באותו רגע ייצרו שתי הזמנות, בדיוק המצב שרצינו למנוע.</li></ul>

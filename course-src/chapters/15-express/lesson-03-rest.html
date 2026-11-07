@@ -1,0 +1,134 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>כללי REST לתכנון כתובות.</li>
+      <li>סינון, מיון ו־pagination — ומבנה התשובה.</li>
+      <li>`express.Router` ופירוק לשכבות: routes ← service ← repository.</li>
+    </ul>
+  </div>
+
+  <h2>1. משאבים, לא פעולות</h2>
+  <p>ב־REST, הכתובת היא <strong>שם עצם</strong> (המשאב), וה־method הוא <strong>הפועל</strong>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>פעולה</th><th>✘ לא כך</th><th>✔ כך</th><th>status</th></tr>
+    <tr><td>כל המשימות</td><td>`GET /getAllTasks`</td><td>`GET /tasks`</td><td>200</td></tr>
+    <tr><td>משימה אחת</td><td>`GET /task?id=7`</td><td>`GET /tasks/7`</td><td>200 / 404</td></tr>
+    <tr><td>יצירה</td><td>`POST /createTask`</td><td>`POST /tasks`</td><td>201</td></tr>
+    <tr><td>עדכון חלקי</td><td>`POST /tasks/7/update`</td><td>`PATCH /tasks/7`</td><td>200</td></tr>
+    <tr><td>מחיקה</td><td>`GET /deleteTask/7`</td><td>`DELETE /tasks/7`</td><td>204</td></tr>
+    <tr><td>תגובות של משימה</td><td>`GET /comments?taskId=7`</td><td>`GET /tasks/7/comments`</td><td>200</td></tr>
+  </table></div>
+  <ul>
+    <li>רבים: `/tasks`, לא `/task`. אותיות קטנות ומקפים: `/order-items`.</li>
+    <li>קינון רק כשמשאב "שייך" לאחר, ולא יותר משתי רמות.</li>
+    <li>פעולה שהיא באמת לא CRUD — פועל בסוף זה בסדר: `POST /orders/7/cancel`.</li>
+    <li>`GET /deleteTask/7` מסוכן במיוחד: דפדפנים, כלי תצוגה מקדימה וסורקים שולחים GET בלי לשאול.</li>
+  </ul>
+
+  <h2>2. רשימות: סינון, מיון, pagination</h2>
+  <p>`GET /tasks?status=open&q=חלב&sort=-createdAt&page=2&limit=20`</p>
+  <ul>
+    <li><strong>סינון</strong> — שדה = ערך (`status=open`), חיפוש חופשי (`q`).</li>
+    <li><strong>מיון</strong> — שם שדה, ומינוס לסדר יורד (`-createdAt`). רק מרשימה סגורה של שדות.</li>
+    <li><strong>pagination</strong> — `page` ו־`limit`, עם ברירת מחדל <em>ותקרה</em> ל־limit. בלי תקרה, `?limit=10000000` יפיל את השרת.</li>
+  </ul>
+  <p>ומה מחזירים? לא רק מערך — גם מידע על העמוד, כדי שהלקוח יידע אם יש עוד:</p>
+```json
+{
+  "data": [{ "id": 21, "title": "..." }],
+  "meta": { "page": 2, "limit": 20, "total": 57, "totalPages": 3 }
+}
+```
+```ts run
+function paginate<T>(items: T[], page: number, limit: number) {
+  const start = (page - 1) * limit;
+  return {
+    data: items.slice(start, start + limit),
+    meta: { page, limit, total: items.length, totalPages: Math.ceil(items.length / limit) },
+  };
+}
+
+const items = Array.from({ length: 57 }, (_, i) => i + 1);
+const result = paginate(items, 3, 20);
+console.log(result.data.length, result.data[0], JSON.stringify(result.meta));
+```
+```out
+17 41 {"page":3,"limit":20,"total":57,"totalPages":3}
+```
+  <p>(זו pagination לפי offset — פשוטה ומספיקה לרוב המקרים. ברשימות ענק משתמשים ב־cursor: "תן לי 20 אחרי id 1040". נכיר בפרק 18.)</p>
+
+  <h2>3. מבנה שגיאה אחיד</h2>
+  <p>כל שגיאה ב־API — אותו מבנה. הלקוח כותב קוד טיפול אחד:</p>
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "קלט לא תקין",
+    "details": [{ "path": "title", "message": "חובה" }]
+  }
+}
+```
+  <p>`code` — קבוע, באנגלית, בשביל קוד (`if (err.code === "TASK_NOT_FOUND")`). `message` — לבני אדם, ואפשר לשנות אותו בלי לשבור לקוחות. `details` — רק כשיש מה לפרט.</p>
+
+  <h2>4. Router ושכבות</h2>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="שכבות: routes, service, repository">
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="490" y="20" width="200" height="90" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="260" y="20" width="200" height="90" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="30" y="20" width="200" height="90" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M486 65 H 464" marker-end="url(#ah3)"/>
+        <path d="M256 65 H 234" marker-end="url(#ah3)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="590" y="48" class="mono" style="font-size:14px;font-weight:700">tasks.routes.ts</text>
+        <text x="590" y="72" direction="rtl" style="font-size:12px">HTTP: קלט ← בדיקה ← status</text>
+        <text x="590" y="92" direction="rtl" style="font-size:11px;fill:var(--muted)">יודע על req/res</text>
+        <text x="360" y="48" class="mono" style="font-size:14px;font-weight:700">tasks.service.ts</text>
+        <text x="360" y="72" direction="rtl" style="font-size:12px">חוקים עסקיים</text>
+        <text x="360" y="92" direction="rtl" style="font-size:11px;fill:var(--muted)">לא יודע על HTTP</text>
+        <text x="130" y="48" class="mono" style="font-size:14px;font-weight:700">tasks.repository.ts</text>
+        <text x="130" y="72" direction="rtl" style="font-size:12px">שמירה ושליפה</text>
+        <text x="130" y="92" direction="rtl" style="font-size:11px;fill:var(--muted)">זיכרון ← (פרק 19) PostgreSQL</text>
+      </g>
+      <text x="360" y="150" text-anchor="middle" direction="rtl" style="font-size:12px">כל שכבה מדברת רק עם השכבה שלידה. החלפת מסד = החלפת repository בלבד.</text>
+    </svg>
+    <figcaption>איור 2: אותו עיקרון כמו בפרק 12 ובפרויקט 1 — רק שהממשק עכשיו הוא HTTP.</figcaption>
+  </figure>
+```ts file=src/tasks/tasks.routes.ts
+import { Router } from "express";
+import type { TasksService } from "./tasks.service.ts";
+
+export function createTasksRouter(service: TasksService) {
+  const router = Router();
+
+  router.get("/", (req, res) => {
+    res.json(service.list());
+  });
+
+  router.get("/:id", (req, res) => {
+    res.json(service.get(Number(req.params.id))); // service זורק HttpError(404) אם אין
+  });
+
+  return router;
+}
+```
+```ts file=src/app.ts
+export function createApp(service = new TasksService(new InMemoryTasksRepository())) {
+  const app = express();
+  app.use(express.json());
+  app.use("/tasks", createTasksRouter(service));
+  app.use(notFound);
+  app.use(errorHandler);
+  return app;
+}
+```
+  <p>בתוך ה־router, הכתובות <strong>יחסיות</strong> לקידומת: `router.get("/:id")` + `app.use("/tasks", ...)` = `GET /tasks/:id`. וה־service מוזרק מבחוץ (dependency injection — פרק 12): בבדיקות אפשר להעביר service עם נתונים מוכנים.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P15-E05">E05</a> · <a href="exercises.html#P15-E13">E13</a> · <a href="exercises.html#P15-E16">E16</a> · <a href="exercises.html#P15-E19">E19</a> · <a href="exercises.html#P15-E23">E23</a></p>
+  </div>

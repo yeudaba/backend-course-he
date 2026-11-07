@@ -1,0 +1,49 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>הלב של הפרויקט — בלי HTTP בכלל: מה זו משימה תקינה (schema), איפה היא נשמרת (repository), ומה החוקים (service). בסוף: `npm run check PR2-SCHEMA -- --dir ~/dev/tasks-api` ו־`PR2-SERVICE` עוברים.</p>
+  </div>
+
+  <h2>1. `tasks.schema.ts`</h2>
+  <div class="table-wrap"><table>
+    <tr><th>סכמה</th><th>שדות</th></tr>
+    <tr><td>`createTaskSchema`</td><td>`title` — trim, 1–120 · `description` — trim, עד 2000, nullable, ברירת מחדל `null` · `status` — `STATUSES`, ברירת מחדל `"todo"` · `priority` — `PRIORITIES`, ברירת מחדל `"medium"` · `dueDate` — `z.iso.date()` (YYYY-MM-DD, כולל בדיקה שהתאריך קיים), nullable, ברירת מחדל `null`</td></tr>
+    <tr><td>`updateTaskSchema`</td><td>אותם שדות, כולם לא חובה, בלי ברירות מחדל; <strong>strict</strong> (שדה לא מוכר ← שגיאה); לפחות שדה אחד</td></tr>
+    <tr><td>`listQuerySchema`</td><td>`status`, `priority` — לא חובה · `q` — trim, לפחות תו, לא חובה · `sort` — `SORTS`, ברירת מחדל `"-createdAt"` · `page` ≥ 1 (1) · `limit` 1–50 (20) — עם coerce</td></tr>
+    <tr><td>`idParamsSchema`</td><td>`{ id }` — שלם חיובי, עם coerce</td></tr>
+  </table></div>
+  <details><summary>💡 רמז: למה לא `createTaskSchema.partial()` לעדכון?</summary>
+    <p>כי `partial()` משאיר את ה־`default`־ים: `{ "status": "done" }` היה הופך ל־`{ status: "done", priority: "medium", description: null, ... }` — ו־PATCH היה דורס שדות שהלקוח לא ביקש לשנות. לכן כותבים את הסכמה מחדש עם `z.strictObject({...}).partial()` (כמו P15-E17).</p>
+  </details>
+
+  <h2>2. `tasks.repository.ts`</h2>
+  <p>ה־interface `TasksRepository` כבר כתוב — זה ה<strong>חוזה</strong>. ממש את `InMemoryTasksRepository`:</p>
+  <ul>
+    <li>מערך פרטי (`#tasks`) ומונה (`#nextId`, מתחיל ב־1). id לא חוזר לשימוש אחרי מחיקה.</li>
+    <li>`update` משנה רק את השדות שהתקבלו ומחזיר את המשימה המעודכנת, או `undefined` אם אין. `delete` מחזיר `true`/`false`.</li>
+    <li><strong>מחזירים עותקים</strong> (`{ ...task }`). אחרת, קוד שמקבל משימה ומשנה אותה (למשל במיון או בבדיקה) משנה את המאגר בלי לעבור דרך `update`. מסד נתונים אמיתי מתנהג כמו עותק — אז גם הזיכרון צריך.</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 למה async, כשהכול בזיכרון?</span>
+    <p>כי בפרק 19 תכתוב `PrismaTasksRepository` עם אותו interface — ושם כל קריאה היא async. אם ה־service כבר עושה `await this.repo.findById(...)`, ההחלפה תהיה שורה אחת ב־`createApp`. זה בדיוק "לתכנן לשינוי" מפרק 12.</p>
+  </div>
+
+  <h2>3. `tasks.service.ts` — חלק א׳</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מתודה</th><th>התנהגות</th></tr>
+    <tr><td>`get(id)`</td><td>המשימה, או `HttpError(404, "TASK_NOT_FOUND", ...)`</td></tr>
+    <tr><td>`create(input)`</td><td>`dueDate` לפני היום ← `HttpError(422, "DUE_DATE_IN_PAST", ...)`. אחרת — `createdAt` ו־`updatedAt` = `this.now().toISOString()`, ושמירה</td></tr>
+    <tr><td>`update(id, changes)`</td><td>מעדכן ו־`updatedAt` = עכשיו; לא קיים ← 404</td></tr>
+    <tr><td>`remove(id)`</td><td>לא קיים ← 404</td></tr>
+  </table></div>
+  <p>("היום" — לפי UTC: `now.toISOString().slice(0, 10)`. ומשווים מחרוזות YYYY-MM-DD ישירות — בפורמט הזה, סדר מילוני = סדר כרונולוגי. אזורי זמן כמו שצריך — פרק 24.)</p>
+  <p>`now` מוזרק ב־constructor — כך הבדיקה קובעת "היום הוא 4 בנובמבר" ובודקת 422 בלי תלות בתאריך האמיתי.</p>
+  <details><summary>💡 רמז: איך HttpError מגיע ל־service?</summary>
+    <p>`errors.ts` כבר מכיל את המחלקה `HttpError` (מוכנה בשלד). ה־service מייבא אותה וזורק. (יש מי שמעדיף שה־service יזרוק שגיאות "עסקיות" כמו `TaskNotFoundError`, ושה־errorHandler יתרגם ל־HTTP. זה נקי יותר — וזה מה ש־NestJS עושה עם exception filters. כאן נשארים פשוטים.)</p>
+  </details>
+
+  <h2>4. בדיקה</h2>
+```term
+% npm run check PR2-SCHEMA -- --dir ~/dev/tasks-api
+% npm run check PR2-SERVICE -- --dir ~/dev/tasks-api
+```
+  <p>עבר? commit: `git commit -am "Add task schemas, repository and service"` (ו־`git add` לקבצים חדשים אם יש).</p>

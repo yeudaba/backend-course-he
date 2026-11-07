@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>השרת הראשון ב־Express — פרק 15</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 15</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — השרת הראשון ב־Express</h1>
+  <p class="subtitle">⏱ ~35 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>השרת מפרק 14 — מחדש, ב־Express.</li>
+      <li>routes, <code>req.params</code>, <code>req.query</code>, <code>req.body</code>.</li>
+      <li>תשובות: <code>res.json</code>, <code>res.status</code>, <code>res.sendStatus</code>.</li>
+      <li>הפרדה בין <code>app.ts</code> (האפליקציה) ל־<code>server.ts</code> (ההפעלה).</li>
+    </ul>
+  </div>
+
+  <h2>1. לפני ואחרי</h2>
+  <p>זוכר את שרת ההדגמה של פרק 14? ככה נראה החלק של המוצרים ב־Express:</p>
+<span class="file-label">playground/express-demo.ts</span>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.use(express.json());
+
+const products = [
+  { id: 1, name: "מקלדת", price: 249 },
+  { id: 2, name: "עכבר", price: 89 },
+];
+let nextId = 3;
+
+app.get("/products", (req, res) =&gt; {
+  res.json(products);
+});
+
+app.get("/products/:id", (req, res) =&gt; {
+  const product = products.find((p) =&gt; p.id === Number(req.params.id));
+  if (!product) {
+    res.status(404).json({ error: "המוצר לא נמצא" });
+    return;
+  }
+  res.json(product);
+});
+
+app.post("/products", (req, res) =&gt; {
+  const product = { id: nextId++, name: req.body.name, price: req.body.price };
+  products.push(product);
+  res.status(201).location(`/products/${product.id}`).json(product);
+});
+
+app.listen(4000, () =&gt; console.log("http://localhost:4000"));</code></pre>
+  <p>הרץ: <code>node --watch playground/express-demo.ts</code> (ה־<code>--watch</code> מפעיל מחדש בכל שמירה) ובדוק עם curl או REST Client. מה נעלם לעומת פרק 14?</p>
+  <div class="table-wrap"><table>
+    <tr><th>ב־node:http עשינו בעצמנו</th><th>ב־Express</th></tr>
+    <tr><td><code>new URL(...)</code>, <code>split("/")</code>, if על method ו־path</td><td><code>app.get("/products/:id", ...)</code></td></tr>
+    <tr><td><code>for await</code> על הגוף + <code>JSON.parse</code> + try/catch</td><td><code>app.use(express.json())</code> ← <code>req.body</code></td></tr>
+    <tr><td><code>writeHead</code> + <code>Content-Type</code> + <code>JSON.stringify</code> + <code>end</code></td><td><code>res.json(obj)</code></td></tr>
+    <tr><td>405 / 404 ידניים</td><td>404 אוטומטי (נשפר בשיעור 2)</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ השרת הזה עדיין לא בטוח</span>
+    <p><code>POST /products</code> מקבל כל דבר: <code>{"name": 5}</code>, או בלי <code>price</code> בכלל. תיקון בשיעור 4 (Zod). בינתיים — זכור שאסור לסמוך על <code>req.body</code>.</p>
+  </div>
+
+  <h2>2. מה יש ב־req</h2>
+  <p>לבקשה <code>GET /products/7?sort=price&amp;page=2</code> מול route <code>"/products/:id"</code>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>ביטוי</th><th>ערך</th><th>שים לב</th></tr>
+    <tr><td><code>req.params</code></td><td><code>{ id: "7" }</code></td><td>תמיד מחרוזות</td></tr>
+    <tr><td><code>req.query</code></td><td><code>{ sort: "price", page: "2" }</code></td><td>מחרוזות; קריאה בלבד ב־Express 5</td></tr>
+    <tr><td><code>req.body</code></td><td><code>undefined</code></td><td>יש ערך רק אם נשלח JSON <em>וגם</em> <code>express.json()</code> רץ</td></tr>
+    <tr><td><code>req.method</code>, <code>req.path</code></td><td><code>"GET"</code>, <code>"/products/7"</code></td><td>path בלי query</td></tr>
+    <tr><td><code>req.get("authorization")</code></td><td>ערך ה־header</td><td>בלי תלות באותיות</td></tr>
+  </table></div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.get("/products/:id", (req, res) =&gt; {
+  res.json({ params: req.params, query: req.query, path: req.path });
+});
+
+const server = app.listen(0, async () =&gt; {
+  const port = (server.address() as { port: number }).port;
+  const res = await fetch(`http://localhost:${port}/products/7?sort=price&amp;page=2`);
+  console.log(JSON.stringify(await res.json()));
+  server.close();
+});</code></pre>
+<pre class="terminal">{"params":{"id":"7"},"query":{"sort":"price","page":"2"},"path":"/products/7"}</pre>
+  <p>(הדוגמה מפעילה שרת על פורט פנוי (<code>0</code>), שולחת אליו בקשה וסוגרת אותו — כך גם הבדיקות האוטומטיות של הפרק עובדות.)</p>
+
+  <h2>3. תשובות</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קוד</th><th>מה נשלח</th></tr>
+    <tr><td><code>res.json(obj)</code></td><td>200 + <code>Content-Type: application/json</code> + הגוף</td></tr>
+    <tr><td><code>res.status(201).json(obj)</code></td><td>status אחר. <code>status</code> מחזיר את <code>res</code>, ולכן אפשר לשרשר</td></tr>
+    <tr><td><code>res.sendStatus(204)</code></td><td>status בלבד, בלי גוף — למחיקה</td></tr>
+    <tr><td><code>res.location("/products/3")</code></td><td>header <code>Location</code></td></tr>
+    <tr><td><code>res.set("X-Total-Count", "42")</code></td><td>כל header</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ <code>return</code> אחרי תשובה</span>
+    <p><code>res.status(404).json(...)</code> <strong>לא עוצר</strong> את הפונקציה. בלי <code>return</code> הקוד ממשיך, מגיע ל־<code>res.json(product)</code> — ו־Express זורק <code>Cannot set headers after they are sent</code>. לכן אחרי כל תשובה מוקדמת: <code>return</code>. (בדוגמה למעלה — <code>return;</code> בשורה נפרדת, כי TypeScript מעדיף שה־handler לא יחזיר ערך.)</p>
+  </div>
+
+  <h2>4. <code>app.ts</code> ו־<code>server.ts</code> — למה לפצל</h2>
+<span class="file-label">src/app.ts</span>
+<pre><code class="lang-ts">import express from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.get("/health", (req, res) =&gt; {
+    res.json({ ok: true });
+  });
+  return app;
+}</code></pre>
+<span class="file-label">src/server.ts</span>
+<pre><code class="lang-ts">import { createApp } from "./app.ts";
+
+const port = Number(process.env.PORT ?? 3000);
+createApp().listen(port, () =&gt; console.log(`http://localhost:${port}`));</code></pre>
+  <p><code>app.ts</code> רק <em>בונה</em> את האפליקציה; <code>server.ts</code> מפעיל אותה על פורט. היתרון: בדיקות (שלך ושל הבודק) קוראות ל־<code>createApp()</code>, מפעילות על פורט פנוי, וכל בדיקה מקבלת אפליקציה נקייה. ככה בנויים כל התרגילים בפרק — וכל הפרויקטים מכאן והלאה.</p>
+  <p>וטיפוסים? <code>@types/express</code> מותקן, ולכן <code>req</code> ו־<code>res</code> מוקלדים אוטומטית בתוך <code>app.get(...)</code>. נסה לכתוב <code>req.</code> ב־VS Code ותראה את ההשלמות. כשכותבים handler כפונקציה נפרדת — מייבאים את הטיפוסים: <code>import express, { type Request, type Response } from "express"</code>.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P15-E01">E01</a> · <a href="exercises.html#P15-E02">E02</a> · <a href="exercises.html#P15-E03">E03</a> · <a href="exercises.html#P15-E06">E06</a> · <a href="exercises.html#P15-E07">E07</a> · <a href="exercises.html#P15-E08">E08</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 15</a><a href="lesson-02-middleware.html"><small>הבא</small>שיעור 2 — middleware, שגיאות ו־404</a></div>
+</main>
+</body>
+</html>

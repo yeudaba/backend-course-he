@@ -1,0 +1,1372 @@
+@@ P12-E01 | 1 | מה ידפיס? (מחלקות) | 10 | שיעור 1
+@task
+<p>נבא את הפלט:</p>
+```ts
+class Counter {
+  #count = 0;
+  readonly name: string;
+  constructor(name: string) {
+    this.name = name;
+  }
+  get value(): number {
+    return this.#count;
+  }
+  inc(): this {
+    this.#count++;
+    return this;
+  }
+}
+const a = new Counter("a");
+const b = new Counter("b");
+a.inc().inc();
+b.inc();
+const c = a;
+c.inc();
+console.log(a.value, b.value, c.value, a === c, a.name);
+```
+@hint1
+<p>כל <code>new</code> יוצר מופע נפרד עם <code>#count</code> משלו.</p>
+@hint2
+<p><code>c = a</code> — עוד הפניה לאותו מופע (פרק 7).</p>
+@solution
+```ts run
+class Counter {
+  #count = 0;
+  readonly name: string;
+  constructor(name: string) {
+    this.name = name;
+  }
+  get value(): number {
+    return this.#count;
+  }
+  inc(): this {
+    this.#count++;
+    return this;
+  }
+}
+const a = new Counter("a");
+const b = new Counter("b");
+a.inc().inc();
+b.inc();
+const c = a;
+c.inc();
+console.log(a.value, b.value, c.value, a === c, a.name);
+```
+```out
+3 1 3 true a
+```
+<p><code>return this</code> מאפשר שרשור (<code>a.inc().inc()</code>).</p>
+@mistakes
+<ul><li>לחשוב ש־<code>#count</code> משותף לכל המופעים — הוא שייך לכל מופע בנפרד (משותף היה רק <code>static</code>).</li></ul>
+
+@@ P12-E02 | 1 | מחלקות ו־JSON | 10 | שיעור 1
+@task
+<p>מה ידפיס, ולמה זה חשוב כשנתונים נשמרים במסד או נשלחים ברשת?</p>
+```ts
+class Product {
+  #cost = 40;
+  name: string;
+  price: number;
+  constructor(name: string, price: number) {
+    this.name = name;
+    this.price = price;
+  }
+  get margin(): number {
+    return this.price - this.#cost;
+  }
+}
+const p = new Product("עט", 50);
+const text = JSON.stringify(p);
+const back = JSON.parse(text);
+console.log(text);
+console.log(p.margin, back.margin, back instanceof Product);
+```
+@hint1
+<p><code>JSON.stringify</code> כולל רק שדות ציבוריים "רגילים".</p>
+@hint2
+<p><code>JSON.parse</code> מחזיר אובייקט פשוט — בלי getters ובלי מתודות.</p>
+@solution
+```ts run
+class Product {
+  #cost = 40;
+  name: string;
+  price: number;
+  constructor(name: string, price: number) {
+    this.name = name;
+    this.price = price;
+  }
+  get margin(): number {
+    return this.price - this.#cost;
+  }
+}
+const p = new Product("עט", 50);
+const text = JSON.stringify(p);
+const back = JSON.parse(text);
+console.log(text);
+console.log(p.margin, back.margin, back instanceof Product);
+```
+```out
+{"name":"עט","price":50}
+10 undefined false
+```
+<p>מה שחוזר מהרשת או מהמסד הוא אובייקט פשוט. לכן: נתונים (DTOs, רשומות) — <code>type</code> ואובייקטים פשוטים; לוגיקה — במחלקות service שמקבלות את הנתונים.</p>
+@mistakes
+<ul><li>לצפות ש־<code>back.margin</code> יעבוד — המתודות לא "עוברות" ב־JSON.</li></ul>
+
+@@ P12-E03 | 1 | מי תופס? | 10 | שיעור 2
+@task
+<p>עם ההיררכיה <code>AppError ← NotFoundError</code>, <code>AppError ← ValidationError</code> — מה יחזיר <code>handle</code> לכל שגיאה? מה הבאג בסדר הבדיקות?</p>
+```ts
+function handle(err: unknown): number {
+  if (err instanceof AppError) return 400;
+  if (err instanceof NotFoundError) return 404;
+  if (err instanceof ValidationError) return 422;
+  return 500;
+}
+handle(new NotFoundError("x", 1));
+handle(new ValidationError("f", "m"));
+handle(new Error("boom"));
+handle("string error");
+```
+@hint1
+<p>NotFoundError היא גם AppError.</p>
+@hint2
+<p>בדיקה כללית לפני ספציפית "בולעת" אותן.</p>
+@solution
+<p>400, 400, 500, 500. כל שגיאה שיורשת מ־AppError נתפסת בבדיקה הראשונה, וה־404/422 לא מגיעים לעולם. התיקון: מהספציפי לכללי — <code>NotFoundError</code>, <code>ValidationError</code>, ורק אז <code>AppError</code>. (וזריקה של מחרוזת — <code>throw "string error"</code> — הגיעה ל־500: לכן תמיד זורקים <code>Error</code>.)</p>
+@mistakes
+<ul><li>לחשוב ש־<code>instanceof</code> בודק "בדיוק המחלקה הזו" — הוא בודק גם מחלקות אב.</li></ul>
+
+@@ P12-E04 | 1 | איזו שכבה? | 10 | שיעור 3
+@task
+<p>לכל פונקציה — repository, service, או route/CLI (שכבת הממשק)?</p>
+<ol><li><code>findUserByEmail(email)</code> — שליפה מהמסד.</li><li><code>registerUser(dto)</code> — בודק שהאימייל לא תפוס, מגבב סיסמה, שומר.</li><li>קורא את גוף הבקשה, ממיר ל־DTO, קורא ל־<code>registerUser</code>, מחזיר 201.</li><li><code>applyCoupon(order, code)</code> — חוקי קופונים.</li><li><code>saveOrder(order)</code>.</li><li>מתרגם <code>NotFoundError</code> לתשובת 404.</li></ol>
+@hint1
+<p>repository — רק "איך שומרים/מביאים". service — "מה מותר". ממשק — "קלט/פלט".</p>
+@hint2
+<p>חוק עסקי ("אימייל לא תפוס") — service, גם אם הוא משתמש ב־repository.</p>
+@solution
+<ol><li>repository</li><li>service</li><li>route</li><li>service</li><li>repository</li><li>route (או error handler מרכזי — עדיין שכבת הממשק)</li></ol>
+<p>מבחן פשוט: אם תחליף את המסד ב־API אחר — אילו פונקציות ישתנו? (repository). אם תחליף HTTP ב־CLI? (route). מה שלא משתנה באף אחד מהמקרים — service.</p>
+@mistakes
+<ul><li>לשים בדיקת "אימייל תפוס" ב־route — אז ה־CLI או worker אחר יכולים לעקוף אותה.</li></ul>
+
+@@ P12-E05 | 1 | מה TypeScript תופס? | 10 | שיעור 4
+@task
+<p>במצבים הבאים — האם TypeScript (בזמן כתיבה) מונע את הבעיה, או שצריך validation בזמן ריצה?</p>
+<ol><li>פונקציה פנימית קוראת ל־<code>createOrder({ productId: "7", qty: 1 })</code> עם מחרוזת.</li><li>לקוח שולח POST עם <code>{"productId": "7"}</code>.</li><li>מתכנת שוכח לטפל בסטטוס חדש ב־switch עם never.</li><li>משתמש שולח <code>{"qty": 2, "price": 0.01}</code> ומקווה שהשרת יקבל את המחיר.</li><li>שדה במסד שהשתנה מ־number ל־string (מיגרציה), והקוד לא עודכן.</li></ol>
+@hint1
+<p>TypeScript רואה רק קוד שאתה כתבת, בזמן כתיבה.</p>
+@hint2
+<p>כל מה שמגיע מבחוץ בזמן ריצה — validation.</p>
+@solution
+<ol><li>TypeScript ✔ (קוד פנימי, טיפוס ידוע).</li><li>validation — קלט מהרשת.</li><li>TypeScript ✔.</li><li>validation — ובנוסף: לא לקבל מחיר מהלקוח <em>בכלל</em>; לשלוף מהמסד. (ראה E23.)</li><li>אף אחד מהם אוטומטית — צריך שהטיפוסים יגיעו מהמסד עצמו (Prisma מייצר אותם — פרק 19), אחרת הם "משקרים".</li></ol>
+@mistakes
+<ul><li>"יש לי DTO מוקלד אז אני מוגן" — ההגנה רק מפני עצמך.</li></ul>
+
+@@ P12-E06 | 2 | Counter 🤖 | 10 | שיעור 1
+@task
+<p>בקובץ <code>12-design/starter/P12-E06.ts</code> השלם את המחלקה <code>Counter</code>: שדה פרטי <code>#count</code>; constructor שמקבל <code>start = 0</code> ו־<code>max = Infinity</code>; <code>increment()</code> — מגדיל ב־1 אבל לא מעבר ל־max (מחזיר את המופע לשרשור); <code>reset()</code> — חזרה ל־start; getter <code>value</code>.</p>
+@hint1
+<p>שמור גם את start וגם את max בשדות פרטיים.</p>
+@hint2
+<p><code>this.#count = Math.min(this.#count + 1, this.#max); return this;</code></p>
+@solution
+```ts run save=solutions/P12-E06.ts
+// P12-E06
+export class Counter {
+  #count: number;
+  #start: number;
+  #max: number;
+
+  constructor(start = 0, max = Infinity) {
+    this.#start = start;
+    this.#max = max;
+    this.#count = start;
+  }
+
+  get value(): number {
+    return this.#count;
+  }
+
+  increment(): this {
+    this.#count = Math.min(this.#count + 1, this.#max);
+    return this;
+  }
+
+  reset(): void {
+    this.#count = this.#start;
+  }
+}
+
+const c = new Counter(0, 2);
+console.log(c.increment().increment().increment().value);
+```
+```out
+2
+```
+@mistakes
+<ul><li>להחזיר <code>void</code> מ־increment — שרשור לא יעבוד.</li></ul>
+
+@@ P12-E07 | 2 | Temperature עם static 🤖 | 10 | שיעור 1
+@task
+<p>בקובץ <code>12-design/starter/P12-E07.ts</code> השלם: <code>Temperature</code> עם שדה <code>readonly celsius</code>; <code>static fromFahrenheit(f)</code>; getter <code>fahrenheit</code>; <code>isFreezing()</code> (≤ 0); ו־<code>toString()</code> ← <code>"21.5°C"</code>. טמפרטורה מתחת לאפס המוחלט (‎-273.15) — הקונסטרקטור זורק <code>RangeError("מתחת לאפס המוחלט")</code>.</p>
+@hint1
+<p><code>static fromFahrenheit(f: number): Temperature { return new Temperature(((f - 32) * 5) / 9); }</code></p>
+@hint2
+<p><code>RangeError</code> היא מחלקת שגיאה מובנית, כמו TypeError.</p>
+@solution
+```ts run save=solutions/P12-E07.ts
+// P12-E07
+export class Temperature {
+  static readonly ABSOLUTE_ZERO = -273.15;
+  readonly celsius: number;
+
+  constructor(celsius: number) {
+    if (celsius < Temperature.ABSOLUTE_ZERO) {
+      throw new RangeError("מתחת לאפס המוחלט");
+    }
+    this.celsius = celsius;
+  }
+
+  static fromFahrenheit(f: number): Temperature {
+    return new Temperature(((f - 32) * 5) / 9);
+  }
+
+  get fahrenheit(): number {
+    return (this.celsius * 9) / 5 + 32;
+  }
+
+  isFreezing(): boolean {
+    return this.celsius <= 0;
+  }
+
+  toString(): string {
+    return `${this.celsius}°C`;
+  }
+}
+
+console.log(String(Temperature.fromFahrenheit(212)), new Temperature(21.5).fahrenheit);
+```
+```out
+100°C 70.7
+```
+@mistakes
+<ul><li>לבדוק את הטווח רק ב־fromFahrenheit — <code>new Temperature(-500)</code> יעבור.</li></ul>
+
+@@ P12-E08 | 2 | ShoppingCart 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>12-design/starter/P12-E08.ts</code> השלם מחלקה <code>ShoppingCart</code> עם Map פרטי של sku ← <code>{ sku, price, qty }</code>:</p>
+<ul><li><code>add(sku, price, qty = 1)</code> — אם קיים, מוסיף לכמות. qty או price לא חיוביים ← <code>Error("כמות ומחיר חייבים להיות חיוביים")</code>.</li><li><code>remove(sku)</code> — מחזיר true אם הוסר, false אם לא היה.</li><li>getters: <code>total</code> (מעוגל ל־2 ספרות), <code>itemCount</code> (סכום כמויות).</li><li><code>items()</code> — מערך <strong>עותקים</strong>, כך ששינוי בהם לא משנה את העגלה.</li></ul>
+@hint1
+<p><code>#lines = new Map&lt;string, CartLine&gt;()</code></p>
+@hint2
+<p>items: <code>[...this.#lines.values()].map((l) =&gt; ({ ...l }))</code></p>
+@solution
+```ts run save=solutions/P12-E08.ts
+// P12-E08
+export type CartLine = { sku: string; price: number; qty: number };
+
+export class ShoppingCart {
+  #lines = new Map<string, CartLine>();
+
+  add(sku: string, price: number, qty = 1): void {
+    if (qty <= 0 || price <= 0) {
+      throw new Error("כמות ומחיר חייבים להיות חיוביים");
+    }
+    const existing = this.#lines.get(sku);
+    this.#lines.set(sku, { sku, price, qty: (existing?.qty ?? 0) + qty });
+  }
+
+  remove(sku: string): boolean {
+    return this.#lines.delete(sku);
+  }
+
+  get total(): number {
+    let sum = 0;
+    for (const l of this.#lines.values()) {
+      sum += l.price * l.qty;
+    }
+    return Math.round(sum * 100) / 100;
+  }
+
+  get itemCount(): number {
+    let n = 0;
+    for (const l of this.#lines.values()) {
+      n += l.qty;
+    }
+    return n;
+  }
+
+  items(): CartLine[] {
+    return [...this.#lines.values()].map((l) => ({ ...l }));
+  }
+}
+
+const cart = new ShoppingCart();
+cart.add("A", 2.5, 2);
+cart.add("A", 2.5);
+cart.add("B", 10);
+console.log(cart.total, cart.itemCount, cart.items().length);
+```
+```out
+17.5 4 2
+```
+@mistakes
+<ul><li>items() שמחזיר את האובייקטים הפנימיים — <code>cart.items()[0].qty = 999</code> משנה את העגלה.</li></ul>
+
+@@ P12-E09 | 2 | היררכיית שגיאות 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>12-design/starter/P12-E09.ts</code> השלם:</p>
+<ul><li><code>AppError extends Error</code> עם <code>status</code> ו־<code>code</code>, ו־<code>name</code> = שם המחלקה בפועל.</li><li><code>NotFoundError(entity, id)</code> ← <code>`${entity} ${id} לא נמצא`</code>, 404, <code>"NOT_FOUND"</code>.</li><li><code>ValidationError(field, message)</code> ← 400, <code>"VALIDATION"</code>, ושדה <code>field</code>.</li><li><code>ConflictError(message)</code> ← 409, <code>"CONFLICT"</code>.</li><li><code>toHttp(err: unknown)</code> ← <code>{ status, body: { code, message, field? } }</code>; כל שגיאה שאינה AppError ← 500, <code>{ code: "INTERNAL", message: "שגיאה פנימית" }</code>.</li></ul>
+@hint1
+<p><code>this.name = new.target.name;</code></p>
+@hint2
+<p>ב־toHttp: field רק ל־ValidationError — <code>...(err instanceof ValidationError ? { field: err.field } : {})</code>.</p>
+@solution
+```ts run save=solutions/P12-E09.ts
+// P12-E09
+export class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(entity: string, id: string | number) {
+    super(`${entity} ${id} לא נמצא`, 404, "NOT_FOUND");
+  }
+}
+
+export class ValidationError extends AppError {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message, 400, "VALIDATION");
+    this.field = field;
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(message, 409, "CONFLICT");
+  }
+}
+
+export function toHttp(err: unknown): { status: number; body: { code: string; message: string; field?: string } } {
+  if (err instanceof AppError) {
+    return {
+      status: err.status,
+      body: { code: err.code, message: err.message, ...(err instanceof ValidationError ? { field: err.field } : {}) },
+    };
+  }
+  return { status: 500, body: { code: "INTERNAL", message: "שגיאה פנימית" } };
+}
+
+console.log(toHttp(new ValidationError("email", "לא תקין")), new NotFoundError("משתמש", 3).name);
+```
+```out
+{
+  status: 400,
+  body: { code: 'VALIDATION', message: 'לא תקין', field: 'email' }
+} NotFoundError
+```
+@mistakes
+<ul><li>לשכוח את <code>super(message)</code> — TypeScript יזרוק שגיאה, ובלעדיו אין message.</li></ul>
+
+@@ P12-E10 | 2 | חוזה Logger 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>12-design/starter/P12-E10.ts</code> מוגדר <code>interface Logger { info(msg: string): void; error(msg: string): void }</code>. השלם:</p>
+<ul><li><code>MemoryLogger implements Logger</code> — שומר שורות (<code>"INFO: ..."</code>, <code>"ERROR: ..."</code>), עם getter <code>lines</code> שמחזיר עותק.</li><li><code>PrefixLogger implements Logger</code> — <strong>עוטף</strong> Logger אחר (מקבל ב־constructor) ומוסיף קידומת: <code>new PrefixLogger(inner, "[orders]")</code> ← <code>info("x")</code> קורא ל־<code>inner.info("[orders] x")</code>.</li><li><code>processOrders(ids, logger)</code> — לכל id: id חיובי ← <code>info(`order ${id} ok`)</code>; אחרת ← <code>error(`order ${id} invalid`)</code>. מחזירה מספר ההצלחות.</li></ul>
+@hint1
+<p>PrefixLogger הוא הרכבה: "יש לו" Logger.</p>
+@hint2
+<p>processOrders מקבל <code>Logger</code> — לא MemoryLogger. כך עובד עם כל מימוש.</p>
+@solution
+```ts run save=solutions/P12-E10.ts
+// P12-E10
+export interface Logger {
+  info(msg: string): void;
+  error(msg: string): void;
+}
+
+export class MemoryLogger implements Logger {
+  #lines: string[] = [];
+  info(msg: string): void {
+    this.#lines.push(`INFO: ${msg}`);
+  }
+  error(msg: string): void {
+    this.#lines.push(`ERROR: ${msg}`);
+  }
+  get lines(): string[] {
+    return [...this.#lines];
+  }
+}
+
+export class PrefixLogger implements Logger {
+  #inner: Logger;
+  #prefix: string;
+  constructor(inner: Logger, prefix: string) {
+    this.#inner = inner;
+    this.#prefix = prefix;
+  }
+  info(msg: string): void {
+    this.#inner.info(`${this.#prefix} ${msg}`);
+  }
+  error(msg: string): void {
+    this.#inner.error(`${this.#prefix} ${msg}`);
+  }
+}
+
+export function processOrders(ids: number[], logger: Logger): number {
+  let ok = 0;
+  for (const id of ids) {
+    if (id > 0) {
+      logger.info(`order ${id} ok`);
+      ok++;
+    } else {
+      logger.error(`order ${id} invalid`);
+    }
+  }
+  return ok;
+}
+
+const mem = new MemoryLogger();
+console.log(processOrders([1, -2], new PrefixLogger(mem, "[orders]")), mem.lines);
+```
+```out
+1 [ 'INFO: [orders] order 1 ok', 'ERROR: [orders] order -2 invalid' ]
+```
+@mistakes
+<ul><li><code>PrefixLogger extends MemoryLogger</code> — ירושה במקום הרכבה; אז הוא עובד רק עם MemoryLogger.</li></ul>
+
+@@ P12-E11 | 2 | repository גנרי 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>12-design/starter/P12-E11.ts</code> השלם <code>InMemoryRepository&lt;T extends { id: number }&gt;</code> עם מתודות <strong>אסינכרוניות</strong>: <code>findById</code> (עותק או null), <code>findAll</code> (עותקים, ממוינים לפי id), <code>save</code> (מוסיף או מחליף, שומר עותק), <code>delete</code> (true/false), <code>count()</code>.</p>
+@hint1
+<p><code>#items = new Map&lt;number, T&gt;();</code></p>
+@hint2
+<p>עותק: <code>{ ...item }</code> — TypeScript מקבל את זה כ־T.</p>
+@solution
+```ts run save=solutions/P12-E11.ts
+// P12-E11
+export class InMemoryRepository<T extends { id: number }> {
+  #items = new Map<number, T>();
+
+  async findById(id: number): Promise<T | null> {
+    const item = this.#items.get(id);
+    return item ? { ...item } : null;
+  }
+
+  async findAll(): Promise<T[]> {
+    return [...this.#items.values()].sort((a, b) => a.id - b.id).map((x) => ({ ...x }));
+  }
+
+  async save(item: T): Promise<void> {
+    this.#items.set(item.id, { ...item });
+  }
+
+  async delete(id: number): Promise<boolean> {
+    return this.#items.delete(id);
+  }
+
+  async count(): Promise<number> {
+    return this.#items.size;
+  }
+}
+
+const repo = new InMemoryRepository<{ id: number; name: string }>();
+await repo.save({ id: 2, name: "b" });
+await repo.save({ id: 1, name: "a" });
+console.log(await repo.findAll(), await repo.count());
+```
+```out
+[ { id: 1, name: 'a' }, { id: 2, name: 'b' } ] 2
+```
+@mistakes
+<ul><li>save שמאחסן את האובייקט עצמו — מי ששמר וממשיך לשנות אותו, משנה את "המסד".</li></ul>
+
+@@ P12-E12 | 2 | parse ל־DTO 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>12-design/starter/P12-E12.ts</code> השלם <code>parseCreateUser(input: unknown): CreateUserDto</code>, כש־<code>CreateUserDto = { email: string; name: string; age?: number }</code>. נרמול: email ← trim + lowercase; name ← trim. שגיאות — זריקת <code>ValidationError</code> (מוגדרת בקובץ) עם השדה: <code>body</code> ("חייב להיות אובייקט"), <code>email</code> ("אימייל לא תקין" — אין @), <code>name</code> ("שם חובה"), <code>age</code> ("גיל לא תקין" — אם קיים: שלם 13–120). שדות אחרים — לא נכנסים לתוצאה.</p>
+@hint1
+<p><code>const { email, name, age } = input as Record&lt;string, unknown&gt;;</code> אחרי בדיקת אובייקט.</p>
+@hint2
+<p>החזר אובייקט חדש; את age רק אם הוא לא undefined.</p>
+@solution
+```ts run save=solutions/P12-E12.ts
+// P12-E12
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = "ValidationError";
+    this.field = field;
+  }
+}
+
+export type CreateUserDto = { email: string; name: string; age?: number };
+
+export function parseCreateUser(input: unknown): CreateUserDto {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new ValidationError("body", "חייב להיות אובייקט");
+  }
+  const { email, name, age } = input as Record<string, unknown>;
+  if (typeof email !== "string" || !email.includes("@")) {
+    throw new ValidationError("email", "אימייל לא תקין");
+  }
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new ValidationError("name", "שם חובה");
+  }
+  if (age !== undefined && (typeof age !== "number" || !Number.isInteger(age) || age < 13 || age > 120)) {
+    throw new ValidationError("age", "גיל לא תקין");
+  }
+  const dto: CreateUserDto = { email: email.trim().toLowerCase(), name: name.trim() };
+  if (age !== undefined) {
+    dto.age = age;
+  }
+  return dto;
+}
+
+console.log(parseCreateUser({ email: " Dana@X.com ", name: " דנה ", role: "admin" }));
+```
+```out
+{ email: 'dana@x.com', name: 'דנה' }
+```
+@mistakes
+<ul><li>להחזיר <code>{ ...input, email: ... }</code> — <code>role: "admin"</code> עובר פנימה.</li></ul>
+
+@@ P12-E13 | 3 | מלאי עם שמירה על חוקים 🤖 | 20 | שיעור 1
+@task
+<p>בקובץ <code>12-design/starter/P12-E13.ts</code> השלם מחלקה <code>Inventory</code> שמבטיחה שאף פעם אין מלאי שלילי ואף פעם לא "משוריין" יותר ממה שיש:</p>
+<ul><li><code>addStock(sku, qty)</code>; <code>available(sku)</code> = כמות פחות משוריין; <code>reserve(sku, qty)</code> — שריון (לעגלה), זורק <code>Error(`אין מספיק מלאי של ${sku}`)</code>; <code>release(sku, qty)</code> — ביטול שריון (לא יותר ממה ששוריין — אחרת <code>Error("שחרור גדול מהשריון")</code>); <code>commit(sku, qty)</code> — מכירה: מוריד גם מהמלאי וגם מהשריון (לא יותר מהשריון).</li><li>qty חייב להיות שלם חיובי בכל המתודות, אחרת <code>Error("כמות לא תקינה")</code>.</li></ul>
+@hint1
+<p>שני Map פרטיים: <code>#stock</code> ו־<code>#reserved</code>.</p>
+@hint2
+<p>פונקציה פרטית <code>#assertQty(qty)</code> — מתודות פרטיות נכתבות גם הן עם <code>#</code>.</p>
+@solution
+```ts run save=solutions/P12-E13.ts
+// P12-E13
+export class Inventory {
+  #stock = new Map<string, number>();
+  #reserved = new Map<string, number>();
+
+  #assertQty(qty: number): void {
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new Error("כמות לא תקינה");
+    }
+  }
+
+  addStock(sku: string, qty: number): void {
+    this.#assertQty(qty);
+    this.#stock.set(sku, (this.#stock.get(sku) ?? 0) + qty);
+  }
+
+  available(sku: string): number {
+    return (this.#stock.get(sku) ?? 0) - (this.#reserved.get(sku) ?? 0);
+  }
+
+  reserve(sku: string, qty: number): void {
+    this.#assertQty(qty);
+    if (this.available(sku) < qty) {
+      throw new Error(`אין מספיק מלאי של ${sku}`);
+    }
+    this.#reserved.set(sku, (this.#reserved.get(sku) ?? 0) + qty);
+  }
+
+  release(sku: string, qty: number): void {
+    this.#assertQty(qty);
+    const reserved = this.#reserved.get(sku) ?? 0;
+    if (qty > reserved) {
+      throw new Error("שחרור גדול מהשריון");
+    }
+    this.#reserved.set(sku, reserved - qty);
+  }
+
+  commit(sku: string, qty: number): void {
+    this.release(sku, qty);
+    this.#stock.set(sku, (this.#stock.get(sku) ?? 0) - qty);
+  }
+}
+
+const inv = new Inventory();
+inv.addStock("A", 5);
+inv.reserve("A", 3);
+inv.commit("A", 2);
+console.log(inv.available("A"));
+```
+```out
+2
+```
+<p>(5 במלאי, 3 משוריינים ← commit של 2: מלאי 3, משוריין 1 ← זמין 2.) זה בדיוק הדפוס של "שריון בעגלה, הורדה בתשלום" שתממש בפרויקט הדגל — שם עם transaction במסד.</p>
+@mistakes
+<ul><li>commit בלי לבדוק שריון — אפשר למכור מה ששוריין למישהו אחר.</li></ul>
+
+@@ P12-E14 | 3 | הגבלת קצב עם שעון מוזרק 🤖 | 20 | שיעור 2
+@task
+<p>הגבלת קצב (rate limiting) מגינה על שרת מהצפה. בקובץ <code>12-design/starter/P12-E14.ts</code> השלם <code>RateLimiter</code>: constructor מקבל <code>{ limit, windowMs, now = Date.now }</code>. <code>allow(key)</code> מחזירה true אם ל־key היו פחות מ־<code>limit</code> בקשות מותרות ב־<code>windowMs</code> האחרונים (חלון "זז"), ואז רושמת את הבקשה; אחרת false (ולא רושמת). <code>remaining(key)</code> — כמה עוד מותר עכשיו.</p>
+<p>למה מזריקים <code>now</code>? כדי שהבדיקה תוכל "להזיז את הזמן" בלי לחכות באמת.</p>
+@hint1
+<p>Map של key ← מערך זמנים. בכל קריאה — מסננים זמנים ישנים מ־<code>now() - windowMs</code>.</p>
+@hint2
+<p>שמור את <code>now</code> בשדה פרטי וקרא לו <code>this.#now()</code>.</p>
+@solution
+```ts run save=solutions/P12-E14.ts
+// P12-E14
+export class RateLimiter {
+  #limit: number;
+  #windowMs: number;
+  #now: () => number;
+  #hits = new Map<string, number[]>();
+
+  constructor({ limit, windowMs, now = Date.now }: { limit: number; windowMs: number; now?: () => number }) {
+    this.#limit = limit;
+    this.#windowMs = windowMs;
+    this.#now = now;
+  }
+
+  #recent(key: string): number[] {
+    const cutoff = this.#now() - this.#windowMs;
+    const recent = (this.#hits.get(key) ?? []).filter((t) => t > cutoff);
+    this.#hits.set(key, recent);
+    return recent;
+  }
+
+  allow(key: string): boolean {
+    const recent = this.#recent(key);
+    if (recent.length >= this.#limit) {
+      return false;
+    }
+    recent.push(this.#now());
+    return true;
+  }
+
+  remaining(key: string): number {
+    return Math.max(0, this.#limit - this.#recent(key).length);
+  }
+}
+
+let t = 0;
+const rl = new RateLimiter({ limit: 2, windowMs: 1000, now: () => t });
+console.log(rl.allow("ip1"), rl.allow("ip1"), rl.allow("ip1"));
+t = 1001;
+console.log(rl.allow("ip1"), rl.remaining("ip1"));
+```
+```out
+true true false
+true 1
+```
+<p>"שעון מוזרק" הוא אחד הטריקים החשובים בכתיבת קוד בדיק: כל קוד שתלוי בזמן — מקבל את הזמן מבחוץ. נשתמש בזה שוב בפרקים 22 ו־24.</p>
+@mistakes
+<ul><li>לקרוא ל־<code>Date.now()</code> ישירות — הבדיקה תצטרך לחכות שנייה אמיתית.</li></ul>
+
+@@ P12-E15 | 3 | UserService 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>12-design/starter/P12-E15.ts</code> (יש בו <code>User</code>, <code>UserRepository</code> interface, <code>InMemoryUserRepository</code>, ומחלקות שגיאה) השלם <code>UserService</code> שמקבל repository ב־constructor:</p>
+<ul><li><code>register({ email, name })</code> — email מנורמל (trim+lowercase); אם כבר קיים ← <code>ConflictError("האימייל כבר רשום")</code>; id = מספר המשתמשים + 1; מחזיר את המשתמש.</li><li><code>getById(id)</code> — או <code>NotFoundError("משתמש", id)</code>.</li><li><code>rename(id, name)</code> — שם ריק ← <code>ValidationError("name", "שם חובה")</code>; מחזיר את המשתמש המעודכן.</li></ul>
+@hint1
+<p><code>constructor(users: UserRepository) { this.#users = users; }</code></p>
+@hint2
+<p>register: <code>const existing = await this.#users.findByEmail(email); if (existing) throw ...</code></p>
+@solution
+```ts run save=solutions/P12-E15.ts
+// P12-E15
+export type User = { id: number; email: string; name: string };
+
+export interface UserRepository {
+  findById(id: number): Promise<User | null>;
+  findByEmail(email: string): Promise<User | null>;
+  count(): Promise<number>;
+  save(user: User): Promise<void>;
+}
+
+export class InMemoryUserRepository implements UserRepository {
+  #users = new Map<number, User>();
+  async findById(id: number) {
+    const u = this.#users.get(id);
+    return u ? { ...u } : null;
+  }
+  async findByEmail(email: string) {
+    for (const u of this.#users.values()) if (u.email === email) return { ...u };
+    return null;
+  }
+  async count() {
+    return this.#users.size;
+  }
+  async save(user: User) {
+    this.#users.set(user.id, { ...user });
+  }
+}
+
+export class NotFoundError extends Error {
+  constructor(entity: string, id: number) {
+    super(`${entity} ${id} לא נמצא`);
+    this.name = "NotFoundError";
+  }
+}
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = "ValidationError";
+    this.field = field;
+  }
+}
+
+export class UserService {
+  #users: UserRepository;
+
+  constructor(users: UserRepository) {
+    this.#users = users;
+  }
+
+  async register(input: { email: string; name: string }): Promise<User> {
+    const email = input.email.trim().toLowerCase();
+    if (await this.#users.findByEmail(email)) {
+      throw new ConflictError("האימייל כבר רשום");
+    }
+    const user: User = { id: (await this.#users.count()) + 1, email, name: input.name.trim() };
+    await this.#users.save(user);
+    return user;
+  }
+
+  async getById(id: number): Promise<User> {
+    const user = await this.#users.findById(id);
+    if (!user) {
+      throw new NotFoundError("משתמש", id);
+    }
+    return user;
+  }
+
+  async rename(id: number, name: string): Promise<User> {
+    if (name.trim() === "") {
+      throw new ValidationError("name", "שם חובה");
+    }
+    const user = await this.getById(id);
+    const updated = { ...user, name: name.trim() };
+    await this.#users.save(updated);
+    return updated;
+  }
+}
+
+const service = new UserService(new InMemoryUserRepository());
+await service.register({ email: "Dana@X.com", name: "דנה" });
+console.log(await service.rename(1, "דנה כהן"));
+```
+```out
+{ id: 1, email: 'dana@x.com', name: 'דנה כהן' }
+```
+<p>(id = count + 1 שביר אם מוחקים משתמשים — זוכר את פרויקט 1? כאן אין מחיקה; במסד, ה־id ייווצר אוטומטית.)</p>
+@mistakes
+<ul><li>לבדוק כפילות לפני נרמול — <code>Dana@x.com</code> ו־<code>dana@x.com</code> שניהם נרשמים.</li></ul>
+
+@@ P12-E16 | 3 | OrderService עם צילום מחיר 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>12-design/starter/P12-E16.ts</code> השלם <code>OrderService</code>, שמקבל ב־constructor <code>{ products, orders, now }</code> (שני repositories ושעון). <code>placeOrder(userId, items: { productId, qty }[])</code>:</p>
+<ul><li>הזמנה ריקה ← <code>ValidationError("items", "הזמנה ריקה")</code>.</li><li>מוצר לא קיים ← <code>NotFoundError("מוצר", id)</code>; אין מספיק מלאי ← <code>ConflictError(`אין מספיק מלאי למוצר ${id}`)</code>.</li><li><strong>הכול או כלום</strong>: בדוק את כל הפריטים לפני שמשנים מלאי.</li><li>שמור הזמנה <code>{ id, userId, createdAt: now(), lines: [{ productId, qty, unitPrice }], total }</code> — <code>unitPrice</code> הוא <strong>המחיר ברגע ההזמנה</strong> (אם המחיר ישתנה אחר כך — ההזמנה לא משתנה).</li></ul>
+@hint1
+<p>שלב 1: שלוף את כל המוצרים ובדוק. שלב 2: הורד מלאי ושמור הזמנה.</p>
+@hint2
+<p>id להזמנה: <code>(await orders.count()) + 1</code>. total מעוגל ל־2 ספרות.</p>
+@solution
+```ts run save=solutions/P12-E16.ts
+// P12-E16
+export type Product = { id: number; name: string; price: number; stock: number };
+export type OrderLine = { productId: number; qty: number; unitPrice: number };
+export type Order = { id: number; userId: number; createdAt: Date; lines: OrderLine[]; total: number };
+
+export interface Repo<T extends { id: number }> {
+  findById(id: number): Promise<T | null>;
+  save(item: T): Promise<void>;
+  count(): Promise<number>;
+}
+
+export class MemoryRepo<T extends { id: number }> implements Repo<T> {
+  #items = new Map<number, T>();
+  async findById(id: number) {
+    const x = this.#items.get(id);
+    return x ? structuredClone(x) : null;
+  }
+  async save(item: T) {
+    this.#items.set(item.id, structuredClone(item));
+  }
+  async count() {
+    return this.#items.size;
+  }
+}
+
+export class NotFoundError extends Error {}
+export class ConflictError extends Error {}
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.field = field;
+  }
+}
+
+export class OrderService {
+  #products: Repo<Product>;
+  #orders: Repo<Order>;
+  #now: () => Date;
+
+  constructor(deps: { products: Repo<Product>; orders: Repo<Order>; now: () => Date }) {
+    this.#products = deps.products;
+    this.#orders = deps.orders;
+    this.#now = deps.now;
+  }
+
+  async placeOrder(userId: number, items: { productId: number; qty: number }[]): Promise<Order> {
+    if (items.length === 0) {
+      throw new ValidationError("items", "הזמנה ריקה");
+    }
+    const products: Product[] = [];
+    for (const { productId, qty } of items) {
+      const product = await this.#products.findById(productId);
+      if (!product) {
+        throw new NotFoundError(`מוצר ${productId} לא נמצא`);
+      }
+      if (product.stock < qty) {
+        throw new ConflictError(`אין מספיק מלאי למוצר ${productId}`);
+      }
+      products.push(product);
+    }
+
+    const lines: OrderLine[] = items.map((item, i) => ({ ...item, unitPrice: products[i].price }));
+    for (let i = 0; i < items.length; i++) {
+      await this.#products.save({ ...products[i], stock: products[i].stock - items[i].qty });
+    }
+    const total = Math.round(lines.reduce((s, l) => s + l.unitPrice * l.qty, 0) * 100) / 100;
+    const order: Order = { id: (await this.#orders.count()) + 1, userId, createdAt: this.#now(), lines, total };
+    await this.#orders.save(order);
+    return order;
+  }
+}
+
+const products = new MemoryRepo<Product>();
+await products.save({ id: 1, name: "עט", price: 5, stock: 10 });
+const service = new OrderService({ products, orders: new MemoryRepo<Order>(), now: () => new Date("2026-11-01T10:00:00Z") });
+const order = await service.placeOrder(7, [{ productId: 1, qty: 3 }]);
+console.log(order.total, order.lines[0].unitPrice, (await products.findById(1))?.stock);
+```
+```out
+15 5 7
+```
+<p>שים לב לשתי הגבלות בפתרון: (1) אם אותו מוצר מופיע פעמיים בהזמנה — הבדיקה לא מצרפת כמויות (תרגיל להרחבה); (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
+@mistakes
+<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li></ul>
+
+@@ P12-E17 | 3 | repository עם cache (הרכבה) 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>12-design/starter/P12-E17.ts</code> השלם <code>CachedRepository&lt;T&gt; implements Repo&lt;T&gt;</code> — עוטף repository אחר (מקבל אותו ב־constructor):</p>
+<ul><li><code>findById</code> — מהזיכרון אם כבר נטען, אחרת מה־inner ושומר (גם תוצאה null נשמרת).</li><li><code>save</code> — שומר ב־inner <strong>ומעדכן</strong> את ה־cache (אחרת יוחזר מידע ישן).</li><li>getters <code>hits</code> ו־<code>misses</code>.</li></ul>
+<p>ה־service שמשתמש בו לא יודע שיש cache בכלל — זה כל העניין.</p>
+@hint1
+<p><code>#cache = new Map&lt;number, T | null&gt;()</code>; בדוק עם <code>has</code> (ולא עם הערך — כי null הוא ערך שמור).</p>
+@hint2
+<p>החזר עותקים גם מה־cache.</p>
+@solution
+```ts run save=solutions/P12-E17.ts
+// P12-E17
+export interface Repo<T extends { id: number }> {
+  findById(id: number): Promise<T | null>;
+  save(item: T): Promise<void>;
+}
+
+export class CachedRepository<T extends { id: number }> implements Repo<T> {
+  #inner: Repo<T>;
+  #cache = new Map<number, T | null>();
+  #hits = 0;
+  #misses = 0;
+
+  constructor(inner: Repo<T>) {
+    this.#inner = inner;
+  }
+
+  get hits(): number {
+    return this.#hits;
+  }
+  get misses(): number {
+    return this.#misses;
+  }
+
+  async findById(id: number): Promise<T | null> {
+    if (this.#cache.has(id)) {
+      this.#hits++;
+      const cached = this.#cache.get(id) ?? null;
+      return cached ? { ...cached } : null;
+    }
+    this.#misses++;
+    const item = await this.#inner.findById(id);
+    this.#cache.set(id, item ? { ...item } : null);
+    return item;
+  }
+
+  async save(item: T): Promise<void> {
+    await this.#inner.save(item);
+    this.#cache.set(item.id, { ...item });
+  }
+}
+
+const calls: number[] = [];
+const slow: Repo<{ id: number; v: string }> = {
+  async findById(id) {
+    calls.push(id);
+    return id === 1 ? { id: 1, v: "a" } : null;
+  },
+  async save() {},
+};
+const repo = new CachedRepository(slow);
+await repo.findById(1);
+await repo.findById(1);
+await repo.findById(2);
+await repo.findById(2);
+console.log(repo.hits, repo.misses, calls);
+```
+```out
+2 2 [ 1, 2 ]
+```
+<p>זה דפוס "decorator": אותו חוזה, התנהגות נוספת. בפרק 26 נעשה את אותו דבר עם Redis — ונגלה שהחלק הקשה הוא דווקא מתי לנקות את ה־cache.</p>
+@mistakes
+<ul><li><code>if (this.#cache.get(id))</code> — null שמור נחשב "לא בזיכרון", ושוב פונים ל־inner.</li></ul>
+
+@@ P12-E18 | 3 | מיפוי בין שכבות 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>12-design/starter/P12-E18.ts</code> יש שלושה טיפוסים: <code>UserRecord</code> (מה שבמסד — כולל <code>password_hash</code>, <code>created_at</code> כ־Date, <code>is_deleted</code>), <code>UserResponse</code> (מה שיוצא ללקוח — camelCase, תאריך כמחרוזת ISO, בלי סודות). השלם:</p>
+<ul><li><code>toUserResponse(r)</code> ← <code>{ id, email, displayName, memberSince }</code> (<code>displayName</code> = <code>first_name + " " + last_name</code>; <code>memberSince</code> = <code>created_at.toISOString().slice(0, 10)</code>).</li><li><code>toUserResponses(records)</code> ← בלי מחוקים.</li></ul>
+@hint1
+<p>בנה אובייקט חדש שדה־שדה — לא spread.</p>
+@hint2
+<p><code>new Date("2026-03-05T12:00:00Z").toISOString().slice(0, 10)</code> ← <code>"2026-03-05"</code>.</p>
+@solution
+```ts run save=solutions/P12-E18.ts
+// P12-E18
+export type UserRecord = {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  password_hash: string;
+  created_at: Date;
+  is_deleted: boolean;
+};
+
+export type UserResponse = { id: number; email: string; displayName: string; memberSince: string };
+
+export function toUserResponse(r: UserRecord): UserResponse {
+  return {
+    id: r.id,
+    email: r.email,
+    displayName: `${r.first_name} ${r.last_name}`,
+    memberSince: r.created_at.toISOString().slice(0, 10),
+  };
+}
+
+export function toUserResponses(records: UserRecord[]): UserResponse[] {
+  return records.filter((r) => !r.is_deleted).map(toUserResponse);
+}
+
+console.log(
+  toUserResponse({
+    id: 1,
+    email: "d@x.com",
+    first_name: "דנה",
+    last_name: "כהן",
+    password_hash: "$2b$10$...",
+    created_at: new Date("2026-03-05T12:00:00Z"),
+    is_deleted: false,
+  })
+);
+```
+```out
+{
+  id: 1,
+  email: 'd@x.com',
+  displayName: 'דנה כהן',
+  memberSince: '2026-03-05'
+}
+```
+<p>(snake_case במסד, camelCase ב־JSON — מוסכמה נפוצה, ובשכבה הזו מתרגמים ביניהן.)</p>
+@mistakes
+<ul><li><code>{ ...r, displayName }</code> — <code>password_hash</code> יוצא ללקוח.</li></ul>
+
+@@ P12-E19 | 3 | פרמטרי עמוד מה־URL 🤖 | 15 | שיעור 4
+@task
+<p>פרמטרים מה־URL מגיעים כמחרוזות (או חסרים). בקובץ <code>12-design/starter/P12-E19.ts</code> השלם <code>parsePagination(query: Record&lt;string, string | undefined&gt;)</code> ← <code>{ page, pageSize, offset }</code>: ברירות מחדל page=1, pageSize=20; page שלם ≥1; pageSize שלם 1–100; offset = <code>(page-1)*pageSize</code>. ערך קיים ולא תקין ← <code>ValidationError(field, ...)</code> (מוגדרת בקובץ) עם ההודעות: <code>"page חייב להיות מספר שלם חיובי"</code>, <code>"pageSize חייב להיות בין 1 ל־100"</code>.</p>
+@hint1
+<p>פונקציית עזר: <code>parseIntStrict(text)</code> — רק ספרות (<code>/^\d+$/</code> — ביטוי רגולרי: "רק ספרות מההתחלה עד הסוף"), אחרת null.</p>
+@hint2
+<p><code>/^\d+$/.test(text) ? Number(text) : null</code></p>
+@solution
+```ts run save=solutions/P12-E19.ts
+// P12-E19
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.field = field;
+  }
+}
+
+function parseIntStrict(text: string): number | null {
+  return /^\d+$/.test(text.trim()) ? Number(text.trim()) : null;
+}
+
+export function parsePagination(query: Record<string, string | undefined>): { page: number; pageSize: number; offset: number } {
+  let page = 1;
+  if (query.page !== undefined) {
+    const p = parseIntStrict(query.page);
+    if (p === null || p < 1) {
+      throw new ValidationError("page", "page חייב להיות מספר שלם חיובי");
+    }
+    page = p;
+  }
+  let pageSize = 20;
+  if (query.pageSize !== undefined) {
+    const s = parseIntStrict(query.pageSize);
+    if (s === null || s < 1 || s > 100) {
+      throw new ValidationError("pageSize", "pageSize חייב להיות בין 1 ל־100");
+    }
+    pageSize = s;
+  }
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
+console.log(parsePagination({ page: "3", pageSize: "10" }), parsePagination({}));
+```
+```out
+{ page: 3, pageSize: 10, offset: 20 } { page: 1, pageSize: 20, offset: 0 }
+```
+<p>(<code>Number("1e2")</code> הוא 100 ו־<code>Number("0x10")</code> הוא 16 — לכן בדיקה קפדנית של "רק ספרות".)</p>
+@mistakes
+<ul><li><code>Number(query.page) || 1</code> — "abc" הופך בשקט לעמוד 1 במקום שגיאה.</li></ul>
+
+@@ P12-E20 | 4 | this שהלך לאיבוד 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>12-design/starter/P12-E20.ts</code>, <code>PriceFormatter</code> עובדת כשקוראים <code>fmt.format(10)</code>, אבל <code>prices.map(fmt.format)</code> קורס עם <code>TypeError: Cannot read properties of undefined</code>. הבן למה, ותקן <strong>בתוך המחלקה</strong> כך ששני הסגנונות יעבדו.</p>
+@hint1
+<p><code>fmt.format</code> בלי סוגריים הוא הפונקציה "מנותקת" מהאובייקט — בקריאה דרך map, <code>this</code> הוא undefined.</p>
+@hint2
+<p>הגדר את format כשדה שהוא arrow function: <code>format = (n: number): string =&gt; ...</code> — arrow function לוקחת את <code>this</code> מהמקום שבו נוצרה.</p>
+@solution
+```ts run save=solutions/P12-E20.ts
+// P12-E20: מתוקן
+export class PriceFormatter {
+  #currency: string;
+  constructor(currency: string) {
+    this.#currency = currency;
+  }
+  format = (n: number): string => `${this.#currency}${n.toFixed(2)}`;
+}
+
+const fmt = new PriceFormatter("₪");
+console.log([10, 2.5].map(fmt.format), fmt.format(1));
+```
+```out
+[ '₪10.00', '₪2.50' ] ₪1.00
+```
+<p>זה ההבדל ב־<code>this</code> בין arrow function ל־function רגילה, שהוזכר בפרק 5. חלופות: <code>prices.map((n) =&gt; fmt.format(n))</code> בצד הקורא, או <code>this.format = this.format.bind(this)</code> ב־constructor.</p>
+@mistakes
+<ul><li>"לתקן" עם <code>prices.map(fmt.format.bind(fmt))</code> בכל מקום שקורא — עובד, אבל כל מי שישתמש במחלקה ייפול שוב.</li></ul>
+
+@@ P12-E21 | 4 | שגיאות שלא מזוהות 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>12-design/starter/P12-E21.ts</code>, מחלקות השגיאה נראות תקינות, אבל ה־handler מחזיר תשובה שגויה ושם השגיאה ב־stack הוא <code>"Error"</code>. שלושה באגים. תקן.</p>
+@hint1
+<p>name לא מוגדר; status מוגדר במקום הלא נכון; סדר ה־instanceof.</p>
+@hint2
+<p>בדוק כל מחלקה: האם <code>super</code> מקבל את ההודעה?</p>
+@solution
+```ts run save=solutions/P12-E21.ts
+// P12-E21: מתוקן
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+  }
+}
+
+export class NotFoundError extends HttpError {
+  constructor(message: string) {
+    super(message, 404);
+  }
+}
+
+export class ForbiddenError extends HttpError {
+  constructor(message = "אין הרשאה") {
+    super(message, 403);
+  }
+}
+
+export function respond(err: unknown): string {
+  if (err instanceof NotFoundError) return `404 ${err.message}`;
+  if (err instanceof ForbiddenError) return `403 ${err.message}`;
+  if (err instanceof HttpError) return `${err.status} ${err.message}`;
+  return "500 שגיאה פנימית";
+}
+
+console.log(respond(new ForbiddenError()), new NotFoundError("x").name);
+```
+```out
+403 אין הרשאה NotFoundError
+```
+<p>הבאגים: (1) <code>super()</code> בלי ההודעה — message ריק; (2) אין <code>this.name</code>, ולכן כל השגיאות נקראות "Error" ביומן; (3) בדיקת <code>HttpError</code> לפני הספציפיות. (נסה: בלי התיקון, ForbiddenError הייתה מחזירה "403 " עם הודעה ריקה.)</p>
+@mistakes
+<ul><li>לתקן רק את הסדר — ההודעות עדיין ריקות.</li></ul>
+
+@@ P12-E22 | 4 | repository שדולף ו־service שלא ניתן לבדוק 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>12-design/starter/P12-E22.ts</code> שתי בעיות תכנון: (1) <code>MemoryProductRepo</code> מחזיר את האובייקטים הפנימיים, כך שמי שקיבל מוצר ושינה אותו — שינה את "המסד" בלי <code>save</code>; (2) <code>PricingService</code> יוצר לעצמו repository בתוך ה־constructor, כך שהבדיקה לא יכולה להעביר נתונים משלה. תקן את שתיהן. הבודק יוצר <code>new PricingService(repo)</code> עם repository משלו.</p>
+@hint1
+<p>החזר עותקים, ושמור עותקים.</p>
+@hint2
+<p>constructor שמקבל <code>ProductRepo</code>.</p>
+@solution
+```ts run save=solutions/P12-E22.ts
+// P12-E22: מתוקן
+export type Product = { id: number; price: number };
+
+export interface ProductRepo {
+  findById(id: number): Promise<Product | null>;
+  save(p: Product): Promise<void>;
+}
+
+export class MemoryProductRepo implements ProductRepo {
+  #items = new Map<number, Product>();
+  async findById(id: number) {
+    const p = this.#items.get(id);
+    return p ? { ...p } : null;
+  }
+  async save(p: Product) {
+    this.#items.set(p.id, { ...p });
+  }
+}
+
+export class PricingService {
+  #repo: ProductRepo;
+  constructor(repo: ProductRepo) {
+    this.#repo = repo;
+  }
+  async priceWithVat(id: number): Promise<number> {
+    const p = await this.#repo.findById(id);
+    if (!p) throw new Error(`מוצר ${id} לא נמצא`);
+    return Math.round(p.price * 1.18 * 100) / 100;
+  }
+}
+
+const repo = new MemoryProductRepo();
+await repo.save({ id: 1, price: 100 });
+const p = await repo.findById(1);
+if (p) p.price = 1;
+console.log(await new PricingService(repo).priceWithVat(1));
+```
+```out
+118
+```
+@mistakes
+<ul><li>להשאיר ב־PricingService ברירת מחדל <code>repo = new MemoryProductRepo()</code> "לנוחות" — מקובל לפעמים, אבל קל לשכוח להעביר את האמיתי ולעבוד בייצור עם זיכרון.</li></ul>
+
+@@ P12-E23 | 4 | העלאת הרשאות דרך as 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>12-design/starter/P12-E23.ts</code>, <code>updateProfile(user, body)</code> מקבלת גוף בקשה (unknown) וממזגת אותו למשתמש עם <code>{ ...user, ...(body as ProfileUpdate) }</code>. תוקף שולח <code>{"name": "x", "role": "admin"}</code> — והופך למנהל! תקן: רק <code>name</code> (מחרוזת לא ריקה, עד 50 תווים) ו־<code>bio</code> (מחרוזת עד 200, אופציונלי) מותרים; שדות אחרים — מתעלמים; ערך לא תקין ← <code>Error(`שדה לא תקין: ${field}`)</code>.</p>
+@hint1
+<p>בנה אובייקט עדכון חדש רק עם השדות המותרים.</p>
+@hint2
+<p>אחרי הבדיקה: <code>return { ...user, ...update }</code> כש־<code>update</code> בנוי ממך.</p>
+@solution
+```ts run save=solutions/P12-E23.ts
+// P12-E23: מתוקן — רשימת שדות מותרים
+export type User = { id: number; name: string; bio: string; role: "user" | "admin" };
+export type ProfileUpdate = { name?: string; bio?: string };
+
+export function updateProfile(user: User, body: unknown): User {
+  if (typeof body !== "object" || body === null) {
+    throw new Error("שדה לא תקין: body");
+  }
+  const { name, bio } = body as Record<string, unknown>;
+  const update: ProfileUpdate = {};
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.trim() === "" || name.length > 50) {
+      throw new Error("שדה לא תקין: name");
+    }
+    update.name = name.trim();
+  }
+  if (bio !== undefined) {
+    if (typeof bio !== "string" || bio.length > 200) {
+      throw new Error("שדה לא תקין: bio");
+    }
+    update.bio = bio;
+  }
+  return { ...user, ...update };
+}
+
+console.log(updateProfile({ id: 1, name: "a", bio: "", role: "user" }, { name: "דנה", role: "admin" }));
+```
+```out
+{ id: 1, name: 'דנה', bio: '', role: 'user' }
+```
+<p>"Mass assignment" היא פרצה אמיתית שפגעה בחברות גדולות. הכלל: <strong>רשימה מותרת (allowlist)</strong> — לא רשימה אסורה.</p>
+@mistakes
+<ul><li>למחוק <code>role</code> מה־body (<code>delete body.role</code>) — מחר יתווסף שדה <code>isVerified</code>, ותשכח למחוק גם אותו.</li></ul>
+
+@@ P12-E24 | 5 | אתגר: ארנק והעברות idempotent 🤖 | 40 | כל הפרק
+@task
+<p>בקובץ <code>12-design/starter/P12-E24.ts</code> השלם <code>TransferService</code> שמקבל <code>WalletRepo</code> (interface בקובץ). <code>transfer({ from, to, amount, idempotencyKey })</code>:</p>
+<ul><li>סכום חיובי עם עד 2 ספרות עשרוניות; כל החישובים <strong>באגורות שלמות</strong>.</li><li>ארנק לא קיים ← <code>NotFoundError</code>; אותו ארנק ← <code>ValidationError</code>; אין מספיק ← <code>InsufficientFundsError</code> (כל השגיאות בקובץ).</li><li><strong>idempotency:</strong> אותה <code>idempotencyKey</code> שוב (למשל לחיצה כפולה או ניסיון חוזר של רשת) ← מחזירה את <strong>אותה</strong> תוצאה ולא מעבירה שוב — גם אם בינתיים היתרה השתנתה.</li><li>מחזירה <code>{ transferId, fromBalance, toBalance }</code> (יתרות בשקלים).</li></ul>
+@hint1
+<p>Map פרטי של key ← תוצאה. בדוק אותו <strong>לפני</strong> כל דבר אחר.</p>
+@hint2
+<p>שקלים ← אגורות: <code>Math.round(amount * 100)</code>, ובדוק ש־<code>Math.abs(amount * 100 - agorot) &lt; 1e-9</code> (אחרת יש יותר מ־2 ספרות).</p>
+@solution
+```ts run save=solutions/P12-E24.ts
+// P12-E24
+export type Wallet = { id: string; balanceAgorot: number };
+export interface WalletRepo {
+  find(id: string): Promise<Wallet | null>;
+  save(w: Wallet): Promise<void>;
+}
+export class NotFoundError extends Error {}
+export class ValidationError extends Error {}
+export class InsufficientFundsError extends Error {}
+
+type TransferResult = { transferId: number; fromBalance: number; toBalance: number };
+
+export class TransferService {
+  #wallets: WalletRepo;
+  #done = new Map<string, TransferResult>();
+  #nextId = 1;
+
+  constructor(wallets: WalletRepo) {
+    this.#wallets = wallets;
+  }
+
+  async transfer(req: { from: string; to: string; amount: number; idempotencyKey: string }): Promise<TransferResult> {
+    const previous = this.#done.get(req.idempotencyKey);
+    if (previous) {
+      return previous;
+    }
+    const agorot = Math.round(req.amount * 100);
+    if (!(req.amount > 0) || Math.abs(req.amount * 100 - agorot) > 1e-9) {
+      throw new ValidationError("סכום לא תקין");
+    }
+    if (req.from === req.to) {
+      throw new ValidationError("לא ניתן להעביר לאותו ארנק");
+    }
+    const from = await this.#wallets.find(req.from);
+    const to = await this.#wallets.find(req.to);
+    if (!from || !to) {
+      throw new NotFoundError("ארנק לא נמצא");
+    }
+    if (from.balanceAgorot < agorot) {
+      throw new InsufficientFundsError("אין מספיק יתרה");
+    }
+    const newFrom = { ...from, balanceAgorot: from.balanceAgorot - agorot };
+    const newTo = { ...to, balanceAgorot: to.balanceAgorot + agorot };
+    await this.#wallets.save(newFrom);
+    await this.#wallets.save(newTo);
+    const result = { transferId: this.#nextId++, fromBalance: newFrom.balanceAgorot / 100, toBalance: newTo.balanceAgorot / 100 };
+    this.#done.set(req.idempotencyKey, result);
+    return result;
+  }
+}
+
+const store = new Map<string, Wallet>([["a", { id: "a", balanceAgorot: 10000 }], ["b", { id: "b", balanceAgorot: 0 }]]);
+const repo: WalletRepo = { find: async (id) => (store.has(id) ? { ...store.get(id)! } : null), save: async (w) => void store.set(w.id, { ...w }) };
+const svc = new TransferService(repo);
+const r1 = await svc.transfer({ from: "a", to: "b", amount: 19.9, idempotencyKey: "k1" });
+const r2 = await svc.transfer({ from: "a", to: "b", amount: 19.9, idempotencyKey: "k1" });
+console.log(r1, r1 === r2, store.get("a")?.balanceAgorot);
+```
+```out
+{ transferId: 1, fromBalance: 80.1, toBalance: 19.9 } true 8010
+```
+<p>idempotency היא דרישה בכל מערכת תשלומים, ותופיע בפרויקט הדגל (מפתח בכותרת הבקשה). כאן ה־Map בזיכרון — בייצור היא נשמרת במסד, ונבדקת בתוך אותה transaction.</p>
+@mistakes
+<ul><li>לבדוק את ה־idempotencyKey <em>אחרי</em> הבדיקות — ניסיון חוזר אחרי שהיתרה ירדה ייכשל ב"אין מספיק יתרה" במקום להחזיר את התוצאה המקורית.</li></ul>
+
+@@ P12-E25 | 5 | אתגר: מיכל DI זעיר 🤖 | 35 | כל הפרק
+@task
+<p>NestJS יוצר ומזריק את כל ה־services בשבילך. בקובץ <code>12-design/starter/P12-E25.ts</code> בנה גרסה זעירה: <code>Container</code> עם</p>
+<ul><li><code>register(name, factory)</code> — factory מקבלת את ה־container ומחזירה את השירות (ויכולה לקרוא ל־<code>resolve</code> לתלויות שלה). שם קיים ← <code>Error(`השירות ${name} כבר רשום`)</code>.</li><li><code>resolve(name)</code> — יוצר פעם אחת בלבד (singleton) ומחזיר אותו מופע בכל קריאה. שם לא רשום ← <code>Error(`השירות ${name} לא רשום`)</code>.</li><li>זיהוי מעגל (A צריך את B שצריך את A) ← <code>Error("תלות מעגלית: A -> B -> A")</code>.</li></ul>
+@hint1
+<p>שני Map: factories ו־instances. ומערך "בתהליך יצירה" (stack) לזיהוי מעגל.</p>
+@hint2
+<p>ב־resolve: אם name כבר ב־stack — מעגל: <code>[...stack.slice(stack.indexOf(name)), name].join(" -&gt; ")</code>.</p>
+@solution
+```ts run save=solutions/P12-E25.ts
+// P12-E25: מיכל DI מינימלי
+export class Container {
+  #factories = new Map<string, (c: Container) => unknown>();
+  #instances = new Map<string, unknown>();
+  #resolving: string[] = [];
+
+  register(name: string, factory: (c: Container) => unknown): void {
+    if (this.#factories.has(name)) {
+      throw new Error(`השירות ${name} כבר רשום`);
+    }
+    this.#factories.set(name, factory);
+  }
+
+  resolve<T = unknown>(name: string): T {
+    if (this.#instances.has(name)) {
+      return this.#instances.get(name) as T;
+    }
+    const factory = this.#factories.get(name);
+    if (!factory) {
+      throw new Error(`השירות ${name} לא רשום`);
+    }
+    if (this.#resolving.includes(name)) {
+      const cycle = [...this.#resolving.slice(this.#resolving.indexOf(name)), name];
+      throw new Error(`תלות מעגלית: ${cycle.join(" -> ")}`);
+    }
+    this.#resolving.push(name);
+    try {
+      const instance = factory(this);
+      this.#instances.set(name, instance);
+      return instance as T;
+    } finally {
+      this.#resolving.pop();
+    }
+  }
+}
+
+class Repo {}
+class Service {
+  repo: Repo;
+  constructor(repo: Repo) {
+    this.repo = repo;
+  }
+}
+const c = new Container();
+c.register("repo", () => new Repo());
+c.register("service", (ct) => new Service(ct.resolve<Repo>("repo")));
+const s = c.resolve<Service>("service");
+console.log(s === c.resolve("service"), s.repo === c.resolve("repo"));
+
+c.register("A", (ct) => ct.resolve("B"));
+c.register("B", (ct) => ct.resolve("A"));
+try {
+  c.resolve("A");
+} catch (err) {
+  console.log((err as Error).message);
+}
+```
+```out
+true true
+תלות מעגלית: A -> B -> A
+```
+<p>(<code>finally</code> — כדי שה־stack יתנקה גם כשנזרקת שגיאה.) כשתראה בפרק 20 שגיאה של Nest כמו "Nest can't resolve dependencies of OrderService" — תדע בדיוק מה קורה מאחורי הקלעים.</p>
+@mistakes
+<ul><li>בלי זיהוי מעגל — <code>resolve("A")</code> נכנס לרקורסיה אינסופית: <code>RangeError: Maximum call stack size exceeded</code>.</li></ul>

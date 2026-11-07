@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NULL וצבירות — פרק 16</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 16</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — NULL וצבירות</h1>
+  <p class="subtitle">⏱ ~35 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>NULL: "לא ידוע" — ואיך הוא שובר השוואות.</li>
+      <li><code>IS NULL</code>, <code>COALESCE</code>.</li>
+      <li>צבירות: <code>COUNT</code>, <code>SUM</code>, <code>AVG</code>, <code>MIN</code>, <code>MAX</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. NULL הוא לא ערך</h2>
+  <p>ל־Yossi אין טלפון בטבלה. זה לא <code>''</code> (מחרוזת ריקה) ולא <code>0</code> — זה <code>NULL</code>: "אין מידע". ו־SQL מתייחס ל"לא ידוע" ברצינות:</p>
+<pre><code class="lang-sql">SELECT full_name, phone FROM customers WHERE phone = NULL;</code></pre>
+<pre class="terminal"> full_name | phone
+-----------+-------
+(0 rows)</pre>
+  <p>אפס שורות! כי <code>phone = NULL</code> הוא לא <code>true</code> וגם לא <code>false</code> — הוא <code>NULL</code> ("אולי? לא יודע"). ו־WHERE מחזיר רק שורות שהתנאי שלהן <code>true</code>. הדרך הנכונה:</p>
+<pre><code class="lang-sql">SELECT full_name, phone FROM customers WHERE phone IS NULL ORDER BY full_name;</code></pre>
+<pre class="terminal">  full_name   | phone
+--------------+-------
+ lior katz    |
+ Michal Biton |
+ Omer Shalom  |
+ Yossi Cohen  |
+(4 rows)</pre>
+  <div class="table-wrap"><table>
+    <tr><th>ביטוי</th><th>תוצאה</th></tr>
+    <tr><td><code>NULL = NULL</code></td><td><code>NULL</code> (שני לא־ידועים — לא בהכרח שווים)</td></tr>
+    <tr><td><code>NULL + 5</code></td><td><code>NULL</code></td></tr>
+    <tr><td><code>NULL AND false</code></td><td><code>false</code> (מספיק שאחד false)</td></tr>
+    <tr><td><code>NULL OR true</code></td><td><code>true</code></td></tr>
+    <tr><td><code>x IS NULL</code> / <code>x IS NOT NULL</code></td><td>תמיד <code>true</code> או <code>false</code></td></tr>
+    <tr><td><code>x IS DISTINCT FROM y</code></td><td>"שונה", כש־NULL נחשב ערך רגיל</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ המלכודת של <code>&lt;&gt;</code></span>
+    <p>"כל הלקוחות שלא גרים בחיפה": <code>WHERE city &lt;&gt; 'Haifa'</code> — <strong>מפספס</strong> את מי שהעיר שלו NULL (כי <code>NULL &lt;&gt; 'Haifa'</code> הוא NULL). אם הם אמורים להיכלל: <code>WHERE city IS DISTINCT FROM 'Haifa'</code>, או <code>WHERE city &lt;&gt; 'Haifa' OR city IS NULL</code>.</p>
+  </div>
+<pre><code class="lang-sql">SELECT full_name, COALESCE(city, 'unknown') AS city
+FROM customers
+WHERE city IS NULL OR city = 'Ramat Gan'
+ORDER BY full_name;</code></pre>
+<pre class="terminal">  full_name  |   city
+-------------+-----------
+ Avi Peretz  | unknown
+ lior katz   | Ramat Gan
+ Omer Shalom | unknown
+(3 rows)</pre>
+  <p><code>COALESCE(a, b, c)</code> — הערך הראשון שאינו NULL. שימושי להצגה, ולברירות מחדל בחישובים.</p>
+
+  <h2>2. צבירות</h2>
+<pre><code class="lang-sql">SELECT
+  COUNT(*)            AS products,
+  SUM(stock)          AS units,
+  MIN(price)          AS cheapest,
+  MAX(price)          AS priciest,
+  ROUND(AVG(price), 2) AS avg_price
+FROM products
+WHERE is_active;</code></pre>
+<pre class="terminal"> products | units | cheapest | priciest | avg_price
+----------+-------+----------+----------+-----------
+       12 |   660 |    19.90 |   649.00 |    143.54
+(1 row)</pre>
+  <p>פונקציית צבירה הופכת הרבה שורות לשורה אחת. ה־WHERE רץ קודם — הצבירה רק על המוצרים הפעילים.</p>
+  <h3>COUNT ו־NULL</h3>
+<pre><code class="lang-sql">SELECT COUNT(*) AS customers, COUNT(phone) AS with_phone, COUNT(DISTINCT city) AS cities
+FROM customers;</code></pre>
+<pre class="terminal"> customers | with_phone | cities
+-----------+------------+--------
+        12 |          8 |      5
+(1 row)</pre>
+  <ul>
+    <li><code>COUNT(*)</code> — כל השורות.</li>
+    <li><code>COUNT(phone)</code> — שורות שבהן phone <strong>אינו NULL</strong>. כל הצבירות (חוץ מ־<code>COUNT(*)</code>) מתעלמות מ־NULL.</li>
+    <li><code>COUNT(DISTINCT city)</code> — ערכים שונים (NULL לא נספר).</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 numeric לכסף</span>
+    <p>שים לב ש־<code>price</code> הוא <code>numeric(10, 2)</code> — מספר עשרוני מדויק. ב־JavaScript, <code>0.1 + 0.2</code> הוא <code>0.30000000000000004</code> (פרק 2); ב־numeric זה תמיד <code>0.3</code>. לכן כסף במסד — numeric, לעולם לא <code>real</code>/<code>float</code>.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P16-E04">E04</a> · <a href="exercises.html#P16-E10">E10</a> · <a href="exercises.html#P16-E11">E11</a> · <a href="exercises.html#P16-E14">E14</a> · <a href="exercises.html#P16-E15">E15</a> · <a href="exercises.html#P16-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-select.html"><small>הקודם</small>שיעור 2 — SELECT: לשלוף, לסנן, למיין</a><a href="lesson-04-ddl-dml.html"><small>הבא</small>שיעור 4 — יצירת טבלאות ושינוי נתונים</a></div>
+</main>
+</body>
+</html>

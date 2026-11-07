@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מודולים: קוד בכמה קבצים — פרק 8</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 8</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — מודולים: קוד בכמה קבצים</h1>
+  <p class="subtitle">⏱ ~35 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה מפצלים קוד לקבצים.</li>
+      <li>CommonJS: <code>module.exports</code> ו־<code>require</code> — השורה בתחתית התרגילים.</li>
+      <li>ES Modules: <code>export</code> ו־<code>import</code> — התחביר המודרני.</li>
+      <li>מה לבחור, ואיך Node יודע באיזה סגנון מדובר.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה לפצל?</h2>
+  <p>קובץ של 800 שורות הוא כמו מחסן בלי מדפים. כשמפצלים לפי <strong>נושא</strong> — קובץ לחישובי מחירים, קובץ לבדיקות קלט, קובץ ל"תוכנית הראשית" — קל למצוא דברים, קל לבדוק כל חלק לבד, ושני אנשים יכולים לעבוד במקביל בלי להתנגש.</p>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="קובץ main שמייבא משני קבצים">
+      <defs><marker id="am8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--accent)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="40" y="20" width="200" height="70" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="40" y="110" width="200" height="70" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="460" y="65" width="220" height="70" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g style="stroke:var(--accent);stroke-width:2;fill:none">
+        <path d="M244 55 C 350 55, 360 90, 456 95" marker-end="url(#am8)"/>
+        <path d="M244 145 C 350 145, 360 110, 456 105" marker-end="url(#am8)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="140" y="50" class="mono" style="font-size:16px">pricing.js</text>
+        <text x="140" y="72" class="mono" style="font-size:12px;fill:var(--muted)">exports: withVat, discount</text>
+        <text x="140" y="140" class="mono" style="font-size:16px">validation.js</text>
+        <text x="140" y="162" class="mono" style="font-size:12px;fill:var(--muted)">exports: validateQty</text>
+        <text x="570" y="96" class="mono" style="font-size:16px">main.js</text>
+        <text x="570" y="118" direction="rtl" style="font-size:12px;fill:var(--muted)">מייבא ומשתמש</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: כל קובץ מחליט מה הוא "מוציא החוצה" (export). מה שלא ייצא — פרטי לקובץ.</figcaption>
+  </figure>
+
+  <h2>2. CommonJS: <code>module.exports</code> ו־<code>require</code></h2>
+  <p>זה הסגנון שבו כתובים קובצי התרגילים מאז פרק 5:</p>
+<span class="file-label">playground/shop/pricing.js</span>
+<pre><code class="lang-js">const VAT = 0.18;
+
+function withVat(price) {
+  return Math.round(price * (1 + VAT) * 100) / 100;
+}
+
+function discount(price, percent) {
+  return price * (1 - percent / 100);
+}
+
+module.exports = { withVat, discount };</code></pre>
+<span class="file-label">playground/shop/main.js</span>
+<pre><code class="lang-js">const { withVat, discount } = require("./pricing");
+
+console.log(withVat(100));
+console.log(withVat(discount(200, 10)));</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node playground/shop/main.js
+118
+212.4</pre>
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td><code>module.exports = { withVat, discount };</code></td><td>"זה מה שהקובץ הזה נותן החוצה" — אובייקט עם שתי פונקציות (shorthand מפרק 7)</td></tr>
+    <tr><td><code>require("./pricing")</code></td><td>מריץ את <code>pricing.js</code> (פעם אחת) ומחזיר את ה־<code>module.exports</code> שלו</td></tr>
+    <tr><td><code>const { withVat, discount } = ...</code></td><td>destructuring — מוציאים את מה שצריך</td></tr>
+    <tr><td><code>./</code></td><td><strong>חובה</strong> לקבצים שלך: "באותה תיקייה". בלי <code>./</code>, Node מחפש ספרייה מותקנת (פרק 13)</td></tr>
+  </table></div>
+  <p>שים לב: <code>VAT</code> לא ייצא, ולכן <code>main.js</code> לא רואה אותו — הוא "פרטי" ל־<code>pricing.js</code>. ועכשיו מובן מה הבודק עושה: הוא מבצע <code>require</code> (ליתר דיוק <code>import</code>) לקובץ שלך ומקבל את מה שייצאת.</p>
+
+  <h2>3. ES Modules: <code>export</code> ו־<code>import</code></h2>
+  <p>הסגנון המודרני, שקיים גם בדפדפן. אותו קוד:</p>
+<span class="file-label">playground/shop-esm/pricing.mjs</span>
+<pre><code class="lang-js">const VAT = 0.18;
+
+export function withVat(price) {
+  return Math.round(price * (1 + VAT) * 100) / 100;
+}
+
+export const discount = (price, percent) =&gt; price * (1 - percent / 100);</code></pre>
+<span class="file-label">playground/shop-esm/main.mjs</span>
+<pre><code class="lang-js">import { withVat, discount } from "./pricing.mjs";
+
+console.log(withVat(100));
+console.log(withVat(discount(200, 10)));</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>CommonJS</th><th>ES Modules</th></tr>
+    <tr><td>ייצוא</td><td><code>module.exports = { a, b };</code></td><td><code>export function a() {}</code> / <code>export { a, b };</code></td></tr>
+    <tr><td>ייבוא</td><td><code>const { a } = require("./x");</code></td><td><code>import { a } from "./x.js";</code></td></tr>
+    <tr><td>סיומת בייבוא</td><td>לא חובה</td><td><strong>חובה</strong> (<code>./x.js</code>)</td></tr>
+    <tr><td>איך Node יודע</td><td>ברירת המחדל לקובצי <code>.js</code></td><td>קובצי <code>.mjs</code>, או <code>"type": "module"</code> ב־<code>package.json</code></td></tr>
+  </table></div>
+  <h3>ייצוא ברירת מחדל</h3>
+<pre><code class="lang-js">// logger.mjs
+export default function log(msg) {
+  console.log(`[${new Date().toISOString()}] ${msg}`);
+}
+
+// main.mjs
+import log from "./logger.mjs";</code></pre>
+  <p>ייצוא <code>default</code> — "הדבר העיקרי" בקובץ, ומייבאים אותו בלי סוגריים מסולסלים ובאיזה שם שרוצים. בקורס נעדיף ייצוא בשם (named) — שגיאת כתיב בשם נתפסת מיד.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 מה בוחרים?</span>
+    <p>בקוד חדש — <strong>ES Modules</strong>. מהפרויקט הראשון והלאה, כל פרויקט יקבל <code>"type": "module"</code> ב־<code>package.json</code>. CommonJS תמשיך לפגוש בקוד קיים, במדריכים ישנים, וב־NestJS (שבו TypeScript מתרגם לזה מאחורי הקלעים). קובצי התרגילים של הקורס נשארים בסגנון CommonJS כדי שלא נשנה הכול באמצע — שניהם עובדים יחד.</p>
+  </div>
+
+  <h2>⚠️ טעויות נפוצות</h2>
+  <div class="box error"><div class="table-wrap"><table>
+    <tr><th>קוד</th><th>מה קורה</th><th>תיקון</th></tr>
+    <tr><td><code>require("pricing")</code></td><td><code>Error: Cannot find module 'pricing'</code> — Node חיפש ספרייה מותקנת</td><td><code>require("./pricing")</code></td></tr>
+    <tr><td><code>const { sub } = require("./pricing")</code> כש־<code>sub</code> לא יוצא</td><td>אין שגיאה! <code>sub</code> הוא <code>undefined</code>, והשגיאה תגיע רק כשתקרא לו: <code>TypeError: sub is not a function</code></td><td>ודא שהשם קיים ב־<code>module.exports</code></td></tr>
+    <tr><td><code>import { a } from "./x"</code> (בלי סיומת) ב־ESM</td><td><code>Cannot find module</code></td><td><code>"./x.js"</code></td></tr>
+    <tr><td><code>import</code> בקובץ <code>.js</code> רגיל בלי <code>"type": "module"</code></td><td><code>SyntaxError: Cannot use import statement outside a module</code></td><td><code>.mjs</code>, או <code>"type": "module"</code></td></tr>
+  </table></div></div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P08-E01">E01</a> · <a href="exercises.html#P08-E06">E06</a> · <a href="exercises.html#P08-E07">E07</a> · <a href="exercises.html#P08-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 8</a><a href="lesson-02-errors.html"><small>הבא</small>שיעור 2 — throw, try/catch ו־finally</a></div>
+</main>
+</body>
+</html>

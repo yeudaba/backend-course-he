@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>union, literal types ו־narrowing — פרק 11</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 11</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — union, literal types ו־narrowing</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>union — "אחד מכמה טיפוסים".</li>
+      <li>literal types — רשימה סגורה של ערכים מותרים.</li>
+      <li>narrowing — איך TypeScript "מבין" את הטיפוס אחרי בדיקה.</li>
+      <li>discriminated unions ו־<code>never</code> — לא לשכוח אף מקרה.</li>
+    </ul>
+  </div>
+
+  <h2>1. Union: <code>A | B</code></h2>
+<pre><code class="lang-ts">function format(id: string | number): string {
+  return id.toUpperCase();
+}</code></pre>
+<pre class="terminal">snippet.ts(2,13): error TS2339: Property 'toUpperCase' does not exist on type 'string | number'.
+  Property 'toUpperCase' does not exist on type 'number'.</pre>
+  <p><code>id</code> יכול להיות מספר — ולמספר אין <code>toUpperCase</code>. TypeScript מרשה רק מה שבטוח <strong>לכל</strong> האפשרויות. כדי להשתמש במשהו ספציפי — בודקים קודם:</p>
+
+  <h2>2. Narrowing — צמצום בבדיקה</h2>
+<pre><code class="lang-ts">function format(id: string | number): string {
+  if (typeof id === "number") {
+    return `#${id.toFixed(0)}`;
+  }
+  return id.toUpperCase();
+}
+console.log(format(42), format("ab-7"));</code></pre>
+<pre class="terminal">#42 AB-7</pre>
+  <p>בתוך ה־<code>if</code>, TypeScript <strong>יודע</strong> ש־<code>id</code> הוא <code>number</code>; אחרי ה־<code>return</code>, מה שנשאר הוא רק <code>string</code>. אותן בדיקות שכתבת בפרק 3 — עכשיו הן גם מלמדות את הבודק.</p>
+  <div class="table-wrap"><table>
+    <tr><th>בדיקה</th><th>מצמצמת</th></tr>
+    <tr><td><code>typeof x === "string"</code></td><td>טיפוסים בסיסיים</td></tr>
+    <tr><td><code>x === null</code>, <code>x !== undefined</code>, <code>if (x)</code></td><td>מוציא את <code>null</code>/<code>undefined</code></td></tr>
+    <tr><td><code>Array.isArray(x)</code></td><td>מערך</td></tr>
+    <tr><td><code>"email" in x</code></td><td>אובייקט שיש לו את השדה</td></tr>
+    <tr><td><code>x.kind === "card"</code></td><td>discriminated union (סעיף 4)</td></tr>
+  </table></div>
+
+  <h2>3. Literal types — רשימה סגורה</h2>
+<pre><code class="lang-ts">type OrderStatus = "pending" | "paid" | "shipped" | "cancelled";
+
+let orderStatus: OrderStatus = "pending";
+orderStatus = "paid";
+orderStatus = "deliverd";</code></pre>
+<pre class="terminal">snippet.ts(5,1): error TS2322: Type '"deliverd"' is not assignable to type 'OrderStatus'.</pre>
+  <p>שגיאת כתיב בסטטוס — באג שיכול לחיות שנים בקוד JavaScript — נתפסת מיד. ובעורך, הקלדת <code>orderStatus = "</code> מציעה את ארבעת הערכים. (ב־SQL נראה את המקבילה: <code>CHECK</code> או <code>enum</code> בעמודה, פרק 17.)</p>
+
+  <h2>4. Discriminated unions</h2>
+  <p>אמצעי תשלום: לכרטיס יש 4 ספרות אחרונות, ל־PayPal — אימייל, להעברה — מספר אסמכתא. אובייקט אחד עם כל השדות האופציונליים היה מבולגן. במקום:</p>
+<pre><code class="lang-ts">type Payment =
+  | { method: "card"; last4: string }
+  | { method: "paypal"; email: string }
+  | { method: "transfer"; reference: string };
+
+function describe(p: Payment): string {
+  switch (p.method) {
+    case "card":
+      return `כרטיס שמסתיים ב־${p.last4}`;
+    case "paypal":
+      return `PayPal (${p.email})`;
+    case "transfer":
+      return `העברה ${p.reference}`;
+  }
+}
+console.log(describe({ method: "card", last4: "4242" }));</code></pre>
+<pre class="terminal">כרטיס שמסתיים ב־4242</pre>
+  <p>השדה המשותף <code>method</code> "מבחין" בין האפשרויות. בתוך <code>case "card"</code>, TypeScript יודע שיש <code>last4</code> ואין <code>email</code>.</p>
+  <h3><code>never</code> — לוודא שלא שכחנו מקרה</h3>
+<pre><code class="lang-ts">type Payment =
+  | { method: "card"; last4: string }
+  | { method: "paypal"; email: string }
+  | { method: "bit"; phone: string };
+
+function fee(p: Payment): number {
+  switch (p.method) {
+    case "card":
+      return 1.5;
+    case "paypal":
+      return 2.9;
+    default: {
+      const unhandled: never = p;
+      throw new Error(`אמצעי תשלום לא נתמך: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}</code></pre>
+<pre class="terminal">snippet.ts(13,13): error TS2322: Type '{ method: "bit"; phone: string; }' is not assignable to type 'never'.</pre>
+  <p>מישהו הוסיף "bit" לטיפוס — ו־TypeScript מראה בדיוק איפה הקוד לא מטפל בו. <code>never</code> = "טיפוס שאין לו אף ערך"; אם הגענו לשם עם ערך — שכחנו מקרה. דפוס חזק מאוד בקוד עסקי.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P11-E03">E03</a> · <a href="exercises.html#P11-E04">E04</a> · <a href="exercises.html#P11-E11">E11</a> · <a href="exercises.html#P11-E15">E15</a> · <a href="exercises.html#P11-E16">E16</a> · <a href="exercises.html#P11-E17">E17</a> · <a href="exercises.html#P11-E22">E22</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-objects-functions.html"><small>הקודם</small>שיעור 2 — אובייקטים, מערכים ופונקציות</a><a href="lesson-04-unknown.html"><small>הבא</small>שיעור 4 — unknown, any ו־type guards</a></div>
+</main>
+</body>
+</html>

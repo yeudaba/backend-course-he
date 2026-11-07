@@ -1,0 +1,123 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>foreign key: קשר שהמסד אוכף.</li>
+      <li>אחד־לרבים ורבים־לרבים.</li>
+      <li>נרמול — ולמה המחיר בהזמנה נשמר בנפרד.</li>
+      <li>`ON DELETE`: מה קורה כשמוחקים "הורה".</li>
+    </ul>
+  </div>
+
+  <h2>1. המבנה של החנות</h2>
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="דיאגרמת טבלאות: categories, products, customers, orders, order_items">
+      <defs><marker id="fk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g class="mono" style="font-size:12px">
+        <rect x="20" y="20" width="160" height="70" rx="8" style="fill:var(--purple-soft);stroke:var(--purple);stroke-width:2"/>
+        <text x="100" y="42" text-anchor="middle" style="font-weight:700">categories</text>
+        <text x="32" y="62">🔑 id</text><text x="32" y="80">name UNIQUE</text>
+
+        <rect x="20" y="150" width="160" height="130" rx="8" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:2"/>
+        <text x="100" y="172" text-anchor="middle" style="font-weight:700">products</text>
+        <text x="32" y="192">🔑 id</text><text x="32" y="210">name</text><text x="32" y="228" style="fill:var(--purple)">category_id →</text><text x="32" y="246">price</text><text x="32" y="264">stock, is_active</text>
+
+        <rect x="280" y="150" width="170" height="130" rx="8" style="fill:var(--amber-soft);stroke:var(--amber);stroke-width:2"/>
+        <text x="365" y="172" text-anchor="middle" style="font-weight:700">order_items</text>
+        <text x="292" y="192" style="fill:var(--green)">🔑 order_id →</text><text x="292" y="210" style="fill:var(--accent)">🔑 product_id →</text><text x="292" y="228">quantity</text><text x="292" y="246">unit_price</text>
+
+        <rect x="540" y="150" width="160" height="110" rx="8" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+        <text x="620" y="172" text-anchor="middle" style="font-weight:700">orders</text>
+        <text x="552" y="192">🔑 id</text><text x="552" y="210" style="fill:var(--red)">customer_id →</text><text x="552" y="228">status</text><text x="552" y="246">created_at</text>
+
+        <rect x="540" y="20" width="160" height="90" rx="8" style="fill:var(--red-soft);stroke:var(--red);stroke-width:2"/>
+        <text x="620" y="42" text-anchor="middle" style="font-weight:700">customers</text>
+        <text x="552" y="62">🔑 id</text><text x="552" y="80">full_name</text><text x="552" y="98">email UNIQUE</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M100 148 V 94" marker-end="url(#fk)"/>
+        <path d="M278 205 H 184" marker-end="url(#fk)"/>
+        <path d="M452 188 H 536" marker-end="url(#fk)"/>
+        <path d="M620 148 V 114" marker-end="url(#fk)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:11px">
+        <text x="140" y="125" direction="rtl">הרבה מוצרים ← קטגוריה</text>
+        <text x="230" y="198" direction="rtl">מוצר</text>
+        <text x="494" y="180" direction="rtl">הזמנה</text>
+        <text x="665" y="133" direction="rtl">לקוח</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: חץ = foreign key ("מצביע על"). `order_items` מקשרת בין הזמנות למוצרים — יחס של רבים־לרבים.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>יחס</th><th>דוגמה</th><th>איך מממשים</th></tr>
+    <tr><td>אחד־לרבים</td><td>לקוח ← הרבה הזמנות</td><td>`orders.customer_id` מצביע על `customers.id`. ה־FK תמיד בצד ה"רבים"</td></tr>
+    <tr><td>רבים־לרבים</td><td>הזמנה ↔ מוצרים</td><td>טבלת קישור `order_items` עם שני FK. המפתח הראשי: הצירוף `(order_id, product_id)`</td></tr>
+    <tr><td>אחד־לאחד</td><td>משתמש ← פרופיל</td><td>FK עם `UNIQUE` (נדיר; לרוב פשוט עמודות באותה טבלה)</td></tr>
+  </table></div>
+
+  <h2>2. Foreign key</h2>
+```sql run db=17-relations/files/store.sql stderr
+INSERT INTO orders (customer_id, status, created_at) VALUES (99, 'pending', now());
+```
+```out
+ERROR:  insert or update on table "orders" violates foreign key constraint "orders_customer_id_fkey"
+DETAIL:  Key (customer_id)=(99) is not present in table "customers".
+```
+  <p>`REFERENCES customers (id)` אומר למסד: "אסור הזמנה של לקוח שלא קיים". בלי זה, באג אחד בקוד ייצור הזמנות "יתומות" שאף שאילתה לא תמצא את הלקוח שלהן.</p>
+
+  <h2>3. נרמול: כל עובדה במקום אחד</h2>
+  <p>למה `products.category_id` ולא `products.category = 'beans'` כמו בפרק 16? כי אם נרצה לשנות את השם ל־"coffee beans" — זו שורה אחת ב־`categories`, ולא עדכון של כל המוצרים (ואם שכחנו אחד — יש שתי קטגוריות "שונות"). וזה גם מה שמאפשר קטגוריה בלי מוצרים (`gift cards`).</p>
+  <div class="box tip">
+    <span class="box-title">💡 ומה עם unit_price? זה לא שכפול?</span>
+    <p>לא. `order_items.unit_price` הוא <strong>המחיר ברגע ההזמנה</strong> — עובדה אחרת מ"המחיר היום". בהזמנה 1 (ינואר) Ethiopia נקנה ב־84.90; היום המחיר 89.90. אם הקבלה הייתה מחשבת לפי `products.price`, כל שינוי מחיר היה משנה רטרואקטיבית הזמנות ישנות — וחשבוניות. זו דרישה מפורשת בפרויקט הדגל.</p>
+  </div>
+```sql run db=17-relations/files/store.sql
+SELECT oi.order_id, p.name, oi.unit_price AS paid, p.price AS price_today
+FROM order_items oi
+JOIN products p ON p.id = oi.product_id
+WHERE p.id = 1
+ORDER BY oi.order_id;
+```
+```out
+ order_id |        name        | paid  | price_today
+----------+--------------------+-------+-------------
+        1 | Ethiopia Beans 1kg | 84.90 |       89.90
+        5 | Ethiopia Beans 1kg | 89.90 |       89.90
+        9 | Ethiopia Beans 1kg | 89.90 |       89.90
+       12 | Ethiopia Beans 1kg | 89.90 |       89.90
+(4 rows)
+```
+  <p>(את ה־`JOIN` נכיר בשיעור הבא — כאן רק תסתכל על התוצאה.)</p>
+
+  <h2>4. ON DELETE</h2>
+```sql run db=17-relations/files/store.sql stderr
+DELETE FROM customers WHERE id = 1;
+```
+```out
+ERROR:  update or delete on table "customers" violates foreign key constraint "orders_customer_id_fkey" on table "orders"
+DETAIL:  Key (id)=(1) is still referenced from table "orders".
+```
+  <p>ברירת המחדל (`RESTRICT`/`NO ACTION`): אי אפשר למחוק לקוח שיש לו הזמנות. וזה טוב — אחרת אבדו נתוני מכירות. האפשרויות:</p>
+  <div class="table-wrap"><table>
+    <tr><th>הגדרה</th><th>כשמוחקים את ה"הורה"</th><th>מתאים ל־</th></tr>
+    <tr><td>(ברירת מחדל)</td><td>שגיאה, אם יש "ילדים"</td><td>רוב המקרים: לקוח ← הזמנות</td></tr>
+    <tr><td>`ON DELETE CASCADE`</td><td>הילדים נמחקים איתו</td><td>חלקים שאין להם קיום בלי ההורה: הזמנה ← פריטי ההזמנה</td></tr>
+    <tr><td>`ON DELETE SET NULL`</td><td>ה־FK בילדים הופך ל־NULL</td><td>קשר לא חובה: משימה ← "מוקצה ל" עובד שעזב</td></tr>
+  </table></div>
+```sql run db=17-relations/files/store.sql
+DELETE FROM orders WHERE id = 4;
+SELECT COUNT(*) AS items_of_order_4 FROM order_items WHERE order_id = 4;
+```
+```out
+DELETE 1
+ items_of_order_4
+------------------
+                0
+(1 row)
+```
+  <p>`order_items.order_id` הוגדר עם `ON DELETE CASCADE` (ראה `store.sql`) — מחיקת הזמנה 4 מחקה גם את הפריט שלה. (בפועל, במערכת אמיתית לא מוחקים הזמנות — מסמנים `cancelled`. אבל העיקרון חשוב.)</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P17-E01">E01</a> · <a href="exercises.html#P17-E02">E02</a> · <a href="exercises.html#P17-E16">E16</a></p>
+  </div>

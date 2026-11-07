@@ -1,0 +1,152 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה middleware, ולמה הסדר קובע הכול.</li>
+      <li>middleware משלך: לוג וזמני תגובה.</li>
+      <li>טיפול מרוכז בשגיאות ו־404 — ב־JSON.</li>
+    </ul>
+  </div>
+
+  <h2>1. בקשה עוברת בצינור</h2>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="שרשרת middleware: json, לוג, routes, 404, error handler">
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="590" y="40" width="110" height="60" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="450" y="40" width="110" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="310" y="40" width="110" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="170" y="40" width="110" height="60" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="30" y="40" width="110" height="60" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="170" y="150" width="250" height="56" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M586 70 H 564" marker-end="url(#ah2)"/>
+        <path d="M446 70 H 424" marker-end="url(#ah2)"/>
+        <path d="M306 70 H 284" marker-end="url(#ah2)"/>
+        <path d="M166 70 H 144" marker-end="url(#ah2)"/>
+        <path d="M365 104 V 146" marker-end="url(#ah2)" style="stroke-dasharray:5 4"/>
+        <path d="M225 104 V 146" marker-end="url(#ah2)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="645" y="68" direction="rtl" style="font-size:14px;font-weight:700">בקשה</text>
+        <text x="645" y="88" class="mono" style="font-size:11px">POST /tasks</text>
+        <text x="505" y="68" class="mono" style="font-size:12px;font-weight:700">express.json()</text>
+        <text x="505" y="88" direction="rtl" style="font-size:11px">ממלא req.body</text>
+        <text x="365" y="68" class="mono" style="font-size:12px;font-weight:700">logger</text>
+        <text x="365" y="88" direction="rtl" style="font-size:11px">רושם ← next()</text>
+        <text x="225" y="68" direction="rtl" style="font-size:13px;font-weight:700">ה־routes</text>
+        <text x="225" y="88" direction="rtl" style="font-size:11px">מי שמתאים — עונה</text>
+        <text x="85" y="68" direction="rtl" style="font-size:13px;font-weight:700">404</text>
+        <text x="85" y="88" direction="rtl" style="font-size:11px">אף אחד לא ענה</text>
+        <text x="295" y="175" class="mono" style="font-size:12px;font-weight:700">(err, req, res, next)</text>
+        <text x="295" y="195" direction="rtl" style="font-size:11px">error handler — כל שגיאה בדרך מגיעה לכאן</text>
+      </g>
+      <text x="560" y="180" text-anchor="middle" direction="rtl" style="font-size:12px;fill:var(--muted)">הסדר = סדר הכתיבה בקוד</text>
+    </svg>
+    <figcaption>איור 1: כל `app.use` / `app.get` הוא תחנה. בקשה עוברת לפי הסדר; תחנה עונה או קוראת `next()`. שגיאה (זריקה, או `next(err)`) קופצת ישר ל־error handler.</figcaption>
+  </figure>
+  <p>middleware הוא פונקציה `(req, res, next)`. היא יכולה (1) לעשות משהו ולקרוא `next()` כדי להמשיך, או (2) לענות ולעצור. route הוא בעצם middleware שרץ רק כש־method ו־path מתאימים.</p>
+```ts run
+import express from "express";
+
+const app = express();
+const log: string[] = [];
+
+app.use((req, res, next) => {
+  log.push(`1: ${req.method} ${req.path}`);
+  next();
+});
+app.get("/a", (req, res) => {
+  log.push("2: route /a");
+  res.json("A");
+});
+app.use((req, res) => {
+  log.push("3: אף route לא התאים");
+  res.status(404).json({ error: "לא נמצא" });
+});
+
+const server = app.listen(0, async () => {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  await fetch(`${base}/a`);
+  await fetch(`${base}/b`);
+  console.log(log.join("\n"));
+  server.close();
+});
+```
+```out
+1: GET /a
+2: route /a
+1: GET /b
+3: אף route לא התאים
+```
+  <p>שים לב: ה־404 עובד <em>רק</em> כי הוא נרשם <strong>אחרי</strong> ה־routes. אילו היה ראשון — כל בקשה הייתה מקבלת 404.</p>
+
+  <h2>2. middleware לוג עם זמן תגובה</h2>
+```ts file=src/middleware/logger.ts
+import type { Request, Response, NextFunction } from "express";
+
+export function logger(req: Request, res: Response, next: NextFunction) {
+  const start = performance.now();
+  res.on("finish", () => {
+    const ms = Math.round(performance.now() - start);
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+  });
+  next();
+}
+```
+  <p>הטריק: כשה־middleware רץ, התשובה עוד לא קיימת. לכן נרשמים לאירוע `finish` של `res` (פרק 10 — אירועים) ומדפיסים כשהתשובה נשלחה. כך נראים יומנים בכל שרת אמיתי: `GET /tasks?page=2 200 4ms`.</p>
+
+  <h2>3. שגיאות: מקום אחד לכולן</h2>
+  <p>middleware עם <strong>ארבעה</strong> פרמטרים הוא error handler. Express מזהה אותו לפי מספר הפרמטרים — גם אם לא משתמשים ב־`next`, חובה לכתוב אותו.</p>
+```ts file=src/errors.ts
+import type { Request, Response, NextFunction } from "express";
+
+export class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function notFound(req: Request, res: Response) {
+  res.status(404).json({ error: { code: "NOT_FOUND", message: `אין כתובת ${req.method} ${req.path}` } });
+}
+
+export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
+  if (err instanceof HttpError) {
+    res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return;
+  }
+  // JSON שבור בגוף הבקשה — express.json() זורק שגיאה עם type כזה
+  if (typeof err === "object" && err !== null && "type" in err && err.type === "entity.parse.failed") {
+    res.status(400).json({ error: { code: "INVALID_JSON", message: "JSON לא תקין" } });
+    return;
+  }
+  console.error(err);
+  res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+}
+```
+```ts file=src/app.ts
+app.use(express.json());
+app.use(logger);
+app.use("/tasks", tasksRouter);   // כל ה־routes
+app.use(notFound);                // אחרי כל ה־routes
+app.use(errorHandler);            // אחרון
+```
+  <p>מעכשיו, בתוך route, כדי להחזיר שגיאה פשוט זורקים: `throw new HttpError(404, "TASK_NOT_FOUND", "המשימה לא נמצאה")`. אין צורך ב־try/catch בכל route.</p>
+  <div class="box tip">
+    <span class="box-title">💡 Express 5 ו־async</span>
+    <p>ב־Express 5, route שהוא `async` וזורק (או מחזיר Promise שנדחה) — השגיאה מגיעה אוטומטית ל־error handler. ב־Express 4 זה לא היה כך, והשרת היה קורס או הבקשה נתקעת; בקוד ישן תראה עוטפים כמו `asyncHandler(...)` או `express-async-errors` — זו הסיבה.</p>
+  </div>
+  <div class="box warn">
+    <span class="box-title">⚠️ לא לחשוף פרטים</span>
+    <p>500 מחזיר "שגיאה פנימית" — לא את `err.message` ולא stack. הפרטים הולכים ליומן (`console.error`), שרק אתה רואה. הודעת שגיאה פנימית יכולה לחשוף שמות טבלאות, נתיבים או מידע של משתמשים אחרים.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P15-E04">E04</a> · <a href="exercises.html#P15-E09">E09</a> · <a href="exercises.html#P15-E10">E10</a> · <a href="exercises.html#P15-E18">E18</a> · <a href="exercises.html#P15-E20">E20</a> · <a href="exercises.html#P15-E21">E21</a></p>
+  </div>

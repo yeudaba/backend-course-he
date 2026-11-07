@@ -1,0 +1,111 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>union — "אחד מכמה טיפוסים".</li>
+      <li>literal types — רשימה סגורה של ערכים מותרים.</li>
+      <li>narrowing — איך TypeScript "מבין" את הטיפוס אחרי בדיקה.</li>
+      <li>discriminated unions ו־`never` — לא לשכוח אף מקרה.</li>
+    </ul>
+  </div>
+
+  <h2>1. Union: `A | B`</h2>
+```ts tsc
+function format(id: string | number): string {
+  return id.toUpperCase();
+}
+```
+```out
+snippet.ts(2,13): error TS2339: Property 'toUpperCase' does not exist on type 'string | number'.
+  Property 'toUpperCase' does not exist on type 'number'.
+```
+  <p>`id` יכול להיות מספר — ולמספר אין `toUpperCase`. TypeScript מרשה רק מה שבטוח <strong>לכל</strong> האפשרויות. כדי להשתמש במשהו ספציפי — בודקים קודם:</p>
+
+  <h2>2. Narrowing — צמצום בבדיקה</h2>
+```ts run
+function format(id: string | number): string {
+  if (typeof id === "number") {
+    return `#${id.toFixed(0)}`;
+  }
+  return id.toUpperCase();
+}
+console.log(format(42), format("ab-7"));
+```
+```out
+#42 AB-7
+```
+  <p>בתוך ה־`if`, TypeScript <strong>יודע</strong> ש־`id` הוא `number`; אחרי ה־`return`, מה שנשאר הוא רק `string`. אותן בדיקות שכתבת בפרק 3 — עכשיו הן גם מלמדות את הבודק.</p>
+  <div class="table-wrap"><table>
+    <tr><th>בדיקה</th><th>מצמצמת</th></tr>
+    <tr><td>`typeof x === "string"`</td><td>טיפוסים בסיסיים</td></tr>
+    <tr><td>`x === null`, `x !== undefined`, `if (x)`</td><td>מוציא את `null`/`undefined`</td></tr>
+    <tr><td>`Array.isArray(x)`</td><td>מערך</td></tr>
+    <tr><td>`"email" in x`</td><td>אובייקט שיש לו את השדה</td></tr>
+    <tr><td>`x.kind === "card"`</td><td>discriminated union (סעיף 4)</td></tr>
+  </table></div>
+
+  <h2>3. Literal types — רשימה סגורה</h2>
+```ts tsc
+type OrderStatus = "pending" | "paid" | "shipped" | "cancelled";
+
+let orderStatus: OrderStatus = "pending";
+orderStatus = "paid";
+orderStatus = "deliverd";
+```
+```out
+snippet.ts(5,1): error TS2322: Type '"deliverd"' is not assignable to type 'OrderStatus'.
+```
+  <p>שגיאת כתיב בסטטוס — באג שיכול לחיות שנים בקוד JavaScript — נתפסת מיד. ובעורך, הקלדת `orderStatus = "` מציעה את ארבעת הערכים. (ב־SQL נראה את המקבילה: `CHECK` או `enum` בעמודה, פרק 17.)</p>
+
+  <h2>4. Discriminated unions</h2>
+  <p>אמצעי תשלום: לכרטיס יש 4 ספרות אחרונות, ל־PayPal — אימייל, להעברה — מספר אסמכתא. אובייקט אחד עם כל השדות האופציונליים היה מבולגן. במקום:</p>
+```ts run
+type Payment =
+  | { method: "card"; last4: string }
+  | { method: "paypal"; email: string }
+  | { method: "transfer"; reference: string };
+
+function describe(p: Payment): string {
+  switch (p.method) {
+    case "card":
+      return `כרטיס שמסתיים ב־${p.last4}`;
+    case "paypal":
+      return `PayPal (${p.email})`;
+    case "transfer":
+      return `העברה ${p.reference}`;
+  }
+}
+console.log(describe({ method: "card", last4: "4242" }));
+```
+```out
+כרטיס שמסתיים ב־4242
+```
+  <p>השדה המשותף `method` "מבחין" בין האפשרויות. בתוך `case "card"`, TypeScript יודע שיש `last4` ואין `email`.</p>
+  <h3>`never` — לוודא שלא שכחנו מקרה</h3>
+```ts tsc
+type Payment =
+  | { method: "card"; last4: string }
+  | { method: "paypal"; email: string }
+  | { method: "bit"; phone: string };
+
+function fee(p: Payment): number {
+  switch (p.method) {
+    case "card":
+      return 1.5;
+    case "paypal":
+      return 2.9;
+    default: {
+      const unhandled: never = p;
+      throw new Error(`אמצעי תשלום לא נתמך: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+```
+```out
+snippet.ts(13,13): error TS2322: Type '{ method: "bit"; phone: string; }' is not assignable to type 'never'.
+```
+  <p>מישהו הוסיף "bit" לטיפוס — ו־TypeScript מראה בדיוק איפה הקוד לא מטפל בו. `never` = "טיפוס שאין לו אף ערך"; אם הגענו לשם עם ערך — שכחנו מקרה. דפוס חזק מאוד בקוד עסקי.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P11-E03">E03</a> · <a href="exercises.html#P11-E04">E04</a> · <a href="exercises.html#P11-E11">E11</a> · <a href="exercises.html#P11-E15">E15</a> · <a href="exercises.html#P11-E16">E16</a> · <a href="exercises.html#P11-E17">E17</a> · <a href="exercises.html#P11-E22">E22</a></p>
+  </div>

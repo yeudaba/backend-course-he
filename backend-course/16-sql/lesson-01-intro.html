@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מסד נתונים, טבלאות ו־psql — פרק 16</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 16</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — מסד נתונים, טבלאות ו־psql</h1>
+  <p class="subtitle">⏱ ~30 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה מסד נתונים, ולא קובץ JSON.</li>
+      <li>טבלה, שורה, עמודה, טיפוס, מפתח ראשי.</li>
+      <li>לעבוד עם psql ועם התוסף של VS Code.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה לא קובץ JSON?</h2>
+  <p>בפרויקט 1 שמרת הוצאות בקובץ JSON. זה עבד — לאדם אחד, עם מאות שורות. עכשיו דמיין חנות אמיתית:</p>
+  <div class="table-wrap"><table>
+    <tr><th>בעיה</th><th>קובץ JSON</th><th>מסד נתונים</th></tr>
+    <tr><td>שני לקוחות קונים באותו רגע</td><td>שניהם קוראים, שניהם כותבים — אחד דורס את השני</td><td>transactions ונעילות (פרק 18)</td></tr>
+    <tr><td>מיליון הזמנות, "תן לי את של לקוח 7"</td><td>לקרוא את כל הקובץ לזיכרון</td><td>index — מילישניות (פרק 18)</td></tr>
+    <tr><td>השרת נפל באמצע כתיבה</td><td>קובץ חצי כתוב, הכול אבוד</td><td>או שהכול נשמר או ששום דבר</td></tr>
+    <tr><td>מחיר שלילי, אימייל כפול</td><td>רק אם הקוד שלך בדק</td><td>המסד עצמו מסרב (אילוצים)</td></tr>
+    <tr><td>"כמה הכנסות לפי חודש?"</td><td>לכתוב לולאות</td><td>שאילתה אחת</td></tr>
+  </table></div>
+
+  <h2>2. המודל: טבלאות</h2>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="טבלת products: עמודות, שורות, טיפוסים ומפתח ראשי">
+      <g style="font-size:12px" class="mono">
+        <rect x="40" y="40" width="640" height="34" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="40" y="74" width="640" height="32" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="40" y="106" width="640" height="32" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+        <rect x="40" y="138" width="640" height="32" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="40" y="40" width="50" height="130" style="fill:none;stroke:var(--amber);stroke-width:3"/>
+        <text x="65" y="62" text-anchor="middle" style="font-weight:700">id</text>
+        <text x="100" y="62" style="font-weight:700">name</text>
+        <text x="330" y="62" style="font-weight:700">category</text>
+        <text x="450" y="62" style="font-weight:700">price</text>
+        <text x="540" y="62" style="font-weight:700">stock</text>
+        <text x="610" y="62" style="font-weight:700">is_active</text>
+        <text x="65" y="95" text-anchor="middle">1</text><text x="100" y="95">Ethiopia Beans 1kg</text><text x="330" y="95">beans</text><text x="450" y="95">89.90</text><text x="540" y="95">40</text><text x="610" y="95">true</text>
+        <text x="65" y="127" text-anchor="middle">2</text><text x="100" y="127">Colombia Beans 1kg</text><text x="330" y="127">beans</text><text x="450" y="127">84.90</text><text x="540" y="127">0</text><text x="610" y="127">true</text>
+        <text x="65" y="159" text-anchor="middle">5</text><text x="100" y="159">Hand Grinder</text><text x="330" y="159">grinders</text><text x="450" y="159">189.00</text><text x="540" y="159">8</text><text x="610" y="159">true</text>
+        <text x="100" y="32" style="fill:var(--muted)">text</text><text x="330" y="32" style="fill:var(--muted)">text</text><text x="450" y="32" style="fill:var(--muted)">numeric</text><text x="540" y="32" style="fill:var(--muted)">integer</text><text x="610" y="32" style="fill:var(--muted)">boolean</text>
+      </g>
+      <g text-anchor="middle" style="font-size:13px">
+        <text x="65" y="195" direction="rtl" style="fill:var(--amber);font-weight:700">מפתח ראשי</text>
+        <text x="360" y="195" direction="rtl" style="fill:var(--green);font-weight:700">שורה = מוצר אחד</text>
+        <text x="560" y="195" direction="rtl" style="fill:var(--accent);font-weight:700">עמודה = שדה, עם טיפוס קבוע</text>
+      </g>
+      <text x="360" y="220" text-anchor="middle" direction="rtl" style="font-size:12px;fill:var(--muted)">כמו מערך של אובייקטים (פרק 7) — אבל כל השורות באותו מבנה, והמסד אוכף אותו</text>
+    </svg>
+    <figcaption>איור 1: טבלת <code>products</code> מנתוני הדוגמה. לכל עמודה טיפוס, ולכל שורה מזהה ייחודי.</figcaption>
+  </figure>
+  <p>מסד אחד (<code>course</code>) מכיל טבלאות רבות. בפרק 17 נחבר ביניהן (לקוח ← הזמנות ← מוצרים) — משם השם "יחסי" (relational).</p>
+
+  <h2>3. psql</h2>
+<pre class="terminal"><span class="prompt">% </span>psql -d course
+psql (18.0)
+Type "help" for help.
+
+course=# select name, price from products where category = 'grinders';
+         name         | price
+----------------------+--------
+ Hand Grinder         | 189.00
+ Electric Grinder Pro | 649.00
+(2 rows)
+
+course=# \q</pre>
+  <div class="table-wrap"><table>
+    <tr><th>פקודה</th><th>מה עושה</th></tr>
+    <tr><td><code>\dt</code></td><td>רשימת הטבלאות</td></tr>
+    <tr><td><code>\d products</code></td><td>המבנה של טבלה: עמודות, טיפוסים, אילוצים</td></tr>
+    <tr><td><code>\x</code></td><td>תצוגה אנכית (נוח לשורות רחבות)</td></tr>
+    <tr><td><code>\q</code></td><td>יציאה</td></tr>
+  </table></div>
+  <p>פקודות שמתחילות ב־<code>\</code> הן של psql עצמו, לא SQL. כל שאר הפקודות — SQL, ו<strong>מסתיימות ב־<code>;</code></strong>. שכחת? psql יחכה (<code>course-#</code>) עד שתקליד <code>;</code>.</p>
+  <p>מוסכמה: מילות SQL באותיות גדולות (<code>SELECT</code>, <code>WHERE</code>) ושמות באותיות קטנות. ל־PostgreSQL זה לא משנה — זה לבני אדם. בדוגמאות בפרק נכתוב כך:</p>
+<pre><code class="lang-sql">SELECT name, price
+FROM products
+WHERE category = 'grinders';</code></pre>
+<pre class="terminal">         name         | price
+----------------------+--------
+ Hand Grinder         | 189.00
+ Electric Grinder Pro | 649.00
+(2 rows)</pre>
+
+  <h2>4. התוסף של VS Code</h2>
+  <p>לתרגילים נוח יותר לעבוד מקובץ <code>.sql</code> ב־VS Code: כותבים את השאילתה, מסמנים, <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>E</kbd>, והתוצאה מופיעה בטבלה מתחת. בתחתית החלון בוחרים לאיזה חיבור (connection) לשלוח. שמור את קובצי הניסוי שלך ב־<code>playground/</code>.</p>
+  <div class="box tip">
+    <span class="box-title">💡 למה הנתונים באנגלית?</span>
+    <p>הטרמינל של VS Code מציג עברית בסדר הפוך (אין לו תמיכה בכיוון ימין־לשמאל). PostgreSQL שומר עברית מצוין — זו רק בעיית תצוגה. כדי שהטבלאות בטרמינל יהיו קריאות, נתוני הדוגמה באנגלית; ההסברים — בעברית.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P16-E01">E01</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 16</a><a href="lesson-02-select.html"><small>הבא</small>שיעור 2 — SELECT: לשלוף, לסנן, למיין</a></div>
+</main>
+</body>
+</html>

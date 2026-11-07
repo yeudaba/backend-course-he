@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transactions: הכול או כלום — פרק 18</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 18</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — Transactions: הכול או כלום</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li><code>BEGIN</code> / <code>COMMIT</code> / <code>ROLLBACK</code>.</li>
+      <li>מה קורה כשפקודה נכשלת באמצע.</li>
+      <li>transactions מ־Node עם <code>pg</code> — הדפוס הנכון.</li>
+    </ul>
+  </div>
+
+  <h2>1. הבעיה</h2>
+  <p>העברה של 300 ש״ח מ־Yossi ל־Noa היא <strong>שתי</strong> פקודות: להוסיף ל־Noa, להוריד מ־Yossi. מה אם השרת נופל בין השתיים? או שהשנייה נכשלת? הכסף "נוצר יש מאין". transaction אומר למסד: <strong>כל הפקודות האלה — יחד, או אף אחת</strong>.</p>
+<pre><code class="lang-sql">BEGIN;
+UPDATE accounts SET balance = balance + 300 WHERE id = 3;  -- Noa מקבלת
+UPDATE accounts SET balance = balance - 300 WHERE id = 2;  -- ל־Yossi יש רק 250!
+COMMIT;
+SELECT id, owner, balance FROM accounts ORDER BY id;</code></pre>
+<pre class="terminal">BEGIN
+UPDATE 1
+ERROR:  new row for relation "accounts" violates check constraint "accounts_balance_check"
+DETAIL:  Failing row contains (2, Yossi, -50.00).
+ROLLBACK
+ id | owner | balance
+----+-------+---------
+  1 | Dana  | 1000.00
+  2 | Yossi |  250.00
+  3 | Noa   |    0.00
+  4 | Avi   | 5000.00
+(4 rows)</pre>
+  <p>קרא את הפלט לאט: העדכון הראשון הצליח (<code>UPDATE 1</code>), השני הפר את ה־CHECK — ומהרגע הזה ה־transaction "מת". ה־<code>COMMIT</code> בסוף הפך ל־<code>ROLLBACK</code>, וגם העדכון הראשון בוטל: Noa עדיין עם 0. בלי <code>BEGIN</code>, הייתה ל־Noa עכשיו 300 ש״ח שלא באו מאף אחד.</p>
+
+  <h2>2. הפקודות</h2>
+  <div class="table-wrap"><table>
+    <tr><th>פקודה</th><th>מה עושה</th></tr>
+    <tr><td><code>BEGIN</code></td><td>פותח transaction. מעכשיו שום שינוי לא "סופי"</td></tr>
+    <tr><td><code>COMMIT</code></td><td>הכול נשמר — ונראה לכל שאר החיבורים בבת אחת</td></tr>
+    <tr><td><code>ROLLBACK</code></td><td>הכול מבוטל, כאילו לא קרה</td></tr>
+  </table></div>
+  <p>בלי <code>BEGIN</code>, כל פקודה היא transaction קטן משלה (autocommit). אחרי שגיאה בתוך transaction, כל פקודה נוספת נדחית עם <code>current transaction is aborted, commands ignored until end of transaction block</code> — עד ROLLBACK.</p>
+  <div class="box tip">
+    <span class="box-title">💡 ACID במשפט לכל אות</span>
+    <p><strong>A</strong>tomicity — הכול או כלום. <strong>C</strong>onsistency — אחרי ה־commit כל האילוצים מתקיימים. <strong>I</strong>solation — transactions במקביל לא "רואים" חצאי עבודה אחד של השני (שיעור 2). <strong>D</strong>urability — אחרי ש־COMMIT חזר, הנתונים שרדו גם אם החשמל ייפול עכשיו. שאלת ראיון קלאסית.</p>
+  </div>
+  <p>וגם בטעויות שלך: לפני <code>UPDATE</code>/<code>DELETE</code> מסוכן ב־psql, <code>BEGIN;</code> — מריצים, בודקים עם SELECT, ואם משהו לא נראה טוב — <code>ROLLBACK;</code>.</p>
+
+  <h2>3. מ־Node: הספרייה pg</h2>
+  <p>בפרק 19 Prisma תעשה את זה בשבילך, אבל כדאי לראות מה קורה מתחת. <code>pg</code> היא הספרייה הבסיסית של PostgreSQL ל־Node (מותקנת בתיקיית הקורס):</p>
+<span class="file-label">playground/transfer.mjs</span>
+<pre><code class="lang-js">import pg from "pg";
+
+const pool = new pg.Pool({ connectionString: process.env.COURSE_DATABASE_URL });
+
+export async function transfer(fromId, toId, amount) {
+  const client = await pool.connect();          // חיבור אחד — כל ה־transaction עליו
+  try {
+    await client.query("BEGIN");
+    await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+    await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [fromId, toId, amount]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;                                   // מי שקרא יחליט מה להחזיר (400? 500?)
+  } finally {
+    client.release();                            // תמיד! אחרת ה־pool מתרוקן ו־השרת נתקע
+  }
+}</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>למה</th></tr>
+    <tr><td><code>pg.Pool</code></td><td>מאגר חיבורים פתוחים. פתיחת חיבור למסד יקרה (עשרות ms) — ה־pool ממחזר אותם בין בקשות</td></tr>
+    <tr><td><code>pool.connect()</code></td><td>"השאל" חיבור אחד. <strong>חובה</strong> ל־transaction: <code>pool.query()</code> יכול לשלוח כל פקודה בחיבור אחר, ו־BEGIN בחיבור אחד לא משפיע על חיבור אחר</td></tr>
+    <tr><td><code>$1, $2</code></td><td>פרמטרים. <strong>לעולם</strong> לא `<code> </code>... WHERE id = ${id}<code> </code>` — זו SQL injection (פרק 21). pg שולח את הערכים בנפרד מהשאילתה</td></tr>
+    <tr><td><code>finally { release() }</code></td><td>חיבור שלא שוחרר "דולף". אחרי 10 דליפות (ברירת המחדל של ה־pool) — כל בקשה חדשה מחכה לנצח</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ SQL injection — בקצרה</span>
+    <p><code>client.query("SELECT * FROM users WHERE email = '" + email + "'")</code> עם email שהוא <code>' OR '1'='1</code> — מחזיר את כל המשתמשים. עם <code>'; DROP TABLE users; --</code> — גרוע יותר. פרמטרים (<code>$1</code>) פותרים את זה לגמרי, כי הערך אף פעם לא הופך לחלק מהקוד של השאילתה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P18-E01">E01</a> · <a href="exercises.html#P18-E06">E06</a> · <a href="exercises.html#P18-E07">E07</a> · <a href="exercises.html#P18-E08">E08</a> · <a href="exercises.html#P18-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 18</a><a href="lesson-02-concurrency.html"><small>הבא</small>שיעור 2 — מקביליות ו־race conditions</a></div>
+</main>
+</body>
+</html>

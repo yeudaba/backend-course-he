@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שגיאות משלך, ירושה והרכבה — פרק 12</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 12</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — שגיאות משלך, ירושה והרכבה</h1>
+  <p class="subtitle">⏱ ~30 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li><code>extends</code> — מחלקה שמרחיבה מחלקה אחרת.</li>
+      <li>סוגי שגיאות משלך — השימוש הכי נפוץ בירושה ב־Backend.</li>
+      <li>"העדף הרכבה על ירושה" — ולמה.</li>
+    </ul>
+  </div>
+
+  <h2>1. שגיאות משלך</h2>
+<pre><code class="lang-ts">class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class NotFoundError extends AppError {
+  constructor(entity: string, id: number | string) {
+    super(`${entity} ${id} לא נמצא`, 404, "NOT_FOUND");
+  }
+}
+
+class ValidationError extends AppError {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message, 400, "VALIDATION");
+    this.field = field;
+  }
+}
+
+function handle(err: unknown): string {
+  if (err instanceof ValidationError) {
+    return `400 — ${err.field}: ${err.message}`;
+  }
+  if (err instanceof AppError) {
+    return `${err.status} — ${err.message}`;
+  }
+  return "500 — שגיאה פנימית";
+}
+
+console.log(handle(new NotFoundError("הזמנה", 77)));
+console.log(handle(new ValidationError("email", "אימייל לא תקין")));
+console.log(handle(new TypeError("x is undefined")));</code></pre>
+<pre class="terminal">404 — הזמנה 77 לא נמצא
+400 — email: אימייל לא תקין
+500 — שגיאה פנימית</pre>
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td><code>class AppError extends Error</code></td><td>AppError "היא" Error — עם כל מה שיש ל־Error (message, stack), ועוד</td></tr>
+    <tr><td><code>super(message)</code></td><td>קריאה ל־constructor של מחלקת האב. <strong>חובה</strong> לפני כל שימוש ב־<code>this</code></td></tr>
+    <tr><td><code>this.name = new.target.name</code></td><td>שם המחלקה בפועל ("NotFoundError"), כך שהוא מופיע ב־stack trace</td></tr>
+    <tr><td><code>err instanceof ValidationError</code></td><td>בודק אם השגיאה נוצרה מהמחלקה הזו (או ממחלקה שיורשת ממנה). גם מצמצם טיפוס ב־TypeScript</td></tr>
+  </table></div>
+  <p>זה בדיוק <code>toHttpResponse</code> מפרק 8 — אבל במקום לבדוק שדות, כל סוג שגיאה "יודע" את ה־status שלו. NestJS מגיע עם מחלקות כאלה מוכנות (<code>NotFoundException</code>, <code>BadRequestException</code>).</p>
+  <p>שים לב לסדר ב־<code>handle</code>: הבדיקה הספציפית (<code>ValidationError</code>) לפני הכללית (<code>AppError</code>), כי כל ValidationError היא גם AppError — בדיוק כמו בסדר של <code>else if</code> בפרק 3.</p>
+
+  <h2>2. ירושה: כלי חזק, להשתמש בזהירות</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="ירושה מול הרכבה">
+      <g style="stroke-width:2">
+        <rect x="390" y="20" width="310" height="160" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="20" width="350" height="160" rx="12" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <text x="545" y="50" text-anchor="middle" direction="rtl" style="font-size:16px;font-weight:700">הרכבה: "יש לו"</text>
+      <text x="195" y="50" text-anchor="middle" direction="rtl" style="font-size:16px;font-weight:700">ירושה: "הוא סוג של"</text>
+      <g class="mono" style="font-size:13px">
+        <text x="410" y="85">class OrderService {</text>
+        <text x="430" y="107">repo: OrderRepository</text>
+        <text x="430" y="129">payments: PaymentGateway</text>
+        <text x="410" y="151">}</text>
+        <text x="40" y="85">NotFoundError extends AppError</text>
+        <text x="40" y="107">AppError extends Error</text>
+      </g>
+      <text x="195" y="150" text-anchor="middle" direction="rtl" style="font-size:13px">מתאים כשהקשר באמת "סוג של"</text>
+      <text x="545" y="172" text-anchor="middle" direction="rtl" style="font-size:13px">ברירת המחדל לשירותים</text>
+    </svg>
+    <figcaption>איור 1: ירושה — "NotFoundError היא סוג של AppError". הרכבה — "OrderService משתמש ב־repository ובשער תשלומים".</figcaption>
+  </figure>
+  <p>הבעיה עם ירושה עמוקה (<code>AdminUser extends PremiumUser extends User</code>): שינוי במחלקת אב שובר את כל הילדים, וקשה לדעת מאיפה מגיעה כל התנהגות. הכלל המקובל: <strong>"העדף הרכבה על ירושה"</strong>. ירושה — בעיקר להיררכיות קטנות ויציבות, כמו שגיאות. כל השאר — אובייקט שמחזיק אובייקטים אחרים (שיעור 3).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P12-E03">E03</a> · <a href="exercises.html#P12-E09">E09</a> · <a href="exercises.html#P12-E10">E10</a> · <a href="exercises.html#P12-E14">E14</a> · <a href="exercises.html#P12-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-classes.html"><small>הקודם</small>שיעור 1 — מחלקות</a><a href="lesson-03-repository-service.html"><small>הבא</small>שיעור 3 — interface, repository, service והזרקת תלויות</a></div>
+</main>
+</body>
+</html>

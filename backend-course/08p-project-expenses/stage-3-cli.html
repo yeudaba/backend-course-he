@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 3: שורת הפקודה (cli.js) — פרויקט 1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 1</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — שלב 3: שורת הפקודה (cli.js)</h1>
+  <p class="subtitle">⏱ ~60 דקות · 🤖 PR1-CLI</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>לכתוב את <code>run(argv, { filePath, log })</code> ב־<code>src/cli.js</code> — החלק שמחבר הכול. הבודק: <code>npm run check PR1-CLI</code>.</p>
+  </div>
+
+  <h2>1. למה <code>run</code> מקבלת <code>filePath</code> ו־<code>log</code> מבחוץ?</h2>
+  <p>כדי שאפשר יהיה לבדוק אותה: הבודק מעביר קובץ זמני (כדי לא לגעת בנתונים האמיתיים שלך) ופונקציית <code>log</code> שאוספת את ההודעות למערך (כדי לבדוק מה הודפס). בהרצה אמיתית — השורות בתחתית הקובץ מעבירות את הקובץ האמיתי ו־<code>console.log</code>. הטכניקה הזו נקראת <strong>הזרקת תלויות</strong> (dependency injection), ונפגוש אותה בגדול ב־NestJS (פרק 20).</p>
+  <p>ומה עושות השורות בתחתית? <code>import.meta.url</code> הוא הנתיב של הקובץ הנוכחי (בפורמט URL), ו־<code>process.argv[1]</code> הוא הקובץ שהורץ. אם הם זהים — הורצת ישירות, ולכן מפעילים את <code>run</code>. אם הקובץ רק יובא (בבדיקה) — לא. <code>process.exitCode</code> קובע את קוד היציאה.</p>
+
+  <h2>2. מבנה <code>run</code></h2>
+<pre><code class="lang-js">export function run(argv, { filePath, log = console.log }) {
+  const [command, ...args] = argv;
+  try {
+    switch (command) {
+      case "add": {
+        // 1. פרק את args: תאריך, קטגוריה, סכום, ושאר המילים = הערה
+        // 2. אם חסר סכום — throw עם הודעה ודוגמה
+        // 3. טען ← addExpense ← שמור
+        // 4. log(`נוספה הוצאה #${...}`) ו־return 0
+      }
+      // case "list", "delete", "summary", "help"...
+      default:
+        log(`פקודה לא מוכרת: ${command}\n\n${HELP}`);
+        return 1;
+    }
+  } catch (err) {
+    log(`שגיאה: ${err.message}`);
+    return 1;
+  }
+}</code></pre>
+  <p>(<code>case "add": { ... }</code> — סוגריים מסולסלים אחרי <code>case</code> יוצרים בלוק, כדי שיהיה אפשר להגדיר <code>const</code> עם אותו שם בכמה <code>case</code>־ים.)</p>
+  <p>מבנה ה־<code>try</code> אחד סביב כל ה־<code>switch</code> הוא ההבטחה ש<strong>שום שגיאה לא מקריסה את התוכנית</strong>: כל <code>throw</code> — מ־<code>addExpense</code>, מ־<code>loadExpenses</code>, או משלך — מגיע ל־<code>catch</code> אחד, שמדפיס הודעה ומחזיר 1.</p>
+  <p>ולמה "שום פעולה שנכשלה לא משנה את הקובץ" מתקיים מעצמו? כי <code>saveExpenses</code> נקראת רק אחרי ש־<code>addExpense</code> הצליחה. אם היא זרקה — לא הגענו לשמירה.</p>
+
+  <h2>3. <code>list</code> עם אפשרויות</h2>
+  <p><code>list --category food --month 2026-10</code> מגיע כ־<code>["--category", "food", "--month", "2026-10"]</code>. עבור בזוגות (<code>i += 2</code>): דגל וערך. דגל לא מוכר או ערך חסר — <code>throw</code>. התוצאה — אובייקט <code>{ category, month }</code> שעובר ישר ל־<code>filterExpenses</code>.</p>
+
+  <h2>4. הרצה אמיתית</h2>
+<pre class="terminal"><span class="prompt">% </span>cd 08p-project-expenses/starter/expenses-cli
+<span class="prompt">% </span>node src/cli.js add 2026-10-01 food 54.5 lunch with team
+נוספה הוצאה #1
+<span class="prompt">% </span>node src/cli.js list
+#1   2026-10-01  food             54.50  lunch with team
+<span class="prompt">% </span>node src/cli.js delete 7
+שגיאה: לא נמצאה הוצאה עם מזהה 7
+<span class="prompt">% </span>echo $?
+1</pre>
+  <p><code>echo $?</code> מדפיס את קוד היציאה של הפקודה האחרונה. 0 = הצלחה. כלים אחרים (סקריפטים, CI בפרק 25) מסתמכים על זה כדי לדעת אם משהו נכשל.</p>
+  <p>אפשר גם <code>npm start -- add 2026-10-01 food 54.5</code> (ה־<code>--</code> מעביר את שאר המילים לתוכנית).</p>
+
+<div class="pager"><a href="stage-2-storage.html"><small>הקודם</small>שיעור 3 — שלב 2: שמירה בקובץ (storage.js)</a><a href="stage-4-finish.html"><small>הבא</small>שיעור 5 — שלב 4: גימור, README ובדיקה עצמית</a></div>
+</main>
+</body>
+</html>

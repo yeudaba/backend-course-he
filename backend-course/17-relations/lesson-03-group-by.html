@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GROUP BY ו־HAVING — פרק 17</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 17</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — GROUP BY ו־HAVING</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li><code>GROUP BY</code>: צבירה לכל קבוצה.</li>
+      <li><code>HAVING</code> מול <code>WHERE</code>.</li>
+      <li>GROUP BY עם JOIN — ומלכודת ה־COUNT.</li>
+    </ul>
+  </div>
+
+  <h2>1. GROUP BY</h2>
+<pre><code class="lang-sql">SELECT status, COUNT(*) AS orders
+FROM orders
+GROUP BY status
+ORDER BY orders DESC, status;</code></pre>
+<pre class="terminal">  status   | orders
+-----------+--------
+ shipped   |      6
+ paid      |      3
+ pending   |      2
+ cancelled |      1
+(4 rows)</pre>
+  <p><code>GROUP BY status</code> מחלק את השורות לקבוצות לפי הערך, ו־<code>COUNT(*)</code> רץ על כל קבוצה בנפרד. בפרק 16 צבירה הפכה את כל הטבלה לשורה אחת; כאן — שורה לכל קבוצה.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ הכלל</span>
+    <p>ב־SELECT עם GROUP BY מותר רק: (1) העמודות שב־GROUP BY, (2) פונקציות צבירה. <code>SELECT status, created_at, COUNT(*) ... GROUP BY status</code> — שגיאה: לאיזה <code>created_at</code> מתוך הקבוצה התכוונת? (חריג אחד: אם מקבצים לפי מפתח ראשי, מותר כל עמודה מאותה טבלה — נראה בהמשך.)</p>
+  </div>
+
+  <h2>2. GROUP BY עם JOIN</h2>
+<pre><code class="lang-sql">SELECT cat.name AS category,
+       SUM(oi.quantity) AS units,
+       SUM(oi.quantity * oi.unit_price) AS revenue
+FROM order_items oi
+JOIN orders o       ON o.id = oi.order_id
+JOIN products p     ON p.id = oi.product_id
+JOIN categories cat ON cat.id = p.category_id
+WHERE o.status &lt;&gt; 'cancelled'
+GROUP BY cat.name
+ORDER BY revenue DESC;</code></pre>
+<pre class="terminal">  category   | units | revenue
+-------------+-------+---------
+ beans       |    18 | 1058.20
+ brewing     |     5 |  765.00
+ grinders    |     2 |  378.00
+ accessories |    11 |  372.60
+(4 rows)</pre>
+  <p>קודם JOIN (שורה לכל פריט), אחר כך WHERE (בלי הזמנות מבוטלות), ואז GROUP BY (שורה לכל קטגוריה). "ההכנסה לפי X" — כמעט תמיד התבנית הזו.</p>
+
+  <h2>3. HAVING</h2>
+<pre><code class="lang-sql">SELECT c.full_name, COUNT(*) AS orders
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE o.status &lt;&gt; 'cancelled'
+GROUP BY c.id, c.full_name
+HAVING COUNT(*) &gt;= 2
+ORDER BY orders DESC, c.full_name;</code></pre>
+<pre class="terminal">  full_name   | orders
+--------------+--------
+ Dana Levi    |      3
+ Michal Biton |      2
+ Ron Avraham  |      2
+ Yossi Cohen  |      2
+(4 rows)</pre>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>WHERE</th><th>HAVING</th></tr>
+    <tr><td>מתי רץ</td><td>לפני הקיבוץ</td><td>אחרי הקיבוץ</td></tr>
+    <tr><td>על מה</td><td>שורות בודדות</td><td>קבוצות</td></tr>
+    <tr><td>צבירות?</td><td>✘ <code>WHERE COUNT(*) &gt; 1</code> — שגיאה</td><td>✔</td></tr>
+  </table></div>
+  <p>סדר הביצוע המלא: <code>FROM</code>/<code>JOIN</code> ← <code>WHERE</code> ← <code>GROUP BY</code> ← <code>HAVING</code> ← <code>SELECT</code> ← <code>ORDER BY</code> ← <code>LIMIT</code>.</p>
+  <p>ולמה <code>GROUP BY c.id, c.full_name</code> ולא רק <code>c.full_name</code>? כי שני לקוחות יכולים להיקרא "Dana Levi". מקבצים לפי המזהה; השם — כדי להציג.</p>
+
+  <h2>4. מלכודת ה־COUNT</h2>
+<pre><code class="lang-sql">SELECT c.full_name, COUNT(*) AS count_star, COUNT(o.id) AS count_orders
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+GROUP BY c.id
+ORDER BY c.id;</code></pre>
+<pre class="terminal">  full_name   | count_star | count_orders
+--------------+------------+--------------
+ Dana Levi    |          3 |            3
+ Yossi Cohen  |          2 |            2
+ Noa Mizrahi  |          2 |            2
+ Avi Peretz   |          1 |            0
+ Michal Biton |          2 |            2
+ Ron Avraham  |          2 |            2
+ Shira David  |          1 |            1
+ Omer Shalom  |          1 |            0
+(8 rows)</pre>
+  <p>ל־Avi ול־Omer אין הזמנות — אבל <code>COUNT(*)</code> מחזיר להם 1! כי LEFT JOIN השאיר להם שורה אחת (עם NULL). <code>COUNT(o.id)</code> סופר רק ערכים שאינם NULL — וזה מה שרצית. (שים לב גם ל־<code>GROUP BY c.id</code> עם <code>c.full_name</code> ב־SELECT — זה החריג: id הוא מפתח ראשי, אז כל עמודה של <code>c</code> מותרת.)</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P17-E04">E04</a> · <a href="exercises.html#P17-E10">E10</a> · <a href="exercises.html#P17-E11">E11</a> · <a href="exercises.html#P17-E12">E12</a> · <a href="exercises.html#P17-E13">E13</a> · <a href="exercises.html#P17-E14">E14</a> · <a href="exercises.html#P17-E22">E22</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-joins.html"><small>הקודם</small>שיעור 2 — JOIN: לשלב טבלאות</a><a href="lesson-04-subqueries.html"><small>הבא</small>שיעור 4 — תת־שאילתות, WITH ופונקציות חלון</a></div>
+</main>
+</body>
+</html>

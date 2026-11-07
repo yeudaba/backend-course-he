@@ -1,0 +1,249 @@
+  <div class="box warn">
+    <span class="box-title">🔒 קרא את העמוד הזה רק אחרי ש־<code>npm run check PR1</code> עובר אצלך</span>
+    <p>פתרון לדוגמה הוא לא "התשובה הנכונה" — הוא דרך אחת. השווה אותו לשלך: איפה הוא פשוט יותר? איפה שלך פשוט יותר? הקבצים המלאים נמצאים גם ב־`08p-project-expenses/solutions/expenses-cli`.</p>
+  </div>
+
+  <h2>החלטות עיצוב שכדאי לשים לב אליהן</h2>
+  <ul>
+    <li><strong>`expenseError` עם `code`</strong> — ה־CLI לא צריך את הקוד, אבל הבדיקות משתמשות בו, ובפרויקט 2 השרת יתרגם אותו ל־HTTP status (`NOT_FOUND` ← 404, `INVALID_*` ← 400).</li>
+    <li><strong>`isValidDate` משתמשת במערך של ימים בחודש</strong> במקום `switch` — פחות שורות, אותה לוגיקה.</li>
+    <li><strong>`filterExpenses` בודקת `=== undefined`</strong> ולא falsy — כך מסנן ריק לא "נבלע" בטעות.</li>
+    <li><strong>`run` קטנה ככל האפשר</strong>: היא רק מפרשת ומחברת. כל ההיגיון ב־`expenses.js`.</li>
+    <li><strong>`try` אחד סביב כל ה־`switch`</strong> — נקודה אחת שאחראית ש"שום דבר לא קורס".</li>
+  </ul>
+
+  <h2>src/expenses.js</h2>
+```js file=src/expenses.js
+// לוגיקה טהורה של הוצאות: בלי קבצים, בלי הדפסות — רק נתונים פנימה ונתונים החוצה.
+
+export function expenseError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+export function isValidDate(text) {
+  const parts = String(text).split("-");
+  if (parts.length !== 3 || parts[0].length !== 4 || parts[1].length !== 2 || parts[2].length !== 2) {
+    return false;
+  }
+  const [year, month, day] = parts.map(Number);
+  if (![year, month, day].every(Number.isInteger) || month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1];
+}
+
+export function parseAmount(input) {
+  const text = String(input).trim();
+  const amount = Number(text);
+  if (text === "" || Number.isNaN(amount) || amount <= 0) {
+    throw expenseError("INVALID_AMOUNT", `סכום לא תקין: ${input}`);
+  }
+  return Math.round(amount * 100) / 100;
+}
+
+export function nextId(expenses) {
+  return expenses.reduce((max, e) => Math.max(max, e.id), 0) + 1;
+}
+
+export function addExpense(expenses, { date, category, amount, note = "" }) {
+  if (!isValidDate(date)) {
+    throw expenseError("INVALID_DATE", `תאריך לא תקין: ${date} (פורמט: YYYY-MM-DD)`);
+  }
+  const cleanCategory = String(category ?? "").trim().toLowerCase();
+  if (cleanCategory === "") {
+    throw expenseError("INVALID_CATEGORY", "חובה לציין קטגוריה");
+  }
+  const expense = {
+    id: nextId(expenses),
+    date,
+    category: cleanCategory,
+    amount: parseAmount(amount),
+    note: String(note).trim(),
+  };
+  return [...expenses, expense];
+}
+
+export function removeExpense(expenses, id) {
+  const numericId = Number(id);
+  if (!expenses.some((e) => e.id === numericId)) {
+    throw expenseError("NOT_FOUND", `לא נמצאה הוצאה עם מזהה ${id}`);
+  }
+  return expenses.filter((e) => e.id !== numericId);
+}
+
+export function filterExpenses(expenses, { category, month } = {}) {
+  return expenses.filter(
+    (e) =>
+      (category === undefined || e.category === category.trim().toLowerCase()) &&
+      (month === undefined || e.date.startsWith(`${month}-`))
+  );
+}
+
+export function monthlySummary(expenses, month) {
+  const inMonth = filterExpenses(expenses, { month });
+  const byCategory = {};
+  for (const e of inMonth) {
+    byCategory[e.category] = Math.round(((byCategory[e.category] ?? 0) + e.amount) * 100) / 100;
+  }
+  const total = Math.round(inMonth.reduce((s, e) => s + e.amount, 0) * 100) / 100;
+  let topCategory = null;
+  for (const [category, sum] of Object.entries(byCategory)) {
+    if (topCategory === null || sum > byCategory[topCategory]) {
+      topCategory = category;
+    }
+  }
+  return { month, count: inMonth.length, total, byCategory, topCategory };
+}
+
+export function formatExpenses(expenses) {
+  if (expenses.length === 0) {
+    return "אין הוצאות להצגה";
+  }
+  const sorted = [...expenses].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  return sorted
+    .map((e) => {
+      const note = e.note ? `  ${e.note}` : "";
+      return `#${String(e.id).padEnd(4)}${e.date}  ${e.category.padEnd(12)}${e.amount.toFixed(2).padStart(10)}${note}`;
+    })
+    .join("\n");
+}
+
+export function formatSummary(summary) {
+  const lines = [`סיכום ${summary.month}: ${summary.count} הוצאות, סה״כ ${summary.total.toFixed(2)}`];
+  const entries = Object.entries(summary.byCategory).sort((a, b) => b[1] - a[1]);
+  for (const [category, sum] of entries) {
+    lines.push(`  ${category.padEnd(12)}${sum.toFixed(2).padStart(10)}`);
+  }
+  return lines.join("\n");
+}
+```
+
+  <h2>src/storage.js</h2>
+```js file=src/storage.js
+// שמירה וטעינה של ההוצאות מקובץ JSON.
+import fs from "node:fs";
+import { expenseError } from "./expenses.js";
+
+export function loadExpenses(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  const text = fs.readFileSync(filePath, "utf8");
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw expenseError("CORRUPT_FILE", `קובץ הנתונים פגום: ${filePath}`);
+  }
+  if (!Array.isArray(data)) {
+    throw expenseError("CORRUPT_FILE", `קובץ הנתונים פגום: ${filePath}`);
+  }
+  return data;
+}
+
+export function saveExpenses(filePath, expenses) {
+  fs.writeFileSync(filePath, JSON.stringify(expenses, null, 2) + "\n", "utf8");
+}
+```
+
+  <h2>src/cli.js</h2>
+```js file=src/cli.js
+// נקודת הכניסה: מפרשת את הפקודה מה־Terminal ומחברת בין הלוגיקה לאחסון.
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  addExpense,
+  removeExpense,
+  filterExpenses,
+  monthlySummary,
+  formatExpenses,
+  formatSummary,
+} from "./expenses.js";
+import { loadExpenses, saveExpenses } from "./storage.js";
+
+const HELP = `שימוש:
+  add <YYYY-MM-DD> <קטגוריה> <סכום> [הערה...]   הוספת הוצאה
+  list [--category X] [--month YYYY-MM]          רשימת הוצאות
+  delete <id>                                     מחיקת הוצאה
+  summary <YYYY-MM>                               סיכום חודשי
+  help                                            העזרה הזו`;
+
+function readOptions(args) {
+  const options = {};
+  for (let i = 0; i < args.length; i += 2) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if (flag !== "--category" && flag !== "--month") {
+      throw new Error(`אפשרות לא מוכרת: ${flag}`);
+    }
+    if (value === undefined) {
+      throw new Error(`חסר ערך אחרי ${flag}`);
+    }
+    options[flag.slice(2)] = value;
+  }
+  return options;
+}
+
+export function run(argv, { filePath, log = console.log }) {
+  const [command, ...args] = argv;
+  try {
+    switch (command) {
+      case "add": {
+        const [date, category, amount, ...noteWords] = args;
+        if (amount === undefined) {
+          throw new Error("חסרים פרטים. דוגמה: add 2026-10-01 food 54.5 lunch");
+        }
+        const updated = addExpense(loadExpenses(filePath), { date, category, amount, note: noteWords.join(" ") });
+        saveExpenses(filePath, updated);
+        log(`נוספה הוצאה #${updated[updated.length - 1].id}`);
+        return 0;
+      }
+      case "list": {
+        const expenses = filterExpenses(loadExpenses(filePath), readOptions(args));
+        log(formatExpenses(expenses));
+        return 0;
+      }
+      case "delete": {
+        if (args[0] === undefined) {
+          throw new Error("חסר מזהה. דוגמה: delete 3");
+        }
+        saveExpenses(filePath, removeExpense(loadExpenses(filePath), args[0]));
+        log(`הוצאה #${args[0]} נמחקה`);
+        return 0;
+      }
+      case "summary": {
+        if (args[0] === undefined) {
+          throw new Error("חסר חודש. דוגמה: summary 2026-10");
+        }
+        log(formatSummary(monthlySummary(loadExpenses(filePath), args[0])));
+        return 0;
+      }
+      case "help":
+      case undefined:
+        log(HELP);
+        return 0;
+      default:
+        log(`פקודה לא מוכרת: ${command}\n\n${HELP}`);
+        return 1;
+    }
+  } catch (err) {
+    log(`שגיאה: ${err.message}`);
+    return 1;
+  }
+}
+
+// מריצים רק כשהקובץ הופעל ישירות (node src/cli.js), לא כשמייבאים אותו בבדיקות
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const filePath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "expenses.json");
+  process.exitCode = run(process.argv.slice(2), { filePath });
+}
+```
+
+  <div class="box tip">
+    <span class="box-title">💡 מה הלאה</span>
+    <p>בפרק 9 תלמד Git ותעלה את הפרויקט ל־GitHub — זה יהיה ה־commit הראשון בתיק העבודות שלך.</p>
+  </div>

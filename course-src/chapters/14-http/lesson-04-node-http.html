@@ -1,0 +1,105 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>שרת HTTP אמיתי עם `node:http` — בלי ספריות.</li>
+      <li>קריאת JSON מגוף הבקשה, ו־routing ידני.</li>
+      <li>לקוח: `fetch` מתוך Node, עם בדיקת status ו־timeout.</li>
+    </ul>
+  </div>
+
+  <h2>1. השרת הכי קטן</h2>
+```js file=playground/hello-server.mjs
+import http from "node:http";
+
+const server = http.createServer((req, res) => {
+  console.log(req.method, req.url);
+  res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify({ message: "שלום מהשרת", path: req.url }));
+});
+
+server.listen(3000, () => console.log("http://localhost:3000"));
+```
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td>`http.createServer(handler)`</td><td>יוצר שרת. ה־handler נקרא <strong>על כל בקשה</strong> — callback (פרק 5!)</td></tr>
+    <tr><td>`req`</td><td>הבקשה: `req.method`, `req.url`, `req.headers`, והגוף (stream)</td></tr>
+    <tr><td>`res.writeHead(status, headers)`</td><td>שורת ה־status ו־headers</td></tr>
+    <tr><td>`res.end(body)`</td><td>שולח את הגוף <strong>ומסיים</strong>. בלי `end` — הלקוח מחכה לנצח</td></tr>
+    <tr><td>`server.listen(3000)`</td><td>מתחיל להאזין בפורט. התוכנית לא מסתיימת — Ctrl+C</td></tr>
+  </table></div>
+  <p>הרץ, ופתח `http://localhost:3000/abc` בדפדפן. כל רענון — שורה חדשה ב־Terminal (ולפעמים גם בקשה ל־`/favicon.ico` — הדפדפן מבקש אייקון).</p>
+
+  <h2>2. Routing ידני וגוף JSON</h2>
+  <p>פתח את `14-http/files/demo-server.mjs` ב־VS Code וקרא אותו — הוא קצר. שלושה רעיונות מרכזיים בו:</p>
+```js
+const url = new URL(req.url, `http://${req.headers.host}`);
+const parts = url.pathname.split("/").filter(Boolean);
+```
+  <p>`req.url` הוא רק `"/products/7?x=1"`. `new URL` מפרק אותו; `parts` הוא `["products", "7"]` — ומשם `if`־ים לפי method ו־path.</p>
+```js
+async function readJson(req) {
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  if (raw === "") return undefined;
+  return JSON.parse(raw);
+}
+```
+  <p>הגוף מגיע כ־<strong>stream</strong> (פרק 13) — בחתיכות. אוספים, ואז `JSON.parse` (שעלול לזרוק → 400).</p>
+```js
+} catch (err) {
+  if (err instanceof SyntaxError) return send(res, 400, { error: "JSON לא תקין" });
+  console.error(err);
+  send(res, 500, { error: "שגיאה פנימית" });
+}
+```
+  <p>try/catch אחד סביב הכול — שום בקשה לא מפילה את השרת, וללקוח לא נחשפים פרטים (פרק 8).</p>
+  <div class="box tip">
+    <span class="box-title">💡 למה בכלל Express?</span>
+    <p>תסתכל כמה קוד השרת הזה דורש לחמישה routes: פירוק URL, קריאת גוף, if־ים, `writeHead`. Express (פרק 15) עושה את כל זה בשורה לכל route. אבל עכשיו אתה יודע מה קורה מתחת — וזה יעזור בכל דיבוג.</p>
+  </div>
+
+  <h2>3. `fetch` — Node כלקוח</h2>
+  <p>שרתים מדברים גם עם שרתים אחרים (תשלומים, מיילים, מזג אוויר). `fetch` מובנה ב־Node:</p>
+```js file=playground/client.mjs
+const res = await fetch("http://localhost:4000/products/1");
+console.log(res.status, res.ok, res.headers.get("content-type"));
+const product = await res.json();
+console.log(product.name);
+
+const created = await fetch("http://localhost:4000/products", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "רמקול", price: 199 }),
+});
+console.log(created.status, await created.json());
+```
+```term
+% node playground/client.mjs
+200 true application/json; charset=utf-8
+מקלדת
+201 { id: 3, name: 'רמקול', price: 199 }
+```
+  <p>(ה־id תלוי בכמה מוצרים כבר יצרת מאז שהשרת עלה — הנתונים בזיכרון, ונמחקים בכל הפעלה מחדש.)</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ fetch לא זורק על 404 או 500</span>
+    <p>`fetch` נכשל (זורק) רק אם אין חיבור בכלל. תשובת 404 או 500 היא "הצלחה" מבחינתו! חייבים לבדוק `res.ok` (true ל־2xx) בעצמך. ו־timeout? אין כברירת מחדל — שרת שלא עונה ישאיר אותך מחכה. הפתרון: `signal: AbortSignal.timeout(3000)`.</p>
+  </div>
+```js
+async function getJson(url, ms = 3000) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(ms) });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} מ־${url}`);
+  }
+  return res.json();
+}
+```
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P14-E05">E05</a> · <a href="exercises.html#P14-E11">E11</a> · <a href="exercises.html#P14-E12">E12</a> · <a href="exercises.html#P14-E16">E16</a> · <a href="exercises.html#P14-E17">E17</a> · <a href="exercises.html#P14-E18">E18</a> · <a href="exercises.html#P14-E19">E19</a> · <a href="exercises.html#P14-E21">E21</a> · <a href="exercises.html#P14-E22">E22</a> · <a href="exercises.html#P14-E23">E23</a> — ואת האתגרים <a href="exercises.html#P14-E24">E24</a> ו־<a href="exercises.html#P14-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>השאלה "מה קורה כשמקלידים כתובת בדפדפן ולוחצים Enter?" היא אולי שאלת הראיון המפורסמת ביותר. תשובה טובה ברמת Junior: DNS ← חיבור TCP (ו־TLS ב־HTTPS) ← בקשת HTTP ← השרת (routing, לוגיקה, מסד) ← תשובה עם status ו־body ← הדפדפן מציג ומבקש משאבים נוספים. עכשיו אתה יכול לפרט כל שלב.</p>
+  </div>

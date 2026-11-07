@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>תכנון, הקמה ו־Git — פרויקט 2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 2</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — תכנון, הקמה ו־Git</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>להבין את הדרישות ואת המבנה.</li>
+      <li>להקים פרויקט עצמאי: תיקייה, npm, Git, GitHub.</li>
+      <li>להפעיל את השלד ולראות את הבודק נכשל — זו נקודת ההתחלה.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדרישות</h2>
+  <p><strong>משימה</strong> נראית כך:</p>
+<pre><code class="lang-json">{
+  "id": 1,
+  "title": "ללמוד Express",
+  "description": null,
+  "status": "todo",
+  "priority": "high",
+  "dueDate": "2026-12-31",
+  "createdAt": "2026-11-04T19:09:09.056Z",
+  "updatedAt": "2026-11-04T19:09:09.056Z"
+}</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>בקשה</th><th>מה עושה</th><th>הצלחה</th></tr>
+    <tr><td><code>GET /health</code></td><td>"אני חי" — לניטור ולפריסה (פרק 25)</td><td>200 <code>{ "ok": true }</code></td></tr>
+    <tr><td><code>POST /tasks</code></td><td>יצירה</td><td>201 + <code>Location</code></td></tr>
+    <tr><td><code>GET /tasks</code></td><td>רשימה: <code>status</code>, <code>priority</code>, <code>q</code>, <code>sort</code>, <code>page</code>, <code>limit</code></td><td>200 <code>{ data, meta }</code></td></tr>
+    <tr><td><code>GET /tasks/stats</code></td><td>כמה בכל סטטוס, וכמה באיחור</td><td>200</td></tr>
+    <tr><td><code>GET /tasks/:id</code></td><td>משימה אחת</td><td>200</td></tr>
+    <tr><td><code>PATCH /tasks/:id</code></td><td>עדכון חלקי</td><td>200</td></tr>
+    <tr><td><code>DELETE /tasks/:id</code></td><td>מחיקה</td><td>204</td></tr>
+  </table></div>
+  <p><strong>שגיאות</strong> — תמיד <code>{ "error": { "code", "message", "details"? } }</code>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>status</th><th>code</th><th>מתי</th></tr>
+    <tr><td>400</td><td><code>VALIDATION_ERROR</code></td><td>body / query / params לא עוברים את הסכמה (עם <code>details</code>)</td></tr>
+    <tr><td>400</td><td><code>INVALID_JSON</code></td><td>גוף שאינו JSON תקין</td></tr>
+    <tr><td>404</td><td><code>TASK_NOT_FOUND</code></td><td>אין משימה עם ה־id</td></tr>
+    <tr><td>404</td><td><code>NOT_FOUND</code></td><td>אין כתובת כזו</td></tr>
+    <tr><td>422</td><td><code>DUE_DATE_IN_PAST</code></td><td>יצירת משימה עם תאריך יעד שכבר עבר</td></tr>
+    <tr><td>500</td><td><code>INTERNAL</code></td><td>באג — פרטים רק ביומן</td></tr>
+  </table></div>
+  <div class="box tip">
+    <span class="box-title">💡 400 מול 422</span>
+    <p><code>{"dueDate": "31/12"}</code> — המבנה שגוי ← 400, הסכמה תופסת. <code>{"dueDate": "2020-01-01"}</code> — מבנה תקין, אבל חוק עסקי ("לא יוצרים משימה לעבר") נכשל ← 422, וה־<em>service</em> תופס. ההבחנה הזו קובעת גם <strong>איפה</strong> כל בדיקה גרה.</p>
+  </div>
+
+  <h2>2. המבנה</h2>
+<pre><code class="lang-text">tasks-api/
+├── package.json
+├── tsconfig.json
+├── requests.http            ← בקשות לדוגמה ל־REST Client
+├── README.md                ← שלב 4
+└── src/
+    ├── server.ts            ← מפעיל על פורט (מוכן)
+    ├── app.ts               ← createApp(): מחבר הכול           (שלב 2)
+    ├── errors.ts            ← HttpError, notFound, errorHandler (שלב 2)
+    ├── middleware/
+    │   ├── logger.ts        ← (מוכן — כמו P15-E09)
+    │   └── validate.ts      ←                                    (שלב 2)
+    └── tasks/
+        ├── tasks.schema.ts      ← Zod + טיפוסים                  (שלב 1)
+        ├── tasks.repository.ts  ← אחסון בזיכרון                  (שלב 1)
+        ├── tasks.service.ts     ← חוקים                          (שלבים 1, 3)
+        └── tasks.routes.ts      ← HTTP                           (שלב 2)</code></pre>
+  <p>מבנה "לפי תחום" (<code>tasks/</code>) ולא "לפי סוג" (<code>routes/</code>, <code>services/</code>): כשיתווספו <code>users/</code> ו־<code>auth/</code> בפרק 21, כל תחום יהיה בתיקייה אחת. כך בנוי גם NestJS (פרק 20).</p>
+
+  <h2>3. הקמה</h2>
+  <ol class="steps">
+    <li>ב־Finder: העתק את <code>15p-project-tasks/starter/tasks-api</code> אל <code>~/dev/tasks-api</code> (לצד <code>backend-course</code>, לא בתוכו).</li>
+    <li>ב־Terminal:</li>
+  </ol>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev/tasks-api
+<span class="prompt">% </span>npm install
+<span class="dim">added 78 packages, and audited 79 packages in 6s</span>
+<span class="prompt">% </span>code .</pre>
+  <ol class="steps" start="3">
+    <li>צור <code>.gitignore</code> עם השורה <code>node_modules/</code> — <strong>לפני</strong> ה־commit הראשון.</li>
+    <li>Git ו־GitHub (כמו בפרק 9, שיעור 4):</li>
+  </ol>
+<pre class="terminal"><span class="prompt">% </span>git init
+<span class="prompt">% </span>git add .
+<span class="prompt">% </span>git commit -m "Initial skeleton for tasks API"
+<span class="prompt">% </span>git remote add origin https://github.com/YOUR-USER/tasks-api.git
+<span class="prompt">% </span>git push -u origin main</pre>
+  <ol class="steps" start="5">
+    <li>הפעל: <code>npm run dev</code>. השרת עולה (<code>tasks-api רץ: http://localhost:3000</code>) — אבל כל בקשה תחזיר 404 של Express, כי <code>createApp</code> עוד ריקה.</li>
+    <li>הרץ את הבודק (בחלון Terminal שני, מתיקיית הקורס): <code>npm run check PR2 -- --dir ~/dev/tasks-api</code>. הכול נכשל — מצוין, זו נקודת ההתחלה.</li>
+  </ol>
+
+  <h2>4. איך עובדים</h2>
+  <ul>
+    <li><strong>commit לכל צעד שעובד</strong>: "Add task schemas", "Implement in-memory repository"... מראיין שפותח את ה־repo רואה איך אתה עובד, לא רק את התוצאה.</li>
+    <li><strong><code>npm run typecheck</code></strong> (בתיקיית הפרויקט) מדי פעם — הבודק לא בודק טיפוסים, אבל TypeScript ימצא באגים לפני שהם קורים.</li>
+    <li>אפשר (ומומלץ) להעתיק מהפתרונות שלך לתרגילי פרק 15: E10 (שגיאות), E13 (pagination), E15 (validate), E16 (שכבות). זה לא רמאות — זו הסיבה שתרגלת אותם.</li>
+    <li>תקוע? רמזים בכל שלב. הפתרון המלא — רק בסוף (<code>reference.html</code>).</li>
+  </ul>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרויקט 2</a><a href="stage-1-core.html"><small>הבא</small>שיעור 2 — שלב 1: schema, repository ו־service</a></div>
+</main>
+</body>
+</html>

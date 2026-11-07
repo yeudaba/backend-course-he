@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>יצירת טבלאות ושינוי נתונים — פרק 16</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 16</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — יצירת טבלאות ושינוי נתונים</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li><code>CREATE TABLE</code>: טיפוסים, מפתח ראשי ואילוצים.</li>
+      <li><code>INSERT</code> (עם <code>RETURNING</code>), <code>UPDATE</code>, <code>DELETE</code>.</li>
+      <li><code>ALTER TABLE</code> ו־<code>DROP TABLE</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. CREATE TABLE</h2>
+<pre><code class="lang-sql">CREATE TABLE tasks (
+  id          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title       text NOT NULL CHECK (length(title) BETWEEN 1 AND 120),
+  status      text NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+  priority    smallint NOT NULL DEFAULT 2,
+  due_date    date,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+<pre class="terminal">CREATE TABLE</pre>
+  <div class="table-wrap"><table>
+    <tr><th>טיפוס</th><th>לְמה</th></tr>
+    <tr><td><code>integer</code> / <code>bigint</code></td><td>מספרים שלמים (bigint — לטבלאות ענק)</td></tr>
+    <tr><td><code>numeric(10, 2)</code></td><td>כסף וכל מה שחייב דיוק</td></tr>
+    <tr><td><code>text</code></td><td>מחרוזת. ב־PostgreSQL אין סיבה ל־<code>varchar(n)</code> — את האורך בודקים עם CHECK</td></tr>
+    <tr><td><code>boolean</code></td><td>true / false</td></tr>
+    <tr><td><code>date</code></td><td>תאריך בלי שעה: <code>'2026-11-04'</code></td></tr>
+    <tr><td><code>timestamptz</code></td><td>רגע בזמן (נשמר ב־UTC). תמיד tz, לא <code>timestamp</code> "ערום" — פרק 24</td></tr>
+    <tr><td><code>uuid</code> · <code>jsonb</code></td><td>מזהה אקראי · מסמך JSON (נכיר בהמשך)</td></tr>
+  </table></div>
+  <div class="table-wrap"><table>
+    <tr><th>אילוץ</th><th>אומר</th></tr>
+    <tr><td><code>PRIMARY KEY</code></td><td>מזהה ייחודי, לא NULL. <code>GENERATED ALWAYS AS IDENTITY</code> — המסד ממספר בעצמו (1, 2, 3...)</td></tr>
+    <tr><td><code>NOT NULL</code></td><td>חובה</td></tr>
+    <tr><td><code>DEFAULT x</code></td><td>ערך כשלא נשלח</td></tr>
+    <tr><td><code>UNIQUE</code></td><td>אין שתי שורות עם אותו ערך (אימייל)</td></tr>
+    <tr><td><code>CHECK (...)</code></td><td>כל תנאי: <code>price &gt; 0</code></td></tr>
+  </table></div>
+  <p>זו "שכבת ההגנה האחרונה": גם אם יש באג בקוד, או מישהו מריץ SQL ידנית — המסד לא יסכים לנתונים לא תקינים. Zod בגבול ה־API + אילוצים במסד = שתי שכבות.</p>
+
+  <h2>2. INSERT</h2>
+<pre><code class="lang-sql">CREATE TABLE tasks (
+  id        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title     text NOT NULL,
+  status    text NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+  due_date  date
+);
+
+INSERT INTO tasks (title, due_date) VALUES ('Learn SQL', '2026-12-01');
+
+INSERT INTO tasks (title, status) VALUES
+  ('Buy coffee beans', 'done'),
+  ('Connect project 2 to the DB', 'todo')
+RETURNING id, title, status;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 1
+ id |            title            | status
+----+-----------------------------+--------
+  2 | Buy coffee beans            | done
+  3 | Connect project 2 to the DB | todo
+(2 rows)
+
+INSERT 0 2</pre>
+  <ul>
+    <li>מציינים עמודות במפורש (<code>(title, due_date)</code>). מה שלא צוין — DEFAULT או NULL.</li>
+    <li><code>INSERT 0 1</code> — psql מדווח כמה שורות נוספו.</li>
+    <li><code>RETURNING</code> מחזיר את השורות שנוצרו — כולל ה־id שהמסד בחר. בדיוק מה שצריך ל־<code>POST /tasks</code> שמחזיר 201 עם האובייקט.</li>
+  </ul>
+<pre><code class="lang-sql">CREATE TABLE tasks (
+  id      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title   text NOT NULL,
+  status  text NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done'))
+);
+INSERT INTO tasks (title, status) VALUES ('Test', 'urgent');</code></pre>
+<pre class="terminal">CREATE TABLE
+ERROR:  new row for relation "tasks" violates check constraint "tasks_status_check"
+DETAIL:  Failing row contains (1, Test, urgent).</pre>
+  <p>המסד מסרב, ושום שורה לא נוספה. בפרק 19 נראה איך שגיאה כזו מגיעה לקוד ומתורגמת ל־400/409.</p>
+
+  <h2>3. UPDATE ו־DELETE</h2>
+<pre><code class="lang-sql">UPDATE products
+SET price = price * 1.10, stock = stock + 10
+WHERE category = 'grinders'
+RETURNING name, price, stock;</code></pre>
+<pre class="terminal">         name         | price  | stock
+----------------------+--------+-------
+ Hand Grinder         | 207.90 |    18
+ Electric Grinder Pro | 713.90 |    13
+(2 rows)
+
+UPDATE 2</pre>
+<pre><code class="lang-sql">DELETE FROM customers WHERE email = 'omer@example.com';
+SELECT COUNT(*) FROM customers;</code></pre>
+<pre class="terminal">DELETE 1
+ count
+-------
+    11
+(1 row)</pre>
+  <div class="box warn">
+    <span class="box-title">⚠️ UPDATE / DELETE בלי WHERE</span>
+    <p><code>DELETE FROM customers;</code> מוחק <strong>את כל הלקוחות</strong>. בלי אישור, בלי "פח מחזור". <code>UPDATE products SET price = 0;</code> — כל המוצרים בחינם. זה קורה גם לאנשים מנוסים. הרגל שמציל: קודם מריצים <code>SELECT</code> עם אותו WHERE ובודקים כמה שורות חוזרות — ורק אז מחליפים ל־UPDATE/DELETE. (ובפרק 18: לעטוף ב־transaction, ולבטל אם טעית.)</p>
+  </div>
+
+  <h2>4. ALTER ו־DROP</h2>
+<pre><code class="lang-sql">ALTER TABLE customers ADD COLUMN newsletter boolean NOT NULL DEFAULT false;
+ALTER TABLE customers RENAME COLUMN phone TO phone_number;
+SELECT full_name, phone_number, newsletter FROM customers ORDER BY id LIMIT 2;</code></pre>
+<pre class="terminal">ALTER TABLE
+ALTER TABLE
+  full_name  | phone_number | newsletter
+-------------+--------------+------------
+ Dana Levi   | 050-1111111  | f
+ Yossi Cohen |              | f
+(2 rows)</pre>
+  <p><code>DROP TABLE tasks;</code> — מוחק טבלה עם כל הנתונים. <code>DROP TABLE IF EXISTS</code> — בלי שגיאה אם לא קיימת (כמו בקובץ <code>shop.sql</code>).</p>
+  <div class="box tip">
+    <span class="box-title">💡 שינויים במבנה בפרויקט אמיתי</span>
+    <p>לא מריצים <code>ALTER TABLE</code> ידנית על מסד של ייצור. כל שינוי מבנה נכתב כ<strong>migration</strong> — קובץ עם מספר סידורי שנכנס ל־Git ורץ אוטומטית בכל סביבה. Prisma מייצר אותם בשבילך — פרק 19.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P16-E05">E05</a> · <a href="exercises.html#P16-E12">E12</a> · <a href="exercises.html#P16-E16">E16</a> · <a href="exercises.html#P16-E17">E17</a> · <a href="exercises.html#P16-E18">E18</a> · <a href="exercises.html#P16-E19">E19</a> · <a href="exercises.html#P16-E22">E22</a> · <a href="exercises.html#P16-E23">E23</a> — ואת האתגרים <a href="exercises.html#P16-E24">E24</a> ו־<a href="exercises.html#P16-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות SQL בראיונות ל־Junior: "כתוב שאילתה שמחזירה את 5 המוצרים היקרים בכל קטגוריה", "מה ההבדל בין <code>COUNT(*)</code> ל־<code>COUNT(col)</code>", "למה <code>= NULL</code> לא עובד". ובעבודה עצמה — גם עם ORM, תכתוב SQL כל שבוע: לבדוק נתונים, לדבג, להבין שאילתה איטית.</p>
+  </div>
+
+<div class="pager"><a href="lesson-03-null-aggregates.html"><small>הקודם</small>שיעור 3 — NULL וצבירות</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

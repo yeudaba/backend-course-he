@@ -1,0 +1,764 @@
+@@ P17-E01 | 1 | לתכנן ספרייה | 15 | שיעור 1
+@task
+<p>מערכת לספרייה: ספרים, מחברים (לספר יכולים להיות כמה מחברים), חברי ספרייה, והשאלות (חבר שאל עותק של ספר, בתאריך, ואולי החזיר). תכנן: אילו טבלאות, אילו foreign keys, מה המפתח הראשי של כל טבלה, ומה <code>ON DELETE</code> לכל FK.</p>
+@hint1
+<p>ספרים ↔ מחברים הוא רבים־לרבים.</p>
+@hint2
+<p>האם מוחקים חבר שיש לו היסטוריית השאלות?</p>
+@solution
+<ul><li><code>authors(id, full_name)</code>, <code>books(id, title, isbn UNIQUE, published_year)</code></li><li><code>book_authors(book_id → books ON DELETE CASCADE, author_id → authors, PRIMARY KEY (book_id, author_id))</code> — טבלת קישור. מחיקת ספר מוחקת את הקישורים; מחיקת מחבר שיש לו ספרים — חסומה (ברירת מחדל).</li><li><code>members(id, full_name, email UNIQUE, joined_on)</code></li><li><code>loans(id, book_id → books, member_id → members, loaned_at, due_at, returned_at NULL)</code> — שני ה־FK עם ברירת המחדל (RESTRICT): היסטוריית השאלות היא מידע שלא רוצים לאבד, אז אי אפשר למחוק ספר או חבר שיש להם השאלות. (במקום למחוק חבר — מסמנים <code>is_active = false</code>.)</li></ul>
+<p>(ואם יש כמה עותקים מאותו ספר? טבלה נוספת <code>copies(id, book_id, barcode)</code>, וההשאלה מצביעה על עותק.)</p>
+@mistakes
+<ul><li><code>books.author_id</code> — מאפשר רק מחבר אחד לספר.</li><li><code>ON DELETE CASCADE</code> על loans — מחיקת חבר מוחקת בשקט את כל ההיסטוריה.</li></ul>
+
+@@ P17-E02 | 1 | כמה שורות? | 10 | שיעור 2
+@task
+<p>בנתוני הפרק: 8 לקוחות, 12 הזמנות; ל־2 לקוחות אין הזמנות. כמה שורות יחזיר כל אחד?</p>
+```sql
+SELECT * FROM customers c JOIN orders o ON o.customer_id = c.id;            -- 1
+SELECT * FROM customers c LEFT JOIN orders o ON o.customer_id = c.id;       -- 2
+SELECT * FROM orders o LEFT JOIN customers c ON c.id = o.customer_id;       -- 3
+SELECT * FROM customers c JOIN orders o ON true;                            -- 4
+```
+@hint1
+<p>INNER: שורה לכל זוג מתאים. LEFT: + שורה ל"שמאלי בלי התאמה".</p>
+@hint2
+<p>ב־3, הטבלה השמאלית היא orders. יש הזמנה בלי לקוח?</p>
+@solution
+```sql run db=17-relations/files/store.sql
+SELECT
+  (SELECT COUNT(*) FROM customers c JOIN orders o ON o.customer_id = c.id) AS q1,
+  (SELECT COUNT(*) FROM customers c LEFT JOIN orders o ON o.customer_id = c.id) AS q2,
+  (SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON c.id = o.customer_id) AS q3,
+  (SELECT COUNT(*) FROM customers c JOIN orders o ON true) AS q4;
+```
+```out
+ q1 | q2 | q3 | q4
+----+----+----+----
+ 12 | 14 | 12 | 96
+(1 row)
+```
+<p>1: 12 (כל הזמנה מתאימה ללקוח אחד). 2: 12 + 2 לקוחות בלי הזמנות. 3: 12 — אין הזמנה בלי לקוח (ה־FK דואג). 4: 8 × 12 — כל צירוף; זה מה שקורה כששוכחים את תנאי ה־ON.</p>
+@mistakes
+<ul><li>לחשוב ש־LEFT JOIN "מוסיף שורות" תמיד — רק לשורות שאין להן התאמה.</li></ul>
+
+@@ P17-E03 | 1 | למה הסכום כפול? | 10 | שיעור 2
+@task
+<p>נניח שיש גם טבלת <code>payments(order_id, amount)</code>, ולהזמנה אחת יכולים להיות כמה תשלומים (חלוקה לכרטיסים). מישהו כתב:</p>
+```sql
+SELECT o.id, SUM(oi.quantity * oi.unit_price) AS total, SUM(p.amount) AS paid
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+JOIN payments p     ON p.order_id = o.id
+GROUP BY o.id;
+```
+<p>להזמנה עם 3 פריטים ו־2 תשלומים — מה יקרה ל־total ול־paid? למה? ואיך מתקנים?</p>
+@hint1
+<p>כמה שורות יש להזמנה הזו אחרי שני ה־JOIN־ים?</p>
+@hint2
+<p>לסכם כל צד בנפרד, ורק אז לחבר.</p>
+@solution
+<p>אחרי שני ה־JOIN־ים יש 3 × 2 = 6 שורות להזמנה (כל פריט עם כל תשלום). total יוצא פי 2 (כל פריט נספר פעמיים), ו־paid פי 3. זה ה־"fan-out" — אחד הבאגים הנפוצים בדוחות.</p>
+```sql
+WITH items AS (SELECT order_id, SUM(quantity * unit_price) AS total FROM order_items GROUP BY order_id),
+     pays  AS (SELECT order_id, SUM(amount) AS paid FROM payments GROUP BY order_id)
+SELECT o.id, i.total, COALESCE(p.paid, 0) AS paid
+FROM orders o
+JOIN items i     ON i.order_id = o.id
+LEFT JOIN pays p ON p.order_id = o.id;
+```
+@mistakes
+<ul><li>"לתקן" עם <code>SUM(DISTINCT ...)</code> — שני פריטים באותו מחיר ייספרו כאחד.</li></ul>
+
+@@ P17-E04 | 1 | WHERE או HAVING? | 10 | שיעור 3
+@task
+<p>אילו שאילתות תקינות? לתקינות — מה הן מחזירות במילים.</p>
+```sql
+SELECT status, COUNT(*) FROM orders WHERE COUNT(*) > 2 GROUP BY status;                    -- 1
+SELECT status, COUNT(*) FROM orders GROUP BY status HAVING COUNT(*) > 2;                   -- 2
+SELECT status, COUNT(*) FROM orders WHERE created_at >= '2026-03-01' GROUP BY status;      -- 3
+SELECT status, customer_id, COUNT(*) FROM orders GROUP BY status;                          -- 4
+SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING status = 'paid';      -- 5
+```
+@hint1
+<p>WHERE — לפני הקיבוץ, בלי צבירות.</p>
+@hint2
+<p>ב־SELECT וב־HAVING — רק עמודות הקיבוץ או צבירות.</p>
+@solution
+<ol><li>✘ צבירה ב־WHERE.</li><li>✔ סטטוסים שיש להם יותר מ־2 הזמנות, עם הכמות.</li><li>✔ כמה הזמנות בכל סטטוס, מאז מרץ.</li><li>✘ <code>customer_id</code> לא בקיבוץ ולא בצבירה.</li><li>✘ <code>status</code> ב־HAVING בלי צבירה — לאיזה status בקבוצה? (התכוונת: <code>WHERE status = 'paid'</code>.)</li></ol>
+@mistakes
+<ul><li>להעביר כל תנאי ל־HAVING "ליתר ביטחון" — עובד לפעמים, אבל איטי (מקבצים שורות שאחר כך זורקים).</li></ul>
+
+@@ P17-E05 | 1 | NOT IN שמחזיר כלום | 10 | שיעור 4
+@task
+<p>מה תחזיר כל שאילתה, ולמה?</p>
+```sql
+SELECT full_name FROM customers WHERE city NOT IN ('Haifa', 'Tel Aviv');                     -- 1
+SELECT full_name FROM customers WHERE city NOT IN ('Haifa', NULL);                           -- 2
+SELECT name FROM categories WHERE id NOT IN (SELECT category_id FROM products);              -- 3
+```
+@hint1
+<p><code>x NOT IN (a, b)</code> = <code>x &lt;&gt; a AND x &lt;&gt; b</code>.</p>
+@hint2
+<p>ו־<code>x &lt;&gt; NULL</code> הוא NULL, לכן ה־AND לעולם לא true.</p>
+@solution
+```sql run db=17-relations/files/store.sql
+SELECT full_name FROM customers WHERE city NOT IN ('Haifa', 'Tel Aviv') ORDER BY full_name;
+SELECT full_name FROM customers WHERE city NOT IN ('Haifa', NULL);
+SELECT name FROM categories WHERE id NOT IN (SELECT category_id FROM products);
+```
+```out
+  full_name
+-------------
+ Noa Mizrahi
+ Ron Avraham
+(2 rows)
+
+ full_name
+-----------
+(0 rows)
+
+    name
+------------
+ gift cards
+(1 row)
+```
+<p>1: בלי Avi ו־Omer (עיר NULL). 2: <strong>כלום</strong> — בגלל ה־NULL ברשימה. 3: עובד כאן, כי <code>category_id</code> הוא NOT NULL. אבל אם יום אחד העמודה תהיה nullable ומוצר אחד יהיה בלי קטגוריה — השאילתה תחזיר כלום בשקט. לכן: <code>NOT EXISTS</code>.</p>
+@mistakes
+<ul><li>"זה עבד בבדיקה" — כי בנתוני הבדיקה עוד לא היה NULL.</li></ul>
+
+@@ P17-E06 | 2 | הזמנות עם שם לקוח 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E06.sql</code>: כל ההזמנות של לקוחות מ־<code>Haifa</code> — <code>order_id</code>, <code>full_name</code>, <code>status</code> — לפי order_id.</p>
+@hint1
+<p>JOIN בין orders ל־customers.</p>
+@hint2
+<p>הסינון על עמודה מ־customers: <code>WHERE c.city = 'Haifa'</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E06.sql
+SELECT o.id AS order_id, c.full_name, o.status
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE c.city = 'Haifa'
+ORDER BY o.id;
+```
+```out
+ order_id |  full_name  | status
+----------+-------------+---------
+        2 | Yossi Cohen | shipped
+        6 | Yossi Cohen | paid
+        9 | Shira David | shipped
+(3 rows)
+```
+@mistakes
+<ul><li><code>SELECT id</code> בלי כינוי טבלה — <code>column reference "id" is ambiguous</code>.</li></ul>
+
+@@ P17-E07 | 2 | מוצרים עם קטגוריה 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E07.sql</code>: המוצרים הפעילים — <code>product</code> (שם המוצר), <code>category</code> (שם הקטגוריה), <code>price</code> — לפי קטגוריה ואז מחיר.</p>
+@hint1
+<p>שתי עמודות בשם <code>name</code> — לכל אחת כינוי.</p>
+@hint2
+<p><code>p.name AS product, c.name AS category</code></p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E07.sql
+SELECT p.name AS product, c.name AS category, p.price
+FROM products p
+JOIN categories c ON c.id = p.category_id
+WHERE p.is_active
+ORDER BY c.name, p.price;
+```
+```out
+       product        |  category   | price
+----------------------+-------------+--------
+ Paper Filters (100)  | accessories |  24.90
+ Ceramic Mug          | accessories |  39.00
+ Brazil Beans 250g    | beans       |  29.90
+ Colombia Beans 1kg   | beans       |  84.90
+ Ethiopia Beans 1kg   | beans       |  89.90
+ V60 Ceramic          | brewing     |  99.00
+ French Press 1L      | brewing     | 119.00
+ Moka Pot 6 Cups      | brewing     | 149.00
+ Gooseneck Kettle     | brewing     | 229.00
+ Hand Grinder         | grinders    | 189.00
+ Electric Grinder Pro | grinders    | 649.00
+(11 rows)
+```
+@mistakes
+<ul><li><code>ORDER BY category</code> — עובד (כינוי), אבל <code>ORDER BY name</code> היה עמום.</li></ul>
+
+@@ P17-E08 | 2 | לא הזמינו אף פעם 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E08.sql</code>: הלקוחות שאין להם אף הזמנה — <code>full_name</code>, <code>email</code> — לפי full_name. (בשיטת LEFT JOIN.)</p>
+@hint1
+<p>LEFT JOIN מ־customers ל־orders.</p>
+@hint2
+<p><code>WHERE o.id IS NULL</code></p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E08.sql
+SELECT c.full_name, c.email
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+WHERE o.id IS NULL
+ORDER BY c.full_name;
+```
+```out
+  full_name  |      email
+-------------+------------------
+ Avi Peretz  | avi@example.com
+ Omer Shalom | omer@example.com
+(2 rows)
+```
+@mistakes
+<ul><li><code>WHERE o.customer_id = NULL</code> — שוב <code>= NULL</code>.</li></ul>
+
+@@ P17-E09 | 2 | פריטי הזמנה 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E09.sql</code>: הפריטים בהזמנה 9 — <code>product</code>, <code>quantity</code>, <code>unit_price</code>, <code>line_total</code> (כמות × מחיר) — לפי שם המוצר. זו בדיוק השאילתה שמאחורי "פרטי הזמנה" באתר.</p>
+@hint1
+<p>JOIN בין order_items ל־products.</p>
+@hint2
+<p><code>oi.quantity * oi.unit_price AS line_total</code> — המחיר מההזמנה, לא מ־products.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E09.sql
+SELECT p.name AS product, oi.quantity, oi.unit_price, oi.quantity * oi.unit_price AS line_total
+FROM order_items oi
+JOIN products p ON p.id = oi.product_id
+WHERE oi.order_id = 9
+ORDER BY p.name;
+```
+```out
+       product       | quantity | unit_price | line_total
+---------------------+----------+------------+------------
+ Ethiopia Beans 1kg  |        1 |      89.90 |      89.90
+ French Press 1L     |        1 |     119.00 |     119.00
+ Paper Filters (100) |        1 |      24.90 |      24.90
+(3 rows)
+```
+@mistakes
+<ul><li><code>p.price</code> במקום <code>oi.unit_price</code> — הקבלה של הלקוח תשתנה כשהמחיר ישתנה.</li></ul>
+
+@@ P17-E10 | 2 | מוצרים בכל קטגוריה 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E10.sql</code>: לכל קטגוריה — <strong>כולל ריקות</strong> — <code>category</code> ו־<code>products</code> (כמה מוצרים יש בה), לפי שם הקטגוריה.</p>
+@hint1
+<p>LEFT JOIN מ־categories.</p>
+@hint2
+<p><code>COUNT(p.id)</code>, לא <code>COUNT(*)</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E10.sql
+SELECT c.name AS category, COUNT(p.id) AS products
+FROM categories c
+LEFT JOIN products p ON p.category_id = c.id
+GROUP BY c.id
+ORDER BY c.name;
+```
+```out
+  category   | products
+-------------+----------
+ accessories |        3
+ beans       |        3
+ brewing     |        4
+ gift cards  |        0
+ grinders    |        2
+(5 rows)
+```
+@mistakes
+<ul><li><code>COUNT(*)</code> — gift cards יקבל 1.</li></ul>
+
+@@ P17-E11 | 2 | סכום לכל הזמנה 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E11.sql</code>: לכל הזמנה שלא בוטלה — <code>order_id</code> ו־<code>total</code> (סכום הפריטים) — לפי order_id.</p>
+@hint1
+<p>JOIN orders עם order_items, WHERE על הסטטוס, GROUP BY על ההזמנה.</p>
+@hint2
+<p><code>SUM(oi.quantity * oi.unit_price)</code></p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E11.sql
+SELECT o.id AS order_id, SUM(oi.quantity * oi.unit_price) AS total
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status <> 'cancelled'
+GROUP BY o.id
+ORDER BY o.id;
+```
+```out
+ order_id | total
+----------+--------
+        1 | 194.70
+        2 | 278.70
+        3 | 197.00
+        5 | 288.70
+        6 | 169.80
+        7 | 288.80
+        8 | 158.60
+        9 | 233.80
+       10 | 189.00
+       11 | 305.00
+       12 | 269.70
+(11 rows)
+```
+@mistakes
+<ul><li>לשמור total כעמודה בטבלת orders בלי לדאוג שתתעדכן — נתון כפול שמתישהו לא יתאים. (לפעמים שומרים בכוונה, לביצועים — אבל אז זו החלטה מודעת.)</li></ul>
+
+@@ P17-E12 | 2 | הכנסה לפי עיר 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E12.sql</code>: הכנסה מהזמנות שלא בוטלו, לפי עיר הלקוח — <code>city</code> (עיר NULL ← <code>'unknown'</code>) ו־<code>revenue</code> — מההכנסה הגבוהה לנמוכה.</p>
+@hint1
+<p>שלוש טבלאות: customers, orders, order_items.</p>
+@hint2
+<p><code>COALESCE(c.city, 'unknown')</code> — גם ב־SELECT וגם ב־GROUP BY (או <code>GROUP BY 1</code>).</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E12.sql
+SELECT COALESCE(c.city, 'unknown') AS city, SUM(oi.quantity * oi.unit_price) AS revenue
+FROM customers c
+JOIN orders o       ON o.customer_id = c.id
+JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status <> 'cancelled'
+GROUP BY COALESCE(c.city, 'unknown')
+ORDER BY revenue DESC;
+```
+```out
+    city    | revenue
+------------+---------
+ Tel Aviv   | 1144.00
+ Haifa      |  682.30
+ Beer Sheva |  558.50
+ Jerusalem  |  189.00
+(4 rows)
+```
+<p>(הלקוחות בלי עיר לא הזמינו — לכן 'unknown' לא מופיע. אבל השאילתה מוכנה ליום שיזמינו.)</p>
+@mistakes
+<ul><li><code>GROUP BY c.city</code> עם <code>COALESCE</code> רק ב־SELECT — עובד, אבל אם שתי ערים שונות היו הופכות לאותה תווית, היו שתי שורות "unknown".</li></ul>
+
+@@ P17-E13 | 3 | לקוחות שהוציאו הרבה 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E13.sql</code>: לקוחות שסך ההוצאה שלהם (בהזמנות שלא בוטלו) עולה על 300 — <code>full_name</code>, <code>orders</code> (כמה הזמנות), <code>spent</code> — מהגבוה לנמוך.</p>
+@hint1
+<p>שים לב: אחרי JOIN עם order_items, יש כמה שורות לכל הזמנה. COUNT(*) יספור פריטים.</p>
+@hint2
+<p><code>COUNT(DISTINCT o.id)</code>, ו־<code>HAVING SUM(...) &gt; 300</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E13.sql
+SELECT c.full_name, COUNT(DISTINCT o.id) AS orders, SUM(oi.quantity * oi.unit_price) AS spent
+FROM customers c
+JOIN orders o       ON o.customer_id = c.id
+JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status <> 'cancelled'
+GROUP BY c.id
+HAVING SUM(oi.quantity * oi.unit_price) > 300
+ORDER BY spent DESC;
+```
+```out
+  full_name   | orders | spent
+--------------+--------+--------
+ Michal Biton |      2 | 593.70
+ Ron Avraham  |      2 | 558.50
+ Dana Levi    |      3 | 550.30
+ Yossi Cohen  |      2 | 448.50
+(4 rows)
+```
+@mistakes
+<ul><li><code>HAVING spent &gt; 300</code> — ב־PostgreSQL כינוי מ־SELECT לא מוכר ב־HAVING. חוזרים על הביטוי.</li></ul>
+
+@@ P17-E14 | 3 | דוח חודשי 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E14.sql</code>: לכל חודש — <code>month</code> (תאריך תחילת החודש, כ־<code>date</code>), <code>orders</code> (מספר ההזמנות), <code>revenue</code> — רק הזמנות שלא בוטלו, לפי חודש.</p>
+@hint1
+<p><code>date_trunc('month', o.created_at)::date</code></p>
+@hint2
+<p>שוב: הזמנות — <code>COUNT(DISTINCT o.id)</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E14.sql
+SELECT date_trunc('month', o.created_at)::date AS month,
+       COUNT(DISTINCT o.id) AS orders,
+       SUM(oi.quantity * oi.unit_price) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status <> 'cancelled'
+GROUP BY 1
+ORDER BY 1;
+```
+```out
+   month    | orders | revenue
+------------+--------+---------
+ 2026-01-01 |      2 |  473.40
+ 2026-02-01 |      2 |  485.70
+ 2026-03-01 |      3 |  617.20
+ 2026-04-01 |      2 |  422.80
+ 2026-05-01 |      2 |  574.70
+(5 rows)
+```
+<p>(<code>GROUP BY 1</code> — "לפי העמודה הראשונה ב־SELECT". נוח, אבל שביר אם מזיזים עמודות.) ובאיזה אזור זמן נקבע "החודש"? של ה־session — כאן Asia/Jerusalem. הזמנה ב־31 בחודש ב־23:30 בישראל היא כבר החודש הבא ב־UTC. נחזור לזה בפרק 24.</p>
+@mistakes
+<ul><li><code>EXTRACT(MONTH FROM created_at)</code> לבד — ינואר 2026 וינואר 2027 מתמזגים.</li></ul>
+
+@@ P17-E15 | 3 | יקר מהממוצע בקטגוריה 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>17-relations/starter/P17-E15.sql</code>: מוצרים שמחירם גבוה מממוצע המחירים <strong>בקטגוריה שלהם</strong> — <code>product</code>, <code>category</code>, <code>price</code>, <code>category_avg</code> (מעוגל ל־2) — לפי קטגוריה ואז מחיר.</p>
+@hint1
+<p>CTE עם ממוצע לכל קטגוריה, ואז JOIN.</p>
+@hint2
+<p>או פונקציית חלון: <code>AVG(price) OVER (PARTITION BY category_id)</code> — אבל אז צריך עוד שלב כדי לסנן.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E15.sql
+WITH averages AS (
+  SELECT category_id, AVG(price) AS avg_price
+  FROM products
+  GROUP BY category_id
+)
+SELECT p.name AS product, c.name AS category, p.price, ROUND(a.avg_price, 2) AS category_avg
+FROM products p
+JOIN averages a   ON a.category_id = p.category_id
+JOIN categories c ON c.id = p.category_id
+WHERE p.price > a.avg_price
+ORDER BY c.name, p.price;
+```
+```out
+       product        |  category   | price  | category_avg
+----------------------+-------------+--------+--------------
+ Digital Scale        | accessories | 129.00 |        64.30
+ Colombia Beans 1kg   | beans       |  84.90 |        68.23
+ Ethiopia Beans 1kg   | beans       |  89.90 |        68.23
+ Gooseneck Kettle     | brewing     | 229.00 |       149.00
+ Electric Grinder Pro | grinders    | 649.00 |       419.00
+(5 rows)
+```
+@mistakes
+<ul><li>להשוות למחיר המעוגל — מוצר שמחירו בדיוק בין העיגול לממוצע ייכנס או ייצא בטעות.</li></ul>
+
+@@ P17-E16 | 3 | תגיות למוצרים 🤖 | 20 | שיעור 1
+@task
+<p>בקובץ <code>17-relations/starter/P17-E16.sql</code>: הוסף תמיכה בתגיות (למשל "organic", "gift"). למוצר יכולות להיות כמה תגיות, ותגית יכולה להיות על כמה מוצרים.</p>
+<ul><li><code>tags</code>: <code>id</code> (ממוספר), <code>name</code> (טקסט, חובה, ייחודי).</li><li><code>product_tags</code>: <code>product_id</code> ו־<code>tag_id</code>, שניהם foreign keys; צירוף ייחודי (מפתח ראשי משותף). מחיקת מוצר או תגית — מוחקת את הקישורים שלהם.</li></ul>
+@hint1
+<p><code>product_id integer NOT NULL REFERENCES products (id) ON DELETE CASCADE</code></p>
+@hint2
+<p><code>PRIMARY KEY (product_id, tag_id)</code></p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E16.sql
+CREATE TABLE tags (
+  id    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name  text NOT NULL UNIQUE
+);
+
+CREATE TABLE product_tags (
+  product_id  integer NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  tag_id      integer NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+  PRIMARY KEY (product_id, tag_id)
+);
+```
+```out
+CREATE TABLE
+CREATE TABLE
+```
+<p>CASCADE כאן הגיוני: קישור בין מוצר לתגית הוא לא מידע בפני עצמו — אין לו משמעות בלי שני הצדדים. (בניגוד להשאלה בספרייה, E01.)</p>
+@mistakes
+<ul><li>עמודת <code>tags text</code> במוצר עם <code>'organic,gift'</code> — אי אפשר לאכוף, לחפש ביעילות או לשנות שם תגית.</li></ul>
+
+@@ P17-E17 | 3 | קנו מטחנה 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>17-relations/starter/P17-E17.sql</code>: הלקוחות שקנו לפחות מוצר אחד מקטגוריית <code>grinders</code>, בהזמנה שלא בוטלה — <code>full_name</code> בלבד, כל לקוח פעם אחת, לפי שם. (בשיטת <code>EXISTS</code>.)</p>
+@hint1
+<p>החיצונית: customers. הפנימית: orders + order_items + products + categories, מקושרת ל־<code>c.id</code>.</p>
+@hint2
+<p>היתרון של EXISTS כאן: לקוח שקנה שתי מטחנות לא יופיע פעמיים — אין צורך ב־DISTINCT.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E17.sql
+SELECT c.full_name
+FROM customers c
+WHERE EXISTS (
+  SELECT 1
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  JOIN products p     ON p.id = oi.product_id
+  JOIN categories cat ON cat.id = p.category_id
+  WHERE o.customer_id = c.id AND o.status <> 'cancelled' AND cat.name = 'grinders'
+)
+ORDER BY c.full_name;
+```
+```out
+  full_name
+-------------
+ Noa Mizrahi
+ Yossi Cohen
+(2 rows)
+```
+<p>Noa הזמינה Electric Grinder — אבל ההזמנה בוטלה (ואז הזמינה Hand Grinder בהזמנה 10, ולכן היא כן ברשימה).</p>
+@mistakes
+<ul><li>JOIN רגיל בלי DISTINCT — Yossi יופיע פעם לכל פריט מטחנה שקנה.</li></ul>
+
+@@ P17-E18 | 3 | שני המובילים בכל קטגוריה 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>17-relations/starter/P17-E18.sql</code>: לכל קטגוריה — שני המוצרים עם ההכנסה הגבוהה ביותר (מהזמנות שלא בוטלו). <code>category</code>, <code>product</code>, <code>revenue</code>, <code>rank</code> (1 או 2) — לפי קטגוריה ואז rank. בשוויון — לפי שם המוצר.</p>
+@hint1
+<p>שלב 1 (CTE): הכנסה לכל מוצר. שלב 2: <code>ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)</code>. שלב 3: <code>WHERE rank &lt;= 2</code>.</p>
+@hint2
+<p><code>rank</code> הוא גם שם של פונקציה — כעמודה זה עובד, אבל אפשר לכתוב <code>AS "rank"</code> ליתר ביטחון.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E18.sql
+WITH revenue AS (
+  SELECT cat.name AS category, p.name AS product, SUM(oi.quantity * oi.unit_price) AS revenue
+  FROM order_items oi
+  JOIN orders o       ON o.id = oi.order_id
+  JOIN products p     ON p.id = oi.product_id
+  JOIN categories cat ON cat.id = p.category_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY cat.name, p.name
+),
+ranked AS (
+  SELECT category, product, revenue,
+         ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC, product) AS "rank"
+  FROM revenue
+)
+SELECT category, product, revenue, "rank"
+FROM ranked
+WHERE "rank" <= 2
+ORDER BY category, "rank";
+```
+```out
+  category   |       product       | revenue | rank
+-------------+---------------------+---------+------
+ accessories | Ceramic Mug         |  273.00 |    1
+ accessories | Paper Filters (100) |   99.60 |    2
+ beans       | Ethiopia Beans 1kg  |  619.30 |    1
+ beans       | Brazil Beans 250g   |  269.10 |    2
+ brewing     | Moka Pot 6 Cups     |  298.00 |    1
+ brewing     | French Press 1L     |  238.00 |    2
+ grinders    | Hand Grinder        |  378.00 |    1
+(7 rows)
+```
+@mistakes
+<ul><li><code>LIMIT 2</code> — שני מוצרים בכלל, לא שניים לכל קטגוריה.</li></ul>
+
+@@ P17-E19 | 3 | תקציר הזמנות 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E19.sql</code>: לכל הזמנה בסטטוס <code>paid</code> (שולמה, מחכה למשלוח) — <code>order_id</code>, <code>full_name</code>, <code>lines</code> (כמה שורות פריטים), <code>units</code> (סך היחידות), <code>total</code> — מהסכום הגבוה לנמוך. זה מסך "הזמנות למשלוח" של המחסן.</p>
+@hint1
+<p>שלוש טבלאות, GROUP BY על ההזמנה.</p>
+@hint2
+<p><code>GROUP BY o.id, c.full_name</code> (או <code>o.id, c.id</code>).</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E19.sql
+SELECT o.id AS order_id, c.full_name,
+       COUNT(*) AS lines,
+       SUM(oi.quantity) AS units,
+       SUM(oi.quantity * oi.unit_price) AS total
+FROM orders o
+JOIN customers c    ON c.id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status = 'paid'
+GROUP BY o.id, c.full_name
+ORDER BY total DESC;
+```
+```out
+ order_id |  full_name  | lines | units | total
+----------+-------------+-------+-------+--------
+       10 | Noa Mizrahi |     1 |     1 | 189.00
+        6 | Yossi Cohen |     1 |     2 | 169.80
+        8 | Dana Levi   |     2 |     5 | 158.60
+(3 rows)
+```
+@mistakes
+<ul><li><code>GROUP BY o.id</code> בלבד עם <code>c.full_name</code> ב־SELECT — שגיאה (החריג של מפתח ראשי חל רק על עמודות של אותה טבלה).</li></ul>
+
+@@ P17-E20 | 4 | כל הלקוחות — כמעט 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E20.sql</code>: "כל הלקוחות, עם מספר ההזמנות ששולמו (<code>paid</code>) — 0 למי שאין". אבל חוזרים רק 3 לקוחות. תקן — כל 8 הלקוחות, עם <code>full_name</code> ו־<code>paid_orders</code>, לפי full_name.</p>
+@hint1
+<p>מה ה־WHERE עושה לשורות עם NULL מה־LEFT JOIN?</p>
+@hint2
+<p>להעביר את התנאי ל־ON. ומה עם COUNT(*)?</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E20.sql
+SELECT c.full_name, COUNT(o.id) AS paid_orders
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status = 'paid'
+GROUP BY c.id
+ORDER BY c.full_name;
+```
+```out
+  full_name   | paid_orders
+--------------+-------------
+ Avi Peretz   |           0
+ Dana Levi    |           1
+ Michal Biton |           0
+ Noa Mizrahi  |           1
+ Omer Shalom  |           0
+ Ron Avraham  |           0
+ Shira David  |           0
+ Yossi Cohen  |           1
+(8 rows)
+```
+@mistakes
+<ul><li>להעביר רק את התנאי ל־ON ולהשאיר <code>COUNT(*)</code> — כל מי שאין לו יקבל 1.</li></ul>
+
+@@ P17-E21 | 4 | קטגוריות מבולבלות 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>17-relations/starter/P17-E21.sql</code>: רשימת מוצרים עם הקטגוריה — אבל ה־Hand Grinder מופיע כ־"accessories", ומוצרים 6–12 נעלמו. תקן.</p>
+@hint1
+<p>קרא את תנאי ה־ON לאט: מה מושווה למה?</p>
+@hint2
+<p>FK מול PK: <code>p.category_id = c.id</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E21.sql
+SELECT p.id, p.name AS product, c.name AS category
+FROM products p
+JOIN categories c ON c.id = p.category_id
+ORDER BY p.id;
+```
+```out
+ id |       product        |  category
+----+----------------------+-------------
+  1 | Ethiopia Beans 1kg   | beans
+  2 | Colombia Beans 1kg   | beans
+  3 | Brazil Beans 250g    | beans
+  4 | Hand Grinder         | grinders
+  5 | Electric Grinder Pro | grinders
+  6 | French Press 1L      | brewing
+  7 | V60 Ceramic          | brewing
+  8 | Moka Pot 6 Cups      | brewing
+  9 | Paper Filters (100)  | accessories
+ 10 | Ceramic Mug          | accessories
+ 11 | Digital Scale        | accessories
+ 12 | Gooseneck Kettle     | brewing
+(12 rows)
+```
+@mistakes
+<ul><li>JOIN שמשווה id של טבלה אחת ל־id של אחרת — תמיד מחזיר משהו (מספרים מתאימים במקרה), ולכן קשה לשים לב. תנאי JOIN כמעט תמיד הוא FK = PK.</li></ul>
+
+@@ P17-E22 | 4 | הזמנות מנופחות 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E22.sql</code>: לכל לקוח שהזמין — מספר ההזמנות (כולל מבוטלות) וסך הפריטים. Dana מופיעה עם 6 הזמנות, אבל יש לה 3. תקן (עמודות: <code>full_name</code>, <code>orders</code>, <code>units</code>; לפי full_name).</p>
+@hint1
+<p>אחרי JOIN עם order_items — מה שורה אחת מייצגת?</p>
+@hint2
+<p><code>COUNT(DISTINCT ...)</code></p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E22.sql
+SELECT c.full_name, COUNT(DISTINCT o.id) AS orders, SUM(oi.quantity) AS units
+FROM customers c
+JOIN orders o       ON o.customer_id = c.id
+JOIN order_items oi ON oi.order_id = o.id
+GROUP BY c.id
+ORDER BY c.full_name;
+```
+```out
+  full_name   | orders | units
+--------------+--------+-------
+ Dana Levi    |      3 |    11
+ Michal Biton |      2 |     9
+ Noa Mizrahi  |      2 |     2
+ Ron Avraham  |      2 |     6
+ Shira David  |      1 |     3
+ Yossi Cohen  |      2 |     6
+(6 rows)
+```
+@mistakes
+<ul><li><code>COUNT(o.id)</code> — עדיין סופר שורות (id לא NULL), כלומר פריטים.</li></ul>
+
+@@ P17-E23 | 4 | ההכנסה של המטחנות 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>17-relations/starter/P17-E23.sql</code>: "קטגוריות שההכנסה שלהן מעל 400". הדוח מראה את grinders עם 1,027 ש״ח — אבל מנהל החנות יודע שנמכרו רק שתי מטחנות ידניות. תקן (עמודות <code>category</code>, <code>revenue</code>; מהגבוה לנמוך).</p>
+@hint1
+<p>איזו הזמנה של מטחנה לא באמת נמכרה?</p>
+@hint2
+<p>WHERE על הסטטוס — לפני הקיבוץ.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E23.sql
+SELECT cat.name AS category, SUM(oi.quantity * oi.unit_price) AS revenue
+FROM order_items oi
+JOIN orders o       ON o.id = oi.order_id
+JOIN products p     ON p.id = oi.product_id
+JOIN categories cat ON cat.id = p.category_id
+WHERE o.status <> 'cancelled'
+GROUP BY cat.name
+HAVING SUM(oi.quantity * oi.unit_price) > 400
+ORDER BY revenue DESC;
+```
+```out
+ category | revenue
+----------+---------
+ beans    | 1058.20
+ brewing  |  765.00
+(2 rows)
+```
+<p>ובלי המבוטלת, grinders (378) כבר לא עובר את הרף.</p>
+@mistakes
+<ul><li><code>HAVING ... AND o.status &lt;&gt; 'cancelled'</code> — שגיאה (עמודה לא מקובצת ב־HAVING).</li></ul>
+
+@@ P17-E24 | 5 | אתגר: פרופיל לקוח 🤖 | 30 | כל הפרק
+@task
+<p>בקובץ <code>17-relations/starter/P17-E24.sql</code>: שורה לכל לקוח (כולל מי שלא הזמין), לפי full_name, עם (רק הזמנות שלא בוטלו):</p>
+<ul><li><code>full_name</code>, <code>orders</code> (0 אם אין), <code>spent</code> (0 אם אין)</li><li><code>first_order</code>, <code>last_order</code> — תאריכים (<code>date</code>), NULL אם אין</li><li><code>days_active</code> — ימים בין הראשונה לאחרונה (NULL אם אין)</li><li><code>segment</code>: <code>'new'</code> בלי הזמנות, <code>'one-time'</code> עם אחת, <code>'repeat'</code> עם שתיים ומעלה</li></ul>
+@hint1
+<p>CTE של סכומי הזמנות (כמו P17-E11), ואז LEFT JOIN מ־customers.</p>
+@hint2
+<p>הפרש בין שני <code>date</code> ב־PostgreSQL הוא מספר ימים: <code>MAX(d) - MIN(d)</code>.</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E24.sql
+WITH order_totals AS (
+  SELECT o.id, o.customer_id, o.created_at::date AS day, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.id
+)
+SELECT c.full_name,
+       COUNT(t.id) AS orders,
+       COALESCE(SUM(t.total), 0) AS spent,
+       MIN(t.day) AS first_order,
+       MAX(t.day) AS last_order,
+       MAX(t.day) - MIN(t.day) AS days_active,
+       CASE COUNT(t.id) WHEN 0 THEN 'new' WHEN 1 THEN 'one-time' ELSE 'repeat' END AS segment
+FROM customers c
+LEFT JOIN order_totals t ON t.customer_id = c.id
+GROUP BY c.id
+ORDER BY c.full_name;
+```
+```out
+  full_name   | orders | spent  | first_order | last_order | days_active | segment
+--------------+--------+--------+-------------+------------+-------------+----------
+ Avi Peretz   |      0 |      0 |             |            |             | new
+ Dana Levi    |      3 | 550.30 | 2026-01-05  | 2026-03-28 |          82 | repeat
+ Michal Biton |      2 | 593.70 | 2026-02-20  | 2026-05-01 |          70 | repeat
+ Noa Mizrahi  |      1 | 189.00 | 2026-04-22  | 2026-04-22 |           0 | one-time
+ Omer Shalom  |      0 |      0 |             |            |             | new
+ Ron Avraham  |      2 | 558.50 | 2026-03-11  | 2026-05-03 |          53 | repeat
+ Shira David  |      1 | 233.80 | 2026-04-09  | 2026-04-09 |           0 | one-time
+ Yossi Cohen  |      2 | 448.50 | 2026-01-17  | 2026-03-02 |          44 | repeat
+(8 rows)
+```
+<p>זה סוג השאילתה שמאחורי דשבורד CRM. שים לב ש־Noa היא "one-time" — ההזמנה המבוטלת לא נחשבת.</p>
+@mistakes
+<ul><li>לסנן <code>status &lt;&gt; 'cancelled'</code> ב־WHERE של השאילתה החיצונית אחרי LEFT JOIN של orders — Avi ו־Omer נעלמים (המלכודת של שיעור 2).</li></ul>
+
+@@ P17-E25 | 5 | אתגר: נקנים יחד 🤖 | 30 | כל הפרק
+@task
+<p>"לקוחות שקנו את זה קנו גם...". בקובץ <code>17-relations/starter/P17-E25.sql</code>: זוגות מוצרים שהופיעו יחד באותה הזמנה (שלא בוטלה) לפחות פעמיים — <code>product_a</code>, <code>product_b</code> (שם; כל זוג פעם אחת, a לפני b לפי id), <code>orders_together</code> — מהשכיח לנדיר, ובשוויון לפי product_a ואז product_b.</p>
+@hint1
+<p>JOIN של order_items עם עצמה (self-join) על אותו order_id.</p>
+@hint2
+<p><code>a.product_id &lt; b.product_id</code> — מונע זוג עם עצמו, וגם את הכפילות (a,b)/(b,a).</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E25.sql
+SELECT pa.name AS product_a, pb.name AS product_b, COUNT(*) AS orders_together
+FROM order_items a
+JOIN order_items b ON b.order_id = a.order_id AND a.product_id < b.product_id
+JOIN orders o      ON o.id = a.order_id
+JOIN products pa   ON pa.id = a.product_id
+JOIN products pb   ON pb.id = b.product_id
+WHERE o.status <> 'cancelled'
+GROUP BY pa.name, pb.name
+HAVING COUNT(*) >= 2
+ORDER BY orders_together DESC, product_a, product_b;
+```
+```out
+     product_a      |      product_b      | orders_together
+--------------------+---------------------+-----------------
+ Ethiopia Beans 1kg | Paper Filters (100) |               3
+(1 row)
+```
+<p>בחנות אמיתית הייתי מחשב את זה פעם בלילה ושומר בטבלה (המלצות לא חייבות להיות בזמן אמת), כי self-join על טבלת פריטים ענקית יקר. אבל הרעיון — בדיוק זה.</p>
+@mistakes
+<ul><li><code>a.product_id &lt;&gt; b.product_id</code> — כל זוג נספר פעמיים, בשני הכיוונים.</li></ul>

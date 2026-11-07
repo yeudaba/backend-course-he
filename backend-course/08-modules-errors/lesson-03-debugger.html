@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stack trace וה־Debugger של VS Code — פרק 8</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 8</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — stack trace וה־Debugger של VS Code</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>לקרוא stack trace מלא ולמצוא את השורה שלך.</li>
+      <li>להפעיל את ה־Debugger של VS Code: breakpoint, צעד אחר צעד, צפייה במשתנים.</li>
+    </ul>
+  </div>
+
+  <h2>1. stack trace — עד הסוף</h2>
+  <p>בפרק 0 אמרנו "כרגע אפשר להתעלם משורות ה־<code>at</code>". הגיע הזמן. נניח שלושה קבצים:</p>
+<span class="file-label">playground/debug/main.js</span>
+<pre><code class="lang-js">const { orderTotal } = require("./orders");
+
+const order = { items: [{ price: 10, qty: 2 }, null] };
+console.log(orderTotal(order));</code></pre>
+<span class="file-label">playground/debug/orders.js</span>
+<pre><code class="lang-js">const { lineTotal } = require("./lines");
+
+function orderTotal(order) {
+  return order.items.reduce((sum, item) =&gt; sum + lineTotal(item), 0);
+}
+
+module.exports = { orderTotal };</code></pre>
+<span class="file-label">playground/debug/lines.js</span>
+<pre><code class="lang-js">function lineTotal(item) {
+  return item.price * item.qty;
+}
+
+module.exports = { lineTotal };</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node playground/debug/main.js
+<span class="dim">/Users/yeuda/dev/backend-course/playground/debug/lines.js:2</span>
+  return item.price * item.qty;
+              ^
+
+<span class="err">TypeError: Cannot read properties of null (reading 'price')</span>
+    at lineTotal (/Users/yeuda/dev/backend-course/playground/debug/lines.js:2:15)
+    at /Users/yeuda/dev/backend-course/playground/debug/orders.js:4:50
+    at Array.reduce (&lt;anonymous&gt;)
+    at orderTotal (/Users/yeuda/dev/backend-course/playground/debug/orders.js:4:22)
+    at Object.&lt;anonymous&gt; (/Users/yeuda/dev/backend-course/playground/debug/main.js:4:13)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+<span class="dim">...</span></pre>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="מחסנית הקריאות כערימה: main קורא ל-orderTotal שקורא ל-lineTotal">
+      <g style="stroke-width:2">
+        <rect x="200" y="20" width="320" height="40" rx="8" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="200" y="66" width="320" height="40" rx="8" style="fill:var(--svg-fill);stroke:var(--svg-stroke)"/>
+        <rect x="200" y="112" width="320" height="40" rx="8" style="fill:var(--svg-fill);stroke:var(--svg-stroke)"/>
+        <rect x="200" y="158" width="320" height="40" rx="8" style="fill:var(--svg-fill);stroke:var(--svg-stroke)"/>
+      </g>
+      <g class="mono" style="font-size:14px" text-anchor="middle">
+        <text x="360" y="45">lineTotal — lines.js:2</text>
+        <text x="360" y="91">(callback של reduce) — orders.js:4</text>
+        <text x="360" y="137">orderTotal — orders.js:4</text>
+        <text x="360" y="183">main.js:4</text>
+      </g>
+      <text x="540" y="45" direction="rtl" text-anchor="end" style="font-size:13px;fill:var(--red)" transform="translate(150 0)">← כאן קרתה השגיאה</text>
+      <text x="540" y="183" direction="rtl" text-anchor="end" style="font-size:13px;fill:var(--muted)" transform="translate(150 0)">← כאן הכול התחיל</text>
+      <text x="360" y="222" text-anchor="middle" direction="rtl" style="font-size:13px;fill:var(--muted)">שורות node:internal — הקוד של Node עצמו. דלג עליהן.</text>
+    </svg>
+    <figcaption>איור 1: ה־stack trace הוא ערימת הקריאות ברגע השגיאה — מהמקום שבו היא קרתה (למעלה) ועד נקודת ההתחלה (למטה).</figcaption>
+  </figure>
+  <ol class="steps">
+    <li><strong>קרא את הסוג וההודעה:</strong> ניסיון לקרוא <code>price</code> מתוך <code>null</code>.</li>
+    <li><strong>השורה העליונה שלך:</strong> <code>lines.js:2:15</code> — שורה 2, תו 15. שם השגיאה <em>קרתה</em>.</li>
+    <li><strong>אבל הבאג אולי במקום אחר:</strong> <code>lineTotal</code> לא אשמה שקיבלה <code>null</code>. עלה בערימה: מי קרא לה? <code>orders.js:4</code>, ומי קרא ל־<code>orderTotal</code>? <code>main.js:4</code> — ושם, בשורה 3, ההזמנה מכילה <code>null</code>. <strong>הבאג הוא בנתונים</strong>, לא בפונקציה.</li>
+  </ol>
+  <p>(ב־Terminal של VS Code, <kbd>⌘</kbd> + לחיצה על נתיב כמו <code>lines.js:2:15</code> פותחת את הקובץ בדיוק בשורה.)</p>
+
+  <h2>2. ה־Debugger: לעצור את הזמן</h2>
+  <p><code>console.log</code> הוא כמו לצלם תמונה; הדיבאגר הוא כמו לעצור את הסרט ולהסתובב בתוך הסצנה. במקום לנחש איפה להוסיף הדפסות — עוצרים בשורה ורואים <strong>את כל</strong> המשתנים.</p>
+
+  <h3>הפעלה</h3>
+  <ol class="steps">
+    <li>פתח את <code>playground/debug/orders.js</code>. לחץ <strong>משמאל למספר השורה 4</strong> — תופיע נקודה אדומה. זה <strong>breakpoint</strong>.</li>
+    <li>פתח את לשונית <strong>Run and Debug</strong> בסרגל הפעולות (אייקון ▷ עם חרק, או <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>D</kbd>).</li>
+    <li>לחץ <strong>JavaScript Debug Terminal</strong>. נפתח Terminal מיוחד בפאנל התחתון.</li>
+    <li>בו, הרץ כרגיל: <code>node playground/debug/main.js</code>. התוכנית תעצור בשורה 4, והשורה תודגש בצהוב.</li>
+  </ol>
+
+  <figure>
+    <svg viewBox="0 0 720 330" role="img" aria-label="מפת מסך הדיבאגר ב-VS Code">
+      <rect x="10" y="10" width="700" height="310" rx="12" style="fill:var(--svg-fill);stroke:var(--svg-stroke);stroke-width:2"/>
+      <rect x="250" y="18" width="220" height="30" rx="6" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      <text x="360" y="38" text-anchor="middle" class="mono" style="font-size:15px">▶  ⤼  ↓  ↑  ⟲  ■</text>
+      <rect x="20" y="60" width="210" height="250" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      <g class="mono" style="font-size:12px">
+        <text x="30" y="82" style="font-weight:700">VARIABLES</text>
+        <text x="40" y="104">order: {items: Array(2)}</text>
+        <text x="40" y="124">sum: 20</text>
+        <text x="40" y="144" style="fill:var(--red)">item: null</text>
+        <text x="30" y="180" style="font-weight:700">WATCH</text>
+        <text x="40" y="202">order.items.length: 2</text>
+        <text x="30" y="238" style="font-weight:700">CALL STACK</text>
+        <text x="40" y="260">lineTotal  lines.js</text>
+        <text x="40" y="280">orderTotal  orders.js</text>
+      </g>
+      <rect x="240" y="60" width="460" height="170" rx="8" style="fill:var(--svg-fill);stroke:var(--svg-stroke)"/>
+      <rect x="241" y="122" width="458" height="24" style="fill:var(--amber-soft)"/>
+      <circle cx="258" cy="134" r="6" fill="#e51400"/>
+      <g class="mono" style="font-size:13px">
+        <text x="275" y="90" style="fill:var(--muted)">3</text><text x="300" y="90">function orderTotal(order) {</text>
+        <text x="275" y="138" style="fill:var(--muted)">4</text><text x="300" y="138">  return order.items.reduce(...)</text>
+        <text x="275" y="170" style="fill:var(--muted)">5</text><text x="300" y="170">}</text>
+      </g>
+      <rect x="240" y="240" width="460" height="70" rx="8" style="fill:var(--term-bg)"/>
+      <text x="255" y="265" class="mono" style="font-size:12px;fill:#e6e6e6">DEBUG CONSOLE</text>
+      <text x="255" y="290" class="mono" style="font-size:12px;fill:#7ee787">&gt; order.items[1]</text>
+      <text x="420" y="290" class="mono" style="font-size:12px;fill:#e6e6e6">null</text>
+    </svg>
+    <figcaption>איור 2 (שרטוט): למעלה — כפתורי השליטה; משמאל — משתנים, Watch ו־Call Stack; במרכז — השורה שבה עצרנו; למטה — Debug Console, שבו אפשר להקליד כל ביטוי ולראות את ערכו עכשיו.</figcaption>
+  </figure>
+
+  <h3>הכפתורים</h3>
+  <div class="table-wrap"><table>
+    <tr><th>כפתור</th><th>מקש</th><th>מה עושה</th></tr>
+    <tr><td>▶ Continue</td><td><kbd>F5</kbd></td><td>ממשיך עד ה־breakpoint הבא (או הסוף)</td></tr>
+    <tr><td>⤼ Step Over</td><td><kbd>F10</kbd></td><td>מבצע את השורה הנוכחית ועובר לבאה (בלי להיכנס לפונקציות)</td></tr>
+    <tr><td>↓ Step Into</td><td><kbd>F11</kbd></td><td>אם בשורה יש קריאה לפונקציה — נכנס לתוכה</td></tr>
+    <tr><td>↑ Step Out</td><td><kbd>⇧</kbd>+<kbd>F11</kbd></td><td>מסיים את הפונקציה הנוכחית וחוזר למי שקרא לה</td></tr>
+    <tr><td>■ Stop</td><td><kbd>⇧</kbd>+<kbd>F5</kbd></td><td>עוצר הכול</td></tr>
+  </table></div>
+  <p>(במקלדות Mac אולי צריך <kbd>fn</kbd> יחד עם F5/F10. הכפתורים בסרגל עובדים תמיד.)</p>
+
+  <h3>👣 תרגיל מודרך</h3>
+  <ol class="steps">
+    <li>עם ה־breakpoint בשורה 4, הקש <strong>Step Into</strong> — נכנסת ל־callback של <code>reduce</code>. ב־VARIABLES רואים <code>sum: 0</code> ו־<code>item: {price: 10, qty: 2}</code>.</li>
+    <li>שוב <strong>Step Into</strong> — נכנסת ל־<code>lineTotal</code>. <strong>Step Out</strong> — חוזרים.</li>
+    <li>המשך עד שתראה <code>item: null</code> — זה הסיבוב השני. מצאת את הבעיה בלי שורת <code>console.log</code> אחת.</li>
+    <li>ב־Debug Console הקלד <code>order.items</code> ולחץ <kbd>Enter</kbd> — רואים את כל המערך.</li>
+  </ol>
+  <div class="box tip">
+    <span class="box-title">💡 breakpoint עם תנאי</span>
+    <p>לחיצה ימנית על הנקודה האדומה ← <strong>Edit Breakpoint</strong> ← ביטוי, למשל <code>item === null</code>. עכשיו הדיבאגר יעצור רק בסיבוב הבעייתי — גם אם יש 10,000 סיבובים. וכלי נוסף: השורה <code>debugger;</code> בתוך הקוד עובדת כמו breakpoint כשמריצים מה־JavaScript Debug Terminal.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P08-E04">E04</a> · <a href="exercises.html#P08-E11">E11</a> · <a href="exercises.html#P08-E16">E16</a> · <a href="exercises.html#P08-E22">E22</a></p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>במקומות עבודה רבים, בודקים בראיון ה"טכני־מעשי" גם איך אתה מדבג: נותנים לך פרויקט עם באג ושעה. מועמד שפותח דיבאגר, שם breakpoint ומסביר מה הוא רואה — עושה רושם הרבה יותר טוב ממי שמפזר 20 הדפסות.</p>
+  </div>
+
+<div class="pager"><a href="lesson-02-errors.html"><small>הקודם</small>שיעור 2 — throw, try/catch ו־finally</a><a href="lesson-04-method.html"><small>הבא</small>שיעור 4 — ESLint ושיטה לאיתור באגים</a></div>
+</main>
+</body>
+</html>

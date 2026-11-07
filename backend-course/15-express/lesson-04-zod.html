@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>בדיקת קלט עם Zod — פרק 15</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 15</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — בדיקת קלט עם Zod</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>סכמה ב־Zod: מבנה, טווחים, ברירות מחדל.</li>
+      <li><code>safeParse</code> והפיכת השגיאה לתשובת 400 מסודרת.</li>
+      <li><code>z.infer</code> — טיפוס TypeScript מתוך הסכמה.</li>
+      <li>query עם <code>z.coerce</code>, ו־middleware בדיקה שעובד לכל route.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה Zod</h2>
+  <p>בפרק 12 כתבת ולידציה ביד: <code>if (typeof body.title !== "string" || ...)</code>. זה עובד, אבל ארוך, קל לשכוח שדה, ו־TypeScript לא יודע שבדקת. Zod: מתארים פעם אחת <em>איך נראה קלט תקין</em> — ומקבלים גם בדיקה וגם טיפוס.</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const createTaskSchema = z.object({
+  title: z.string().trim().min(1, "חובה").max(100, "עד 100 תווים"),
+  priority: z.enum(["low", "medium", "high"]).default("medium"),
+  dueDate: z.iso.date().optional(),
+});
+
+type CreateTaskInput = z.infer&lt;typeof createTaskSchema&gt;;
+
+const good = createTaskSchema.safeParse({ title: "  לקנות חלב ", dueDate: "2026-11-20" });
+if (good.success) {
+  const task: CreateTaskInput = good.data;
+  console.log(JSON.stringify(task));
+}
+
+const bad = createTaskSchema.safeParse({ title: "", priority: "urgent" });
+if (!bad.success) {
+  for (const issue of bad.error.issues) console.log(issue.path.join("."), "—", issue.message);
+}</code></pre>
+<pre class="terminal">{"title":"לקנות חלב","priority":"medium","dueDate":"2026-11-20"}
+title — חובה
+priority — Invalid option: expected one of "low"|"medium"|"high"</pre>
+  <ul>
+    <li><code>.trim()</code> ו־<code>.default()</code> לא רק בודקים — הם <strong>משנים</strong>: התוצאה ב־<code>data</code> היא הגרסה הנקייה. תמיד ממשיכים עם <code>data</code>, לא עם הקלט המקורי.</li>
+    <li>שדות שלא בסכמה (<code>{"isAdmin": true}</code>) <strong>נמחקים</strong> מ־<code>data</code>. זו הגנה חשובה: לקוח לא יכול "להשחיל" שדה שלא ציפית לו. (<code>z.strictObject</code> — מחזיר שגיאה במקום למחוק.)</li>
+    <li><code>z.infer</code> נותן את הטיפוס — בלי לכתוב <code>interface</code> נפרד שעלול לא להתאים לבדיקה.</li>
+    <li><code>parse</code> זורק; <code>safeParse</code> מחזיר <code>{ success, data | error }</code>. בשרת — <code>safeParse</code>, כדי להחליט בעצמנו מה להחזיר.</li>
+  </ul>
+  <div class="table-wrap"><table>
+    <tr><th>Zod</th><th>מה בודק</th></tr>
+    <tr><td><code>z.string().min(1).max(100)</code></td><td>מחרוזת באורך</td></tr>
+    <tr><td><code>z.email()</code> · <code>z.url()</code> · <code>z.uuid()</code> · <code>z.iso.date()</code></td><td>פורמטים נפוצים</td></tr>
+    <tr><td><code>z.number().int().positive()</code></td><td>מספר שלם חיובי</td></tr>
+    <tr><td><code>z.boolean()</code> · <code>z.enum([...])</code></td><td>ערכים סגורים</td></tr>
+    <tr><td><code>z.array(z.string()).max(5)</code></td><td>מערך</td></tr>
+    <tr><td><code>.optional()</code> · <code>.nullable()</code> · <code>.default(x)</code></td><td>שדה לא חובה / יכול להיות null / ערך אם חסר</td></tr>
+    <tr><td><code>schema.partial()</code></td><td>אותה סכמה, כל השדות לא חובה — מושלם ל־PATCH</td></tr>
+  </table></div>
+
+  <h2>2. query: הכול מגיע כמחרוזת</h2>
+  <p>ב־<code>?page=2</code>, הערך הוא <code>"2"</code>. <code>z.number()</code> יכשיל אותו. <code>z.coerce.number()</code> ממיר קודם:</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const listQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  status: z.enum(["open", "done"]).optional(),
+});
+
+console.log(JSON.stringify(listQuerySchema.parse({ page: "2" })));
+console.log(listQuerySchema.safeParse({ limit: "1000" }).success);
+console.log(listQuerySchema.safeParse({ page: "" }).success);
+console.log(z.coerce.number().parse(""));</code></pre>
+<pre class="terminal">{"page":2,"limit":20}
+false
+false
+0</pre>
+  <p>שורה 2: limit מעל התקרה ← נכשל, וטוב שכך. שורה 3: <code>?page=</code> (ריק) נכשל — כי <code>Number("")</code> הוא <code>0</code>, ו־0 קטן מ־1. ושורה 4 היא המלכודת: בשדה בלי <code>min</code>, ערך ריק הופך <strong>בשקט</strong> ל־0. <code>?maxPrice=</code> יחזיר רק מוצרים בחינם. כשזה חשוב — הוסף <code>.positive()</code>, או בדוק ש־<code>""</code> לא נשלח.</p>
+
+  <h2>3. middleware בדיקה אחד לכל ה־routes</h2>
+<span class="file-label">src/middleware/validate.ts</span>
+<pre><code class="lang-ts">import type { Request, Response, NextFunction } from "express";
+import type { ZodType } from "zod";
+
+export function validateBody(schema: ZodType) {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const result = schema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "קלט לא תקין",
+          details: result.error.issues.map((i) =&gt; ({ path: i.path.join("."), message: i.message })),
+        },
+      });
+      return;
+    }
+    req.body = result.data; // מעכשיו req.body נקי ובטוח
+    next();
+  };
+}</code></pre>
+<pre><code class="lang-ts">router.post("/", validateBody(createTaskSchema), (req, res) =&gt; {
+  const task = service.create(req.body);
+  res.status(201).location(`/tasks/${task.id}`).json(task);
+});</code></pre>
+  <p>שים לב לרעיון: <code>validateBody(schema)</code> היא פונקציה <em>שמחזירה</em> middleware (closure — פרק 5). כך אותו קוד משרת כל סכמה.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ Express 5: אסור לדרוס את req.query</span>
+    <p><code>req.body = result.data</code> עובד. אבל <code>req.query = result.data</code> זורק: <code>Cannot set property query of #&lt;IncomingMessage&gt; which has only a getter</code> (ב־Express 5 ה־query מחושב מחדש מהכתובת). המקום המקובל לשמור query שנבדק: <code>res.locals.query = result.data</code> — <code>res.locals</code> הוא אובייקט שמיועד בדיוק להעברת נתונים בין middleware ל־handler באותה בקשה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P15-E11">E11</a> · <a href="exercises.html#P15-E12">E12</a> · <a href="exercises.html#P15-E14">E14</a> · <a href="exercises.html#P15-E15">E15</a> · <a href="exercises.html#P15-E17">E17</a> · <a href="exercises.html#P15-E22">E22</a> — ואת האתגרים <a href="exercises.html#P15-E24">E24</a> ו־<a href="exercises.html#P15-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"מבנה של שרת Express טוב" היא שאלת ראיון ומשימת בית נפוצה. מה שבודקים: שכבות (routes / service / repository), ולידציה בגבול, error handler מרכזי עם מבנה אחיד, status נכונים, pagination עם תקרה, ו־<code>createApp()</code> נפרד מ־<code>listen</code> כדי שאפשר יהיה לבדוק. אם תגיש משימת בית עם כל אלה — אתה כבר מעל רוב המועמדים ל־Junior.</p>
+  </div>
+
+<div class="pager"><a href="lesson-03-rest.html"><small>הקודם</small>שיעור 3 — תכנון REST: כתובות, pagination ושכבות</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

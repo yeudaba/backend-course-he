@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>callbacks ו־error-first — פרק 10</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 10</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — callbacks ו־error-first</h1>
+  <p class="subtitle">⏱ ~25 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>callbacks אסינכרוניים: "תתקשר אליי כשסיימת".</li>
+      <li>המוסכמה של Node: error-first.</li>
+      <li>למה callbacks מסתבכים ("callback hell") — והמוטיבציה ל־Promises.</li>
+    </ul>
+  </div>
+
+  <h2>1. קריאת קובץ — בגרסה האסינכרונית</h2>
+  <p>בפרויקט 1 השתמשת ב־<code>fs.readFileSync</code> — התוכנית <em>עוצרת</em> עד שהקובץ נקרא. הגרסה האסינכרונית מקבלת callback:</p>
+<pre><code class="lang-js">const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const file = path.join(os.tmpdir(), "async-demo.txt");
+fs.writeFileSync(file, "שלום מהקובץ");
+
+console.log("מבקש לקרוא...");
+fs.readFile(file, "utf8", (err, text) =&gt; {
+  if (err) {
+    console.log("שגיאה:", err.message);
+    return;
+  }
+  console.log("קיבלתי:", text);
+});
+console.log("ממשיך בינתיים");</code></pre>
+<pre class="terminal">מבקש לקרוא...
+ממשיך בינתיים
+קיבלתי: שלום מהקובץ</pre>
+
+  <h2>2. error-first</h2>
+  <p>המוסכמה של Node: ה־callback מקבל <strong>קודם את השגיאה</strong> (או <code>null</code> אם אין), ורק אחר כך את התוצאה. למה ראשונה? כדי שאי אפשר יהיה "לשכוח" לבדוק אותה.</p>
+<pre><code class="lang-js">const fs = require("node:fs");
+fs.readFile("/no/such/file.txt", "utf8", (err, text) =&gt; {
+  if (err) {
+    console.log(err.code);
+    return;
+  }
+  console.log(text);
+});</code></pre>
+<pre class="terminal">ENOENT</pre>
+  <div class="box warn">
+    <span class="box-title">⚠️ <code>try/catch</code> לא תופס שגיאות של callback</span>
+    <p><code>try { fs.readFile(..., cb) } catch {}</code> — לא יעבוד: ה־<code>try</code> מסתיים מיד, הרבה לפני שהשגיאה מתרחשת. שגיאות אסינכרוניות מגיעות דרך הפרמטר <code>err</code> (או, בהמשך, דרך Promise).</p>
+  </div>
+
+  <h2>3. callback hell</h2>
+  <p>מה אם צריך כמה פעולות ברצף — כל אחת תלויה בקודמת? קרא הגדרות ← קרא משתמש ← קרא הזמנות של המשתמש:</p>
+<pre><code class="lang-js">readConfig((err, config) =&gt; {
+  if (err) return handle(err);
+  readUser(config.userId, (err, user) =&gt; {
+    if (err) return handle(err);
+    readOrders(user.id, (err, orders) =&gt; {
+      if (err) return handle(err);
+      sendReport(orders, (err) =&gt; {
+        if (err) return handle(err);
+        console.log("done");
+      });
+    });
+  });
+});</code></pre>
+  <p>"פירמידת האבדון": כל שלב מוזח עוד, הטיפול בשגיאות חוזר בכל רמה, וקשה לקרוא מה קורה. כך נראה הרבה קוד Node ישן. ה־Promises (שיעור 3) ו־<code>async/await</code> (שיעור 4) נולדו כדי לפתור בדיוק את זה — אותה לוגיקה תיראה כמו ארבע שורות רגילות.</p>
+
+  <h2>4. 👣 לעטוף callback ב־Promise</h2>
+  <p>תצטרך את זה עם ספריות ישנות. הצצה לשיעור הבא:</p>
+<pre><code class="lang-js">const fs = require("node:fs");
+
+function readText(file) {
+  return new Promise((resolve, reject) =&gt; {
+    fs.readFile(file, "utf8", (err, text) =&gt; {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(text);
+      }
+    });
+  });
+}
+
+readText("/no/such/file.txt").catch((err) =&gt; console.log("נתפס:", err.code));</code></pre>
+<pre class="terminal">נתפס: ENOENT</pre>
+  <p>(ל־<code>fs</code> כבר יש גרסה מוכנה שמחזירה Promises: <code>require("node:fs/promises")</code> — נשתמש בה בשיעור הבא.)</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P10-E03">E03</a> · <a href="exercises.html#P10-E07">E07</a> · <a href="exercises.html#P10-E08">E08</a> · <a href="exercises.html#P10-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-event-loop.html"><small>הקודם</small>שיעור 1 — סינכרוני, אסינכרוני ו־event loop</a><a href="lesson-03-promises.html"><small>הבא</small>שיעור 3 — Promises</a></div>
+</main>
+</body>
+</html>

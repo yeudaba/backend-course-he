@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schema, קשרים ו־migrations — פרק 19</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 19</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — Schema, קשרים ו־migrations</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מודלים, טיפוסים ו־attributes.</li>
+      <li>קשרים: אחד־לרבים, רבים־לרבים, <code>onDelete</code>.</li>
+      <li>migrations: מה נוצר, מה נכנס ל־Git, ומה מריצים בייצור.</li>
+    </ul>
+  </div>
+
+  <h2>1. מודל</h2>
+  <p>פתח את <code>19-prisma/files/prisma/schema.prisma</code>. מודל אחד ממנו:</p>
+<pre><code class="lang-text">model Customer {
+  id       Int      @id @default(autoincrement())
+  fullName String   @map("full_name")
+  email    String   @unique
+  city     String?
+  joinedOn DateTime @map("joined_on") @db.Date
+  orders   Order[]
+
+  @@map("customers")
+}</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>Prisma</th><th>PostgreSQL</th><th>בקוד</th></tr>
+    <tr><td><code>Int</code></td><td><code>integer</code></td><td><code>number</code></td></tr>
+    <tr><td><code>String</code></td><td><code>text</code></td><td><code>string</code></td></tr>
+    <tr><td><code>String?</code></td><td><code>text</code> (nullable)</td><td><code>string | null</code></td></tr>
+    <tr><td><code>Boolean</code></td><td><code>boolean</code></td><td><code>boolean</code></td></tr>
+    <tr><td><code>Decimal @db.Decimal(10, 2)</code></td><td><code>numeric(10,2)</code></td><td><code>Decimal</code> (אובייקט — <code>Number(x)</code> או <code>x.toNumber()</code>)</td></tr>
+    <tr><td><code>DateTime @db.Timestamptz(3)</code></td><td><code>timestamptz</code></td><td><code>Date</code></td></tr>
+    <tr><td><code>DateTime @db.Date</code></td><td><code>date</code></td><td><code>Date</code> (בחצות UTC)</td></tr>
+    <tr><td><code>enum OrderStatus { ... }</code></td><td><code>CREATE TYPE ... AS ENUM</code></td><td><code>"pending" | "paid" | ...</code></td></tr>
+  </table></div>
+  <div class="table-wrap"><table>
+    <tr><th>Attribute</th><th>מה עושה</th></tr>
+    <tr><td><code>@id @default(autoincrement())</code></td><td>מפתח ראשי ממוספר</td></tr>
+    <tr><td><code>@unique</code> · <code>@@unique([a, b])</code></td><td>ייחודי (עמודה / צירוף)</td></tr>
+    <tr><td><code>@default(now())</code> · <code>@updatedAt</code></td><td>זמן יצירה / מתעדכן אוטומטית בכל update (על ידי Prisma)</td></tr>
+    <tr><td><code>@map("full_name")</code> · <code>@@map("customers")</code></td><td>שם העמודה/הטבלה במסד — camelCase בקוד, snake_case במסד</td></tr>
+    <tr><td><code>@@index([customerId, createdAt])</code></td><td>index (פרק 18)</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ <code>DateTime</code> לבד = timestamp בלי אזור זמן</span>
+    <p>בלי <code>@db.Timestamptz(3)</code>, Prisma יוצר <code>timestamp(3)</code> — "ערום", בלי אזור זמן. בפרק 16 ראינו למה זה רע. הוסף <code>@db.Timestamptz(3)</code> לכל שדה זמן.</p>
+  </div>
+
+  <h2>2. קשרים</h2>
+<pre><code class="lang-text">model Order {
+  id         Int         @id @default(autoincrement())
+  customerId Int         @map("customer_id")
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  items      OrderItem[]
+  ...
+}</code></pre>
+  <ul>
+    <li><strong>אחד־לרבים</strong>: בצד ה"רבים" — עמודת FK (<code>customerId</code>) ושדה קשר (<code>customer</code>) עם <code>@relation(fields, references)</code>. בצד ה"אחד" — מערך (<code>orders Order[]</code>). שדות הקשר לא קיימים במסד; הם בשביל ה־client (<code>include: { customer: true }</code>).</li>
+    <li><strong>רבים־לרבים</strong>: מודל קישור מפורש (<code>ProductTag</code> עם <code>@@id([productId, tagId])</code>), כמו בפרק 17. (ל־Prisma יש גם קשר "מובלע", אבל המפורש גמיש יותר — אפשר להוסיף לו שדות כמו "מתי נוסף".)</li>
+    <li><strong><code>onDelete</code></strong>: ברירת המחדל — מחיקה חסומה כשיש "ילדים". <code>onDelete: Cascade</code> על <code>OrderItem.order</code> — מחיקת הזמנה מוחקת את פריטיה. (<code>SetNull</code> — לקשר אופציונלי.)</li>
+  </ul>
+
+  <h2>3. Migrations</h2>
+  <p>נניח שמוסיפים לקוח VIP: בסכמה, ב־<code>Customer</code>: <code>isVip Boolean @default(false) @map("is_vip")</code>. ואז:</p>
+<pre class="terminal"><span class="prompt">% </span>npx prisma migrate dev --name add_customer_is_vip
+Applying migration `20261105093000_add_customer_is_vip`
+<span class="prompt">% </span>npx prisma generate</pre>
+<span class="file-label">prisma/migrations/20261105093000_add_customer_is_vip/migration.sql</span>
+<pre><code class="lang-sql">-- AlterTable
+ALTER TABLE "customers" ADD COLUMN     "is_vip" BOOLEAN NOT NULL DEFAULT false;</code></pre>
+  <p>Prisma השווה את הסכמה למצב האחרון של ה־migrations, וכתב את ה־SQL שמגשר. זה הקובץ שנכנס ל־Git, ורץ — בדיוק כך — אצל חבר הצוות, בבדיקות ובייצור.</p>
+  <div class="table-wrap"><table>
+    <tr><th>פקודה</th><th>מתי</th><th>מה עושה</th></tr>
+    <tr><td><code>migrate dev</code></td><td>פיתוח</td><td>יוצר migration חדש מהשינויים בסכמה ומריץ. אם המסד "התפזר" — מציע לאפס (ומוחק נתונים!)</td></tr>
+    <tr><td><code>migrate deploy</code></td><td>ייצור, CI</td><td>מריץ רק migrations שעוד לא רצו. לא יוצר, לא מאפס, לא שואל</td></tr>
+    <tr><td><code>migrate reset</code></td><td>פיתוח</td><td>מוחק הכול ומריץ את כל ה־migrations מהתחלה</td></tr>
+    <tr><td><code>migrate status</code></td><td>תמיד</td><td>אילו migrations רצו ואילו לא</td></tr>
+    <tr><td><code>db seed</code></td><td>פיתוח</td><td>מריץ את פקודת ה־seed מ־<code>prisma.config.ts</code></td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ חוקי הברזל</span>
+    <ul>
+      <li>לא עורכים migration שכבר רץ אצל מישהו אחר (או בייצור) — יוצרים חדש.</li>
+      <li>לא מריצים <code>migrate dev</code> או <code>reset</code> מול ייצור — רק <code>deploy</code>.</li>
+      <li>שינוי "הורס" (מחיקת עמודה, שינוי טיפוס) — קרא את ה־SQL שנוצר לפני שמריצים. Prisma מזהיר, אבל אתה אחראי.</li>
+      <li>עמודה חובה חדשה בטבלה עם נתונים? <code>@default(...)</code>, או שלושה שלבים כמו ב־P16-E19 (Prisma ייתן לערוך את ה־SQL עם <code>--create-only</code>).</li>
+    </ul>
+  </div>
+  <p>ו־<code>npx prisma studio</code> — ממשק בדפדפן לראות ולערוך נתונים. נוח לבדיקות מהירות (בפיתוח בלבד).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19-E03">E03</a> · <a href="exercises.html#P19-E05">E05</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-setup.html"><small>הקודם</small>שיעור 1 — ORM, Prisma והחיבור הראשון</a><a href="lesson-03-queries.html"><small>הבא</small>שיעור 3 — שאילתות, transactions ושגיאות</a></div>
+</main>
+</body>
+</html>

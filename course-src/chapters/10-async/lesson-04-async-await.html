@@ -1,0 +1,161 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>`async`/`await` — קוד אסינכרוני שנקרא כמו רגיל.</li>
+      <li>שגיאות עם `try/catch`.</li>
+      <li>רצף מול מקביליות: `Promise.all`, `allSettled`, `race`.</li>
+      <li><strong>גישור:</strong> מה עושים כשהתוצאה מאחרת או נכשלת — timeout ו־retry.</li>
+    </ul>
+  </div>
+
+  <h2>1. `async` ו־`await`</h2>
+```js run mjs
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function getUser(id) {
+  await sleep(20);
+  return { id, name: id === 1 ? "דנה" : "עומר" };
+}
+
+async function main() {
+  console.log("מביא משתמש...");
+  const user = await getUser(1);
+  console.log("קיבלתי:", user.name);
+}
+
+main();
+console.log("main התחילה, ממשיכים");
+```
+```out
+מביא משתמש...
+main התחילה, ממשיכים
+קיבלתי: דנה
+```
+  <div class="table-wrap"><table>
+    <tr><th>מילה</th><th>מה עושה</th></tr>
+    <tr><td>`async function`</td><td>הפונקציה <strong>תמיד מחזירה Promise</strong>. `return 5` ← Promise שמצליח עם 5</td></tr>
+    <tr><td>`await promise`</td><td>"עצור את <em>הפונקציה הזו</em> עד שה־Promise מסתיים, ותן לי את הערך". מותר רק בתוך `async` (או ברמה העליונה של קובץ `.mjs`)</td></tr>
+  </table></div>
+  <p>שים לב: `await` עוצר רק את `main`, לא את כל התוכנית — לכן "main התחילה, ממשיכים" הודפס לפני "קיבלתי". המלצר ממשיך לשולחנות אחרים.</p>
+
+  <h2>2. שגיאות: `try/catch` חוזר לעבוד</h2>
+```js run mjs
+import fs from "node:fs/promises";
+
+async function loadConfig(file) {
+  try {
+    const text = await fs.readFile(file, "utf8");
+    return JSON.parse(text);
+  } catch (err) {
+    console.log(`לא הצלחתי לטעון ${file}: ${err.code ?? err.message}`);
+    return { port: 3000 };
+  }
+}
+
+console.log(await loadConfig("/no/such/config.json"));
+```
+```out
+לא הצלחתי לטעון /no/such/config.json: ENOENT
+{ port: 3000 }
+```
+  <p>עם `await`, Promise שנכשל <strong>זורק</strong> — כמו שגיאה רגילה. ו־`try/catch` תופס אותה. השווה לפירמידת ה־callbacks: אותה לוגיקה, בלי קינון.</p>
+
+  <h2>3. ⚡ רצף מול מקביליות</h2>
+  <div class="box warn">
+    <span class="box-title">⚡ הטעות הנפוצה ביותר עם await</span>
+```js run mjs
+const sleep = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
+const fetchUser = () => sleep(100, "user");
+const fetchOrders = () => sleep(100, "orders");
+const fetchStock = () => sleep(100, "stock");
+
+let t = Date.now();
+const a = await fetchUser();
+const b = await fetchOrders();
+const c = await fetchStock();
+console.log("ברצף:", Math.round((Date.now() - t) / 100) * 100, "ms");
+
+t = Date.now();
+const [x, y, z] = await Promise.all([fetchUser(), fetchOrders(), fetchStock()]);
+console.log("במקביל:", Math.round((Date.now() - t) / 100) * 100, "ms", x, y, z);
+```
+```out
+ברצף: 300 ms
+במקביל: 100 ms user orders stock
+```
+    <p>שלוש פעולות <strong>בלתי תלויות</strong> עם `await` אחרי `await` מחכות אחת לשנייה בלי סיבה. `Promise.all` מתחיל את כולן יחד ומחכה לכולן. <strong>כלל:</strong> אם פעולה ב' צריכה את התוצאה של א' — רצף. אם לא — במקביל.</p>
+  </div>
+  <div class="table-wrap"><table>
+    <tr><th>כלי</th><th>מחזיר</th><th>אם אחת נכשלת</th></tr>
+    <tr><td>`Promise.all([...])`</td><td>מערך תוצאות, באותו סדר</td><td>נכשל מיד עם השגיאה הראשונה ("הכול או כלום")</td></tr>
+    <tr><td>`Promise.allSettled([...])`</td><td>מערך של `{ status: "fulfilled", value }` / `{ status: "rejected", reason }`</td><td>לא נכשל — מדווח על כל אחת</td></tr>
+    <tr><td>`Promise.race([...])`</td><td>התוצאה של הראשונה שמסתיימת (הצלחה או כישלון)</td><td>תלוי מי ראשונה</td></tr>
+  </table></div>
+
+  <h2>4. 👣 גישור: כשהתוצאה מאחרת או נכשלת</h2>
+  <p>בשרת אמיתי, כל קריאה לשירות אחר יכולה: (א) להצליח; (ב) להיכשל מיד; (ג) <strong>לא לענות בכלל</strong>. המקרה השלישי הוא המסוכן — בלי הגבלה, הבקשה של המשתמש תחכה לנצח. שני כלים:</p>
+  <h3>Timeout עם `race`</h3>
+```js run mjs
+const sleep = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
+
+function withTimeout(promise, ms) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`timeout אחרי ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
+try {
+  console.log(await withTimeout(sleep(20, "מהיר"), 100));
+  console.log(await withTimeout(sleep(500, "איטי"), 100));
+} catch (err) {
+  console.log("נכשל:", err.message);
+}
+```
+```out
+מהיר
+נכשל: timeout אחרי 100ms
+```
+  <h3>Retry עם המתנה שגדלה</h3>
+```js run mjs
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function retry(fn, attempts, baseDelay = 10) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn(i);
+    } catch (err) {
+      if (i === attempts) throw err;
+      const delay = baseDelay * 2 ** (i - 1);
+      console.log(`ניסיון ${i} נכשל, מחכה ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+}
+
+const flaky = async (attempt) => {
+  if (attempt < 3) throw new Error("השירות לא זמין");
+  return "הצלחה";
+};
+console.log(await retry(flaky, 5));
+```
+```out
+ניסיון 1 נכשל, מחכה 10ms
+ניסיון 2 נכשל, מחכה 20ms
+הצלחה
+```
+  <p>המתנה שמכפילה את עצמה ("exponential backoff") נותנת לשירות שקרס זמן להתאושש, במקום להפציץ אותו. שים לב ל־`return await` בתוך `try`: בלי ה־`await`, השגיאה הייתה "בורחת" מה־`try`.</p>
+  <div class="box error">
+    <span class="box-title">⚠️ Promise שאף אחד לא תפס</span>
+    <p>`async` function שנזרקה בה שגיאה, ונקראה בלי `await`/`catch` — Node <strong>קורס</strong> (unhandled rejection). בשרת זה אומר שרת שנפל. כל Promise צריך מישהו שמחכה לו ותופס.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P10-E05">E05</a> · <a href="exercises.html#P10-E11">E11</a> · <a href="exercises.html#P10-E12">E12</a> · <a href="exercises.html#P10-E15">E15</a> · <a href="exercises.html#P10-E16">E16</a> · <a href="exercises.html#P10-E17">E17</a> · <a href="exercises.html#P10-E18">E18</a> · <a href="exercises.html#P10-E19">E19</a> · <a href="exercises.html#P10-E22">E22</a> · <a href="exercises.html#P10-E23">E23</a> — ואת האתגרים <a href="exercises.html#P10-E24">E24</a> ו־<a href="exercises.html#P10-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות ראיון: <em>"מה ההבדל בין Promise.all ל־allSettled?"</em>, <em>"מה יודפס קודם?"</em> (event loop), <em>"מה הבעיה בקוד הזה?"</em> — ושם כמעט תמיד יש <code>await</code> בתוך לולאה על דברים בלתי תלויים, או <code>forEach</code> עם <code>async</code> (שלא מחכה לכלום — תרגיל E22).</p>
+  </div>

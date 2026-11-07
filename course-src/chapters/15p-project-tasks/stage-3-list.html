@@ -1,0 +1,46 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>`service.list(query)` ו־`service.stats()`. בסוף: PR2-SCHEMA, PR2-SERVICE, PR2-API ו־PR2-LIST עוברים. (קובץ חמישי, PR2-WEB, שייך ליחידה 15.5 — הוא ייכשל עד שתגיע לשם, וזה בסדר.)</p>
+  </div>
+
+  <h2>1. `list(query)`</h2>
+  <p>`query` כבר עבר את `listQuerySchema` — הכול מוקלד ועם ברירות מחדל. שלושה שלבים, לפי הסדר:</p>
+  <ol>
+    <li><strong>סינון</strong>: `status`, `priority` — שוויון. `q` — מופיע ב־title <em>או</em> ב־description, בלי תלות באותיות.</li>
+    <li><strong>מיון</strong> לפי `sort`:
+      <ul>
+        <li>`createdAt` / `dueDate` — השוואת מחרוזות (ISO ממוין נכון כמחרוזת).</li>
+        <li>`priority` — לפי דרגה: low &lt; medium &lt; high (לא לפי א״ב!).</li>
+        <li>משימות בלי `dueDate` — <strong>תמיד בסוף</strong>, גם במיון עולה וגם ביורד.</li>
+        <li>שוויון ← לפי `id` עולה. בלי זה, הסדר של משימות שוות עלול להשתנות בין בקשות — והלקוח יראה משימה פעמיים, בשני עמודים.</li>
+      </ul>
+    </li>
+    <li><strong>pagination</strong>: `{ data, meta: { page, limit, total, totalPages } }` — `total` הוא אחרי הסינון.</li>
+  </ol>
+  <details><summary>💡 רמז: מיון לפי עדיפות</summary>
+```ts
+const PRIORITY_RANK = { low: 1, medium: 2, high: 3 };
+const diff = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+```
+  </details>
+  <details><summary>💡 רמז: "בלי dueDate בסוף, בשני הכיוונים"</summary>
+    <p>טפל במקרה הזה <em>לפני</em> שהופכים את הכיוון: אם לאחת מהן אין dueDate — מחזירים תוצאה שלא תלויה ב־desc. רק כשלשתיהן יש — משווים, ואז הופכים אם צריך.</p>
+  </details>
+
+  <h2>2. `stats()`</h2>
+```json
+{ "total": 5, "byStatus": { "todo": 3, "in_progress": 1, "done": 1 }, "overdue": 1 }
+```
+  <p>`overdue` — משימות שאינן `done`, יש להן `dueDate`, והוא לפני היום (לפי `this.now()`). כל הסטטוסים מופיעים ב־`byStatus`, גם עם 0.</p>
+
+  <h2>3. בדיקה</h2>
+```term
+% npm run check PR2-LIST -- --dir ~/dev/tasks-api
+% npm run check PR2 -- --dir ~/dev/tasks-api
+```
+  <p>(השנייה מריצה את כל קובצי PR2 — כולם צריכים לעבור חוץ מ־PR2-WEB.)</p>
+  <p>נסה גם ידנית: צור 6–7 משימות ב־`requests.http`, ובדוק `?sort=dueDate`, `?q=...`, `?limit=2&page=2`. commit: "Add filtering, sorting, pagination and stats".</p>
+  <div class="box tip">
+    <span class="box-title">💡 מה יקרה בפרק 19</span>
+    <p>עכשיו אתה שולף <em>את כל</em> המשימות לזיכרון ואז מסנן וחותך. עם 100 משימות — מצוין. עם 10 מיליון — השרת יקרוס. בפרק 19 הסינון, המיון וה־pagination יעברו למסד הנתונים (`WHERE`, `ORDER BY`, `LIMIT/OFFSET`) — ולכן אז `list` תעבור מה־service ל־repository. שים לב לזה כשתגיע לשם.</p>
+  </div>

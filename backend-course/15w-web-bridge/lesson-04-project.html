@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>דף הדגמה לפרויקט 2 — יחידה 15.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 15.5</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — דף הדגמה לפרויקט 2</h1>
+  <p class="subtitle">⏱ ~45 דקות · 🤖 PR2-WEB</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <p>פרויקט 2 מקבל דף הדגמה: רשימת משימות עם סינון, טופס הוספה, סימון "בוצע" ומחיקה — ו־CORS בשרת. בסוף: <code>npm run check PR2-WEB -- --dir ~/dev/tasks-api</code> עובר, והדף עובד מול השרת שלך.</p>
+  </div>
+
+  <h2>1. CORS בשרת</h2>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev/tasks-api
+<span class="prompt">% </span>npm install cors
+<span class="prompt">% </span>npm install -D @types/cors</pre>
+  <ol class="steps">
+    <li>ב־<code>AppOptions</code> הוסף <code>corsOrigins?: string[]</code>, עם ברירת מחדל <code>["http://localhost:5500"]</code>.</li>
+    <li>ב־<code>createApp</code>, <strong>ראשון</strong>: <code>app.use(cors({ origin: corsOrigins }))</code>. (לפני <code>express.json</code> ולפני ה־routes — preflight צריך תשובה גם אם הוא היה נופל בהמשך.)</li>
+    <li>ב־<code>server.ts</code>: <code>corsOrigins: process.env.CORS_ORIGINS?.split(",")</code> — בייצור (פרק 25) תגדיר את הדומיין האמיתי בלי לשנות קוד.</li>
+    <li><code>npm run check PR2-WEB -- --dir ~/dev/tasks-api</code> (מתיקיית הקורס).</li>
+  </ol>
+
+  <h2>2. שרת לדף</h2>
+  <p>הדף צריך לרוץ מ־origin משלו (כמו אתר אמיתי, שה־Frontend וה־API שלו בכתובות נפרדות). העתק את <code>15w-web-bridge/files/serve-web.mjs</code> אל <code>~/dev/tasks-api/scripts/serve-web.mjs</code>, והוסף ל־<code>package.json</code>:</p>
+<pre><code class="lang-json">"scripts": {
+  "dev": "node --watch src/server.ts",
+  "start": "node src/server.ts",
+  "web": "node scripts/serve-web.mjs",
+  "typecheck": "tsc --noEmit"
+}</code></pre>
+  <p>הסקריפט מגיש את התיקייה <code>web/</code> בפורט 5500. (קרא אותו — 25 שורות, ובהן ההגנה מ־<code>../</code> של פרק 13.)</p>
+
+  <h2>3. הדף</h2>
+  <p>צור <code>web/index.html</code>, <code>web/style.css</code> ו־<code>web/app.js</code>. דרישות:</p>
+  <ul class="check">
+    <li>טופס: כותרת (חובה), עדיפות (select), תאריך יעד (date, לא חובה). שליחה ← POST, ניקוי הטופס, רענון הרשימה.</li>
+    <li>רשימה: כל משימה בשורה — צ'קבוקס "בוצע" (PATCH status), כותרת, עדיפות ותאריך, כפתור מחיקה (DELETE).</li>
+    <li>סינון לפי סטטוס (select) ← טעינה מחדש עם <code>?status=...</code>.</li>
+    <li>"טוען..." בזמן בקשה; "אין משימות" כשהרשימה ריקה.</li>
+    <li>שגיאה מה־API (למשל כותרת של 200 תווים) — מוצגת בתיבה, כולל ה־details.</li>
+    <li>שום <code>innerHTML</code> עם נתונים מהשרת.</li>
+  </ul>
+  <details><summary>💡 רמז: מבנה ל־app.js</summary>
+<pre><code class="lang-js">const API = "http://localhost:3000";
+const $ = (selector) =&gt; document.querySelector(selector);
+
+async function request(path, options = {}) { /* fetch + בדיקת ok + זריקת שגיאה עם ההודעה */ }
+function renderTask(task) { /* מחזירה li — createElement + textContent */ }
+async function loadTasks() { /* GET /tasks?status=... ← replaceChildren(...data.map(renderTask)) */ }
+
+$("#new-task").addEventListener("submit", async (event) =&gt; { /* preventDefault, FormData, POST, loadTasks */ });
+$("#status-filter").addEventListener("change", loadTasks);
+loadTasks();</code></pre>
+  </details>
+  <details><summary>💡 רמז: תאריך ריק</summary>
+    <p><code>&lt;input type="date"&gt;</code> ריק נותן <code>""</code>, וה־API מצפה ל־<code>null</code> או <code>"YYYY-MM-DD"</code>. <code>fields.get("dueDate") || null</code>. (זו בדיוק הפונקציה של תרגיל E07.)</p>
+  </details>
+
+  <h2>4. להריץ</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run dev</pre>
+<pre class="terminal"><span class="prompt">% </span>npm run web
+הדף זמין ב־http://localhost:5500</pre>
+  <p>(שני חלונות Terminal.) פתח <code>http://localhost:5500</code> ב־Chrome, עם DevTools ← Network. הוסף משימה: תראה <code>OPTIONS /tasks</code> ואחריה <code>POST /tasks</code>. נסה גם: עצור את ה־API (<kbd>Ctrl</kbd>+<kbd>C</kbd>) ורענן — הדף צריך להציג שגיאה, לא להיתקע. ונסה ליצור משימה בשם <code>&lt;b&gt;בדיקה&lt;/b&gt;</code> — היא צריכה להופיע עם התגיות כטקסט.</p>
+  <p>כשהכול עובד: commit ("Add demo web page and CORS"), עדכן ב־README את "הפעלה" (<code>npm run web</code>) ואת "מה הלאה" — ו־push. אחר כך השווה ל־<code>15p-project-tasks/solutions/tasks-api/web/</code>.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"ה־Frontend אומר שיש שגיאת CORS" — תשמע את זה בשבוע הראשון בעבודה. עכשיו תדע: (1) לבקש את ה־origin המדויק מהקונסול; (2) לבדוק בצד השרת את רשימת ה־origins ואת סדר ה־middleware; (3) לבדוק ב־Network אם ה־preflight חזר עם ה־headers הנכונים. ולא "לשים <code>*</code> שיעבוד".</p>
+  </div>
+
+<div class="pager"><a href="lesson-03-js-fetch.html"><small>הקודם</small>שיעור 3 — JavaScript בדפדפן ו־CORS</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

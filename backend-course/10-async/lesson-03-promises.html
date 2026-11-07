@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Promises — פרק 10</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 10</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — Promises</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה Promise ובאילו מצבים הוא יכול להיות.</li>
+      <li><code>then</code>, <code>catch</code>, <code>finally</code> — ושרשור.</li>
+      <li>ליצור Promise בעצמך (<code>sleep</code>).</li>
+      <li><code>fs/promises</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. "הבטחה" לתוצאה עתידית</h2>
+  <p>כשמזמינים בפיצרייה, מקבלים <strong>מספר הזמנה</strong>. זה לא פיצה — זו הבטחה לפיצה. בינתיים אפשר לעשות דברים אחרים, וכשהמספר נקרא — או שמקבלים פיצה, או שאומרים "נגמר הבצק". Promise הוא מספר ההזמנה.</p>
+  <figure>
+    <svg viewBox="0 0 720 180" role="img" aria-label="שלושת המצבים של Promise">
+      <defs><marker id="apr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="40" y="60" width="180" height="60" rx="30" style="fill:var(--amber-soft);stroke:var(--amber);stroke-width:2"/>
+      <rect x="470" y="10" width="210" height="60" rx="30" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+      <rect x="470" y="110" width="210" height="60" rx="30" style="fill:var(--red-soft);stroke:var(--red);stroke-width:2"/>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M224 80 C 340 80, 360 40, 466 40" marker-end="url(#apr)"/>
+        <path d="M224 100 C 340 100, 360 140, 466 140" marker-end="url(#apr)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="130" y="88" class="mono" style="font-size:15px">pending</text>
+        <text x="130" y="108" direction="rtl" style="font-size:12px">ממתין</text>
+        <text x="575" y="38" class="mono" style="font-size:15px">fulfilled</text>
+        <text x="575" y="58" direction="rtl" style="font-size:12px">הצליח — יש ערך ← then</text>
+        <text x="575" y="138" class="mono" style="font-size:15px">rejected</text>
+        <text x="575" y="158" direction="rtl" style="font-size:12px">נכשל — יש שגיאה ← catch</text>
+        <text x="345" y="56" class="mono" style="font-size:12px">resolve(value)</text>
+        <text x="345" y="134" class="mono" style="font-size:12px">reject(error)</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: Promise מתחיל ב־pending, ומסתיים פעם אחת — הצלחה או כישלון. אחרי זה הוא לא משתנה.</figcaption>
+  </figure>
+
+  <h2>2. <code>then</code>, <code>catch</code>, <code>finally</code></h2>
+<pre><code class="lang-js">import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const file = path.join(os.tmpdir(), "promise-demo.json");
+await fs.writeFile(file, '{"total": 42}');
+
+fs.readFile(file, "utf8")
+  .then((text) =&gt; JSON.parse(text))
+  .then((data) =&gt; console.log("סה״כ:", data.total))
+  .catch((err) =&gt; console.log("נכשל:", err.message))
+  .finally(() =&gt; console.log("סיימנו לנסות"));</code></pre>
+<pre class="terminal">סה״כ: 42
+סיימנו לנסות</pre>
+  <div class="table-wrap"><table>
+    <tr><th>מתודה</th><th>מתי רצה</th></tr>
+    <tr><td><code>.then(fn)</code></td><td>כשהקודם הצליח. מה ש־<code>fn</code> מחזירה עובר ל־<code>then</code> הבא (אם היא מחזירה Promise — מחכים לו)</td></tr>
+    <tr><td><code>.catch(fn)</code></td><td>אם משהו <strong>בשרשרת שלפניה</strong> נכשל — כולל <code>JSON.parse</code> שזרק</td></tr>
+    <tr><td><code>.finally(fn)</code></td><td>תמיד, בסוף</td></tr>
+  </table></div>
+  <p>זה פותר את פירמידת האבדון: שרשרת שטוחה, ו־<code>catch</code> <strong>אחד</strong> לכל השלבים.</p>
+
+  <h2>3. ליצור Promise: <code>sleep</code></h2>
+<pre><code class="lang-js">function sleep(ms) {
+  return new Promise((resolve) =&gt; setTimeout(resolve, ms));
+}
+
+function delayedValue(value, ms) {
+  return new Promise((resolve, reject) =&gt; {
+    setTimeout(() =&gt; {
+      if (value &lt; 0) {
+        reject(new Error("ערך שלילי"));
+      } else {
+        resolve(value * 2);
+      }
+    }, ms);
+  });
+}
+
+sleep(50).then(() =&gt; console.log("עברו 50ms"));
+delayedValue(5, 10).then((v) =&gt; console.log("קיבלתי", v));
+delayedValue(-1, 20).catch((e) =&gt; console.log("נכשל:", e.message));</code></pre>
+<pre class="terminal">קיבלתי 10
+נכשל: ערך שלילי
+עברו 50ms</pre>
+  <p><code>new Promise((resolve, reject) =&gt; { ... })</code> — הפונקציה שבפנים רצה מיד. קוראים ל־<code>resolve(ערך)</code> כשיש תוצאה, או ל־<code>reject(שגיאה)</code> כשנכשל. (את <code>sleep</code> נכתוב כמעט בכל פרק מעכשיו — לסימולציות ולניסיונות חוזרים.)</p>
+
+  <h2>4. כמה מלכודות</h2>
+  <div class="box error"><div class="table-wrap"><table>
+    <tr><th>קוד</th><th>מה קורה</th></tr>
+    <tr><td><code>const data = fs.readFile(file, "utf8"); console.log(data.length);</code></td><td><code>data</code> הוא <strong>Promise</strong>, לא טקסט. מדפיס <code>undefined</code>. Promise צריך <code>then</code> או <code>await</code></td></tr>
+    <tr><td><code>.then((x) =&gt; { transform(x) })</code></td><td>שוכחים <code>return</code> ← ה־<code>then</code> הבא מקבל <code>undefined</code></td></tr>
+    <tr><td>Promise שנכשל בלי <code>catch</code></td><td>Node קורס: <code>Error: ...</code> עם אזהרת "unhandled rejection". תמיד צריך מישהו שתופס</td></tr>
+  </table></div></div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P10-E04">E04</a> · <a href="exercises.html#P10-E09">E09</a> · <a href="exercises.html#P10-E10">E10</a> · <a href="exercises.html#P10-E13">E13</a> · <a href="exercises.html#P10-E14">E14</a> · <a href="exercises.html#P10-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-callbacks.html"><small>הקודם</small>שיעור 2 — callbacks ו־error-first</a><a href="lesson-04-async-await.html"><small>הבא</small>שיעור 4 — async/await, מקביליות וכשלים</a></div>
+</main>
+</body>
+</html>

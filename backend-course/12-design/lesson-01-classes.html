@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מחלקות — פרק 12</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 12</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — מחלקות</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מחלקה: שדות, constructor, מתודות ו־<code>this</code>.</li>
+      <li>שדות פרטיים (<code>#</code>) ו־<code>readonly</code> — לשמור על אובייקט במצב תקין.</li>
+      <li>getters ו־<code>static</code>.</li>
+      <li>מתי מחלקה, ומתי פונקציות ואובייקטים פשוטים.</li>
+    </ul>
+  </div>
+
+  <h2>1. מחלקה = תבנית</h2>
+  <p>בפרק 8 כתבת פונקציות בנק שמקבלות חשבון ומחזירות חשבון חדש. מחלקה מחברת את הנתונים (יתרה) עם הפעולות המותרות עליהם (הפקדה, משיכה) ביחידה אחת:</p>
+<pre><code class="lang-ts">class BankAccount {
+  readonly owner: string;
+  #balance = 0;
+
+  constructor(owner: string, initial = 0) {
+    this.owner = owner;
+    this.deposit(initial);
+  }
+
+  get balance(): number {
+    return this.#balance;
+  }
+
+  deposit(amount: number): void {
+    if (amount &lt; 0) {
+      throw new Error("סכום שלילי");
+    }
+    this.#balance += amount;
+  }
+
+  withdraw(amount: number): void {
+    if (amount &gt; this.#balance) {
+      throw new Error("אין מספיק יתרה");
+    }
+    this.#balance -= amount;
+  }
+}
+
+const acc = new BankAccount("דנה", 100);
+acc.withdraw(30);
+console.log(acc.owner, acc.balance);</code></pre>
+<pre class="terminal">דנה 70</pre>
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td><code>class BankAccount</code></td><td>הגדרת התבנית. שם באות גדולה (PascalCase) — מוסכמה</td></tr>
+    <tr><td><code>readonly owner: string;</code></td><td>שדה ציבורי שלא משתנה אחרי האתחול</td></tr>
+    <tr><td><code>#balance = 0;</code></td><td><strong>שדה פרטי</strong> — רק קוד בתוך המחלקה רואה אותו</td></tr>
+    <tr><td><code>constructor(...)</code></td><td>רץ ב־<code>new</code>, מאתחל את המופע</td></tr>
+    <tr><td><code>this</code></td><td>"המופע הזה" (<code>acc</code>)</td></tr>
+    <tr><td><code>get balance()</code></td><td>נקרא כמו שדה (<code>acc.balance</code>, בלי סוגריים), אבל מחושב — וקריאה בלבד</td></tr>
+    <tr><td><code>new BankAccount(...)</code></td><td>יוצר <strong>מופע</strong> חדש</td></tr>
+  </table></div>
+
+  <h2>2. למה פרטי?</h2>
+  <p>בלי <code>#</code>, כל קוד יכול לכתוב <code>acc.balance = -1000000</code>. עם <code>#balance</code>, הדרך <strong>היחידה</strong> לשנות יתרה היא דרך <code>deposit</code>/<code>withdraw</code> — שבודקות. זה נקרא <strong>encapsulation</strong> ("כימוס"): המחלקה מבטיחה שהאובייקט תמיד במצב חוקי.</p>
+<pre><code class="lang-ts">class BankAccount {
+  #balance = 0;
+  get balance(): number {
+    return this.#balance;
+  }
+}
+const acc = new BankAccount();
+acc.#balance = 1000000;
+acc.balance = 5;</code></pre>
+<pre class="terminal">snippet.ts(8,5): error TS18013: Property '#balance' is not accessible outside class 'BankAccount' because it has a private identifier.
+snippet.ts(9,5): error TS2540: Cannot assign to 'balance' because it is a read-only property.</pre>
+  <div class="box tip">
+    <span class="box-title">💡 <code>#</code> מול <code>private</code></span>
+    <p>יש ב־TypeScript גם <code>private balance = 0</code>. ההבדל: <code>private</code> נבדק רק ב־TypeScript (בזמן ריצה השדה גלוי), <code>#</code> נאכף גם בזמן ריצה. ב־NestJS תראה הרבה <code>private</code> — ובמיוחד בכתיב מקוצר בתוך ה־constructor (<code>constructor(private repo: Repo)</code>). את הכתיב המקוצר הזה <strong>Node לא יודע להריץ ישירות</strong> מקובץ <code>.ts</code> — הוא דורש קומפילציה עם <code>tsc</code>, ולכן בקורס עד פרק 20 נכתוב את השדות במפורש.</p>
+  </div>
+
+  <h2>3. <code>static</code></h2>
+<pre><code class="lang-ts">class Money {
+  static readonly CURRENCY = "₪";
+  static fromAgorot(agorot: number): Money {
+    return new Money(agorot / 100);
+  }
+  readonly amount: number;
+  constructor(amount: number) {
+    this.amount = Math.round(amount * 100) / 100;
+  }
+  toString(): string {
+    return `${Money.CURRENCY}${this.amount.toFixed(2)}`;
+  }
+}
+console.log(String(Money.fromAgorot(1990)));</code></pre>
+<pre class="terminal">₪19.90</pre>
+  <p><code>static</code> — שייך למחלקה, לא למופע: <code>Money.CURRENCY</code>, <code>Money.fromAgorot(...)</code>. נוח לקבועים ול"מפעלים" (פונקציות שיוצרות מופעים בדרכים שונות). ו־<code>toString()</code> — JavaScript קוראת לה כשממירים את האובייקט למחרוזת.</p>
+
+  <h2>4. מחלקה או אובייקט פשוט?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מחלקה</th><th><code>type</code> + אובייקט פשוט + פונקציות</th></tr>
+    <tr><td>יש מצב פנימי שצריך להגן עליו (יתרה, מלאי)</td><td>נתונים שעוברים בין שכבות (מה שמגיע מ־JSON, מהמסד)</td></tr>
+    <tr><td>שירות עם תלויות (service, repository)</td><td>חישובים טהורים</td></tr>
+    <tr><td>סוגי שגיאות</td><td>DTOs — אובייקטים שנשלחים ברשת</td></tr>
+  </table></div>
+  <p>שים לב: <code>JSON.stringify</code> של מופע לא כולל שדות <code>#</code> ולא מתודות, ו־<code>JSON.parse</code> מחזיר אובייקט פשוט — <strong>לא</strong> מופע של המחלקה. לכן נתונים שעוברים ברשת או נשמרים — אובייקטים פשוטים. מחלקות — ללוגיקה.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P12-E01">E01</a> · <a href="exercises.html#P12-E02">E02</a> · <a href="exercises.html#P12-E06">E06</a> · <a href="exercises.html#P12-E07">E07</a> · <a href="exercises.html#P12-E08">E08</a> · <a href="exercises.html#P12-E13">E13</a> · <a href="exercises.html#P12-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 12</a><a href="lesson-02-errors-inheritance.html"><small>הבא</small>שיעור 2 — שגיאות משלך, ירושה והרכבה</a></div>
+</main>
+</body>
+</html>

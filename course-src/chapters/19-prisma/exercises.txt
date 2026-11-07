@@ -1,0 +1,875 @@
+@@ P19-E01 | 1 | לקרוא schema | 10 | שיעור 1
+@task
+<p>פתח את <code>19-prisma/files/prisma/schema.prisma</code> וענה:</p>
+<ol><li>מה שם הטבלה במסד של המודל <code>OrderItem</code>, ומה המפתח הראשי שלה?</li><li>איזה טיפוס TypeScript יהיה ל־<code>customer.city</code>? ול־<code>product.price</code>?</li><li>מה יקרה במסד כשמוחקים הזמנה? וכשמנסים למחוק קטגוריה שיש בה מוצרים?</li><li>למה <code>Order</code> מכיל גם <code>customerId</code> וגם <code>customer</code>? איזה מהם הוא עמודה במסד?</li><li>אילו indexes יש על הטבלה <code>orders</code>?</li></ol>
+@hint1
+<p><code>@@map</code>, <code>@@id</code>, <code>?</code>, <code>onDelete</code>.</p>
+@hint2
+<p>שדה קשר (עם <code>@relation</code>) קיים רק ב־client.</p>
+@solution
+<ol><li><code>order_items</code>; מפתח משותף <code>(order_id, product_id)</code> — <code>@@id([orderId, productId])</code>.</li><li><code>string | null</code> (בגלל <code>String?</code>). <code>Decimal</code> — אובייקט, לא <code>number</code>.</li><li>הזמנה: הפריטים שלה נמחקים איתה (<code>onDelete: Cascade</code> על <code>OrderItem.order</code>). קטגוריה עם מוצרים: שגיאה (ברירת המחדל — RESTRICT), קוד P2003.</li><li><code>customerId</code> הוא העמודה (FK). <code>customer</code> הוא שדה קשר — מאפשר <code>include: { customer: true }</code> ו־<code>where: { customer: { city: "Haifa" } }</code>.</li><li>המפתח הראשי (<code>id</code>), ו־<code>(customer_id, created_at)</code> — <code>@@index([customerId, createdAt])</code>, בדיוק ה־index של "ההזמנות שלי" מפרק 18.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>orders Order[]</code> ב־Customer הוא עמודה — אין שום דבר כזה בטבלה customers.</li></ul>
+
+@@ P19-E02 | 1 | מ־SQL ל־Prisma | 15 | שיעור 3
+@task
+<p>כתוב את השאילתה ב־Prisma:</p>
+```sql
+-- 1
+SELECT id, name, price FROM products WHERE is_active AND price BETWEEN 50 AND 200 ORDER BY price DESC LIMIT 5;
+-- 2
+SELECT * FROM customers WHERE city IS NULL OR city = 'Haifa';
+-- 3
+SELECT COUNT(*) FROM orders WHERE status IN ('paid', 'pending');
+-- 4
+SELECT c.* FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);
+-- 5
+UPDATE products SET stock = stock + 10 WHERE category_id = 2;
+```
+@hint1
+<p><code>gte</code>/<code>lte</code>, <code>OR</code>, <code>in</code>, <code>none</code>, <code>increment</code>.</p>
+@hint2
+<p>5 משנה הרבה שורות — <code>updateMany</code>.</p>
+@solution
+```ts
+// 1
+prisma.product.findMany({
+  where: { isActive: true, price: { gte: 50, lte: 200 } },
+  select: { id: true, name: true, price: true },
+  orderBy: { price: "desc" },
+  take: 5,
+});
+// 2
+prisma.customer.findMany({ where: { OR: [{ city: null }, { city: "Haifa" }] } });
+// 3
+prisma.order.count({ where: { status: { in: ["paid", "pending"] } } });
+// 4
+prisma.customer.findMany({ where: { orders: { none: {} } } });
+// 5
+prisma.product.updateMany({ where: { categoryId: 2 }, data: { stock: { increment: 10 } } });
+```
+@mistakes
+<ul><li><code>update</code> במקום <code>updateMany</code> ב־5 — <code>update</code> דורש תנאי ייחודי (id).</li></ul>
+
+@@ P19-E03 | 1 | איזו פקודה? | 10 | שיעור 2
+@task
+<p>לכל מצב — איזו פקודת Prisma ולמה?</p>
+<ol><li>הוספת שדה <code>phone</code> ל־Customer בסכמה, במחשב שלך.</li><li>משכת מ־Git migration חדש שחבר צוות כתב.</li><li>השרת בייצור עולה אחרי deploy עם migration חדש.</li><li>בפיתוח, המסד "התבלגן" ורוצים להתחיל נקי עם נתוני דוגמה.</li><li>שינית את הסכמה, הרצת migrate, ו־TypeScript עדיין לא מכיר את השדה החדש.</li><li>רוצים לראות את ה־SQL של שינוי מסוכן לפני שהוא רץ.</li></ol>
+@hint1
+<p>dev / deploy / reset / generate.</p>
+@hint2
+<p>יש דגל שיוצר migration בלי להריץ.</p>
+@solution
+<ol><li><code>npx prisma migrate dev --name add_customer_phone</code> (ואז <code>generate</code>).</li><li><code>npx prisma migrate dev</code> — מריץ את מה שעוד לא רץ אצלך (בלי ליצור חדש, אם הסכמה תואמת). ו־<code>generate</code>.</li><li><code>npx prisma migrate deploy</code> — לעולם לא <code>dev</code> בייצור.</li><li><code>npx prisma migrate reset</code> ואז <code>npx prisma db seed</code>.</li><li><code>npx prisma generate</code> — ב־Prisma 7 migrate לא מייצר את ה־client.</li><li><code>npx prisma migrate dev --create-only --name ...</code> — קוראים (ואם צריך עורכים) את ה־SQL, ואז <code>migrate dev</code>.</li></ol>
+@mistakes
+<ul><li><code>migrate reset</code> "כדי שיעבוד" — על מסד משותף או ייצור, זה מוחק את כל הנתונים.</li></ul>
+
+@@ P19-E04 | 1 | N+1 ב־Prisma | 10 | שיעור 3
+@task
+<p>כמה שאילתות שולח כל קוד (ל־12 הזמנות)? איזה עדיף ולמה?</p>
+```ts
+// א
+const orders = await prisma.order.findMany();
+for (const o of orders) {
+  const c = await prisma.customer.findUnique({ where: { id: o.customerId } });
+  console.log(o.id, c?.fullName);
+}
+// ב
+const orders2 = await prisma.order.findMany({ include: { customer: { select: { fullName: true } } } });
+for (const o of orders2) console.log(o.id, o.customer.fullName);
+```
+@hint1
+<p>ב־א' — שאילתה לכל איטרציה.</p>
+@hint2
+<p>ב־ב' — Prisma מביא את כל הלקוחות הדרושים בשאילתה אחת נוספת.</p>
+@solution
+<p>א: 1 + 12 = 13 שאילתות (N+1). ב: 2 שאילתות (ההזמנות, ואז כל הלקוחות שלהן עם <code>WHERE id IN (...)</code>) — וזה לא משתנה גם עם 10,000 הזמנות. ב' עדיף. ORM לא מונע N+1 לבד: לולאה עם <code>await</code> בפנים היא עדיין N+1.</p>
+@mistakes
+<ul><li>להוסיף <code>include</code> של הכול "ליתר ביטחון" — מביא נתונים שלא צריך. <code>select</code> רק את השדות שמשתמשים בהם.</li></ul>
+
+@@ P19-E05 | 1 | מקוד שגיאה ל־HTTP | 10 | שיעור 3
+@task
+<p>לכל פעולה שנכשלה — קוד השגיאה של Prisma, וה־status שה־API צריך להחזיר:</p>
+<ol><li><code>prisma.customer.create({ data: { email: "dana@example.com", ... } })</code> — האימייל קיים.</li><li><code>prisma.product.update({ where: { id: 999 }, data: { stock: 5 } })</code></li><li><code>prisma.category.delete({ where: { id: 1 } })</code> — יש בה מוצרים.</li><li><code>prisma.order.create({ data: { customerId: 999 } })</code></li><li><code>prisma.product.findUnique({ where: { id: 999 } })</code></li><li>המסד לא זמין (השרת שלו נפל).</li></ol>
+@hint1
+<p>P2002, P2025, P2003.</p>
+@hint2
+<p>אחד מהם לא זורק בכלל.</p>
+@solution
+<ol><li>P2002 (unique) ← 409 <code>EMAIL_TAKEN</code>.</li><li>P2025 (לא נמצא) ← 404.</li><li>P2003 (foreign key) ← 409 <code>CATEGORY_NOT_EMPTY</code>.</li><li>P2003 (הלקוח לא קיים) ← 400 או 404 (הלקוח שנשלח לא קיים). עדיף לבדוק לפני ולהחזיר הודעה ברורה.</li><li>לא שגיאה — מחזיר <code>null</code>. הקוד שלך מחליט: 404.</li><li>שגיאת חיבור (לא P20xx של "נתונים") ← לא לתרגם; ה־errorHandler מחזיר 500, ובמערכת אמיתית — 503 וניטור.</li></ol>
+@mistakes
+<ul><li>לתפוס כל שגיאה של Prisma ולהחזיר 404 — מסד שנפל ייראה כמו "לא נמצא", ואף אחד לא יקבל התראה.</li></ul>
+
+@@ P19-E06 | 2 | מוצרים פעילים 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E06.ts</code> השלם <code>activeProducts(prisma)</code> ← המוצרים הפעילים, <code>{ name, price }</code> בלבד, מהזול ליקר; <code>price</code> כ־<code>number</code> (לא Decimal).</p>
+<p>בדיקה: <code>npm run check P19-E06</code> (צריך את ה־client — ראה קופסת 🧰).</p>
+@hint1
+<p><code>select: { name: true, price: true }</code></p>
+@hint2
+<p><code>rows.map((p) =&gt; ({ name: p.name, price: Number(p.price) }))</code></p>
+@solution
+```ts save=solutions/P19-E06.ts
+// P19-E06
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function activeProducts(prisma: PrismaClient) {
+  const rows = await prisma.product.findMany({
+    where: { isActive: true },
+    select: { name: true, price: true },
+    orderBy: { price: "asc" },
+  });
+  return rows.map((p) => ({ name: p.name, price: Number(p.price) }));
+}
+```
+@mistakes
+<ul><li>להחזיר את ה־Decimal כמו שהוא — ב־JSON הוא יהפוך למחרוזת <code>"24.9"</code>, והלקוח יקבל מחיר כטקסט.</li></ul>
+
+@@ P19-E07 | 2 | לפי קטגוריה 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E07.ts</code> השלם <code>productsInCategory(prisma, categoryName)</code> ← שמות המוצרים (מערך מחרוזות) בקטגוריה לפי שם, לפי שם המוצר. קטגוריה שלא קיימת או ריקה ← <code>[]</code>.</p>
+@hint1
+<p>סינון לפי קשר: <code>where: { category: { name: categoryName } }</code>.</p>
+@hint2
+<p><code>.map((p) =&gt; p.name)</code></p>
+@solution
+```ts save=solutions/P19-E07.ts
+// P19-E07
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function productsInCategory(prisma: PrismaClient, categoryName: string) {
+  const rows = await prisma.product.findMany({
+    where: { category: { name: categoryName } },
+    select: { name: true },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((p) => p.name);
+}
+```
+@mistakes
+<ul><li>שתי שאילתות (קודם מוצאים את ה־id של הקטגוריה, ואז מוצרים) — עובד, אבל Prisma עושה את זה בשאילתה אחת.</li></ul>
+
+@@ P19-E08 | 2 | לקוח חדש 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E08.ts</code> (המחלקה <code>AppError</code> כתובה) השלם <code>createCustomer(prisma, { fullName, email, city })</code>: יוצר לקוח עם <code>joinedOn</code> של היום, ומחזיר אותו. אימייל קיים ← <code>AppError("EMAIL_TAKEN")</code>. כל שגיאה אחרת — נזרקת כמו שהיא.</p>
+@hint1
+<p><code>Prisma.PrismaClientKnownRequestError</code> ו־<code>err.code === "P2002"</code>.</p>
+@hint2
+<p><code>import { Prisma } from "../files/generated/prisma/client.ts"</code></p>
+@solution
+```ts save=solutions/P19-E08.ts
+// P19-E08
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function createCustomer(prisma: PrismaClient, data: { fullName: string; email: string; city?: string | null }) {
+  try {
+    return await prisma.customer.create({
+      data: { fullName: data.fullName, email: data.email, city: data.city ?? null, joinedOn: new Date() },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") throw new AppError("EMAIL_TAKEN");
+    throw err;
+  }
+}
+```
+<p>שים לב ל־<code>return await</code>: בלי <code>await</code>, ה־Promise יוחזר וידחה <em>מחוץ</em> ל־try — וה־catch לא יתפוס כלום.</p>
+@mistakes
+<ul><li>לבדוק קודם עם <code>findUnique</code> אם האימייל קיים — מרוץ (פרק 18). ה־UNIQUE במסד הוא מקור האמת.</li></ul>
+
+@@ P19-E09 | 2 | עדכון מלאי 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E09.ts</code> השלם <code>adjustStock(prisma, productId, delta)</code> ← מוסיף <code>delta</code> (יכול להיות שלילי) למלאי, ומחזיר את המלאי החדש. מוצר לא קיים ← <code>AppError("PRODUCT_NOT_FOUND")</code>. (מלאי שלילי — לא בתרגיל הזה.)</p>
+@hint1
+<p><code>data: { stock: { increment: delta } }</code> — עדכון אטומי.</p>
+@hint2
+<p>update על id שלא קיים ← P2025.</p>
+@solution
+```ts save=solutions/P19-E09.ts
+// P19-E09
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function adjustStock(prisma: PrismaClient, productId: number, delta: number) {
+  try {
+    const p = await prisma.product.update({ where: { id: productId }, data: { stock: { increment: delta } }, select: { stock: true } });
+    return p.stock;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") throw new AppError("PRODUCT_NOT_FOUND");
+    throw err;
+  }
+}
+```
+@mistakes
+<ul><li><code>findUnique</code> ואז <code>update({ data: { stock: p.stock + delta } })</code> — "קרא ← חשב ← כתוב", בדיוק ה־lost update של פרק 18.</li></ul>
+
+@@ P19-E10 | 2 | חיפוש מוצרים 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E10.ts</code> השלם <code>searchProducts(prisma, { q, minPrice, maxPrice, page = 1, limit = 10 })</code> ← <code>{ data: [{ id, name, price }], total }</code>:</p>
+<ul><li>רק מוצרים פעילים. <code>q</code> — מוכל בשם, בלי תלות באותיות. <code>minPrice</code>/<code>maxPrice</code> — כולל הקצוות. כל פרמטר לא חובה.</li><li>מיון לפי מחיר, ובשוויון לפי id. <code>total</code> — כל התוצאות (לא רק בעמוד). price כ־number.</li></ul>
+@hint1
+<p><code>price: { gte: minPrice, lte: maxPrice }</code> — Prisma מתעלם משדות <code>undefined</code>.</p>
+@hint2
+<p>אותו <code>where</code> ל־<code>findMany</code> ול־<code>count</code>; <code>skip: (page - 1) * limit, take: limit</code>.</p>
+@solution
+```ts save=solutions/P19-E10.ts
+// P19-E10
+import type { Prisma, PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function searchProducts(
+  prisma: PrismaClient,
+  { q, minPrice, maxPrice, page = 1, limit = 10 }: { q?: string; minPrice?: number; maxPrice?: number; page?: number; limit?: number } = {}
+) {
+  const where: Prisma.ProductWhereInput = {
+    isActive: true,
+    ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
+    price: { gte: minPrice, lte: maxPrice },
+  };
+  const [rows, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      select: { id: true, name: true, price: true },
+      orderBy: [{ price: "asc" }, { id: "asc" }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.product.count({ where }),
+  ]);
+  return { data: rows.map((p) => ({ ...p, price: Number(p.price) })), total };
+}
+```
+@mistakes
+<ul><li><code>q</code> ריק ← <code>contains: ""</code> — עובד (מתאים להכול), אבל <code>undefined</code> נקי יותר.</li></ul>
+
+@@ P19-E11 | 2 | לקוח עם הזמנות 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E11.ts</code> השלם <code>customerOrders(prisma, customerId)</code> ← <code>null</code> אם אין לקוח, אחרת:</p>
+```ts
+{ fullName: "Dana Levi", orders: [
+  { id: 1, status: "shipped", items: [{ product: "Ethiopia Beans 1kg", quantity: 2, unitPrice: 84.9 }, ...] },
+  ...
+] }
+```
+<p>הזמנות לפי id עולה; פריטים לפי שם המוצר. מספרים כ־number. לכל היותר 4 שאילתות, בלי תלות במספר ההזמנות.</p>
+@hint1
+<p><code>include</code> מקונן: orders ← items ← product.</p>
+@hint2
+<p>אפשר <code>orderBy</code> בתוך include, גם לפי שדה של קשר: <code>orderBy: { product: { name: "asc" } }</code>.</p>
+@solution
+```ts save=solutions/P19-E11.ts
+// P19-E11
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function customerOrders(prisma: PrismaClient, customerId: number) {
+  const c = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      fullName: true,
+      orders: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          status: true,
+          items: {
+            orderBy: { product: { name: "asc" } },
+            select: { quantity: true, unitPrice: true, product: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!c) return null;
+  return {
+    fullName: c.fullName,
+    orders: c.orders.map((o) => ({
+      id: o.id,
+      status: o.status,
+      items: o.items.map((i) => ({ product: i.product.name, quantity: i.quantity, unitPrice: Number(i.unitPrice) })),
+    })),
+  };
+}
+```
+<p><code>select</code> מקונן (במקום <code>include</code>) — מביא רק את השדות שבאמת מחזירים.</p>
+@mistakes
+<ul><li>לולאה על ההזמנות עם <code>findMany</code> לפריטים — N+1.</li></ul>
+
+@@ P19-E12 | 2 | מחיקת קטגוריה 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E12.ts</code> השלם <code>deleteCategory(prisma, id)</code>: קטגוריה לא קיימת ← <code>AppError("CATEGORY_NOT_FOUND")</code>; יש בה מוצרים ← <code>AppError("CATEGORY_NOT_EMPTY")</code>; אחרת — מחיקה. (בלי לבדוק מראש — לתרגם את השגיאות של Prisma.)</p>
+@hint1
+<p>P2025 ו־P2003.</p>
+@hint2
+<p>פונקציית עזר קטנה: <code>prismaCode(err)</code> שמחזירה את הקוד או undefined.</p>
+@solution
+```ts save=solutions/P19-E12.ts
+// P19-E12
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const prismaCode = (err: unknown) => (err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined);
+
+export async function deleteCategory(prisma: PrismaClient, id: number) {
+  try {
+    await prisma.category.delete({ where: { id } });
+  } catch (err) {
+    if (prismaCode(err) === "P2025") throw new AppError("CATEGORY_NOT_FOUND");
+    if (prismaCode(err) === "P2003") throw new AppError("CATEGORY_NOT_EMPTY");
+    throw err;
+  }
+}
+```
+@mistakes
+<ul><li>לבדוק <code>count</code> של מוצרים לפני המחיקה — מוצר שנוסף בין הבדיקה למחיקה. וה־FK עדיין יתפוס — אבל אז השגיאה לא מתורגמת.</li></ul>
+
+@@ P19-E13 | 3 | דוח הכנסות ב־SQL 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E13.ts</code> השלם <code>revenueByCategory(prisma, { since })</code> ← <code>[{ category, revenue }]</code> מהגבוה לנמוך: הכנסה מהזמנות שלא בוטלו, שנוצרו מ־<code>since</code> (Date) והלאה. revenue כ־number. השתמש ב־<code>$queryRaw</code> עם template literal.</p>
+@hint1
+<p>ה־SQL כמו ב־P17-E23; <code>WHERE o.created_at &gt;= ${since}</code>.</p>
+@hint2
+<p><code>SUM(...)::float AS revenue</code> — אחרת חוזר Decimal.</p>
+@solution
+```ts save=solutions/P19-E13.ts
+// P19-E13
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function revenueByCategory(prisma: PrismaClient, { since }: { since: Date }) {
+  return prisma.$queryRaw<{ category: string; revenue: number }[]>`
+    SELECT c.name AS category, SUM(oi.quantity * oi.unit_price)::float AS revenue
+    FROM order_items oi
+    JOIN orders o     ON o.id = oi.order_id
+    JOIN products p   ON p.id = oi.product_id
+    JOIN categories c ON c.id = p.category_id
+    WHERE o.status <> 'cancelled' AND o.created_at >= ${since}
+    GROUP BY c.name
+    ORDER BY revenue DESC`;
+}
+```
+<p>ה־<code>${since}</code> הופך לפרמטר (<code>$1</code>) — Prisma לא מדביק אותו כטקסט. בשאילתות האלה עדיין צריך לכתוב שמות <em>טבלאות</em> (snake_case), לא שמות מודלים.</p>
+@mistakes
+<ul><li><code>$queryRawUnsafe(`... &gt;= '${since.toISOString()}'`)</code> — עובד, עד שמישהו מעביר ערך מהמשתמש.</li></ul>
+
+@@ P19-E14 | 3 | הזמנה ב־transaction 🤖 | 30 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E14.ts</code> השלם <code>placeOrder(prisma, customerId, items)</code>, <code>items</code> = <code>[{ productId, quantity }]</code>:</p>
+<ul><li>ב־<code>$transaction</code> אחד: לכל פריט — הורדת מלאי אטומית (<code>updateMany</code> עם <code>stock: { gte }</code>); 0 ← <code>AppError("OUT_OF_STOCK")</code> (וכל ה־transaction מתבטל). המחיר הנוכחי מהקטלוג נשמר ב־<code>unitPrice</code>.</li><li>יוצר הזמנה (<code>status: "pending"</code>) עם הפריטים (nested create). מחזיר <code>{ orderId, total }</code> (number).</li></ul>
+<p>הבדיקה: 5 הזמנות במקביל של המוצר שנשארו ממנו 3 — בדיוק 3 מצליחות.</p>
+@hint1
+<p><code>prisma.$transaction(async (tx) =&gt; { ... })</code> — וכל הפעולות דרך <code>tx</code>.</p>
+@hint2
+<p>אחרי ה־updateMany, <code>tx.product.findUniqueOrThrow</code> למחיר.</p>
+@solution
+```ts save=solutions/P19-E14.ts
+// P19-E14
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function placeOrder(prisma: PrismaClient, customerId: number, items: { productId: number; quantity: number }[]) {
+  return prisma.$transaction(async (tx) => {
+    const lines = [];
+    for (const { productId, quantity } of items) {
+      const { count } = await tx.product.updateMany({
+        where: { id: productId, stock: { gte: quantity } },
+        data: { stock: { decrement: quantity } },
+      });
+      if (count === 0) throw new AppError("OUT_OF_STOCK");
+      const { price } = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { price: true } });
+      lines.push({ productId, quantity, unitPrice: price });
+    }
+    const order = await tx.order.create({ data: { customerId, status: "pending", items: { create: lines } } });
+    const total = lines.reduce((sum, l) => sum + Number(l.unitPrice) * l.quantity, 0);
+    return { orderId: order.id, total: Math.round(total * 100) / 100 };
+  });
+}
+```
+@mistakes
+<ul><li><code>await prisma.product.updateMany(...)</code> בתוך ה־callback — רץ מחוץ ל־transaction, והמלאי לא חוזר כשפריט אחר חסר.</li></ul>
+
+@@ P19-E15 | 3 | ביטול הזמנה 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E15.ts</code> השלם <code>cancelOrder(prisma, orderId)</code>: ב־transaction — הזמנה לא קיימת ← <code>AppError("ORDER_NOT_FOUND")</code>; כבר מבוטלת ← <code>AppError("ALREADY_CANCELLED")</code>; נשלחה (<code>shipped</code>) ← <code>AppError("CANNOT_CANCEL")</code>. אחרת — סטטוס <code>cancelled</code>, והמלאי של כל פריט חוזר. מחזיר את מספר היחידות שהוחזרו למלאי.</p>
+<p>גם כששתי בקשות ביטול לאותה הזמנה מגיעות יחד — המלאי חוזר פעם אחת בלבד.</p>
+@hint1
+<p>שני ביטולים במקביל: שניהם קוראים "paid", שניהם מחזירים מלאי. איך הופכים את המעבר "לא מבוטל ← מבוטל" לאטומי?</p>
+@hint2
+<p><code>tx.order.updateMany({ where: { id, status: { in: ["pending", "paid"] } }, data: { status: "cancelled" } })</code> — count 0 אומר שמישהו אחר (או הסטטוס) מנע. ואז לברר למה.</p>
+@solution
+```ts save=solutions/P19-E15.ts
+// P19-E15
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function cancelOrder(prisma: PrismaClient, orderId: number) {
+  return prisma.$transaction(async (tx) => {
+    // המעבר לסטטוס cancelled — אטומי: רק אחד מכמה ביטולים במקביל "ינצח"
+    const { count } = await tx.order.updateMany({
+      where: { id: orderId, status: { in: ["pending", "paid"] } },
+      data: { status: "cancelled" },
+    });
+    if (count === 0) {
+      const order = await tx.order.findUnique({ where: { id: orderId }, select: { status: true } });
+      if (!order) throw new AppError("ORDER_NOT_FOUND");
+      throw new AppError(order.status === "cancelled" ? "ALREADY_CANCELLED" : "CANNOT_CANCEL");
+    }
+    const items = await tx.orderItem.findMany({ where: { orderId } });
+    for (const i of items) {
+      await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.quantity } } });
+    }
+    return items.reduce((sum, i) => sum + i.quantity, 0);
+  });
+}
+```
+@mistakes
+<ul><li><code>findUnique</code> לסטטוס ואז <code>update</code> — שני ביטולים במקביל מחזירים מלאי פעמיים.</li></ul>
+
+@@ P19-E16 | 3 | נתוני דשבורד 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E16.ts</code> השלם <code>catalogStats(prisma)</code> ← <code>{ products, active, outOfStock, avgActivePrice, byCategory }</code>:</p>
+<ul><li><code>products</code> — כל המוצרים; <code>active</code> — הפעילים; <code>outOfStock</code> — פעילים עם מלאי 0.</li><li><code>avgActivePrice</code> — ממוצע מחיר הפעילים, מעוגל ל־2 (number).</li><li><code>byCategory</code> — <code>{ beans: 3, ... }</code>: כמה מוצרים בכל קטגוריה, כולל קטגוריות ריקות (0).</li></ul>
+<p>בלי <code>$queryRaw</code>, ובלי להביא את כל המוצרים לזיכרון.</p>
+@hint1
+<p><code>count</code>, <code>aggregate({ _avg: { price: true } })</code>, ו־<code>_count</code> של קשר: <code>category.findMany({ select: { name: true, _count: { select: { products: true } } } })</code>.</p>
+@hint2
+<p>כל השאילתות במקביל: <code>Promise.all</code>.</p>
+@solution
+```ts save=solutions/P19-E16.ts
+// P19-E16
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function catalogStats(prisma: PrismaClient) {
+  const [products, active, outOfStock, avg, categories] = await Promise.all([
+    prisma.product.count(),
+    prisma.product.count({ where: { isActive: true } }),
+    prisma.product.count({ where: { isActive: true, stock: 0 } }),
+    prisma.product.aggregate({ where: { isActive: true }, _avg: { price: true } }),
+    prisma.category.findMany({ select: { name: true, _count: { select: { products: true } } } }),
+  ]);
+  return {
+    products,
+    active,
+    outOfStock,
+    avgActivePrice: Math.round(Number(avg._avg.price ?? 0) * 100) / 100,
+    byCategory: Object.fromEntries(categories.map((c) => [c.name, c._count.products])),
+  };
+}
+```
+@mistakes
+<ul><li><code>(await prisma.product.findMany()).filter(...).length</code> — מביא את כל הטבלה כדי לספור.</li></ul>
+
+@@ P19-E17 | 3 | pagination עם cursor 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E17.ts</code> השלם <code>listOrders(prisma, { after, limit = 5 })</code> ← הזמנות לפי id עולה, <code>{ data: [{ id, status }], nextCursor }</code> (כמו P18-E18), עם ה־<code>cursor</code> של Prisma או <code>where: { id: { gt } }</code>.</p>
+@hint1
+<p><code>take: limit + 1</code> כדי לדעת אם יש עוד.</p>
+@hint2
+<p>עם cursor: <code>cursor: { id: after }, skip: 1</code> (לדלג על השורה של ה־cursor עצמו). עם where — פשוט <code>id: { gt: after ?? 0 }</code>.</p>
+@solution
+```ts save=solutions/P19-E17.ts
+// P19-E17
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function listOrders(prisma: PrismaClient, { after, limit = 5 }: { after?: number; limit?: number } = {}) {
+  const rows = await prisma.order.findMany({
+    where: { id: { gt: after ?? 0 } },
+    orderBy: { id: "asc" },
+    take: limit + 1,
+    select: { id: true, status: true },
+  });
+  const hasMore = rows.length > limit;
+  const data = rows.slice(0, limit);
+  return { data, nextCursor: hasMore ? data[data.length - 1].id : null };
+}
+```
+<p>(ה־<code>cursor</code> של Prisma נכשל אם הרשומה של ה־cursor נמחקה בינתיים. <code>gt</code> עמיד יותר.)</p>
+@mistakes
+<ul><li><code>skip: page * limit</code> — חזרנו ל־OFFSET.</li></ul>
+
+@@ P19-E18 | 3 | תגיות למוצר 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E18.ts</code> השלם <code>setProductTags(prisma, productId, names)</code>: מחליף את כל התגיות של המוצר ברשימה החדשה. תגית שלא קיימת — נוצרת. שמות: trim ואותיות קטנות, בלי כפילויות, בלי ריקים. מחזיר את שמות התגיות של המוצר, ממוינים. מוצר לא קיים ← <code>AppError("PRODUCT_NOT_FOUND")</code>. הכול ב־transaction.</p>
+@hint1
+<p><code>tx.tag.upsert({ where: { name }, create: { name }, update: {} })</code> לכל שם.</p>
+@hint2
+<p>ואז <code>tx.productTag.deleteMany({ where: { productId } })</code> ו־<code>createMany</code> של החדשים.</p>
+@solution
+```ts save=solutions/P19-E18.ts
+// P19-E18
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function setProductTags(prisma: PrismaClient, productId: number, names: string[]) {
+  const clean = [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!product) throw new AppError("PRODUCT_NOT_FOUND");
+    const tags = [];
+    for (const name of clean) tags.push(await tx.tag.upsert({ where: { name }, create: { name }, update: {} }));
+    await tx.productTag.deleteMany({ where: { productId } });
+    await tx.productTag.createMany({ data: tags.map((t) => ({ productId, tagId: t.id })) });
+    return tags.map((t) => t.name).sort();
+  });
+}
+```
+@mistakes
+<ul><li>למחוק את התגיות הישנות ואז ליצור — מחוץ ל־transaction: כישלון באמצע משאיר את המוצר בלי תגיות בכלל.</li></ul>
+
+@@ P19-E19 | 3 | seed שאפשר להריץ שוב 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E19.ts</code> השלם <code>seedDemoData(prisma)</code>: מוסיף קטגוריה <code>"cold brew"</code>, ושני מוצרים בה — <code>"Cold Brew Bottle 1L"</code> (59.90, מלאי 20) ו־<code>"Cold Brew Filter Bags"</code> (34.90, מלאי 100) — ולקוח <code>demo@example.com</code> (Demo User, Tel Aviv, הצטרף ב־2026-01-01). הרצה שנייה (ושלישית) לא יוצרת כפילויות ולא נכשלת. מחזיר <code>{ categoryId, customerId }</code>.</p>
+@hint1
+<p><code>upsert</code> לכל דבר שיש לו שדה ייחודי (קטגוריה לפי name, לקוח לפי email).</p>
+@hint2
+<p>למוצר אין שדה ייחודי חוץ מ־id. <code>findFirst</code> לפי שם וקטגוריה, ו־create רק אם אין.</p>
+@solution
+```ts save=solutions/P19-E19.ts
+// P19-E19
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+const PRODUCTS = [
+  { name: "Cold Brew Bottle 1L", price: 59.9, stock: 20 },
+  { name: "Cold Brew Filter Bags", price: 34.9, stock: 100 },
+];
+
+export async function seedDemoData(prisma: PrismaClient) {
+  const category = await prisma.category.upsert({ where: { name: "cold brew" }, create: { name: "cold brew" }, update: {} });
+  for (const p of PRODUCTS) {
+    const existing = await prisma.product.findFirst({ where: { name: p.name, categoryId: category.id } });
+    if (!existing) await prisma.product.create({ data: { ...p, categoryId: category.id } });
+  }
+  const customer = await prisma.customer.upsert({
+    where: { email: "demo@example.com" },
+    create: { email: "demo@example.com", fullName: "Demo User", city: "Tel Aviv", joinedOn: new Date("2026-01-01") },
+    update: {},
+  });
+  return { categoryId: category.id, customerId: customer.id };
+}
+```
+<p>seed שאפשר להריץ שוב ("idempotent") חוסך המון כאב: אפשר להריץ אותו בכל הפעלה של סביבת פיתוח, בלי "קודם תמחק".</p>
+@mistakes
+<ul><li><code>create</code> לכל דבר — הרצה שנייה נכשלת על unique (או יוצרת מוצרים כפולים).</li></ul>
+
+@@ P19-E20 | 4 | 13 שאילתות לרשימה 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E20.ts</code>, <code>ordersWithCustomers(prisma)</code> מחזירה <code>[{ id, status, customer }]</code> (שם הלקוח) לפי id — ושולחת שאילתה לכל הזמנה. תקן ל־2 שאילתות לכל היותר (הבדיקה סופרת).</p>
+@hint1
+<p><code>include</code> / <code>select</code> של הקשר.</p>
+@hint2
+<p><code>select: { id: true, status: true, customer: { select: { fullName: true } } }</code></p>
+@solution
+```ts save=solutions/P19-E20.ts
+// P19-E20: מתוקן — include במקום שאילתה לכל הזמנה
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function ordersWithCustomers(prisma: PrismaClient) {
+  const orders = await prisma.order.findMany({
+    orderBy: { id: "asc" },
+    select: { id: true, status: true, customer: { select: { fullName: true } } },
+  });
+  return orders.map((o) => ({ id: o.id, status: o.status, customer: o.customer.fullName }));
+}
+```
+@mistakes
+<ul><li><code>Promise.all</code> על ה־findUnique־ים — מהיר יותר, אבל עדיין 13 שאילתות.</li></ul>
+
+@@ P19-E21 | 4 | מכירה כפולה, גרסת Prisma 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E21.ts</code>, <code>buy(prisma, productId, qty)</code> בודקת מלאי וקונה — אבל במבצע נמכרו מטחנות שלא היו. תקן (אותה חתימה, אותן שגיאות: <code>PRODUCT_NOT_FOUND</code>, <code>OUT_OF_STOCK</code>; מחזירה את המלאי שנשאר).</p>
+@hint1
+<p>findUnique ← בדיקה ← update עם ערך מחושב = מרוץ.</p>
+@hint2
+<p><code>updateMany</code> עם <code>stock: { gte: qty }</code> ו־<code>decrement</code>.</p>
+@solution
+```ts save=solutions/P19-E21.ts
+// P19-E21: מתוקן — עדכון אטומי עם תנאי
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function buy(prisma: PrismaClient, productId: number, qty: number) {
+  const { count } = await prisma.product.updateMany({
+    where: { id: productId, stock: { gte: qty } },
+    data: { stock: { decrement: qty } },
+  });
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { stock: true } });
+  if (!product) throw new AppError("PRODUCT_NOT_FOUND");
+  if (count === 0) throw new AppError("OUT_OF_STOCK");
+  return product.stock;
+}
+```
+<p>(ה־<code>findUnique</code> אחרי העדכון רק <em>קורא</em> את התוצאה. במקביל, הוא עלול להחזיר מלאי שכבר ירד עוד — זה בסדר: הוא לא משמש להחלטה.)</p>
+@mistakes
+<ul><li>לעטוף את הקוד הישן ב־<code>$transaction</code> — ב־Read Committed זה לא עוזר (P18-E02).</li></ul>
+
+@@ P19-E22 | 4 | הכול "לא נמצא" 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E22.ts</code>, <code>updateEmail(prisma, customerId, email)</code> מחזירה <code>CUSTOMER_NOT_FOUND</code> גם כשהאימייל תפוס, וגם כשהמסד בכלל לא זמין. תקן: P2025 ← <code>CUSTOMER_NOT_FOUND</code>; P2002 ← <code>EMAIL_TAKEN</code>; כל השאר — לזרוק כמו שהוא.</p>
+@hint1
+<p>catch שמתעלם מ־<code>err</code> — תמיד חשוד.</p>
+@hint2
+<p><code>err instanceof Prisma.PrismaClientKnownRequestError</code> ואז <code>err.code</code>.</p>
+@solution
+```ts save=solutions/P19-E22.ts
+// P19-E22: מתוקן — מתרגמים רק את מה שמבינים
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function updateEmail(prisma: PrismaClient, customerId: number, email: string) {
+  try {
+    return await prisma.customer.update({ where: { id: customerId }, data: { email } });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2025") throw new AppError("CUSTOMER_NOT_FOUND");
+      if (err.code === "P2002") throw new AppError("EMAIL_TAKEN");
+    }
+    throw err;
+  }
+}
+```
+@mistakes
+<ul><li>להשאיר <code>catch</code> כללי בסוף שמחזיר הודעה "ידידותית" — באגים אמיתיים נבלעים.</li></ul>
+
+@@ P19-E23 | 4 | transaction שדולף 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E23.ts</code>, <code>transferStock(prisma, fromProductId, toProductId, qty)</code> מעביר מלאי בין שני מוצרים (למשל, אריזה מחדש) ב־transaction. כשאין מספיק מלאי במקור — נזרקת שגיאה, אבל היעד כבר קיבל את היחידות. תקן.</p>
+@hint1
+<p>על איזה אובייקט רצה כל פעולה בתוך ה־callback?</p>
+@hint2
+<p>הכול דרך <code>tx</code>.</p>
+@solution
+```ts save=solutions/P19-E23.ts
+// P19-E23: מתוקן — כל הפעולות דרך tx
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function transferStock(prisma: PrismaClient, fromProductId: number, toProductId: number, qty: number) {
+  await prisma.$transaction(async (tx) => {
+    await tx.product.update({ where: { id: toProductId }, data: { stock: { increment: qty } } });
+    const { count } = await tx.product.updateMany({
+      where: { id: fromProductId, stock: { gte: qty } },
+      data: { stock: { decrement: qty } },
+    });
+    if (count === 0) throw new AppError("OUT_OF_STOCK");
+  });
+}
+```
+@mistakes
+<ul><li>לשנות רק את הסדר (קודם להוריד) — מסתיר את הבאג במקרה הזה, אבל הפעולה עדיין לא בתוך ה־transaction.</li></ul>
+
+@@ P19-E24 | 5 | אתגר: repository למוצרים 🤖 | 50 | כל הפרק
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E24.ts</code> מוגדר ה־interface <code>ProductsRepository</code> (מוצר ב־API: <code>{ id, name, category, price, stock, isActive }</code> — category הוא <em>שם</em>, price הוא number). ממש <code>PrismaProductsRepository</code>:</p>
+<ul><li><code>list({ category, q, inStock, sort, page, limit })</code> ← <code>{ data, total }</code>. <code>sort</code>: <code>"price"</code>, <code>"-price"</code>, <code>"name"</code> (ברירת מחדל: name); תמיד שובר שוויון לפי id. <code>inStock: true</code> ← רק מלאי &gt; 0.</li><li><code>get(id)</code> ← מוצר או <code>undefined</code>.</li><li><code>create({ name, category, price, stock })</code> — הקטגוריה לפי שם; לא קיימת ← <code>AppError("CATEGORY_NOT_FOUND")</code>.</li><li><code>update(id, changes)</code> — כל שדה לא חובה, כולל <code>category</code> (שם); לא קיים ← <code>undefined</code>.</li><li><code>remove(id)</code> ← <code>true</code>/<code>false</code>; מוצר שהוזמן ← <code>AppError("PRODUCT_HAS_ORDERS")</code>.</li></ul>
+@hint1
+<p>פונקציה אחת <code>toProduct(row)</code> עם <code>include: { category: { select: { name: true } } }</code> בכל שאילתה.</p>
+@hint2
+<p>קטגוריה לפי שם בכתיבה: <code>category: { connect: { name } }</code> — ואם לא קיימת, Prisma זורק <code>P2025</code>.</p>
+@solution
+```ts save=solutions/P19-E24.ts
+// P19-E24
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export interface Product { id: number; name: string; category: string; price: number; stock: number; isActive: boolean }
+export interface ListOptions { category?: string; q?: string; inStock?: boolean; sort?: "price" | "-price" | "name"; page?: number; limit?: number }
+
+export interface ProductsRepository {
+  list(options: ListOptions): Promise<{ data: Product[]; total: number }>;
+  get(id: number): Promise<Product | undefined>;
+  create(data: { name: string; category: string; price: number; stock: number }): Promise<Product>;
+  update(id: number, changes: Partial<Omit<Product, "id">>): Promise<Product | undefined>;
+  remove(id: number): Promise<boolean>;
+}
+
+const withCategory = { category: { select: { name: true } } } as const;
+type Row = Prisma.ProductGetPayload<{ include: typeof withCategory }>;
+
+const toProduct = (r: Row): Product => ({
+  id: r.id,
+  name: r.name,
+  category: r.category.name,
+  price: Number(r.price),
+  stock: r.stock,
+  isActive: r.isActive,
+});
+
+const code = (err: unknown) => (err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined);
+
+export class PrismaProductsRepository implements ProductsRepository {
+  prisma: PrismaClient;
+  constructor(prisma: PrismaClient) {
+    this.prisma = prisma;
+  }
+
+  async list({ category, q, inStock, sort = "name", page = 1, limit = 10 }: ListOptions) {
+    const where: Prisma.ProductWhereInput = {
+      ...(category ? { category: { name: category } } : {}),
+      ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
+      ...(inStock ? { stock: { gt: 0 } } : {}),
+    };
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] = [
+      sort === "name" ? { name: "asc" } : { price: sort === "price" ? "asc" : "desc" },
+      { id: "asc" },
+    ];
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({ where, orderBy, include: withCategory, skip: (page - 1) * limit, take: limit }),
+      this.prisma.product.count({ where }),
+    ]);
+    return { data: rows.map(toProduct), total };
+  }
+
+  async get(id: number) {
+    const row = await this.prisma.product.findUnique({ where: { id }, include: withCategory });
+    return row ? toProduct(row) : undefined;
+  }
+
+  async create({ name, category, price, stock }: { name: string; category: string; price: number; stock: number }) {
+    try {
+      const row = await this.prisma.product.create({
+        data: { name, price, stock, category: { connect: { name: category } } },
+        include: withCategory,
+      });
+      return toProduct(row);
+    } catch (err) {
+      if (code(err) === "P2025") throw new AppError("CATEGORY_NOT_FOUND");
+      throw err;
+    }
+  }
+
+  async update(id: number, { category, ...rest }: Partial<Omit<Product, "id">>) {
+    const exists = await this.prisma.product.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return undefined;
+    try {
+      const row = await this.prisma.product.update({
+        where: { id },
+        data: { ...rest, ...(category ? { category: { connect: { name: category } } } : {}) },
+        include: withCategory,
+      });
+      return toProduct(row);
+    } catch (err) {
+      if (code(err) === "P2025") throw new AppError("CATEGORY_NOT_FOUND");
+      throw err;
+    }
+  }
+
+  async remove(id: number) {
+    try {
+      await this.prisma.product.delete({ where: { id } });
+      return true;
+    } catch (err) {
+      if (code(err) === "P2025") return false;
+      if (code(err) === "P2003") throw new AppError("PRODUCT_HAS_ORDERS");
+      throw err;
+    }
+  }
+}
+```
+<p>ב־<code>update</code>, P2025 יכול לבוא משני מקומות (המוצר או הקטגוריה) — לכן בודקים קודם שהמוצר קיים. (יש בזה מרוץ קטן: מוצר שנמחק בין הבדיקה לעדכון ידווח כ"קטגוריה לא נמצאה". זה מקרה נדיר, ובשביל להבדיל באמת צריך לבדוק את שניהם באותו transaction.)</p>
+@mistakes
+<ul><li>להחזיר את ה־row של Prisma כמו שהוא — <code>categoryId</code> במקום שם, ו־Decimal במקום מספר. ה־repository הוא המקום שמתרגם.</li></ul>
+
+@@ P19-E25 | 5 | אתגר: דוח חודשי עם $queryRaw 🤖 | 30 | כל הפרק
+@task
+<p>בקובץ <code>19-prisma/starter/P19-E25.ts</code> השלם <code>monthlyReport(prisma, year)</code> ← שורה לכל חודש <strong>מ־1 עד 12</strong> של השנה (גם חודשים בלי מכירות!): <code>{ month: "2026-01", orders, revenue, runningTotal }</code> — רק הזמנות שלא בוטלו, חודשים לפי UTC. numbers. שאילתה אחת.</p>
+@hint1
+<p><code>generate_series(1, 12)</code> נותן את 12 החודשים; LEFT JOIN לסכומים.</p>
+@hint2
+<p><code>SUM(revenue) OVER (ORDER BY m)</code> לסכום מצטבר; <code>to_char(make_date(${year}, m, 1), 'YYYY-MM')</code>. ו־<code>::int</code>/<code>::float</code> כדי לקבל מספרים.</p>
+@solution
+```ts save=solutions/P19-E25.ts
+// P19-E25
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function monthlyReport(prisma: PrismaClient, year: number) {
+  return prisma.$queryRaw<{ month: string; orders: number; revenue: number; runningTotal: number }[]>`
+    WITH sales AS (
+      SELECT EXTRACT(MONTH FROM o.created_at AT TIME ZONE 'UTC')::int AS m,
+             COUNT(DISTINCT o.id) AS orders,
+             SUM(oi.quantity * oi.unit_price) AS revenue
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status <> 'cancelled'
+        AND o.created_at >= make_timestamptz(${year}::int, 1, 1, 0, 0, 0, 'UTC')
+        AND o.created_at <  make_timestamptz(${year}::int + 1, 1, 1, 0, 0, 0, 'UTC')
+      GROUP BY 1
+    )
+    SELECT to_char(make_date(${year}::int, g.m, 1), 'YYYY-MM') AS month,
+           COALESCE(s.orders, 0)::int AS orders,
+           COALESCE(s.revenue, 0)::float AS revenue,
+           (SUM(COALESCE(s.revenue, 0)) OVER (ORDER BY g.m))::float AS "runningTotal"
+    FROM generate_series(1, 12) AS g(m)
+    LEFT JOIN sales s ON s.m = g.m
+    ORDER BY g.m`;
+}
+```
+<p>שלושה כלים מהפרקים הקודמים בשאילתה אחת: CTE, LEFT JOIN מ"רשימת כל הערכים" (כדי שחודש ריק יופיע עם 0), ופונקציית חלון. ה־<code>${year}::int</code> — פרמטר עם המרה מפורשת, כי PostgreSQL לא תמיד מנחש את הטיפוס של פרמטר.</p>
+@mistakes
+<ul><li>GROUP BY ישר על orders — חודשים בלי מכירות פשוט לא יופיעו, והגרף בדשבורד "יקפוץ" מפברואר לאפריל.</li></ul>

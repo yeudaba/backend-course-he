@@ -1,0 +1,126 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>`SELECT ... FROM` — אילו עמודות, מאיזו טבלה.</li>
+      <li>`WHERE`: השוואות, `AND`/`OR`, `IN`, `BETWEEN`, `LIKE`.</li>
+      <li>`ORDER BY`, `LIMIT`, `OFFSET`, `DISTINCT`, ביטויים וכינויים.</li>
+    </ul>
+  </div>
+
+  <h2>1. עמודות וביטויים</h2>
+```sql run db=16-sql/files/shop.sql
+SELECT name, price, stock, price * stock AS stock_value
+FROM products
+WHERE category = 'brewing';
+```
+```out
+       name       | price  | stock | stock_value
+------------------+--------+-------+-------------
+ French Press 1L  | 119.00 |    25 |     2975.00
+ V60 Ceramic      |  99.00 |     0 |        0.00
+ Moka Pot 6 Cups  | 149.00 |    12 |     1788.00
+ Gooseneck Kettle | 229.00 |     7 |     1603.00
+(4 rows)
+```
+  <ul>
+    <li>`SELECT *` — כל העמודות. נוח לבדיקה מהירה, אבל בקוד אמיתי כותבים עמודות במפורש (פחות נתונים, ולא נשבר כשמוסיפים עמודה).</li>
+    <li>`price * stock AS stock_value` — עמודה מחושבת עם <strong>כינוי</strong> (alias). הנתונים בטבלה לא משתנים.</li>
+    <li>מחרוזות — ב<strong>גרש בודד</strong>: `'brewing'`. מירכאות כפולות ב־SQL הן לשמות עמודות/טבלאות (`"Order"`), לא לטקסט — טעות נפוצה מאוד.</li>
+  </ul>
+
+  <h2>2. WHERE</h2>
+  <div class="table-wrap"><table>
+    <tr><th>אופרטור</th><th>דוגמה</th></tr>
+    <tr><td>`=` · `<>` · `<` · `>=`</td><td>`stock = 0` · `category <> 'beans'` (שונה)</td></tr>
+    <tr><td>`AND` · `OR` · `NOT`</td><td>`is_active AND stock > 0`</td></tr>
+    <tr><td>`IN (...)`</td><td>`category IN ('beans', 'grinders')`</td></tr>
+    <tr><td>`BETWEEN a AND b`</td><td>`price BETWEEN 50 AND 150` — כולל את הקצוות</td></tr>
+    <tr><td>`LIKE` · `ILIKE`</td><td>`name LIKE '%Grinder%'` — `%` = כל רצף, `_` = תו אחד. `ILIKE` — בלי תלות באותיות גדולות/קטנות</td></tr>
+  </table></div>
+```sql run db=16-sql/files/shop.sql
+SELECT id, name, price
+FROM products
+WHERE is_active AND stock > 0 AND price BETWEEN 50 AND 150;
+```
+```out
+ id |        name        | price
+----+--------------------+--------
+  1 | Ethiopia Beans 1kg |  89.90
+  7 | French Press 1L    | 119.00
+  9 | Moka Pot 6 Cups    | 149.00
+(3 rows)
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ AND לפני OR</span>
+    <p>`WHERE category = 'beans' OR category = 'grinders' AND price < 200` — `AND` נקשר חזק יותר, אז זה "כל ה־beans, ועוד grinders מתחת ל־200". כנראה רצית סוגריים: `(category = 'beans' OR category = 'grinders') AND price < 200`. כלל: כשמערבבים AND ו־OR — תמיד סוגריים.</p>
+  </div>
+```sql run db=16-sql/files/shop.sql
+SELECT full_name, email
+FROM customers
+WHERE email ILIKE '%@example.com' AND full_name LIKE 'D%';
+```
+```out
+ full_name |      email
+-----------+------------------
+ Dana Levi | dana@example.com
+(1 row)
+```
+
+  <h2>3. מיון והגבלה</h2>
+```sql run db=16-sql/files/shop.sql
+SELECT name, category, price
+FROM products
+WHERE is_active
+ORDER BY category, price DESC
+LIMIT 5;
+```
+```out
+          name          |  category   | price
+------------------------+-------------+-------
+ Ceramic Mug            | accessories | 39.00
+ Paper Filters (100)    | accessories | 24.90
+ Grinder Cleaning Brush | accessories | 19.90
+ Ethiopia Beans 1kg     | beans       | 89.90
+ Colombia Beans 1kg     | beans       | 84.90
+(5 rows)
+```
+  <ul>
+    <li>`ORDER BY category, price DESC` — קודם לפי קטגוריה (עולה, ברירת מחדל), ובתוך כל קטגוריה לפי מחיר יורד.</li>
+    <li><strong>בלי ORDER BY אין סדר מובטח</strong>. גם אם היום השורות חוזרות לפי id — מחר, אחרי עדכונים, אולי לא.</li>
+    <li>`LIMIT 5 OFFSET 10` — דלג על 10, תן 5. זו בדיוק ה־pagination מפרק 15: `OFFSET (page - 1) * limit`.</li>
+  </ul>
+
+  <h2>4. DISTINCT</h2>
+```sql run db=16-sql/files/shop.sql
+SELECT DISTINCT category
+FROM products
+ORDER BY category;
+```
+```out
+  category
+-------------
+ accessories
+ beans
+ brewing
+ grinders
+(4 rows)
+```
+  <p>`DISTINCT` מסיר שורות כפולות בתוצאה. ("כמה מוצרים בכל קטגוריה?" — זו כבר שאלה של `GROUP BY`, בפרק 17.)</p>
+
+  <h2>5. סדר הכתיבה מול סדר הביצוע</h2>
+  <p>כותבים `SELECT ... FROM ... WHERE ... ORDER BY ... LIMIT`, אבל המסד מבצע: `FROM` (איזו טבלה) ← `WHERE` (אילו שורות) ← `SELECT` (אילו עמודות) ← `ORDER BY` ← `LIMIT`. לכן אפשר להשתמש בכינוי מ־SELECT ב־ORDER BY, אבל <strong>לא</strong> ב־WHERE:</p>
+```sql run db=16-sql/files/shop.sql stderr
+SELECT name, price * stock AS stock_value
+FROM products
+WHERE stock_value > 5000;
+```
+```out
+ERROR:  column "stock_value" does not exist
+LINE 3: WHERE stock_value > 5000;
+              ^
+```
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P16-E02">E02</a> · <a href="exercises.html#P16-E03">E03</a> · <a href="exercises.html#P16-E06">E06</a> · <a href="exercises.html#P16-E07">E07</a> · <a href="exercises.html#P16-E08">E08</a> · <a href="exercises.html#P16-E09">E09</a> · <a href="exercises.html#P16-E13">E13</a> · <a href="exercises.html#P16-E20">E20</a></p>
+  </div>

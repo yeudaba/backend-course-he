@@ -1,0 +1,93 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <p>Node מגיע עם "ספרייה סטנדרטית" עשירה — לפני שמתקינים חבילה, כדאי לבדוק אם יש כבר משהו מובנה. נכיר את אלה שתשתמש בהם הכי הרבה.</p>
+  </div>
+
+  <h2>1. `path`</h2>
+```js run mjs
+import path from "node:path";
+console.log(path.join("data", "..", "uploads", "a.png"));
+console.log(path.basename("/srv/app/report.pdf"));
+console.log(path.extname("photo.final.jpg"));
+console.log(path.resolve("/srv/app", "logs", "today.log"));
+```
+```out
+uploads/a.png
+report.pdf
+.jpg
+/srv/app/logs/today.log
+```
+  <p>תמיד `path.join` ולא חיבור מחרוזות עם `"/"` — הוא מטפל ב־`..`, בלוכסנים כפולים, ובהבדלים בין מערכות הפעלה.</p>
+  <div class="box error">
+    <span class="box-title">🔐 Path traversal</span>
+    <p>אם משתמש שולח שם קובץ (`"../../etc/passwd"`) ואתה עושה `path.join("uploads", name)` — יצאת מהתיקייה! שם קובץ מהמשתמש: `path.basename(name)` (רק השם, בלי תיקיות), ובדיקה שהנתיב הסופי עדיין בתוך התיקייה המותרת (תרגיל E17).</p>
+  </div>
+
+  <h2>2. `fs/promises`</h2>
+```js run mjs
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "demo-"));
+await fs.mkdir(path.join(dir, "reports", "2026"), { recursive: true });
+await fs.writeFile(path.join(dir, "reports", "2026", "oct.txt"), "שורה 1\n");
+await fs.appendFile(path.join(dir, "reports", "2026", "oct.txt"), "שורה 2\n");
+console.log(await fs.readdir(path.join(dir, "reports", "2026")));
+const stat = await fs.stat(path.join(dir, "reports", "2026", "oct.txt"));
+console.log(stat.size > 0, stat.isFile());
+await fs.rm(dir, { recursive: true });
+```
+```out
+[ 'oct.txt' ]
+true true
+```
+  <p>`mkdir` עם `recursive: true` יוצר את כל התיקיות בדרך (כמו `mkdir -p`). `fs.rm(..., { recursive: true })` מוחק תיקייה עם כל התוכן — <strong>בלי פח</strong>. השתמש בזהירות, ותמיד עם נתיב שאתה בנית.</p>
+
+  <h2>3. `readline` — קובץ גדול, שורה־שורה</h2>
+  <p>`readFile` טוען את <strong>כל</strong> הקובץ לזיכרון. ללוג של 5GB — השרת יקרוס. הפתרון: <strong>stream</strong> — קריאה בחלקים:</p>
+```js run mjs
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import readline from "node:readline";
+
+const file = path.join(os.tmpdir(), "access.log");
+fs.writeFileSync(file, "GET /a 200\nGET /b 404\nPOST /c 500\nGET /d 200\n");
+
+const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
+let errors = 0;
+for await (const line of rl) {
+  const status = Number(line.split(" ")[2]);
+  if (status >= 400) errors++;
+}
+console.log(`שגיאות: ${errors}`);
+```
+```out
+שגיאות: 2
+```
+  <p>`for await` — לולאה על "רצף אסינכרוני": כל סיבוב מחכה לשורה הבאה. הזיכרון בשימוש — שורה אחת בכל רגע, לא משנה כמה גדול הקובץ.</p>
+
+  <h2>4. `crypto`</h2>
+```js run mjs
+import { randomUUID, randomBytes, createHash } from "node:crypto";
+console.log(randomUUID().length);
+console.log(randomBytes(16).toString("hex").length);
+console.log(createHash("sha256").update("hello").digest("hex").slice(0, 16));
+```
+```out
+36
+32
+2cf24dba5fb0a30e
+```
+  <p>`randomUUID` — מזהים ייחודיים (נשתמש בהם ל־request ID ולמפתחות idempotency). `randomBytes` — טוקנים אקראיים בטוחים (איפוס סיסמה). `createHash` — "טביעת אצבע" של תוכן. ⚠️ <strong>לא</strong> לסיסמאות — לסיסמאות יש אלגוריתמים איטיים בכוונה (bcrypt/argon2, פרק 21). ולעולם לא `Math.random()` לשום דבר שקשור לאבטחה — הוא צפוי.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P13-E05">E05</a> · <a href="exercises.html#P13-E11">E11</a> · <a href="exercises.html#P13-E12">E12</a> · <a href="exercises.html#P13-E17">E17</a> · <a href="exercises.html#P13-E18">E18</a> · <a href="exercises.html#P13-E19">E19</a> · <a href="exercises.html#P13-E23">E23</a> — ואת האתגרים <a href="exercises.html#P13-E24">E24</a> ו־<a href="exercises.html#P13-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות ראיון: <em>"מה ההבדל בין dependencies ל־devDependencies?"</em>, <em>"למה ה־lockfile נכנס ל־Git ו־node_modules לא?"</em>, <em>"איך שומרים סודות?"</em>, <em>"איך תקרא קובץ של 10GB?"</em> (streams). ובעבודה — דבר ראשון בפרויקט חדש: לקרוא את <code>package.json</code> (מה ה־scripts? אילו ספריות?) ואת <code>.env.example</code>.</p>
+  </div>

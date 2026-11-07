@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>המודולים המובנים: fs, path, crypto, readline — פרק 13</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 13</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — המודולים המובנים: fs, path, crypto, readline</h1>
+  <p class="subtitle">⏱ ~35 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <p>Node מגיע עם "ספרייה סטנדרטית" עשירה — לפני שמתקינים חבילה, כדאי לבדוק אם יש כבר משהו מובנה. נכיר את אלה שתשתמש בהם הכי הרבה.</p>
+  </div>
+
+  <h2>1. <code>path</code></h2>
+<pre><code class="lang-js">import path from "node:path";
+console.log(path.join("data", "..", "uploads", "a.png"));
+console.log(path.basename("/srv/app/report.pdf"));
+console.log(path.extname("photo.final.jpg"));
+console.log(path.resolve("/srv/app", "logs", "today.log"));</code></pre>
+<pre class="terminal">uploads/a.png
+report.pdf
+.jpg
+/srv/app/logs/today.log</pre>
+  <p>תמיד <code>path.join</code> ולא חיבור מחרוזות עם <code>"/"</code> — הוא מטפל ב־<code>..</code>, בלוכסנים כפולים, ובהבדלים בין מערכות הפעלה.</p>
+  <div class="box error">
+    <span class="box-title">🔐 Path traversal</span>
+    <p>אם משתמש שולח שם קובץ (<code>"../../etc/passwd"</code>) ואתה עושה <code>path.join("uploads", name)</code> — יצאת מהתיקייה! שם קובץ מהמשתמש: <code>path.basename(name)</code> (רק השם, בלי תיקיות), ובדיקה שהנתיב הסופי עדיין בתוך התיקייה המותרת (תרגיל E17).</p>
+  </div>
+
+  <h2>2. <code>fs/promises</code></h2>
+<pre><code class="lang-js">import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "demo-"));
+await fs.mkdir(path.join(dir, "reports", "2026"), { recursive: true });
+await fs.writeFile(path.join(dir, "reports", "2026", "oct.txt"), "שורה 1\n");
+await fs.appendFile(path.join(dir, "reports", "2026", "oct.txt"), "שורה 2\n");
+console.log(await fs.readdir(path.join(dir, "reports", "2026")));
+const stat = await fs.stat(path.join(dir, "reports", "2026", "oct.txt"));
+console.log(stat.size &gt; 0, stat.isFile());
+await fs.rm(dir, { recursive: true });</code></pre>
+<pre class="terminal">[ 'oct.txt' ]
+true true</pre>
+  <p><code>mkdir</code> עם <code>recursive: true</code> יוצר את כל התיקיות בדרך (כמו <code>mkdir -p</code>). <code>fs.rm(..., { recursive: true })</code> מוחק תיקייה עם כל התוכן — <strong>בלי פח</strong>. השתמש בזהירות, ותמיד עם נתיב שאתה בנית.</p>
+
+  <h2>3. <code>readline</code> — קובץ גדול, שורה־שורה</h2>
+  <p><code>readFile</code> טוען את <strong>כל</strong> הקובץ לזיכרון. ללוג של 5GB — השרת יקרוס. הפתרון: <strong>stream</strong> — קריאה בחלקים:</p>
+<pre><code class="lang-js">import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import readline from "node:readline";
+
+const file = path.join(os.tmpdir(), "access.log");
+fs.writeFileSync(file, "GET /a 200\nGET /b 404\nPOST /c 500\nGET /d 200\n");
+
+const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
+let errors = 0;
+for await (const line of rl) {
+  const status = Number(line.split(" ")[2]);
+  if (status &gt;= 400) errors++;
+}
+console.log(`שגיאות: ${errors}`);</code></pre>
+<pre class="terminal">שגיאות: 2</pre>
+  <p><code>for await</code> — לולאה על "רצף אסינכרוני": כל סיבוב מחכה לשורה הבאה. הזיכרון בשימוש — שורה אחת בכל רגע, לא משנה כמה גדול הקובץ.</p>
+
+  <h2>4. <code>crypto</code></h2>
+<pre><code class="lang-js">import { randomUUID, randomBytes, createHash } from "node:crypto";
+console.log(randomUUID().length);
+console.log(randomBytes(16).toString("hex").length);
+console.log(createHash("sha256").update("hello").digest("hex").slice(0, 16));</code></pre>
+<pre class="terminal">36
+32
+2cf24dba5fb0a30e</pre>
+  <p><code>randomUUID</code> — מזהים ייחודיים (נשתמש בהם ל־request ID ולמפתחות idempotency). <code>randomBytes</code> — טוקנים אקראיים בטוחים (איפוס סיסמה). <code>createHash</code> — "טביעת אצבע" של תוכן. ⚠️ <strong>לא</strong> לסיסמאות — לסיסמאות יש אלגוריתמים איטיים בכוונה (bcrypt/argon2, פרק 21). ולעולם לא <code>Math.random()</code> לשום דבר שקשור לאבטחה — הוא צפוי.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P13-E05">E05</a> · <a href="exercises.html#P13-E11">E11</a> · <a href="exercises.html#P13-E12">E12</a> · <a href="exercises.html#P13-E17">E17</a> · <a href="exercises.html#P13-E18">E18</a> · <a href="exercises.html#P13-E19">E19</a> · <a href="exercises.html#P13-E23">E23</a> — ואת האתגרים <a href="exercises.html#P13-E24">E24</a> ו־<a href="exercises.html#P13-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות ראיון: <em>"מה ההבדל בין dependencies ל־devDependencies?"</em>, <em>"למה ה־lockfile נכנס ל־Git ו־node_modules לא?"</em>, <em>"איך שומרים סודות?"</em>, <em>"איך תקרא קובץ של 10GB?"</em> (streams). ובעבודה — דבר ראשון בפרויקט חדש: לקרוא את <code>package.json</code> (מה ה־scripts? אילו ספריות?) ואת <code>.env.example</code>.</p>
+  </div>
+
+<div class="pager"><a href="lesson-03-config.html"><small>הקודם</small>שיעור 3 — הגדרות וסודות: .env</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

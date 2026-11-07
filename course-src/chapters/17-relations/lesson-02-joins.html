@@ -1,0 +1,114 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>`JOIN ... ON` — לחבר שורות משתי טבלאות.</li>
+      <li>`INNER` מול `LEFT`: מה קורה לשורות בלי התאמה.</li>
+      <li>JOIN של כמה טבלאות, וכינויי טבלאות.</li>
+    </ul>
+  </div>
+
+  <h2>1. INNER JOIN</h2>
+```sql run db=17-relations/files/store.sql
+SELECT o.id, c.full_name, o.status
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.created_at < '2026-03-01'
+ORDER BY o.id;
+```
+```out
+ id |  full_name   |  status
+----+--------------+-----------
+  1 | Dana Levi    | shipped
+  2 | Yossi Cohen  | shipped
+  3 | Dana Levi    | shipped
+  4 | Noa Mizrahi  | cancelled
+  5 | Michal Biton | shipped
+(5 rows)
+```
+  <ul>
+    <li>`FROM orders o` — `o` הוא כינוי לטבלה. חוסך הקלדה, וחובה כשאותה עמודה (`id`) קיימת בשתי הטבלאות: `o.id`, `c.id`.</li>
+    <li>`JOIN customers c ON c.id = o.customer_id` — לכל הזמנה, מצא את הלקוח שה־id שלו שווה ל־customer_id. `JOIN` לבד = `INNER JOIN`.</li>
+    <li>התוצאה: שורה לכל <strong>זוג מתאים</strong>. הזמנה בלי לקוח (אין כאלה, בזכות ה־FK), או לקוח בלי הזמנה — לא מופיעים.</li>
+  </ul>
+
+  <h2>2. LEFT JOIN</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="INNER מול LEFT JOIN: לקוחות בלי הזמנות">
+      <g class="mono" style="font-size:12px">
+        <text x="40" y="24" style="font-weight:700">customers</text>
+        <rect x="40" y="34" width="120" height="26" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="50" y="52">Dana</text>
+        <rect x="40" y="60" width="120" height="26" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="50" y="78">Yossi</text>
+        <rect x="40" y="86" width="120" height="26" style="fill:var(--red-soft);stroke:var(--red)"/><text x="50" y="104">Avi</text>
+        <text x="200" y="24" style="font-weight:700">orders</text>
+        <rect x="200" y="34" width="120" height="26" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="210" y="52">#1 Dana</text>
+        <rect x="200" y="60" width="120" height="26" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="210" y="78">#3 Dana</text>
+        <rect x="200" y="86" width="120" height="26" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="210" y="104">#2 Yossi</text>
+
+        <text x="400" y="24" style="font-weight:700">INNER JOIN</text>
+        <text x="400" y="52">Dana  | #1</text><text x="400" y="74">Dana  | #3</text><text x="400" y="96">Yossi | #2</text>
+        <text x="570" y="24" style="font-weight:700">LEFT JOIN</text>
+        <text x="570" y="52">Dana  | #1</text><text x="570" y="74">Dana  | #3</text><text x="570" y="96">Yossi | #2</text>
+        <rect x="562" y="102" width="130" height="24" style="fill:var(--red-soft);stroke:var(--red)"/><text x="570" y="119">Avi   | NULL</text>
+      </g>
+      <g text-anchor="middle" style="font-size:12px">
+        <text x="460" y="150" direction="rtl">Avi נעלם — אין לו התאמה</text>
+        <text x="630" y="150" direction="rtl">Avi נשאר, עם NULL בצד ההזמנה</text>
+      </g>
+      <text x="360" y="190" text-anchor="middle" direction="rtl" style="font-size:13px">LEFT = "כל השורות מהטבלה השמאלית (FROM), ואם יש — את המתאימות מהימנית"</text>
+    </svg>
+    <figcaption>איור 1: לקוח עם 2 הזמנות ← 2 שורות. לקוח בלי הזמנות ← 0 שורות ב־INNER, שורה אחת עם NULL ב־LEFT.</figcaption>
+  </figure>
+```sql run db=17-relations/files/store.sql
+SELECT c.full_name, o.id AS order_id
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+WHERE o.id IS NULL;
+```
+```out
+  full_name  | order_id
+-------------+----------
+ Omer Shalom |
+ Avi Peretz  |
+(2 rows)
+```
+  <p>זו התבנית הקלאסית ל"מי שאין לו": LEFT JOIN, ואז `WHERE <צד ימין>.id IS NULL`. "לקוחות שלא הזמינו", "מוצרים שלא נמכרו", "קטגוריות ריקות".</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ LEFT JOIN שהפך ל־INNER בשקט</span>
+    <p>"כל הלקוחות, עם ההזמנות ששולמו (אם יש)": `LEFT JOIN orders o ON o.customer_id = c.id WHERE o.status = 'paid'` — ה־WHERE מסנן את השורות עם NULL (כי `NULL = 'paid'` אינו true), ו־Avi נעלם שוב. תנאי על הטבלה הימנית ב־LEFT JOIN — שמים ב־<strong>ON</strong>: `LEFT JOIN orders o ON o.customer_id = c.id AND o.status = 'paid'`.</p>
+  </div>
+
+  <h2>3. כמה טבלאות</h2>
+```sql run db=17-relations/files/store.sql
+SELECT o.id AS order_id, c.full_name, p.name AS product, cat.name AS category, oi.quantity
+FROM orders o
+JOIN customers c     ON c.id = o.customer_id
+JOIN order_items oi  ON oi.order_id = o.id
+JOIN products p      ON p.id = oi.product_id
+JOIN categories cat  ON cat.id = p.category_id
+WHERE o.id IN (1, 5)
+ORDER BY o.id, p.name;
+```
+```out
+ order_id |  full_name   |       product       |  category   | quantity
+----------+--------------+---------------------+-------------+----------
+        1 | Dana Levi    | Ethiopia Beans 1kg  | beans       |        2
+        1 | Dana Levi    | Paper Filters (100) | accessories |        1
+        5 | Michal Biton | Ethiopia Beans 1kg  | beans       |        1
+        5 | Michal Biton | Moka Pot 6 Cups     | brewing     |        1
+        5 | Michal Biton | Paper Filters (100) | accessories |        2
+(5 rows)
+```
+  <p>כל JOIN מוסיף טבלה לפי הקשר שלה (ה־FK). שים לב: הזמנה 5 מופיעה <strong>3 פעמים</strong> — פעם לכל פריט. JOIN "מכפיל" שורות לפי מספר ההתאמות. לכן אחרי JOIN שואלים תמיד: "מה שורה אחת בתוצאה מייצגת?" (כאן: פריט בהזמנה).</p>
+  <div class="table-wrap"><table>
+    <tr><th>סוג</th><th>מה מחזיר</th></tr>
+    <tr><td>`[INNER] JOIN`</td><td>רק זוגות מתאימים</td></tr>
+    <tr><td>`LEFT [OUTER] JOIN`</td><td>כל השמאלית + התאמות (או NULL)</td></tr>
+    <tr><td>`RIGHT JOIN`</td><td>כמו LEFT מהצד השני — כמעט לא משתמשים (פשוט הופכים את הסדר)</td></tr>
+    <tr><td>`FULL JOIN`</td><td>כל השורות משתי הטבלאות — נדיר (השוואת שתי רשימות)</td></tr>
+    <tr><td>`CROSS JOIN`</td><td>כל צירוף אפשרי — בדרך כלל באג (שכחת ON)</td></tr>
+  </table></div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P17-E03">E03</a> · <a href="exercises.html#P17-E06">E06</a> · <a href="exercises.html#P17-E07">E07</a> · <a href="exercises.html#P17-E08">E08</a> · <a href="exercises.html#P17-E09">E09</a> · <a href="exercises.html#P17-E20">E20</a> · <a href="exercises.html#P17-E21">E21</a></p>
+  </div>

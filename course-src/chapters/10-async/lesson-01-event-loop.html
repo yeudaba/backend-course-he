@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>ההבדל בין סינכרוני לאסינכרוני — באנלוגיה ובקוד.</li>
+      <li>`setTimeout` — הפעולה האסינכרונית הפשוטה ביותר.</li>
+      <li>ה־event loop: למה הסדר של ההדפסות "מוזר".</li>
+    </ul>
+  </div>
+
+  <h2>1. מלצר אחד, הרבה שולחנות</h2>
+  <p>דמיין מסעדה עם מלצר אחד. <strong>מלצר סינכרוני</strong> לוקח הזמנה משולחן 1, הולך למטבח, <em>עומד ומחכה</em> 20 דקות עד שהמנה מוכנה, מגיש — ורק אז ניגש לשולחן 2. <strong>מלצר אסינכרוני</strong> לוקח הזמנה, מוסר למטבח, וממשיך לשולחן 2, 3, 4. כשהמטבח מצלצל "מנה מוכנה" — הוא מגיש.</p>
+  <p>Node הוא המלצר האסינכרוני: יש לו <strong>תהליכון אחד</strong> שמריץ את הקוד שלך, אבל פעולות איטיות (רשת, קבצים, מסד נתונים) נמסרות "למטבח" — מערכת ההפעלה — והוא ממשיך הלאה. כך שרת אחד מטפל באלפי בקשות.</p>
+
+  <h2>2. `setTimeout`</h2>
+```js run
+console.log("מזמין קפה");
+setTimeout(() => {
+  console.log("☕ הקפה מוכן");
+}, 1000);
+console.log("קורא עיתון בינתיים");
+```
+```out
+מזמין קפה
+קורא עיתון בינתיים
+☕ הקפה מוכן
+```
+  <p>`setTimeout(fn, ms)` אומר: "תריץ את `fn` בעוד `ms` מילישניות (לפחות)". השורה האחרונה לא חיכתה — היא רצה מיד, והקפה הגיע שנייה אחר כך. (1000 מילישניות = שנייה.)</p>
+
+  <h2>3. ⚡ ה־event loop</h2>
+  <div class="box warn">
+    <span class="box-title">⚡ הנושא הזה הוא שאלת ראיון קבועה</span>
+```js run
+console.log("1");
+setTimeout(() => console.log("timeout"), 0);
+Promise.resolve().then(() => console.log("promise"));
+console.log("2");
+```
+```out
+1
+2
+promise
+timeout
+```
+    <p>גם `setTimeout` של 0 מילישניות רץ <strong>אחרי</strong> "2". ו־Promise רץ לפני ה־timeout. למה?</p>
+  </div>
+  <figure>
+    <svg viewBox="0 0 720 260" role="img" aria-label="ה-event loop: מחסנית קריאות, תור משימות קטנות ותור משימות">
+      <defs><marker id="ael" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="480" y="20" width="220" height="150" rx="12" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:2"/>
+      <text x="590" y="48" text-anchor="middle" direction="rtl" style="font-size:16px;font-weight:700">① הקוד שרץ עכשיו</text>
+      <text x="590" y="68" text-anchor="middle" class="mono" style="font-size:12px;fill:var(--muted)">call stack</text>
+      <text x="590" y="100" text-anchor="middle" direction="rtl" style="font-size:13px">רץ עד הסוף,</text>
+      <text x="590" y="120" text-anchor="middle" direction="rtl" style="font-size:13px">בלי הפרעות</text>
+      <rect x="250" y="20" width="200" height="70" rx="12" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+      <text x="350" y="48" text-anchor="middle" direction="rtl" style="font-size:15px;font-weight:700">② תור Promises</text>
+      <text x="350" y="72" text-anchor="middle" class="mono" style="font-size:12px">then ← "promise"</text>
+      <rect x="250" y="110" width="200" height="70" rx="12" style="fill:var(--amber-soft);stroke:var(--amber);stroke-width:2"/>
+      <text x="350" y="138" text-anchor="middle" direction="rtl" style="font-size:15px;font-weight:700">③ תור משימות</text>
+      <text x="350" y="162" text-anchor="middle" class="mono" style="font-size:12px">setTimeout ← "timeout"</text>
+      <rect x="20" y="20" width="200" height="160" rx="12" style="fill:var(--svg-fill);stroke:var(--muted);stroke-width:2;stroke-dasharray:6 4"/>
+      <text x="120" y="48" text-anchor="middle" direction="rtl" style="font-size:15px;font-weight:700">"המטבח"</text>
+      <text x="120" y="72" text-anchor="middle" direction="rtl" style="font-size:12px">מערכת ההפעלה:</text>
+      <text x="120" y="92" text-anchor="middle" direction="rtl" style="font-size:12px">טיימרים, רשת, קבצים</text>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M222 140 H 246" marker-end="url(#ael)"/>
+        <path d="M454 55 H 476" marker-end="url(#ael)"/>
+        <path d="M454 145 C 466 145, 466 120, 476 120" marker-end="url(#ael)"/>
+      </g>
+      <text x="360" y="215" text-anchor="middle" direction="rtl" style="font-size:14px">הלולאה: כשהקוד הנוכחי מסתיים ← כל התור הירוק ← משימה אחת מהכתום ← שוב הירוק...</text>
+      <text x="360" y="240" text-anchor="middle" direction="rtl" style="font-size:13px;fill:var(--muted)">לכן "promise" (ירוק) לפני "timeout" (כתום), ושניהם רק אחרי ש"2" הודפס</text>
+    </svg>
+    <figcaption>איור 1: event loop בפשטות. הקוד שרץ עכשיו לעולם לא נקטע באמצע.</figcaption>
+  </figure>
+  <ol class="steps">
+    <li>Node מריץ את הקובץ מלמעלה למטה: מדפיס "1", <em>רושם</em> טיימר, <em>רושם</em> Promise, מדפיס "2".</li>
+    <li>הקוד הנוכחי הסתיים. עכשיו — תור ה־Promises: "promise".</li>
+    <li>ואז תור המשימות: הטיימר כבר הבשיל ← "timeout".</li>
+  </ol>
+  <p>שתי מסקנות חשובות לעבודה:</p>
+  <ul>
+    <li><strong>callback לעולם לא קוטע קוד שרץ.</strong> אין "שני דברים באמת באותו רגע" ב־JavaScript שלך — לכן אין צורך בנעילות כמו בשפות אחרות (בתוך תהליך אחד).</li>
+    <li><strong>קוד כבד וסינכרוני חוסם הכול.</strong> לולאה של 5 שניות בשרת = 5 שניות שבהן אף בקשה אחרת לא מקבלת תשובה, וגם טיימרים מתעכבים.</li>
+  </ul>
+```js run
+const start = Date.now();
+setTimeout(() => console.log(`הטיימר רץ אחרי ~${Math.round((Date.now() - start) / 100) * 100}ms`), 100);
+while (Date.now() - start < 500) {
+  // לולאה "עסוקה" של חצי שנייה
+}
+console.log("הלולאה הסתיימה");
+```
+```out
+הלולאה הסתיימה
+הטיימר רץ אחרי ~500ms
+```
+  <p>ביקשנו 100ms — קיבלנו 500. הטיימר "הבשיל" בזמן, אבל המלצר היה עסוק.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P10-E01">E01</a> · <a href="exercises.html#P10-E02">E02</a> · <a href="exercises.html#P10-E06">E06</a></p>
+  </div>

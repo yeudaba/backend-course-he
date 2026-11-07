@@ -1,0 +1,105 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>`Set` — אוסף בלי כפילויות.</li>
+      <li>`Map` — מילון מפתח ← ערך עם חיפוש מהיר.</li>
+      <li><strong>יחידת גישור:</strong> תוכנית קטנה מקצה לקצה עם נתונים מקושרים (הזמנות ולקוחות).</li>
+    </ul>
+  </div>
+
+  <h2>1. `Set`</h2>
+```js run
+const visitors = new Set();
+visitors.add("dana");
+visitors.add("omer");
+visitors.add("dana");
+console.log(visitors.size, visitors.has("dana"), visitors.has("noa"));
+
+const tags = ["node", "api", "node", "sql", "api"];
+console.log([...new Set(tags)]);
+```
+```out
+2 true false
+[ 'node', 'api', 'sql' ]
+```
+  <p>`Set` שומר כל ערך פעם אחת. `has` מהיר מאוד גם עם מיליון ערכים — בניגוד ל־`includes` על מערך, שעובר על כל האיברים. `[...new Set(arr)]` הוא הקיצור ל־`unique` שכתבת ב־P06-E13.</p>
+
+  <h2>2. `Map`</h2>
+```js run
+const stock = new Map();
+stock.set("KB-101", 4);
+stock.set("MS-201", 0);
+console.log(stock.get("KB-101"));
+console.log(stock.get("XX"));
+console.log(stock.has("MS-201"), stock.size);
+stock.set("KB-101", stock.get("KB-101") - 1);
+for (const [code, qty] of stock) {
+  console.log(code, qty);
+}
+```
+```out
+4
+undefined
+true 2
+KB-101 3
+MS-201 0
+```
+  <div class="table-wrap"><table>
+    <tr><th></th><th>אובייקט רגיל `{}`</th><th>`Map`</th></tr>
+    <tr><td>מתי</td><td>"כרטיס" עם שדות ידועים: `user.name`, `user.age`</td><td>מילון של <strong>הרבה</strong> רשומות שהמפתחות שלהן דינמיים: מזהה ← משתמש</td></tr>
+    <tr><td>מפתחות</td><td>רק מחרוזות</td><td>כל סוג (גם מספרים, גם אובייקטים)</td></tr>
+    <tr><td>גודל</td><td>`Object.keys(o).length`</td><td>`map.size`</td></tr>
+  </table></div>
+
+  <h2>3. 👣 גישור: חיבור נתונים מקושרים</h2>
+  <p>במערכת אמיתית הנתונים מפוצלים: הזמנה לא מכילה את כל פרטי הלקוח — רק את המזהה שלו (`customerId`). כדי להציג "הזמנה 7 של עומר מאילת", צריך <strong>לחבר</strong> שני מקורות. זה בדיוק מה ש־SQL עושה עם `JOIN` (פרק 17) — ועכשיו נעשה את זה בקוד.</p>
+```js run
+const customers = [
+  { id: 1, name: "דנה", city: "חיפה" },
+  { id: 2, name: "עומר", city: "אילת" },
+];
+const orders = [
+  { id: 7, customerId: 2, total: 320 },
+  { id: 8, customerId: 1, total: 150 },
+  { id: 9, customerId: 2, total: 80 },
+  { id: 10, customerId: 3, total: 40 },
+];
+
+const customersById = new Map(customers.map((c) => [c.id, c]));
+
+const report = orders.map((o) => {
+  const customer = customersById.get(o.customerId);
+  return `הזמנה ${o.id}: ${customer?.name ?? "לקוח לא ידוע"} (${customer?.city ?? "-"}) — ₪${o.total}`;
+});
+console.log(report.join("\n"));
+
+const totals = new Map();
+for (const o of orders) {
+  totals.set(o.customerId, (totals.get(o.customerId) ?? 0) + o.total);
+}
+console.log(totals);
+```
+```out
+הזמנה 7: עומר (אילת) — ₪320
+הזמנה 8: דנה (חיפה) — ₪150
+הזמנה 9: עומר (אילת) — ₪80
+הזמנה 10: לקוח לא ידוע (-) — ₪40
+Map(3) { 2 => 400, 1 => 150, 3 => 40 }
+```
+  <h3>למה Map ולא `find`?</h3>
+  <p>הגרסה ה"נאיבית" — `customers.find((c) => c.id === o.customerId)` בתוך ה־`map` — היא לולאה בתוך לולאה: על כל הזמנה עוברים על כל הלקוחות. עם 10,000 הזמנות ו־10,000 לקוחות — 100 מיליון השוואות. עם `Map` — בונים פעם אחת (10,000 צעדים), ואז כל `get` הוא צעד אחד: ~20,000 צעדים בסך הכול.</p>
+  <div class="box tip">
+    <span class="box-title">💡 הדפוס: "בנה אינדקס, ואז חפש"</span>
+    <p>`new Map(list.map((x) => [x.id, x]))` — שורה שתכתוב שוב ושוב. היא הופכת מערך למילון לפי מזהה. וזה בדיוק מה ש"אינדקס" עושה במסד נתונים (פרק 18).</p>
+  </div>
+  <p>ושים לב להזמנה 10: לקוח 3 לא קיים. בנתונים אמיתיים זה <em>יקרה</em> (לקוח נמחק, באג בייבוא). קוד טוב לא קורס — `?.` ו־`??` מציגים "לקוח לא ידוע". במסד נתונים נמנע את זה מראש עם foreign key (פרק 17).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P07-E05">E05</a> · <a href="exercises.html#P07-E18">E18</a> · <a href="exercises.html#P07-E19">E19</a> · <a href="exercises.html#P07-E23">E23</a> — ואת האתגרים <a href="exercises.html#P07-E24">E24</a> ו־<a href="exercises.html#P07-E25">E25</a>.</p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>זוכר את twoSum מ־P06-E25? המראיין שואל "אפשר מהר יותר?". התשובה: <code>Map</code> של "ערך ← אינדקס"; לכל מספר בודקים אם <code>target - n</code> כבר במפה. מעבר אחד, O(n). תכתוב את זה בתרגיל P07-E25.</p>
+  </div>

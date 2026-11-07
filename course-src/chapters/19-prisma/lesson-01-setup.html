@@ -1,0 +1,137 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה ORM נותן — ומה המחיר.</li>
+      <li>החלקים של Prisma 7: schema, config, migrations, client.</li>
+      <li>הקמה בפרויקט חדש, צעד אחר צעד.</li>
+      <li>⚠️ מלכודת אזור הזמן — ואיך נמנעים ממנה.</li>
+    </ul>
+  </div>
+
+  <h2>1. אותה שאילתה, פעמיים</h2>
+```ts
+// pg (פרק 18): מחרוזת SQL, ותוצאה מסוג any
+const { rows } = await pool.query(
+  "SELECT id, name, price FROM products WHERE is_active AND price < $1 ORDER BY price", [50]);
+rows[0].nmae; // שגיאת כתיב — TypeScript לא יודע. undefined בזמן ריצה
+
+// Prisma: שאילתה כקוד, ותוצאה מוקלדת
+const products = await prisma.product.findMany({
+  where: { isActive: true, price: { lt: 50 } },
+  select: { id: true, name: true, price: true },
+  orderBy: { price: "asc" },
+});
+products[0].nmae; // ✘ שגיאת TypeScript מיד ב־VS Code
+```
+  <div class="table-wrap"><table>
+    <tr><th>מה ORM נותן</th><th>מה המחיר</th></tr>
+    <tr><td>טיפוסים מלאים, השלמה אוטומטית</td><td>שכבה נוספת ללמוד ולדבג</td></tr>
+    <tr><td>migrations מנוהלים מהסכמה</td><td>לא כל שאילתה מורכבת נוחה לכתיבה (ואז — SQL ישיר)</td></tr>
+    <tr><td>קשרים (`include`) בלי JOIN ידני, ובלי N+1</td><td>קל לכתוב שאילתה לא יעילה בלי לראות את ה־SQL</td></tr>
+    <tr><td>הגנה מ־SQL injection כברירת מחדל</td><td>תלות בספרייה ובגרסה שלה</td></tr>
+  </table></div>
+  <p>בגלל השורה האחרונה בצד ימין, למדת SQL קודם: כשהשאילתה של Prisma איטית, תדע לקרוא מה הוא שלח למסד.</p>
+
+  <h2>2. ארבעת החלקים</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="schema.prisma מייצר migrations ו־Prisma Client">
+      <defs><marker id="pz" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="270" y="20" width="180" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="490" y="130" width="200" height="60" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="30" y="130" width="200" height="60" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="290" y="130" width="140" height="60" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M410 82 L 560 126" marker-end="url(#pz)"/>
+        <path d="M310 82 L 160 126" marker-end="url(#pz)"/>
+        <path d="M486 160 H 434" marker-end="url(#pz)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="360" y="46" class="mono" style="font-size:13px;font-weight:700">prisma/schema.prisma</text>
+        <text x="360" y="66" direction="rtl" style="font-size:11px">מקור האמת: המודלים</text>
+        <text x="590" y="156" class="mono" style="font-size:12px;font-weight:700">prisma/migrations/</text>
+        <text x="590" y="176" direction="rtl" style="font-size:11px">קובצי SQL — נכנסים ל־Git</text>
+        <text x="130" y="156" class="mono" style="font-size:12px;font-weight:700">generated/prisma/</text>
+        <text x="130" y="176" direction="rtl" style="font-size:11px">Prisma Client — לא ב־Git</text>
+        <text x="360" y="156" class="mono" style="font-size:12px;font-weight:700">PostgreSQL</text>
+        <text x="360" y="176" direction="rtl" style="font-size:11px">הטבלאות</text>
+        <text x="520" y="100" class="mono" style="font-size:11px">migrate dev</text>
+        <text x="200" y="100" class="mono" style="font-size:11px">generate</text>
+        <text x="460" y="152" class="mono" style="font-size:10px">migrate</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: משנים את הסכמה ← `migrate dev` יוצר קובץ SQL ומריץ אותו ← `generate` מעדכן את הטיפוסים. ו־`prisma.config.ts` אומר ל־CLI איפה הכול ולאיזה מסד להתחבר.</figcaption>
+  </figure>
+
+  <h2>3. הקמה בפרויקט</h2>
+  <p>(בתיקיית הפרק כבר הכול מוכן — את זה תעשה בפרויקט 2 בשיעור 4. קרא עכשיו, כדי להבין מה יש שם.)</p>
+```term
+% npm install @prisma/client @prisma/adapter-pg pg
+% npm install -D prisma dotenv
+```
+  <p><strong>`prisma.config.ts`</strong> בשורש הפרויקט (את הקובץ הזה כותבים בעצמנו; `npx prisma init` בגרסה 7.10 יוצר אותו בשם `prisma7.config.ts` — אפשר לשנות שם, או פשוט לכתוב):</p>
+```ts file=prisma.config.ts
+import "dotenv/config";                       // טוען את .env (Prisma 7 לא עושה זאת לבד)
+import { defineConfig } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: { path: "prisma/migrations" },
+  datasource: { url: process.env.DATABASE_URL },
+});
+```
+  <p><strong>`prisma/schema.prisma`</strong>:</p>
+```text file=prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Product {
+  id       Int     @id @default(autoincrement())
+  name     String
+  price    Decimal @db.Decimal(10, 2)
+  isActive Boolean @default(true) @map("is_active")
+
+  @@map("products")
+}
+```
+```term
+% npx prisma migrate dev --name init
+Applying migration `20261104200235_init`
+.. ...
+Your database is now in sync with your schema.
+% npx prisma generate
+✔ Generated Prisma Client (7.10.1) to ./src/generated/prisma in 14ms
+```
+  <p>שים לב: ב־Prisma 7, `migrate dev` <strong>לא</strong> מריץ `generate` בשבילך. שינית סכמה? שתי הפקודות. (ותוסיף `src/generated` ל־`.gitignore` — זה קוד שנוצר, כמו `node_modules`.)</p>
+  <p>וה־client עצמו:</p>
+```ts file=src/db.ts
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "./generated/prisma/client.ts";
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+  options: "-c timezone=UTC",   // ← ראה סעיף 4
+});
+export const prisma = new PrismaClient({ adapter });
+```
+  <p>ב־Prisma 7 החיבור למסד עובר דרך <strong>driver adapter</strong> — כאן `@prisma/adapter-pg`, שמבוסס על אותה ספריית `pg` מפרק 18. אובייקט `prisma` אחד לכל האפליקציה (יש לו pool של חיבורים בפנים), לא אחד לכל בקשה.</p>
+
+  <h2>4. ⚠️ מלכודת אזור הזמן</h2>
+  <p>ניסוי אמיתי, על מסד שה־TimeZone שלו `Asia/Jerusalem` (ברירת המחדל אצלך, אם ה־Mac מוגדר לישראל): הזמנה שנוצרה ב־SQL ב־`09:12+02` (כלומר 07:12 UTC), ונקראה דרך Prisma:</p>
+```term
+.. בלי options:                    order.createdAt → 2026-01-05T09:12:00.000Z   ✘ (שעתיים הפרש)
+.. עם options: "-c timezone=UTC":  order.createdAt → 2026-01-05T07:12:00.000Z   ✔
+```
+  <p>בגרסה הזו, Prisma מפרש את הזמנים שהמסד מחזיר כאילו הם ב־UTC — וכשה־session של המסד באזור זמן אחר, כל זמן זז. (גם בכתיבה: תאריך שנשמר דרך Prisma יוצא שגוי כשקוראים אותו ב־SQL.) הפתרון: לבקש מהמסד לעבוד ב־UTC בכל חיבור — זה ה־`options`. וזה גם כלל טוב בכלל: <strong>שרתים ומסדי נתונים עובדים ב־UTC</strong>, ורק התצוגה למשתמש מתורגמת לשעון המקומי (פרק 24).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19-E01">E01</a> · <a href="exercises.html#P19-E02">E02</a></p>
+  </div>

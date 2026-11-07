@@ -1,0 +1,688 @@
+@@ P16-E01 | 1 | איזה טיפוס? | 10 | שיעור 4
+@task
+<p>טבלת <code>orders</code> של חנות. לכל עמודה — טיפוס ואילוצים מתאימים, ולמה:</p>
+<ol><li>מזהה ההזמנה</li><li>סכום לתשלום</li><li>כמות פריטים</li><li>מספר טלפון ליצירת קשר</li><li>הערות ללקוח (לא חובה)</li><li>מתי ההזמנה נוצרה</li><li>תאריך משלוח מבוקש</li><li>האם זו מתנה</li><li>סטטוס: חדשה / נשלחה / בוטלה</li></ol>
+@hint1
+<p>טלפון הוא מספר? האם עושים עליו חשבון?</p>
+@hint2
+<p>"מתי נוצרה" = רגע בזמן. "תאריך משלוח" = יום.</p>
+@solution
+<ol><li><code>integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY</code> (או <code>bigint</code> אם מצפים למיליארדים)</li><li><code>numeric(10, 2) NOT NULL CHECK (total &gt;= 0)</code> — לא float</li><li><code>integer NOT NULL CHECK (quantity &gt; 0)</code></li><li><code>text</code> — מספר טלפון הוא <em>מחרוזת</em>: אפס מוביל (050...), מקפים, <code>+972</code>. לא עושים עליו חשבון.</li><li><code>text</code> (nullable), אולי <code>CHECK (length(notes) &lt;= 1000)</code></li><li><code>timestamptz NOT NULL DEFAULT now()</code></li><li><code>date</code></li><li><code>boolean NOT NULL DEFAULT false</code></li><li><code>text NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'shipped', 'cancelled'))</code> (בהמשך נכיר גם enum)</li></ol>
+@mistakes
+<ul><li>טלפון כ־integer — 050 הופך ל־50, ו־<code>+972</code> בכלל לא נכנס.</li></ul>
+
+@@ P16-E02 | 1 | מה יוחזר? | 10 | שיעור 2
+@task
+<p>בלי להריץ: אילו מוצרים (לפי השם) יחזיר כל אחד? (הסתכל על הנתונים ב־<code>files/shop.sql</code>.)</p>
+```sql
+-- א
+SELECT name FROM products WHERE category = 'grinders' OR category = 'brewing' AND price > 200;
+-- ב
+SELECT name FROM products WHERE (category = 'grinders' OR category = 'brewing') AND price > 200;
+```
+@hint1
+<p>AND לפני OR — כמו כפל לפני חיבור.</p>
+@hint2
+<p>א' = "כל ה־grinders" ועוד "brewing יקרים מ־200".</p>
+@solution
+```sql run db=16-sql/files/shop.sql
+SELECT name FROM products WHERE category = 'grinders' OR category = 'brewing' AND price > 200 ORDER BY name;
+SELECT name FROM products WHERE (category = 'grinders' OR category = 'brewing') AND price > 200 ORDER BY name;
+```
+```out
+         name
+----------------------
+ Electric Grinder Pro
+ Gooseneck Kettle
+ Hand Grinder
+(3 rows)
+
+         name
+----------------------
+ Electric Grinder Pro
+ Gooseneck Kettle
+(2 rows)
+```
+<p>ב־א' ה־Hand Grinder (189) נכנס, למרות שהוא מתחת ל־200 — כי ה־AND חל רק על brewing.</p>
+@mistakes
+<ul><li>להניח שהמסד "מבין למה התכוונת". סוגריים — תמיד, כשמערבבים AND ו־OR.</li></ul>
+
+@@ P16-E03 | 1 | מה נכשל? | 10 | שיעור 2
+@task
+<p>אילו מהשאילתות ייכשלו, ולמה?</p>
+```sql
+SELECT name, price * 1.17 AS with_vat FROM products ORDER BY with_vat;            -- 1
+SELECT name, price * 1.17 AS with_vat FROM products WHERE with_vat > 100;         -- 2
+SELECT name FROM products WHERE category = "beans";                               -- 3
+SELECT name FROM products ORDER BY price DESC LIMIT 3 OFFSET 3;                   -- 4
+SELECT DISTINCT category, name FROM products;                                     -- 5
+```
+@hint1
+<p>סדר הביצוע: FROM ← WHERE ← SELECT ← ORDER BY.</p>
+@hint2
+<p>מה ההבדל בין <code>'</code> ל־<code>"</code> ב־SQL?</p>
+@solution
+<ol><li>✔ — ORDER BY רץ אחרי SELECT, ומכיר את הכינוי.</li><li>✘ <code>column "with_vat" does not exist</code> — WHERE רץ לפני SELECT. צריך לחזור על הביטוי: <code>WHERE price * 1.17 &gt; 100</code>.</li><li>✘ <code>column "beans" does not exist</code> — מירכאות כפולות הן שם עמודה. מחרוזת: <code>'beans'</code>.</li><li>✔ — המוצרים במקומות 4–6 לפי מחיר (עמוד 2 של 3).</li><li>✔ — אבל כנראה לא מה שרצית: DISTINCT חל על <em>כל</em> העמודות יחד, וכל צירוף category+name הוא ייחודי — חוזרים כל 14 המוצרים.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>DISTINCT category, name</code> הוא "DISTINCT על category ועוד name".</li></ul>
+
+@@ P16-E04 | 1 | NULL בפועל | 10 | שיעור 3
+@task
+<p>מה התוצאה של כל אחד? (בלי להריץ, ואז בדוק.)</p>
+```sql
+SELECT NULL = NULL;                                   -- 1
+SELECT NULL IS NULL;                                  -- 2
+SELECT 10 + NULL;                                     -- 3
+SELECT COALESCE(NULL, NULL, 'x', 'y');                -- 4
+SELECT COUNT(city), COUNT(*) FROM customers;          -- 5
+SELECT COUNT(*) FROM customers WHERE city <> 'Haifa'; -- 6
+```
+@hint1
+<p>כל השוואה עם NULL ← NULL. psql מציג NULL כתא ריק.</p>
+@hint2
+<p>יש 12 לקוחות: 3 בחיפה ו־2 בלי עיר.</p>
+@solution
+```sql run db=16-sql/files/shop.sql
+SELECT NULL = NULL AS q1, NULL IS NULL AS q2, 10 + NULL AS q3, COALESCE(NULL, NULL, 'x', 'y') AS q4;
+SELECT COUNT(city) AS q5_city, COUNT(*) AS q5_all FROM customers;
+SELECT COUNT(*) AS q6 FROM customers WHERE city <> 'Haifa';
+```
+```out
+ q1 | q2 | q3 | q4
+----+----+----+----
+    | t  |    | x
+(1 row)
+
+ q5_city | q5_all
+---------+--------
+      10 |     12
+(1 row)
+
+ q6
+----
+  7
+(1 row)
+```
+<p>שאלה 6 היא המלכודת: 12 לקוחות, 3 בחיפה — אבל התשובה 7, לא 9. שני הלקוחות בלי עיר "נבלעו", כי <code>NULL &lt;&gt; 'Haifa'</code> הוא NULL.</p>
+@mistakes
+<ul><li>לחשוב ש־NULL "שונה מחיפה" — הוא לא ידוע.</li></ul>
+
+@@ P16-E05 | 1 | מה הפקודה עושה? | 10 | שיעור 4
+@task
+<p>תאר במילים מה כל פקודה עושה לנתונים, וסמן את המסוכנות:</p>
+```sql
+UPDATE products SET stock = 0;                                       -- 1
+UPDATE products SET stock = 0 WHERE id = 7;                          -- 2
+DELETE FROM customers WHERE city = NULL;                             -- 3
+DELETE FROM customers WHERE city IS NULL;                            -- 4
+UPDATE products SET price = price * 0.9 WHERE category = 'beans' OR is_active; -- 5
+DROP TABLE customers;                                                -- 6
+```
+@hint1
+<p>חפש WHERE חסר, ו־WHERE שתופס יותר ממה שנראה.</p>
+@hint2
+<p>3 ו־4 נראים כמעט אותו דבר.</p>
+@solution
+<ol><li>⚠️ מאפס את המלאי של <strong>כל</strong> המוצרים — אין WHERE.</li><li>מאפס מלאי של מוצר 7 בלבד.</li><li>לא מוחק כלום (<code>= NULL</code> אף פעם לא true). לא מסוכן — אבל באג: מי שכתב התכוון ל־4.</li><li>מוחק את הלקוחות בלי עיר (Avi, Omer).</li><li>⚠️ הנחה ל־beans <em>וגם</em> לכל המוצרים הפעילים — OR רחב מדי. כנראה התכוון ל־AND.</li><li>⚠️⚠️ מוחק את הטבלה עם כל הנתונים. אין undo.</li></ol>
+<p>ההרגל: לפני UPDATE/DELETE — הרץ <code>SELECT COUNT(*)</code> עם אותו WHERE.</p>
+@mistakes
+<ul><li>להסתכל רק על הפקודה ולא לשאול "כמה שורות זה יתפוס?".</li></ul>
+
+@@ P16-E06 | 2 | פולים פעילים 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E06.sql</code> כתוב שאילתה: המוצרים <strong>הפעילים</strong> בקטגוריה <code>beans</code>, עם העמודות <code>name</code> ו־<code>price</code>, ממוינים לפי מחיר מהזול ליקר.</p>
+<p>הרצה: מסמנים ← <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>E</kbd> (בתוסף), או <code>psql -d course -f 16-sql/starter/P16-E06.sql</code>. בדיקה: <code>npm run check P16-E06</code>. (בקובצי התרגילים — רק SQL, בלי פקודות <code>\</code> של psql.)</p>
+@hint1
+<p>שני תנאים ב־WHERE, מחוברים ב־AND.</p>
+@hint2
+<p><code>is_active</code> הוא boolean — אפשר לכתוב <code>WHERE is_active</code> לבד.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E06.sql
+SELECT name, price
+FROM products
+WHERE category = 'beans' AND is_active
+ORDER BY price;
+```
+```out
+        name        | price
+--------------------+-------
+ Brazil Beans 250g  | 29.90
+ Colombia Beans 1kg | 84.90
+ Ethiopia Beans 1kg | 89.90
+(3 rows)
+```
+@mistakes
+<ul><li><code>WHERE is_active = 'true'</code> — עובד (PostgreSQL ממיר), אבל <code>WHERE is_active</code> נקי יותר.</li></ul>
+
+@@ P16-E07 | 2 | לקוחות לפי עיר 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E07.sql</code>: הלקוחות מתל אביב או מירושלים (<code>'Tel Aviv'</code>, <code>'Jerusalem'</code>) — <code>full_name</code>, <code>city</code>, <code>joined_on</code> — מהמצטרף האחרון לראשון.</p>
+@hint1
+<p><code>IN</code></p>
+@hint2
+<p><code>ORDER BY joined_on DESC</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E07.sql
+SELECT full_name, city, joined_on
+FROM customers
+WHERE city IN ('Tel Aviv', 'Jerusalem')
+ORDER BY joined_on DESC;
+```
+```out
+  full_name   |   city    | joined_on
+--------------+-----------+------------
+ Itay Hadad   | Tel Aviv  | 2026-06-19
+ Tamar Gabay  | Jerusalem | 2026-05-27
+ Michal Biton | Tel Aviv  | 2026-02-11
+ Noa Mizrahi  | Jerusalem | 2026-01-08
+ Dana Levi    | Tel Aviv  | 2025-11-02
+(5 rows)
+```
+@mistakes
+<ul><li><code>WHERE city = 'Tel Aviv' OR 'Jerusalem'</code> — שגיאה: <code>'Jerusalem'</code> לבד הוא לא תנאי.</li></ul>
+
+@@ P16-E08 | 2 | אזל מהמלאי 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E08.sql</code>: מוצרים <strong>פעילים</strong> שהמלאי שלהם 0 — <code>id</code>, <code>name</code> — לפי id. (זו הרשימה שמנהל החנות צריך להזמין.)</p>
+@hint1
+<p><code>stock = 0</code></p>
+@hint2
+<p>מוצר לא פעיל עם מלאי 0 — לא מעניין אותו.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E08.sql
+SELECT id, name
+FROM products
+WHERE is_active AND stock = 0
+ORDER BY id;
+```
+```out
+ id |        name
+----+--------------------
+  2 | Colombia Beans 1kg
+  8 | V60 Ceramic
+(2 rows)
+```
+@mistakes
+<ul><li>לשכוח את <code>is_active</code> — ה־Digital Scale (לא פעיל) נכנס לרשימה.</li></ul>
+
+@@ P16-E09 | 2 | שלושת היקרים 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E09.sql</code>: שלושת המוצרים הפעילים היקרים ביותר — <code>name</code>, <code>price</code> — מהיקר לזול.</p>
+@hint1
+<p>ORDER BY ואחריו LIMIT.</p>
+@hint2
+<p>בלי ORDER BY, LIMIT נותן "שלוש שורות כלשהן".</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E09.sql
+SELECT name, price
+FROM products
+WHERE is_active
+ORDER BY price DESC
+LIMIT 3;
+```
+```out
+         name         | price
+----------------------+--------
+ Electric Grinder Pro | 649.00
+ Gooseneck Kettle     | 229.00
+ Hand Grinder         | 189.00
+(3 rows)
+```
+@mistakes
+<ul><li>LIMIT לפני ORDER BY — שגיאת תחביר. הסדר בכתיבה קבוע.</li></ul>
+
+@@ P16-E10 | 2 | בלי טלפון 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>16-sql/starter/P16-E10.sql</code>: הלקוחות שאין להם טלפון — <code>full_name</code>, <code>email</code> — לפי <code>full_name</code>.</p>
+@hint1
+<p>לא <code>= NULL</code>.</p>
+@hint2
+<p><code>IS NULL</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E10.sql
+SELECT full_name, email
+FROM customers
+WHERE phone IS NULL
+ORDER BY full_name;
+```
+```out
+  full_name   |         email
+--------------+-----------------------
+ lior katz    | lior.katz@example.com
+ Michal Biton | michal@example.com
+ Omer Shalom  | omer@example.com
+ Yossi Cohen  | yossi@example.com
+(4 rows)
+```
+@mistakes
+<ul><li><code>WHERE phone = ''</code> — מחרוזת ריקה היא לא NULL. אף שורה.</li></ul>
+
+@@ P16-E11 | 2 | שווי מלאי 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>16-sql/starter/P16-E11.sql</code>: שורה אחת עם שתי עמודות — <code>products</code> (כמה מוצרים פעילים) ו־<code>stock_value</code> (סכום של מחיר × מלאי, על המוצרים הפעילים).</p>
+@hint1
+<p>אפשר לצבור ביטוי: <code>SUM(price * stock)</code>.</p>
+@hint2
+<p>כינויים עם <code>AS</code>.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E11.sql
+SELECT COUNT(*) AS products, SUM(price * stock) AS stock_value
+FROM products
+WHERE is_active;
+```
+```out
+ products | stock_value
+----------+-------------
+       12 |    28510.50
+(1 row)
+```
+@mistakes
+<ul><li><code>SUM(price) * SUM(stock)</code> — מכפיל סכומים, לא סוכם מכפלות. תוצאה גדולה פי כמה.</li></ul>
+
+@@ P16-E12 | 2 | מוצר חדש 🤖 | 10 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E12.sql</code>: הוסף מוצר — <code>AeroPress</code>, קטגוריה <code>brewing</code>, מחיר 139, מלאי 20, נוסף ב־<code>2026-11-01</code> (is_active — ברירת המחדל). הפקודה מחזירה (<code>RETURNING</code>) את <code>id</code> ו־<code>name</code>.</p>
+@hint1
+<p>לא מכניסים id — המסד בוחר (<code>GENERATED ALWAYS</code> אפילו לא יסכים).</p>
+@hint2
+<p><code>INSERT INTO products (name, category, price, stock, added_on) VALUES (...) RETURNING id, name;</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E12.sql
+INSERT INTO products (name, category, price, stock, added_on)
+VALUES ('AeroPress', 'brewing', 139, 20, '2026-11-01')
+RETURNING id, name;
+```
+```out
+ id |   name
+----+-----------
+ 15 | AeroPress
+(1 row)
+
+INSERT 0 1
+```
+@mistakes
+<ul><li><code>INSERT INTO products VALUES (...)</code> בלי רשימת עמודות — תלוי בסדר העמודות בטבלה, ונשבר כשמוסיפים עמודה.</li></ul>
+
+@@ P16-E13 | 3 | חיפוש לקוחות 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E13.sql</code>: לקוחות שהאימייל שלהם בדומיין <code>example.com</code> — <strong>בלי תלות באותיות גדולות</strong> — והצטרפו במחצית הראשונה של 2026 (1 בינואר עד 30 ביוני, כולל). <code>full_name</code>, <code>email</code>, <code>joined_on</code>, לפי joined_on.</p>
+@hint1
+<p><code>ILIKE '%@example.com'</code></p>
+@hint2
+<p><code>BETWEEN '2026-01-01' AND '2026-06-30'</code> — על date זה כולל את שני הימים.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E13.sql
+SELECT full_name, email, joined_on
+FROM customers
+WHERE email ILIKE '%@example.com'
+  AND joined_on BETWEEN '2026-01-01' AND '2026-06-30'
+ORDER BY joined_on;
+```
+```out
+  full_name   |       email        | joined_on
+--------------+--------------------+------------
+ Noa Mizrahi  | noa@example.com    | 2026-01-08
+ Avi Peretz   | avi@example.com    | 2026-01-20
+ Michal Biton | michal@example.com | 2026-02-11
+ Ron Avraham  | ron@example.com    | 2026-03-05
+ Shira David  | shira@example.com  | 2026-03-30
+ Omer Shalom  | omer@example.com   | 2026-04-12
+ Tamar Gabay  | tamar@example.com  | 2026-05-27
+ Itay Hadad   | itay@Example.com   | 2026-06-19
+(8 rows)
+```
+<p>Itay (<code>@Example.com</code>) נכנס רק בזכות ILIKE.</p>
+@mistakes
+<ul><li>BETWEEN על <code>timestamptz</code> עם תאריך סיום — <code>'2026-06-30'</code> הוא חצות בתחילת היום, ומפספס את כל 30 ביוני. על timestamp עדיף <code>&gt;= '2026-01-01' AND &lt; '2026-07-01'</code>.</li></ul>
+
+@@ P16-E14 | 3 | עמוד 2 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E14.sql</code>: עמוד 2 של רשימת המוצרים הפעילים, 4 בעמוד, ממוינת לפי שם (<code>name</code> בלבד). איזה OFFSET מתאים ל־page ו־limit כלליים?</p>
+@hint1
+<p>עמוד 1 = שורות 1–4, עמוד 2 = 5–8.</p>
+@hint2
+<p><code>OFFSET (page - 1) * limit</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E14.sql
+SELECT name
+FROM products
+WHERE is_active
+ORDER BY name
+LIMIT 4 OFFSET 4;
+```
+```out
+          name
+------------------------
+ Ethiopia Beans 1kg
+ French Press 1L
+ Gooseneck Kettle
+ Grinder Cleaning Brush
+(4 rows)
+```
+<p>בפרויקט 2 (פרק 19) זה יהיה <code>LIMIT $1 OFFSET $2</code>, עם הערכים מה־query.</p>
+@mistakes
+<ul><li>pagination בלי ORDER BY — המוצר אותו מוצר יכול להופיע בשני עמודים, או בשום עמוד.</li></ul>
+
+@@ P16-E15 | 3 | דוח קטגוריה 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>16-sql/starter/P16-E15.sql</code>: על כל המוצרים (גם הלא פעילים) בקטגוריה <code>brewing</code> — שורה אחת: <code>products</code> (כמות), <code>min_price</code>, <code>max_price</code>, <code>avg_price</code> (מעוגל לשתי ספרות) ו־<code>out_of_stock</code> (כמה עם מלאי 0).</p>
+@hint1
+<p>"כמה עם מלאי 0" — <code>COUNT</code> סופר שורות שאינן NULL. איך הופכים תנאי לערך שהוא NULL כשהתנאי לא מתקיים?</p>
+@hint2
+<p><code>COUNT(*) FILTER (WHERE stock = 0)</code> — תחביר של PostgreSQL בדיוק לזה.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E15.sql
+SELECT
+  COUNT(*) AS products,
+  MIN(price) AS min_price,
+  MAX(price) AS max_price,
+  ROUND(AVG(price), 2) AS avg_price,
+  COUNT(*) FILTER (WHERE stock = 0) AS out_of_stock
+FROM products
+WHERE category = 'brewing';
+```
+```out
+ products | min_price | max_price | avg_price | out_of_stock
+----------+-----------+-----------+-----------+--------------
+        4 |     99.00 |    229.00 |    149.00 |            1
+(1 row)
+```
+<p><code>FILTER</code> הוא דרך נוחה לספור כמה תנאים בשאילתה אחת. (בלעדיו: <code>SUM(CASE WHEN stock = 0 THEN 1 ELSE 0 END)</code> — תראה את זה בקוד ישן.)</p>
+@mistakes
+<ul><li>להוסיף <code>AND stock = 0</code> ל־WHERE — כל שאר הצבירות יחושבו רק על המוצרים שאזלו.</li></ul>
+
+@@ P16-E16 | 3 | טבלת ביקורות 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E16.sql</code> צור טבלה <code>reviews</code>:</p>
+<ul><li><code>id</code> — מזהה שהמסד ממספר, מפתח ראשי.</li><li><code>product_id</code> — מספר שלם, חובה.</li><li><code>rating</code> — מספר שלם בין 1 ל־5, חובה.</li><li><code>comment</code> — טקסט עד 500 תווים, לא חובה.</li><li><code>author_email</code> — טקסט, חובה.</li><li><code>created_at</code> — רגע בזמן, ברירת מחדל "עכשיו".</li><li>אותו מחבר לא יכול לכתוב שתי ביקורות על אותו מוצר.</li></ul>
+<p>הבדיקה מכניסה שורות תקינות ולא תקינות ובודקת שהמסד מסרב בדיוק למה שצריך.</p>
+@hint1
+<p>אילוץ על שתי עמודות יחד: בסוף ההגדרה, <code>UNIQUE (product_id, author_email)</code>.</p>
+@hint2
+<p><code>CHECK (rating BETWEEN 1 AND 5)</code>, <code>CHECK (length(comment) &lt;= 500)</code> — ו־CHECK על NULL עובר (NULL לא "נכשל").</p>
+@solution
+```sql run save=solutions/P16-E16.sql
+CREATE TABLE reviews (
+  id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  product_id    integer NOT NULL,
+  rating        smallint NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment       text CHECK (length(comment) <= 500),
+  author_email  text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (product_id, author_email)
+);
+```
+```out
+CREATE TABLE
+```
+<p>(<code>product_id</code> אמור להצביע על מוצר קיים — זה foreign key, הנושא הראשון של פרק 17.)</p>
+@mistakes
+<ul><li><code>product_id integer UNIQUE</code> ו־<code>author_email text UNIQUE</code> בנפרד — אז מחבר יכול לכתוב רק ביקורת אחת בכלל, ולכל מוצר רק ביקורת אחת.</li></ul>
+
+@@ P16-E17 | 3 | עדכון מחירים 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E17.sql</code>, שתי פקודות: (1) כל מוצר שהמלאי שלו 0 הופך ללא פעיל; (2) כל מוצר פעיל בקטגוריה <code>beans</code> מתייקר ב־5%, מעוגל לשתי ספרות.</p>
+@hint1
+<p>הסדר חשוב: אחרי (1), Colombia כבר לא פעיל — ולא יתייקר.</p>
+@hint2
+<p><code>SET price = ROUND(price * 1.05, 2)</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E17.sql
+UPDATE products SET is_active = false WHERE stock = 0;
+UPDATE products SET price = ROUND(price * 1.05, 2) WHERE category = 'beans' AND is_active;
+SELECT name, price, is_active FROM products WHERE category = 'beans' ORDER BY id;
+```
+```out
+UPDATE 3
+UPDATE 2
+        name        | price | is_active
+--------------------+-------+-----------
+ Ethiopia Beans 1kg | 94.40 | t
+ Colombia Beans 1kg | 84.90 | f
+ Brazil Beans 250g  | 31.40 | t
+ Espresso Blend 1kg | 79.00 | f
+(4 rows)
+```
+@mistakes
+<ul><li><code>WHERE category = 'beans' OR is_active</code> — מייקר את כל החנות.</li></ul>
+
+@@ P16-E18 | 3 | ניקוי לקוחות 🤖 | 10 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E18.sql</code>: מחק את הלקוחות שהצטרפו לפני 2026 (<code>joined_on</code> לפני 1 בינואר 2026) <strong>וגם</strong> אין להם טלפון. החזר (<code>RETURNING</code>) את <code>full_name</code> של מי שנמחק.</p>
+@hint1
+<p>קודם: <code>SELECT full_name FROM customers WHERE ...</code> — ודא שיוצא רק מי שצריך.</p>
+@hint2
+<p><code>DELETE FROM customers WHERE ... RETURNING full_name;</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E18.sql
+DELETE FROM customers
+WHERE joined_on < '2026-01-01' AND phone IS NULL
+RETURNING full_name;
+```
+```out
+  full_name
+-------------
+ Yossi Cohen
+(1 row)
+
+DELETE 1
+```
+@mistakes
+<ul><li><code>joined_on &lt;= '2025-12-31'</code> — נכון ל־date, אבל <code>&lt; '2026-01-01'</code> עובד גם אם יום אחד העמודה תהפוך ל־timestamptz.</li></ul>
+
+@@ P16-E19 | 3 | עמודת SKU 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E19.sql</code>: הוסף לטבלת <code>products</code> עמודה <code>sku</code> (טקסט, ייחודי). מלא אותה לכל המוצרים הקיימים בפורמט <code>BEANS-1</code> (הקטגוריה באותיות גדולות, מקף, id). ואחרי שכולם מלאים — הפוך אותה לחובה.</p>
+@hint1
+<p>אי אפשר להוסיף עמודה NOT NULL בלי ערכים לטבלה מלאה — לכן שלושה שלבים: ADD, UPDATE, ALTER ... SET NOT NULL.</p>
+@hint2
+<p><code>upper(category) || '-' || id</code> (<code>||</code> מחבר מחרוזות).</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E19.sql
+ALTER TABLE products ADD COLUMN sku text UNIQUE;
+UPDATE products SET sku = upper(category) || '-' || id;
+ALTER TABLE products ALTER COLUMN sku SET NOT NULL;
+SELECT id, sku FROM products ORDER BY id LIMIT 3;
+```
+```out
+ALTER TABLE
+UPDATE 14
+ALTER TABLE
+ id |   sku
+----+---------
+  1 | BEANS-1
+  2 | BEANS-2
+  3 | BEANS-3
+(3 rows)
+```
+<p>זה דפוס של migration אמיתי בטבלה עם נתונים: הוספה כ־nullable ← מילוי ← הקשחה.</p>
+@mistakes
+<ul><li><code>ADD COLUMN sku text NOT NULL</code> ישר — נכשל: <code>column "sku" of relation "products" contains null values</code>.</li></ul>
+
+@@ P16-E20 | 4 | הנחה רחבה מדי 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E20.sql</code> השאילתה אמורה להחזיר מוצרים <strong>פעילים</strong> מקטגוריות <code>beans</code> או <code>grinders</code> שמחירם עד 100 — אבל חוזרות גם מטחנות של מאות שקלים. תקן (בלי לשנות את העמודות ואת המיון).</p>
+@hint1
+<p>על מה בדיוק חל כל AND?</p>
+@hint2
+<p>סוגריים סביב ה־OR — או <code>IN</code>.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E20.sql
+SELECT name, category, price
+FROM products
+WHERE is_active AND category IN ('beans', 'grinders') AND price <= 100
+ORDER BY price;
+```
+```out
+        name        | category | price
+--------------------+----------+-------
+ Brazil Beans 250g  | beans    | 29.90
+ Colombia Beans 1kg | beans    | 84.90
+ Ethiopia Beans 1kg | beans    | 89.90
+(3 rows)
+```
+@mistakes
+<ul><li>להוסיף סוגריים במקום הלא נכון: <code>(is_active AND category = 'beans') OR ...</code>.</li></ul>
+
+@@ P16-E21 | 4 | הלקוחות שנעלמו 🤖 | 10 | שיעור 3
+@task
+<p>בקובץ <code>16-sql/starter/P16-E21.sql</code>: "כל הלקוחות שלא מחיפה" — לקמפיין שיווקי באזור המרכז והדרום. השאילתה מחזירה 7, אבל יש 12 לקוחות ורק 3 בחיפה. גם מי שלא ציין עיר צריך להיכלל. תקן.</p>
+@hint1
+<p>מה <code>NULL &lt;&gt; 'Haifa'</code>?</p>
+@hint2
+<p><code>IS DISTINCT FROM</code></p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E21.sql
+SELECT full_name, city
+FROM customers
+WHERE city IS DISTINCT FROM 'Haifa'
+ORDER BY full_name;
+```
+```out
+  full_name   |    city
+--------------+------------
+ Avi Peretz   |
+ Dana Levi    | Tel Aviv
+ Itay Hadad   | Tel Aviv
+ lior katz    | Ramat Gan
+ Michal Biton | Tel Aviv
+ Noa Mizrahi  | Jerusalem
+ Omer Shalom  |
+ Ron Avraham  | Beer Sheva
+ Tamar Gabay  | Jerusalem
+(9 rows)
+```
+@mistakes
+<ul><li><code>WHERE city &lt;&gt; 'Haifa' OR city = NULL</code> — שוב <code>= NULL</code>.</li></ul>
+
+@@ P16-E22 | 4 | הנחה לכל החנות 🤖 | 10 | שיעור 4
+@task
+<p>בקובץ <code>16-sql/starter/P16-E22.sql</code>: מבצע — 20% הנחה על אביזרים (<code>accessories</code>) שמחירם מתחת ל־30. הפקודה שנכתבה הורידה מחיר ל־5 מוצרים. כמה היו צריכים להשתנות? תקן כך שישתנו רק הנכונים (מחיר מעוגל לשתי ספרות).</p>
+@hint1
+<p>הרץ <code>SELECT name FROM products WHERE ...</code> עם ה־WHERE הקיים — ותראה מה הוא תופס.</p>
+@hint2
+<p>"גם וגם" = AND.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E22.sql
+UPDATE products
+SET price = ROUND(price * 0.8, 2)
+WHERE category = 'accessories' AND price < 30
+RETURNING name, price;
+```
+```out
+          name          | price
+------------------------+-------
+ Paper Filters (100)    | 19.92
+ Grinder Cleaning Brush | 15.92
+(2 rows)
+
+UPDATE 2
+```
+@mistakes
+<ul><li>לתקן ולהריץ על הנתונים <em>שכבר</em> נפגעו — במסד שלך, טען מחדש את <code>files/shop.sql</code> לפני שבודקים ידנית.</li></ul>
+
+@@ P16-E23 | 4 | חיפוש שלא מוצא 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>16-sql/starter/P16-E23.sql</code>: תיבת החיפוש באתר שולחת את המילה <code>grinder</code>, והשאילתה אמורה להחזיר כל מוצר ש<strong>מכיל</strong> אותה בשם — בלי תלות באותיות. כרגע חוזרות אפס שורות. תקן.</p>
+@hint1
+<p><code>LIKE</code> בלי <code>%</code> זה כמו <code>=</code>.</p>
+@hint2
+<p>ו־<code>LIKE</code> רגיש לאותיות: <code>'Grinder'</code> ≠ <code>'grinder'</code>.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E23.sql
+SELECT name
+FROM products
+WHERE name ILIKE '%grinder%'
+ORDER BY name;
+```
+```out
+          name
+------------------------
+ Electric Grinder Pro
+ Grinder Cleaning Brush
+ Hand Grinder
+(3 rows)
+```
+@mistakes
+<ul><li><code>lower(name) LIKE '%Grinder%'</code> — הורדת אותיות רק בצד אחד.</li></ul>
+
+@@ P16-E24 | 5 | אתגר: טבלת קופונים 🤖 | 30 | כל הפרק
+@task
+<p>בקובץ <code>16-sql/starter/P16-E24.sql</code> צור טבלה <code>coupons</code> שהמסד עצמו אוכף בה את כל החוקים:</p>
+<ul><li><code>id</code> — מפתח ראשי ממוספר. <code>code</code> — טקסט, ייחודי, 4–20 תווים, <strong>רק אותיות גדולות באנגלית וספרות</strong>.</li><li><code>percent_off</code> (שלם 1–90) או <code>amount_off</code> (numeric חיובי) — <strong>בדיוק אחד</strong> מהם.</li><li><code>valid_from</code>, <code>valid_until</code> — date, חובה, ו־valid_until אחרי valid_from.</li><li><code>max_uses</code> — שלם חיובי, לא חובה (NULL = ללא הגבלה). <code>uses</code> — שלם, ברירת מחדל 0, לא שלילי, ולא יותר מ־max_uses.</li></ul>
+@hint1
+<p>תבנית: <code>CHECK (code ~ '^[A-Z0-9]{4,20}$')</code> (<code>~</code> = התאמה ל־regex).</p>
+@hint2
+<p>"בדיוק אחד": <code>CHECK (num_nonnulls(percent_off, amount_off) = 1)</code>. ו־<code>uses &lt;= max_uses</code> כשהוא NULL — CHECK עם NULL עובר.</p>
+@solution
+```sql run save=solutions/P16-E24.sql
+CREATE TABLE coupons (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  code         text NOT NULL UNIQUE CHECK (code ~ '^[A-Z0-9]{4,20}$'),
+  percent_off  smallint CHECK (percent_off BETWEEN 1 AND 90),
+  amount_off   numeric(10, 2) CHECK (amount_off > 0),
+  valid_from   date NOT NULL,
+  valid_until  date NOT NULL,
+  max_uses     integer CHECK (max_uses > 0),
+  uses         integer NOT NULL DEFAULT 0 CHECK (uses >= 0),
+  CHECK (num_nonnulls(percent_off, amount_off) = 1),
+  CHECK (valid_until > valid_from),
+  CHECK (uses <= max_uses)
+);
+```
+```out
+CREATE TABLE
+```
+<p>שים לב לאילוצים בסוף הטבלה — אילוץ שמערב כמה עמודות כותבים כך. ומה יקרה כש־<code>uses</code> יגיע ל־<code>max_uses</code> ושני לקוחות ינסו לממש את הקופון האחרון באותו רגע? ה־CHECK יציל אחד מהם — נראה איך בפרק 18.</p>
+@mistakes
+<ul><li><code>CHECK (percent_off IS NOT NULL OR amount_off IS NOT NULL)</code> — "לפחות אחד", לא "בדיוק אחד".</li></ul>
+
+@@ P16-E25 | 5 | אתגר: מחירון עם תוויות 🤖 | 25 | כל הפרק
+@task
+<p>בקובץ <code>16-sql/starter/P16-E25.sql</code>: מחירון של המוצרים הפעילים, ממוין לפי מחיר (ובשוויון לפי name), עם העמודות:</p>
+<ul><li><code>name</code>, <code>price</code>, <code>price_with_vat</code> (מחיר × 1.18, מעוגל לשתי ספרות)</li><li><code>tier</code> — <code>'basic'</code> מתחת ל־50, <code>'standard'</code> מ־50 עד 150 (כולל), <code>'premium'</code> מעל 150</li><li><code>availability</code> — <code>'out of stock'</code> כשהמלאי 0, <code>'last units'</code> מתחת ל־10, אחרת <code>'in stock'</code></li></ul>
+<p>(כלי חדש: <code>CASE</code> — ראה רמז.)</p>
+@hint1
+<p><code>CASE WHEN price &lt; 50 THEN 'basic' WHEN price &lt;= 150 THEN 'standard' ELSE 'premium' END AS tier</code> — התנאי הראשון שמתקיים מנצח.</p>
+@hint2
+<p>בגלל "הראשון מנצח", סדר ה־WHEN חשוב: <code>stock = 0</code> לפני <code>stock &lt; 10</code>.</p>
+@solution
+```sql run db=16-sql/files/shop.sql save=solutions/P16-E25.sql
+SELECT
+  name,
+  price,
+  ROUND(price * 1.18, 2) AS price_with_vat,
+  CASE
+    WHEN price < 50 THEN 'basic'
+    WHEN price <= 150 THEN 'standard'
+    ELSE 'premium'
+  END AS tier,
+  CASE
+    WHEN stock = 0 THEN 'out of stock'
+    WHEN stock < 10 THEN 'last units'
+    ELSE 'in stock'
+  END AS availability
+FROM products
+WHERE is_active
+ORDER BY price, name;
+```
+```out
+          name          | price  | price_with_vat |   tier   | availability
+------------------------+--------+----------------+----------+--------------
+ Grinder Cleaning Brush |  19.90 |          23.48 | basic    | in stock
+ Paper Filters (100)    |  24.90 |          29.38 | basic    | in stock
+ Brazil Beans 250g      |  29.90 |          35.28 | basic    | in stock
+ Ceramic Mug            |  39.00 |          46.02 | basic    | in stock
+ Colombia Beans 1kg     |  84.90 |         100.18 | standard | out of stock
+ Ethiopia Beans 1kg     |  89.90 |         106.08 | standard | in stock
+ V60 Ceramic            |  99.00 |         116.82 | standard | out of stock
+ French Press 1L        | 119.00 |         140.42 | standard | in stock
+ Moka Pot 6 Cups        | 149.00 |         175.82 | standard | in stock
+ Hand Grinder           | 189.00 |         223.02 | premium  | last units
+ Gooseneck Kettle       | 229.00 |         270.22 | premium  | last units
+ Electric Grinder Pro   | 649.00 |         765.82 | premium  | last units
+(12 rows)
+```
+<p><code>CASE</code> הוא ה־<code>if</code> של SQL. בפועל הייתי משאיר את ה"תוויות" לקוד (קל לתרגם, קל לשנות), אבל כשמייצאים דוח או בונים view — זה הכלי.</p>
+@mistakes
+<ul><li><code>WHEN stock &lt; 10</code> לפני <code>WHEN stock = 0</code> — מוצר שאזל יסומן "last units".</li></ul>

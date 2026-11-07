@@ -1,0 +1,104 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>NULL: "לא ידוע" — ואיך הוא שובר השוואות.</li>
+      <li>`IS NULL`, `COALESCE`.</li>
+      <li>צבירות: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`.</li>
+    </ul>
+  </div>
+
+  <h2>1. NULL הוא לא ערך</h2>
+  <p>ל־Yossi אין טלפון בטבלה. זה לא `''` (מחרוזת ריקה) ולא `0` — זה `NULL`: "אין מידע". ו־SQL מתייחס ל"לא ידוע" ברצינות:</p>
+```sql run db=16-sql/files/shop.sql
+SELECT full_name, phone FROM customers WHERE phone = NULL;
+```
+```out
+ full_name | phone
+-----------+-------
+(0 rows)
+```
+  <p>אפס שורות! כי `phone = NULL` הוא לא `true` וגם לא `false` — הוא `NULL` ("אולי? לא יודע"). ו־WHERE מחזיר רק שורות שהתנאי שלהן `true`. הדרך הנכונה:</p>
+```sql run db=16-sql/files/shop.sql
+SELECT full_name, phone FROM customers WHERE phone IS NULL ORDER BY full_name;
+```
+```out
+  full_name   | phone
+--------------+-------
+ lior katz    |
+ Michal Biton |
+ Omer Shalom  |
+ Yossi Cohen  |
+(4 rows)
+```
+  <div class="table-wrap"><table>
+    <tr><th>ביטוי</th><th>תוצאה</th></tr>
+    <tr><td>`NULL = NULL`</td><td>`NULL` (שני לא־ידועים — לא בהכרח שווים)</td></tr>
+    <tr><td>`NULL + 5`</td><td>`NULL`</td></tr>
+    <tr><td>`NULL AND false`</td><td>`false` (מספיק שאחד false)</td></tr>
+    <tr><td>`NULL OR true`</td><td>`true`</td></tr>
+    <tr><td>`x IS NULL` / `x IS NOT NULL`</td><td>תמיד `true` או `false`</td></tr>
+    <tr><td>`x IS DISTINCT FROM y`</td><td>"שונה", כש־NULL נחשב ערך רגיל</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ המלכודת של `<>`</span>
+    <p>"כל הלקוחות שלא גרים בחיפה": `WHERE city <> 'Haifa'` — <strong>מפספס</strong> את מי שהעיר שלו NULL (כי `NULL <> 'Haifa'` הוא NULL). אם הם אמורים להיכלל: `WHERE city IS DISTINCT FROM 'Haifa'`, או `WHERE city <> 'Haifa' OR city IS NULL`.</p>
+  </div>
+```sql run db=16-sql/files/shop.sql
+SELECT full_name, COALESCE(city, 'unknown') AS city
+FROM customers
+WHERE city IS NULL OR city = 'Ramat Gan'
+ORDER BY full_name;
+```
+```out
+  full_name  |   city
+-------------+-----------
+ Avi Peretz  | unknown
+ lior katz   | Ramat Gan
+ Omer Shalom | unknown
+(3 rows)
+```
+  <p>`COALESCE(a, b, c)` — הערך הראשון שאינו NULL. שימושי להצגה, ולברירות מחדל בחישובים.</p>
+
+  <h2>2. צבירות</h2>
+```sql run db=16-sql/files/shop.sql
+SELECT
+  COUNT(*)            AS products,
+  SUM(stock)          AS units,
+  MIN(price)          AS cheapest,
+  MAX(price)          AS priciest,
+  ROUND(AVG(price), 2) AS avg_price
+FROM products
+WHERE is_active;
+```
+```out
+ products | units | cheapest | priciest | avg_price
+----------+-------+----------+----------+-----------
+       12 |   660 |    19.90 |   649.00 |    143.54
+(1 row)
+```
+  <p>פונקציית צבירה הופכת הרבה שורות לשורה אחת. ה־WHERE רץ קודם — הצבירה רק על המוצרים הפעילים.</p>
+  <h3>COUNT ו־NULL</h3>
+```sql run db=16-sql/files/shop.sql
+SELECT COUNT(*) AS customers, COUNT(phone) AS with_phone, COUNT(DISTINCT city) AS cities
+FROM customers;
+```
+```out
+ customers | with_phone | cities
+-----------+------------+--------
+        12 |          8 |      5
+(1 row)
+```
+  <ul>
+    <li>`COUNT(*)` — כל השורות.</li>
+    <li>`COUNT(phone)` — שורות שבהן phone <strong>אינו NULL</strong>. כל הצבירות (חוץ מ־`COUNT(*)`) מתעלמות מ־NULL.</li>
+    <li>`COUNT(DISTINCT city)` — ערכים שונים (NULL לא נספר).</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 numeric לכסף</span>
+    <p>שים לב ש־`price` הוא `numeric(10, 2)` — מספר עשרוני מדויק. ב־JavaScript, `0.1 + 0.2` הוא `0.30000000000000004` (פרק 2); ב־numeric זה תמיד `0.3`. לכן כסף במסד — numeric, לעולם לא `real`/`float`.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P16-E04">E04</a> · <a href="exercises.html#P16-E10">E10</a> · <a href="exercises.html#P16-E11">E11</a> · <a href="exercises.html#P16-E14">E14</a> · <a href="exercises.html#P16-E15">E15</a> · <a href="exercises.html#P16-E21">E21</a></p>
+  </div>

@@ -1,0 +1,102 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>callbacks אסינכרוניים: "תתקשר אליי כשסיימת".</li>
+      <li>המוסכמה של Node: error-first.</li>
+      <li>למה callbacks מסתבכים ("callback hell") — והמוטיבציה ל־Promises.</li>
+    </ul>
+  </div>
+
+  <h2>1. קריאת קובץ — בגרסה האסינכרונית</h2>
+  <p>בפרויקט 1 השתמשת ב־`fs.readFileSync` — התוכנית <em>עוצרת</em> עד שהקובץ נקרא. הגרסה האסינכרונית מקבלת callback:</p>
+```js run
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const file = path.join(os.tmpdir(), "async-demo.txt");
+fs.writeFileSync(file, "שלום מהקובץ");
+
+console.log("מבקש לקרוא...");
+fs.readFile(file, "utf8", (err, text) => {
+  if (err) {
+    console.log("שגיאה:", err.message);
+    return;
+  }
+  console.log("קיבלתי:", text);
+});
+console.log("ממשיך בינתיים");
+```
+```out
+מבקש לקרוא...
+ממשיך בינתיים
+קיבלתי: שלום מהקובץ
+```
+
+  <h2>2. error-first</h2>
+  <p>המוסכמה של Node: ה־callback מקבל <strong>קודם את השגיאה</strong> (או `null` אם אין), ורק אחר כך את התוצאה. למה ראשונה? כדי שאי אפשר יהיה "לשכוח" לבדוק אותה.</p>
+```js run
+const fs = require("node:fs");
+fs.readFile("/no/such/file.txt", "utf8", (err, text) => {
+  if (err) {
+    console.log(err.code);
+    return;
+  }
+  console.log(text);
+});
+```
+```out
+ENOENT
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ `try/catch` לא תופס שגיאות של callback</span>
+    <p>`try { fs.readFile(..., cb) } catch {}` — לא יעבוד: ה־`try` מסתיים מיד, הרבה לפני שהשגיאה מתרחשת. שגיאות אסינכרוניות מגיעות דרך הפרמטר `err` (או, בהמשך, דרך Promise).</p>
+  </div>
+
+  <h2>3. callback hell</h2>
+  <p>מה אם צריך כמה פעולות ברצף — כל אחת תלויה בקודמת? קרא הגדרות ← קרא משתמש ← קרא הזמנות של המשתמש:</p>
+```js
+readConfig((err, config) => {
+  if (err) return handle(err);
+  readUser(config.userId, (err, user) => {
+    if (err) return handle(err);
+    readOrders(user.id, (err, orders) => {
+      if (err) return handle(err);
+      sendReport(orders, (err) => {
+        if (err) return handle(err);
+        console.log("done");
+      });
+    });
+  });
+});
+```
+  <p>"פירמידת האבדון": כל שלב מוזח עוד, הטיפול בשגיאות חוזר בכל רמה, וקשה לקרוא מה קורה. כך נראה הרבה קוד Node ישן. ה־Promises (שיעור 3) ו־`async/await` (שיעור 4) נולדו כדי לפתור בדיוק את זה — אותה לוגיקה תיראה כמו ארבע שורות רגילות.</p>
+
+  <h2>4. 👣 לעטוף callback ב־Promise</h2>
+  <p>תצטרך את זה עם ספריות ישנות. הצצה לשיעור הבא:</p>
+```js run
+const fs = require("node:fs");
+
+function readText(file) {
+  return new Promise((resolve, reject) => {
+    fs.readFile(file, "utf8", (err, text) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(text);
+      }
+    });
+  });
+}
+
+readText("/no/such/file.txt").catch((err) => console.log("נתפס:", err.code));
+```
+```out
+נתפס: ENOENT
+```
+  <p>(ל־`fs` כבר יש גרסה מוכנה שמחזירה Promises: `require("node:fs/promises")` — נשתמש בה בשיעור הבא.)</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P10-E03">E03</a> · <a href="exercises.html#P10-E07">E07</a> · <a href="exercises.html#P10-E08">E08</a> · <a href="exercises.html#P10-E20">E20</a></p>
+  </div>

@@ -1,0 +1,53 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>לכתוב את `run(argv, { filePath, log })` ב־`src/cli.js` — החלק שמחבר הכול. הבודק: `npm run check PR1-CLI`.</p>
+  </div>
+
+  <h2>1. למה `run` מקבלת `filePath` ו־`log` מבחוץ?</h2>
+  <p>כדי שאפשר יהיה לבדוק אותה: הבודק מעביר קובץ זמני (כדי לא לגעת בנתונים האמיתיים שלך) ופונקציית `log` שאוספת את ההודעות למערך (כדי לבדוק מה הודפס). בהרצה אמיתית — השורות בתחתית הקובץ מעבירות את הקובץ האמיתי ו־`console.log`. הטכניקה הזו נקראת <strong>הזרקת תלויות</strong> (dependency injection), ונפגוש אותה בגדול ב־NestJS (פרק 20).</p>
+  <p>ומה עושות השורות בתחתית? `import.meta.url` הוא הנתיב של הקובץ הנוכחי (בפורמט URL), ו־`process.argv[1]` הוא הקובץ שהורץ. אם הם זהים — הורצת ישירות, ולכן מפעילים את `run`. אם הקובץ רק יובא (בבדיקה) — לא. `process.exitCode` קובע את קוד היציאה.</p>
+
+  <h2>2. מבנה `run`</h2>
+```js
+export function run(argv, { filePath, log = console.log }) {
+  const [command, ...args] = argv;
+  try {
+    switch (command) {
+      case "add": {
+        // 1. פרק את args: תאריך, קטגוריה, סכום, ושאר המילים = הערה
+        // 2. אם חסר סכום — throw עם הודעה ודוגמה
+        // 3. טען ← addExpense ← שמור
+        // 4. log(`נוספה הוצאה #${...}`) ו־return 0
+      }
+      // case "list", "delete", "summary", "help"...
+      default:
+        log(`פקודה לא מוכרת: ${command}\n\n${HELP}`);
+        return 1;
+    }
+  } catch (err) {
+    log(`שגיאה: ${err.message}`);
+    return 1;
+  }
+}
+```
+  <p>(`case "add": { ... }` — סוגריים מסולסלים אחרי `case` יוצרים בלוק, כדי שיהיה אפשר להגדיר `const` עם אותו שם בכמה `case`־ים.)</p>
+  <p>מבנה ה־`try` אחד סביב כל ה־`switch` הוא ההבטחה ש<strong>שום שגיאה לא מקריסה את התוכנית</strong>: כל `throw` — מ־`addExpense`, מ־`loadExpenses`, או משלך — מגיע ל־`catch` אחד, שמדפיס הודעה ומחזיר 1.</p>
+  <p>ולמה "שום פעולה שנכשלה לא משנה את הקובץ" מתקיים מעצמו? כי `saveExpenses` נקראת רק אחרי ש־`addExpense` הצליחה. אם היא זרקה — לא הגענו לשמירה.</p>
+
+  <h2>3. `list` עם אפשרויות</h2>
+  <p>`list --category food --month 2026-10` מגיע כ־`["--category", "food", "--month", "2026-10"]`. עבור בזוגות (`i += 2`): דגל וערך. דגל לא מוכר או ערך חסר — `throw`. התוצאה — אובייקט `{ category, month }` שעובר ישר ל־`filterExpenses`.</p>
+
+  <h2>4. הרצה אמיתית</h2>
+```term
+% cd 08p-project-expenses/starter/expenses-cli
+% node src/cli.js add 2026-10-01 food 54.5 lunch with team
+נוספה הוצאה #1
+% node src/cli.js list
+#1   2026-10-01  food             54.50  lunch with team
+% node src/cli.js delete 7
+שגיאה: לא נמצאה הוצאה עם מזהה 7
+% echo $?
+1
+```
+  <p>`echo $?` מדפיס את קוד היציאה של הפקודה האחרונה. 0 = הצלחה. כלים אחרים (סקריפטים, CI בפרק 25) מסתמכים על זה כדי לדעת אם משהו נכשל.</p>
+  <p>אפשר גם `npm start -- add 2026-10-01 food 54.5` (ה־`--` מעביר את שאר המילים לתוכנית).</p>

@@ -1,0 +1,111 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>race condition: "קרא ← חשב ← כתוב" במקביל.</li>
+      <li>ארבעה פתרונות: עדכון אטומי, אילוץ, `FOR UPDATE`, ניסיון חוזר.</li>
+      <li>נעילות, deadlock ורמות בידוד — מה שצריך לדעת.</li>
+    </ul>
+  </div>
+
+  <h2>1. הבאג</h2>
+  <p>נשאר <strong>Hand Grinder אחד</strong> במלאי. קוד "נאיבי" של קנייה:</p>
+```js
+const { rows } = await db.query("SELECT stock FROM inventory WHERE product_id = 1");
+if (rows[0].stock < 1) throw new HttpError(409, "OUT_OF_STOCK", "אזל");
+await db.query("UPDATE inventory SET stock = $1 WHERE product_id = 1", [rows[0].stock - 1]);
+// ... יצירת הזמנה, חיוב ...
+```
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="ציר זמן: שתי בקשות קוראות stock=1 ושתיהן מוכרות">
+      <line x1="80" y1="40" x2="80" y2="230" style="stroke:var(--muted);stroke-dasharray:4 4"/>
+      <text x="60" y="35" text-anchor="end" direction="rtl" style="font-size:12px;fill:var(--muted)">זמן ↓</text>
+      <g style="font-size:13px">
+        <rect x="120" y="20" width="260" height="30" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <text x="250" y="40" text-anchor="middle" direction="rtl">בקשה A (Dana)</text>
+        <rect x="420" y="20" width="260" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <text x="550" y="40" text-anchor="middle" direction="rtl">בקשה B (Yossi)</text>
+        <text x="250" y="80" text-anchor="middle" class="mono" style="font-size:12px">SELECT stock → 1 ✓</text>
+        <text x="550" y="110" text-anchor="middle" class="mono" style="font-size:12px">SELECT stock → 1 ✓</text>
+        <text x="250" y="140" text-anchor="middle" class="mono" style="font-size:12px">UPDATE stock = 0</text>
+        <text x="550" y="170" text-anchor="middle" class="mono" style="font-size:12px">UPDATE stock = 0</text>
+        <text x="250" y="200" text-anchor="middle" direction="rtl">"ההזמנה התקבלה" ✓</text>
+        <text x="550" y="200" text-anchor="middle" direction="rtl">"ההזמנה התקבלה" ✓</text>
+      </g>
+      <text x="400" y="236" text-anchor="middle" direction="rtl" style="font-size:13px;fill:var(--red);font-weight:700">שתי מטחנות נמכרו, אחת במלאי. המלאי: 0 — אף אחד לא רואה שמשהו השתבש.</text>
+    </svg>
+    <figcaption>איור 1: "lost update". כל בקשה לבד נכונה; יחד — באג. ו־transaction לבד לא פותר את זה: ב־Read Committed (ברירת המחדל) שני ה־SELECT־ים רואים 1.</figcaption>
+  </figure>
+  <p>הבאג הזה לא יופיע בפיתוח (אתה לבד), וגם לא בבדיקות רגילות. הוא יופיע במבצע של Black Friday.</p>
+
+  <h2>2. פתרון 1: עדכון אטומי עם תנאי</h2>
+```sql run db=18-consistency/files/bank.sql
+UPDATE inventory SET stock = stock - 1 WHERE product_id = 1 AND stock >= 1;
+UPDATE inventory SET stock = stock - 1 WHERE product_id = 1 AND stock >= 1;
+SELECT stock FROM inventory WHERE product_id = 1;
+```
+```out
+UPDATE 1
+UPDATE 0
+ stock
+-------
+     0
+(1 row)
+```
+  <p>במקום "קרא ואז כתוב" — פקודה אחת שבודקת וכותבת. `stock - 1` מחושב <em>במסד</em> מהערך העדכני, ו־`AND stock >= 1` מוודא שיש. הראשון: `UPDATE 1` (נמכר). השני: `UPDATE 0` — אף שורה לא עודכנה, כלומר אזל. בקוד: `if (result.rowCount === 0) throw new HttpError(409, ...)`. גם כששתי הפקודות מגיעות באותה מילישנייה — המסד נועל את השורה לרגע העדכון, והשנייה רואה כבר את 0. זה הפתרון הפשוט והמהיר ביותר — כשמתאים, תמיד אותו.</p>
+
+  <h2>3. פתרון 2: אילוץ כרשת ביטחון</h2>
+  <p>`stock integer NOT NULL CHECK (stock >= 0)` — גם אם יש באג בקוד, המסד לא יסכים למלאי שלילי. העדכון השני ייכשל עם `violates check constraint`, וה־transaction שלו יבוטל. אילוצים הם לא "במקום" לוגיקה נכונה — הם מה שתופס את מה שהלוגיקה פספסה.</p>
+
+  <h2>4. פתרון 3: SELECT ... FOR UPDATE</h2>
+  <p>לפעמים צריך לקרוא, לחשוב בקוד (הנחות, מבצעים, בדיקות מסובכות) ורק אז לכתוב. אז נועלים את השורה בזמן הקריאה. בשני חלונות psql:</p>
+```term
+.. ── חלון A ──────────────────────────────────────────
+% BEGIN;
+% SELECT stock FROM inventory WHERE product_id = 2 FOR UPDATE;
+ stock
+-------
+    40
+.. ── חלון B ──────────────────────────────────────────
+% BEGIN;
+% SELECT stock FROM inventory WHERE product_id = 2 FOR UPDATE;
+.. (B נתקע ומחכה — השורה נעולה על ידי A)
+.. ── חלון A ──────────────────────────────────────────
+% UPDATE inventory SET stock = stock - 5 WHERE product_id = 2;
+% COMMIT;
+.. ── חלון B ──────────────────────────────────────────
+ stock
+-------
+    35
+.. (B ממשיך — ורואה את הערך אחרי השינוי של A)
+% COMMIT;
+```
+  <p>`FOR UPDATE` אומר: "אני עומד לשנות את השורות האלה — אף אחד אחר לא נוגע בהן עד שאסיים". הנעילה משתחררת ב־COMMIT או ROLLBACK. המחיר: בקשות מחכות בתור. לכן — transactions קצרים, ובלי לחכות בתוכם לדברים חיצוניים (קריאה ל־API של תשלומים בתוך transaction פתוח = כל הקונים של אותו מוצר מחכים לספק התשלומים).</p>
+  <div class="box tip">
+    <span class="box-title">💡 גם UPDATE נועל</span>
+    <p>כל `UPDATE` נועל את השורות שהוא משנה עד סוף ה־transaction. אם A עשה `UPDATE accounts ... WHERE id = 1` בתוך BEGIN, ו־B מנסה לעדכן את אותה שורה — B מחכה עד ש־A יסיים, ואז מחשב מהערך החדש. בגלל זה פתרון 1 עובד.</p>
+  </div>
+
+  <h2>5. Deadlock</h2>
+```term
+.. ── A ── העברה מ־Dana (1) ל־Avi (4)        ── B ── העברה מ־Avi (4) ל־Dana (1)
+.. A: UPDATE ... WHERE id = 1   (נועל את 1)
+..                                          B: UPDATE ... WHERE id = 4   (נועל את 4)
+.. A: UPDATE ... WHERE id = 4   (מחכה ל־B)
+..                                          B: UPDATE ... WHERE id = 1   (מחכה ל־A)
+!! ERROR:  deadlock detected
+```
+  <p>כל אחד מחכה לשני — לנצח. PostgreSQL מזהה את זה תוך שנייה, מבטל אחד מהם (קוד שגיאה `40P01`), והשני ממשיך. מניעה: לנעול תמיד באותו סדר — למשל קודם את ה־id הקטן. בהעברה: `ORDER BY id` ב־`SELECT ... FOR UPDATE` של שני החשבונות.</p>
+
+  <h2>6. רמות בידוד וניסיון חוזר</h2>
+  <div class="table-wrap"><table>
+    <tr><th>רמה</th><th>מה רואים</th><th>מתי</th></tr>
+    <tr><td>Read Committed (ברירת מחדל)</td><td>כל פקודה רואה את מה ש־commit עד אליה</td><td>כמעט תמיד — עם עדכונים אטומיים ו־FOR UPDATE</td></tr>
+    <tr><td>Repeatable Read</td><td>כל ה־transaction רואה "צילום" מהתחלתו</td><td>דוחות שצריכים תמונה עקבית</td></tr>
+    <tr><td>Serializable</td><td>כאילו כל ה־transactions רצו אחד אחרי השני</td><td>חוקים מסובכים בין שורות שונות</td></tr>
+  </table></div>
+  <p>ברמות הגבוהות, כשיש התנגשות המסד לא מחכה — הוא <strong>זורק</strong>: `could not serialize access due to concurrent update` (קוד `40001`). הקוד שלך צריך לתפוס את הקוד הזה ולנסות שוב את כל ה־transaction מההתחלה (תרגיל E19). שגיאות `40001` ו־`40P01` הן "זמניות" — כמו 503 בפרק 14.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P18-E02">E02</a> · <a href="exercises.html#P18-E03">E03</a> · <a href="exercises.html#P18-E09">E09</a> · <a href="exercises.html#P18-E10">E10</a> · <a href="exercises.html#P18-E13">E13</a> · <a href="exercises.html#P18-E14">E14</a> · <a href="exercises.html#P18-E19">E19</a> · <a href="exercises.html#P18-E21">E21</a></p>
+  </div>

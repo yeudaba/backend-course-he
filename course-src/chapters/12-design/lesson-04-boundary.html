@@ -1,0 +1,81 @@
+  <div class="box goal">
+    <span class="box-title">🎯 יחידת גישור — TypeScript לא בודק בקשות</span>
+    <p>לפני שנבנה שרת (פרקים 14–15), חשוב לסגור בלבול נפוץ מאוד: אם יש לי טיפוסים בכל מקום — למה צריך עוד בדיקות קלט?</p>
+  </div>
+
+  <h2>1. הניסוי</h2>
+```ts run
+type CreateOrderDto = { productId: number; qty: number };
+
+function createOrder(dto: CreateOrderDto): string {
+  const total = dto.qty * 10;
+  return `הזמנה: ${dto.qty} יחידות, סה״כ ${total}`;
+}
+
+const body: CreateOrderDto = JSON.parse('{"productId": "7", "qty": "-3abc"}');
+console.log(createOrder(body));
+```
+```out
+הזמנה: -3abc יחידות, סה״כ NaN
+```
+  <p>TypeScript לא התלונן בכלל — כי `JSON.parse` מחזיר `any`, וההשמה ל־`CreateOrderDto` "האמינה" לו. ובזמן ריצה הטיפוסים כבר לא קיימים. כך בדיוק נראית בקשה מהרשת: <strong>טקסט שכל אחד יכול לשלוח</strong>.</p>
+
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="גבול המערכת: בדיקה בזמן ריצה בכניסה, טיפוסים בפנים">
+      <defs><marker id="abd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="250" y="20" width="450" height="160" rx="14" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+      <rect x="230" y="20" width="40" height="160" rx="6" style="fill:var(--red-soft);stroke:var(--red);stroke-width:2"/>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M60 100 H 226" marker-end="url(#abd)"/><path d="M274 100 H 400" marker-end="url(#abd)"/></g>
+      <g text-anchor="middle">
+        <text x="120" y="80" direction="rtl" style="font-size:14px;font-weight:700">העולם</text>
+        <text x="120" y="125" direction="rtl" style="font-size:12px">JSON, URL, קבצים</text>
+        <text x="120" y="143" class="mono" style="font-size:12px">unknown</text>
+        <text x="250" y="198" direction="rtl" style="font-size:12px;fill:var(--red)">validation</text>
+        <text x="520" y="70" direction="rtl" style="font-size:15px;font-weight:700">בתוך המערכת</text>
+        <text x="520" y="100" direction="rtl" style="font-size:13px">הנתונים כבר נבדקו</text>
+        <text x="520" y="122" direction="rtl" style="font-size:13px">← הטיפוסים אמינים</text>
+        <text x="520" y="150" class="mono" style="font-size:12px">CreateOrderDto, Product, ...</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: בודקים <strong>פעם אחת, בכניסה</strong>. מעבר לגבול — סומכים על הטיפוסים.</figcaption>
+  </figure>
+
+  <h2>2. הדפוס: parse, don't validate</h2>
+  <p>במקום "לבדוק ואז להמשיך עם אותו `any`", כותבים פונקציה שמקבלת `unknown` ומחזירה <strong>אובייקט חדש מוקלד</strong> (או זורקת):</p>
+```ts run
+type CreateOrderDto = { productId: number; qty: number };
+
+class ValidationError extends Error {}
+
+function parseCreateOrder(input: unknown): CreateOrderDto {
+  if (typeof input !== "object" || input === null) {
+    throw new ValidationError("גוף הבקשה חייב להיות אובייקט");
+  }
+  const { productId, qty } = input as Record<string, unknown>;
+  if (typeof productId !== "number" || !Number.isInteger(productId)) {
+    throw new ValidationError("productId חייב להיות מספר שלם");
+  }
+  if (typeof qty !== "number" || !Number.isInteger(qty) || qty < 1) {
+    throw new ValidationError("qty חייב להיות מספר שלם חיובי");
+  }
+  return { productId, qty };
+}
+
+try {
+  parseCreateOrder(JSON.parse('{"productId": "7", "qty": "-3abc"}'));
+} catch (err) {
+  console.log((err as Error).message);
+}
+console.log(parseCreateOrder({ productId: 7, qty: 2, isAdmin: true }));
+```
+```out
+productId חייב להיות מספר שלם
+{ productId: 7, qty: 2 }
+```
+  <p>שלושה דברים טובים: (1) הקלט הרע נעצר בגבול; (2) שדה מיותר (`isAdmin: true`) <strong>לא עובר פנימה</strong> — אחרת תוקף היה יכול להעביר שדות שלא תכננת (זו פרצה אמיתית בשם mass assignment); (3) מעכשיו כל הקוד עובד עם `CreateOrderDto` אמיתי.</p>
+  <p>(`input as Record<string, unknown>` — הצבה שמותר להשתמש בה כאן, כי בדקנו שזה אובייקט, וכל שדה עדיין `unknown` שנבדק.) את הקוד הזה תכתוב שוב ושוב — ולכן בפרק 15 נעבור ל־Zod, ובפרק 20 ל־class-validator של NestJS. אבל הרעיון — <strong>טיפוסים לא מחליפים validation</strong> — הוא מה שחשוב.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P12-E05">E05</a> · <a href="exercises.html#P12-E12">E12</a> · <a href="exercises.html#P12-E18">E18</a> · <a href="exercises.html#P12-E19">E19</a> · <a href="exercises.html#P12-E23">E23</a> — ואת האתגרים <a href="exercises.html#P12-E24">E24</a> ו־<a href="exercises.html#P12-E25">E25</a>.</p>
+  </div>

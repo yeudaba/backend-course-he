@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 1: schema, repository ו־service — פרויקט 2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 2</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — שלב 1: schema, repository ו־service</h1>
+  <p class="subtitle">⏱ ~90 דקות · 🤖 PR2-SCHEMA, PR2-SERVICE</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <p>הלב של הפרויקט — בלי HTTP בכלל: מה זו משימה תקינה (schema), איפה היא נשמרת (repository), ומה החוקים (service). בסוף: <code>npm run check PR2-SCHEMA -- --dir ~/dev/tasks-api</code> ו־<code>PR2-SERVICE</code> עוברים.</p>
+  </div>
+
+  <h2>1. <code>tasks.schema.ts</code></h2>
+  <div class="table-wrap"><table>
+    <tr><th>סכמה</th><th>שדות</th></tr>
+    <tr><td><code>createTaskSchema</code></td><td><code>title</code> — trim, 1–120 · <code>description</code> — trim, עד 2000, nullable, ברירת מחדל <code>null</code> · <code>status</code> — <code>STATUSES</code>, ברירת מחדל <code>"todo"</code> · <code>priority</code> — <code>PRIORITIES</code>, ברירת מחדל <code>"medium"</code> · <code>dueDate</code> — <code>z.iso.date()</code> (YYYY-MM-DD, כולל בדיקה שהתאריך קיים), nullable, ברירת מחדל <code>null</code></td></tr>
+    <tr><td><code>updateTaskSchema</code></td><td>אותם שדות, כולם לא חובה, בלי ברירות מחדל; <strong>strict</strong> (שדה לא מוכר ← שגיאה); לפחות שדה אחד</td></tr>
+    <tr><td><code>listQuerySchema</code></td><td><code>status</code>, <code>priority</code> — לא חובה · <code>q</code> — trim, לפחות תו, לא חובה · <code>sort</code> — <code>SORTS</code>, ברירת מחדל <code>"-createdAt"</code> · <code>page</code> ≥ 1 (1) · <code>limit</code> 1–50 (20) — עם coerce</td></tr>
+    <tr><td><code>idParamsSchema</code></td><td><code>{ id }</code> — שלם חיובי, עם coerce</td></tr>
+  </table></div>
+  <details><summary>💡 רמז: למה לא <code>createTaskSchema.partial()</code> לעדכון?</summary>
+    <p>כי <code>partial()</code> משאיר את ה־<code>default</code>־ים: <code>{ "status": "done" }</code> היה הופך ל־<code>{ status: "done", priority: "medium", description: null, ... }</code> — ו־PATCH היה דורס שדות שהלקוח לא ביקש לשנות. לכן כותבים את הסכמה מחדש עם <code>z.strictObject({...}).partial()</code> (כמו P15-E17).</p>
+  </details>
+
+  <h2>2. <code>tasks.repository.ts</code></h2>
+  <p>ה־interface <code>TasksRepository</code> כבר כתוב — זה ה<strong>חוזה</strong>. ממש את <code>InMemoryTasksRepository</code>:</p>
+  <ul>
+    <li>מערך פרטי (<code>#tasks</code>) ומונה (<code>#nextId</code>, מתחיל ב־1). id לא חוזר לשימוש אחרי מחיקה.</li>
+    <li><code>update</code> משנה רק את השדות שהתקבלו ומחזיר את המשימה המעודכנת, או <code>undefined</code> אם אין. <code>delete</code> מחזיר <code>true</code>/<code>false</code>.</li>
+    <li><strong>מחזירים עותקים</strong> (<code>{ ...task }</code>). אחרת, קוד שמקבל משימה ומשנה אותה (למשל במיון או בבדיקה) משנה את המאגר בלי לעבור דרך <code>update</code>. מסד נתונים אמיתי מתנהג כמו עותק — אז גם הזיכרון צריך.</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 למה async, כשהכול בזיכרון?</span>
+    <p>כי בפרק 19 תכתוב <code>PrismaTasksRepository</code> עם אותו interface — ושם כל קריאה היא async. אם ה־service כבר עושה <code>await this.repo.findById(...)</code>, ההחלפה תהיה שורה אחת ב־<code>createApp</code>. זה בדיוק "לתכנן לשינוי" מפרק 12.</p>
+  </div>
+
+  <h2>3. <code>tasks.service.ts</code> — חלק א׳</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מתודה</th><th>התנהגות</th></tr>
+    <tr><td><code>get(id)</code></td><td>המשימה, או <code>HttpError(404, "TASK_NOT_FOUND", ...)</code></td></tr>
+    <tr><td><code>create(input)</code></td><td><code>dueDate</code> לפני היום ← <code>HttpError(422, "DUE_DATE_IN_PAST", ...)</code>. אחרת — <code>createdAt</code> ו־<code>updatedAt</code> = <code>this.now().toISOString()</code>, ושמירה</td></tr>
+    <tr><td><code>update(id, changes)</code></td><td>מעדכן ו־<code>updatedAt</code> = עכשיו; לא קיים ← 404</td></tr>
+    <tr><td><code>remove(id)</code></td><td>לא קיים ← 404</td></tr>
+  </table></div>
+  <p>("היום" — לפי UTC: <code>now.toISOString().slice(0, 10)</code>. ומשווים מחרוזות YYYY-MM-DD ישירות — בפורמט הזה, סדר מילוני = סדר כרונולוגי. אזורי זמן כמו שצריך — פרק 24.)</p>
+  <p><code>now</code> מוזרק ב־constructor — כך הבדיקה קובעת "היום הוא 4 בנובמבר" ובודקת 422 בלי תלות בתאריך האמיתי.</p>
+  <details><summary>💡 רמז: איך HttpError מגיע ל־service?</summary>
+    <p><code>errors.ts</code> כבר מכיל את המחלקה <code>HttpError</code> (מוכנה בשלד). ה־service מייבא אותה וזורק. (יש מי שמעדיף שה־service יזרוק שגיאות "עסקיות" כמו <code>TaskNotFoundError</code>, ושה־errorHandler יתרגם ל־HTTP. זה נקי יותר — וזה מה ש־NestJS עושה עם exception filters. כאן נשארים פשוטים.)</p>
+  </details>
+
+  <h2>4. בדיקה</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run check PR2-SCHEMA -- --dir ~/dev/tasks-api
+<span class="prompt">% </span>npm run check PR2-SERVICE -- --dir ~/dev/tasks-api</pre>
+  <p>עבר? commit: <code>git commit -am "Add task schemas, repository and service"</code> (ו־<code>git add</code> לקבצים חדשים אם יש).</p>
+
+<div class="pager"><a href="stage-0-plan.html"><small>הקודם</small>שיעור 1 — תכנון, הקמה ו־Git</a><a href="stage-2-http.html"><small>הבא</small>שיעור 3 — שלב 2: routes, ולידציה ושגיאות</a></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>Swagger: תיעוד API אוטומטי וממשק לניסוי.</li>
+      <li>בדיקות ב־Nest: `Test.createTestingModule` ו־`overrideProvider`.</li>
+      <li>פרויקט 2 עובר ל־Nest — עם אותו API בדיוק. בסוף: PR2-NEST עובר.</li>
+    </ul>
+  </div>
+
+  <h2>1. Swagger</h2>
+```ts file=src/app.setup.ts
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+
+const config = new DocumentBuilder().setTitle("tasks-api").setVersion("1.0").build();
+SwaggerModule.setup("docs", app, () => SwaggerModule.createDocument(app, config));
+```
+  <p>פתח `http://localhost:3000/docs`: כל ה־endpoints, עם כפתור "Try it out" ששולח בקשה אמיתית. ה־JSON הגולמי (מפרט OpenAPI) — ב־`/docs-json`; ממנו אפשר לייצר לקוחות אוטומטית (גם ה־Frontend יכול). Nest יודע לתאר את הגוף מתוך DTO של class־validator, עם `@ApiProperty()` על השדות (או ה־plugin של ה־CLI שמוסיף אותם לבד). בפרויקט שלנו הסכמות הן Zod — ו־Zod 4 יודע לייצר JSON Schema: `@ApiBody({ schema: z.toJSONSchema(createTaskSchema, { io: "input" }) })`.</p>
+  <div class="box tip">
+    <span class="box-title">💡 למה זה חשוב בראיון</span>
+    <p>קישור ל־`/docs` של פרויקט שרץ — המראיין לוחץ, רואה את כל ה־API, ושולח בקשה. זה שווה יותר מעמוד README שלם. בפרויקט הדגל זו דרישה.</p>
+  </div>
+
+  <h2>2. בדיקה של אפליקציית Nest</h2>
+```ts
+const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  .overrideProvider(TASKS_REPOSITORY).useValue(new InMemoryTasksRepository())
+  .overrideProvider(CLOCK).useValue({ now: () => new Date("2026-11-04T10:00:00Z") })
+  .compile();
+const app = moduleRef.createNestApplication();
+configureApp(app);          // אותן הגדרות גלובליות כמו ב־main.ts
+await app.init();
+await app.listen(0);        // או: supertest מול app.getHttpServer()
+```
+  <p>זה מה שהבודק עושה לפרויקט שלך (ופרק 22 יעמיק). שים לב לשני דברים שמאפשרים את זה: (1) `configureApp` — פונקציה אחת עם כל ההגדרות הגלובליות, ש־main.ts <em>וגם</em> הבדיקות קוראות לה; (2) tokens לתלויות שמחליפים.</p>
+
+  <h2>3. פרויקט 2 עובר ל־Nest</h2>
+  <p>הכי נקי: ענף חדש ב־Git (`git switch -c nest`), פרויקט Nest חדש בתיקייה זמנית, והעברת הקוד אליו. בסוף — מיזוג לענף הראשי. ההיסטוריה ב־GitHub תספר את הסיפור.</p>
+```term
+% cd ~/dev && npx @nestjs/cli@12 new tasks-nest --package-manager npm --strict --skip-git
+```
+  <p>העבר מ־`tasks-nest` לתוך `tasks-api`: `nest-cli.json`, `tsconfig.json`, `tsconfig.build.json`, ואת ה־scripts וה־dependencies מ־`package.json` (ו־`npm install`). מ־`tasks-api` הקיים נשארים: `prisma/` (כמעט בלי שינוי), `src/tasks/tasks.schema.ts`, `tasks.repository.ts`, `tasks.prisma-repository.ts`, `tasks.service.ts`, `src/errors.ts`, `web/`, `requests.http`.</p>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>מה עושים</th></tr>
+    <tr><td>כל ה־imports</td><td>בלי `.ts` בסוף (Nest מתקמפל ל־CommonJS)</td></tr>
+    <tr><td>`prisma/schema.prisma`</td><td>בגנרטור: `moduleFormat = "cjs"` ו־`importFileExtension = ""` — ואז `npx prisma generate`. (אין migration חדש: המבנה לא השתנה)</td></tr>
+    <tr><td>`src/prisma/prisma.service.ts` + `prisma.module.ts`</td><td>חדש: `PrismaService extends PrismaClient`, עם ה־adapter ו־`timezone=UTC`; module עם `@Global()`</td></tr>
+    <tr><td>`src/tasks/tasks.tokens.ts`</td><td>חדש: `TASKS_REPOSITORY`, `CLOCK` ו־`interface Clock`</td></tr>
+    <tr><td>`tasks.service.ts`</td><td>`@Injectable()`, ו־constructor עם `@Inject(TASKS_REPOSITORY)` ו־`@Inject(CLOCK)`</td></tr>
+    <tr><td>`tasks.prisma-repository.ts`</td><td>`@Injectable()`, ו־`constructor(private readonly prisma: PrismaService)`</td></tr>
+    <tr><td>`src/common/zod-validation.pipe.ts`</td><td>חדש: pipe שמקבל סכמת Zod וזורק `HttpError(400, "VALIDATION_ERROR", ...)` עם paths כמו `body.title`</td></tr>
+    <tr><td>`tasks.controller.ts`</td><td>במקום `tasks.routes.ts`: `@Get()`, `@Get("stats")` (לפני `:id`!), `@Post()` עם `Location`, `@Delete()` עם `@HttpCode(204)`</td></tr>
+    <tr><td>`src/common/http-error.filter.ts`</td><td>במקום `errorHandler`: `@Catch()` שמחזיר `{ error: { code, message, details? } }` — גם ל־`HttpError`, גם ל־404 של Nest, גם ל־JSON שבור, ו־500 לכל השאר</td></tr>
+    <tr><td>`src/app.setup.ts`</td><td>`configureApp(app, { corsOrigins })`: filter, CORS, Swagger</td></tr>
+    <tr><td>`src/main.ts`, `app.module.ts`, `health.controller.ts`</td><td>bootstrap, module ראשי (`PrismaModule`, `TasksModule`), ו־`GET /health`</td></tr>
+  </table></div>
+  <details><summary>💡 רמז: ה־Location ב־POST</summary>
+    <p>`@Res({ passthrough: true }) res: Response` בפרמטרים, ואז `res.location(...)` — וממשיכים להחזיר את האובייקט כרגיל (passthrough אומר ל־Nest "אני רק נוגע ב־res, אתה עדיין שולח").</p>
+  </details>
+  <details><summary>💡 רמז: ZodValidationPipe ו־params</summary>
+    <p>`transform(value, metadata)` — `metadata.type` הוא `"body"`, `"query"` או `"param"`, ו־`metadata.data` הוא שם הפרמטר (`"id"`). כך בונים את ה־path: `params.id`. ל־`@Param("id", pipe)` מעבירים סכמה של ערך בודד: `idParamsSchema.shape.id`.</p>
+  </details>
+  <details><summary>💡 רמז: לזהות JSON שבור ב־filter</summary>
+    <p>Nest עוטף את השגיאה של body-parser כ־`BadRequestException` שההודעה שלה מזכירה JSON. `/JSON/i.test(message)` ← `INVALID_JSON`.</p>
+  </details>
+
+  <h2>4. להריץ ולבדוק</h2>
+```term
+% npm run start:dev
+.. tasks-api רץ: http://localhost:3000  (תיעוד: /docs)
+% npm run build
+% cd ~/dev/backend-course && npm run check PR2-NEST -- --dir ~/dev/tasks-api
+```
+  <p>PR2-NEST טוען את ה־`dist/` שלך (לכן `npm run build` לפני), מחליף את ה־repository ואת השעון, ומריץ את בדיקות ה־API — כולל שמבנה השגיאות זהה לגרסת Express, ושהתיעוד ב־`/docs-json`. (PR2-SCHEMA/SERVICE/API/LIST/DB נכתבו לגרסת Express ולא ירוצו על פרויקט Nest — זה צפוי.) ובדיקה ידנית: הדף של יחידה 15.5 (`npm run web`) עובד מול השרת החדש בלי שום שינוי. זה כל הרעיון.</p>
+  <p>עדכן את ה־README (Nest, `/docs`), commit, מיזוג ו־push. הפתרון לשלב הזה: `20-nestjs/solutions/tasks-api`.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>בראיונות למשרות Nest שואלים: "מה ההבדל בין guard ל־middleware?", "למה צריך `@Injectable()`?", "איך מחליפים תלות בבדיקה?", "מה הסדר של pipes/guards/interceptors?". ובמשימות בית — "בנה API ב־Nest עם ולידציה ו־Swagger". אחרי הפרק הזה ופרויקט 2 — יש לך תשובה ודוגמה לכל אחת.</p>
+  </div>

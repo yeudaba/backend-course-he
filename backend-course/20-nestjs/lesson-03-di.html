@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dependency injection, guards ו־filters — פרק 20</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — Dependency injection, guards ו־filters</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>custom providers ו־injection tokens.</li>
+      <li>modules שמייבאים ומייצאים.</li>
+      <li>guards, interceptors, exception filters — ומחזור החיים של בקשה.</li>
+    </ul>
+  </div>
+
+  <h2>1. Custom providers</h2>
+  <p>לא כל תלות היא class. שעון, הגדרות, repository לפי interface — לאלה נותנים <strong>token</strong> (מחרוזת או Symbol):</p>
+<pre><code class="lang-ts">export const CLOCK = "CLOCK";
+export interface Clock { now(): Date }
+
+@Module({
+  providers: [
+    TasksService,
+    { provide: CLOCK, useValue: { now: () =&gt; new Date() } },                 // ערך מוכן
+    { provide: TASKS_REPOSITORY, useClass: PrismaTasksRepository },          // class לפי בחירה
+    { provide: CONFIG, useFactory: () =&gt; loadConfig(process.env) },         // פונקציה (גם async)
+  ],
+})
+export class TasksModule {}
+
+@Injectable()
+export class TasksService {
+  constructor(
+    @Inject(TASKS_REPOSITORY) private readonly repo: TasksRepository,     // interface — אין לו טיפוס בזמן ריצה, לכן token
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+}</code></pre>
+  <p>למה <code>@Inject(TOKEN)</code>? <code>TasksRepository</code> הוא interface — הוא נמחק בקומפילציה, ו־Nest לא יכול "לראות" אותו. ה־token הוא השם שבו מבקשים. וזה בדיוק מה שמאפשר בבדיקה:</p>
+<pre><code class="lang-ts">const moduleRef = await Test.createTestingModule({ imports: [TasksModule] })
+  .overrideProvider(TASKS_REPOSITORY).useValue(new InMemoryTasksRepository())
+  .overrideProvider(CLOCK).useValue({ now: () =&gt; new Date("2026-11-04T10:00:00Z") })
+  .compile();</code></pre>
+  <p>אותו רעיון כמו <code>createApp({ repository, now })</code> של פרויקט 2 — רק ש־Nest מנהל את זה.</p>
+
+  <h2>2. Modules: imports / exports</h2>
+<pre><code class="lang-ts">@Module({ providers: [UsersService], exports: [UsersService] })   // ← מאפשר לאחרים להשתמש
+export class UsersModule {}
+
+@Module({ imports: [UsersModule], providers: [OrdersService], controllers: [OrdersController] })
+export class OrdersModule {}   // OrdersService יכול לקבל UsersService ב־constructor</code></pre>
+  <p>provider "פרטי" ל־module שלו, עד שמייצאים אותו. שכחת <code>exports</code> או <code>imports</code>? Nest לא יעלה, עם הודעה כמו: <code>Nest can't resolve dependencies of the OrdersService (?). Please make sure that the argument UsersService at index [0] is available in the OrdersModule context.</code> — קרא אותה לאט, היא אומרת בדיוק מה חסר.</p>
+
+  <h2>3. מחזור החיים של בקשה</h2>
+  <figure>
+    <svg viewBox="0 0 720 150" role="img" aria-label="middleware, guards, interceptors, pipes, handler, filters">
+      <defs><marker id="lc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="610" y="30" width="90" height="50" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="500" y="30" width="90" height="50" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="390" y="30" width="90" height="50" rx="8" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="280" y="30" width="90" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="170" y="30" width="90" height="50" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="30" y="30" width="120" height="50" rx="8" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M608 55 H 594" marker-end="url(#lc)"/><path d="M498 55 H 484" marker-end="url(#lc)"/><path d="M388 55 H 374" marker-end="url(#lc)"/><path d="M278 55 H 264" marker-end="url(#lc)"/><path d="M168 55 H 154" marker-end="url(#lc)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px;font-weight:700">
+        <text x="655" y="60">middleware</text><text x="545" y="60">guards</text><text x="435" y="60">interceptors</text><text x="325" y="60">pipes</text><text x="215" y="60">handler</text><text x="90" y="60">filters</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px">
+        <text x="545" y="100" direction="rtl">מורשה? (401/403)</text>
+        <text x="435" y="100" direction="rtl">לפני/אחרי (זמן, לוג)</text>
+        <text x="325" y="100" direction="rtl">המרה ובדיקה (400)</text>
+        <text x="215" y="100" direction="rtl">הקוד שלך</text>
+        <text x="90" y="100" direction="rtl">שגיאה ← תשובה</text>
+      </g>
+      <text x="360" y="135" text-anchor="middle" direction="rtl" style="font-size:12px;fill:var(--muted)">שגיאה בכל שלב — קופצת ישר ל־filters</text>
+    </svg>
+    <figcaption>איור 1: הסדר קבוע. guard שמחזיר false — הבקשה לא מגיעה ל־pipes ול־handler בכלל.</figcaption>
+  </figure>
+<span class="file-label">src/common/api-key.guard.ts</span>
+<pre><code class="lang-ts">@Injectable()
+export class ApiKeyGuard implements CanActivate {
+  constructor(@Inject(API_KEYS) private readonly keys: Set&lt;string&gt;) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest&lt;Request&gt;();
+    const key = req.get("x-api-key");
+    if (!key) throw new UnauthorizedException("חסר X-Api-Key");
+    if (!this.keys.has(key)) throw new ForbiddenException("מפתח לא מוכר");
+    return true;
+  }
+}
+// שימוש: @UseGuards(ApiKeyGuard) מעל controller או מתודה</code></pre>
+<span class="file-label">src/common/http-exception.filter.ts</span>
+<pre><code class="lang-ts">@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const status = exception.getStatus();
+    res.status(status).json({ error: { code: CODES[status] ?? "ERROR", message: exception.message } });
+  }
+}
+// שימוש: app.useGlobalFilters(new HttpExceptionFilter())</code></pre>
+  <p><code>ExecutionContext</code> / <code>ArgumentsHost</code> — עטיפה כללית (Nest תומך גם ב־GraphQL ו־WebSockets); <code>switchToHttp()</code> נותן את <code>req</code>/<code>res</code> הרגילים של Express.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P20-E03">E03</a> · <a href="exercises.html#P20-E04">E04</a> · <a href="exercises.html#P20-E11">E11</a> · <a href="exercises.html#P20-E12">E12</a> · <a href="exercises.html#P20-E13">E13</a> · <a href="exercises.html#P20-E14">E14</a> · <a href="exercises.html#P20-E15">E15</a> · <a href="exercises.html#P20-E17">E17</a> · <a href="exercises.html#P20-E18">E18</a> · <a href="exercises.html#P20-E20">E20</a> · <a href="exercises.html#P20-E22">E22</a> · <a href="exercises.html#P20-E23">E23</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-controllers.html"><small>הקודם</small>שיעור 2 — Controllers, DTOs ו־validation</a><a href="lesson-04-project.html"><small>הבא</small>שיעור 4 — Swagger, בדיקות ופרויקט 2 ב־Nest</a></div>
+</main>
+</body>
+</html>

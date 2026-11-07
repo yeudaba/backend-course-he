@@ -1,0 +1,134 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <p>פרויקט 2 עובר ל־PostgreSQL. היעד: אותו API בדיוק (כל בדיקות PR2 ממשיכות לעבור), אבל המשימות נשמרות במסד — וסינון, מיון ו־pagination קורים <em>במסד</em>. בסוף: `npm run check PR2 -- --dir ~/dev/tasks-api` עובר, כולל PR2-DB.</p>
+  </div>
+
+  <h2>1. התוכנית</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>שינוי</th></tr>
+    <tr><td>`package.json`</td><td>Prisma, adapter, dotenv; סקריפטים `db:*`</td></tr>
+    <tr><td>`prisma.config.ts`, `prisma/schema.prisma`</td><td>חדשים — מודל `Task`</td></tr>
+    <tr><td>`src/db.ts`</td><td>חדש — `createPrisma(url)`</td></tr>
+    <tr><td>`src/tasks/tasks.repository.ts`</td><td>החוזה מקבל `list(query)` ו־`stats(today)`; הלוגיקה עוברת מה־service ל־`InMemoryTasksRepository`</td></tr>
+    <tr><td>`src/tasks/tasks.prisma-repository.ts`</td><td>חדש — `PrismaTasksRepository`</td></tr>
+    <tr><td>`src/tasks/tasks.service.ts`</td><td>`list` ו־`stats` רק מעבירים ל־repository</td></tr>
+    <tr><td>`src/server.ts`</td><td>יוצר Prisma ומעביר `PrismaTasksRepository` ל־`createApp`</td></tr>
+    <tr><td>routes, schemas, errors, `app.ts`</td><td><strong>בלי שינוי</strong></td></tr>
+  </table></div>
+  <p>השורה האחרונה היא כל הסיבה לשכבות של פרק 12 ופרק 15. שווה לעצור ולהעריך את זה.</p>
+
+  <h2>2. הקמה</h2>
+```term
+% cd ~/dev/tasks-api
+% npm install @prisma/client @prisma/adapter-pg pg
+% npm install -D prisma dotenv
+% createdb tasks_dev
+```
+  <p>(ב־EDB: `createdb -U postgres tasks_dev`.) קובץ `.env` בפרויקט (וודא שהוא ב־`.gitignore`!):</p>
+```text file=.env
+DATABASE_URL=postgresql://localhost:5432/tasks_dev
+```
+  <p>וב־`.gitignore` הוסף גם `src/generated/`. צור `prisma.config.ts` כמו בשיעור 1 (עם `seed: "node prisma/seed.ts"` ב־migrations), ו־`prisma/schema.prisma`:</p>
+```text file=prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+// הסדר כאן קובע את סדר המיון במסד: low < medium < high
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+model Task {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  dueDate     DateTime?    @map("due_date") @db.Date
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@map("tasks")
+}
+```
+```term
+% npx prisma migrate dev --name init
+% npx prisma generate
+```
+  <p>commit: "Add Prisma schema and initial migration" (כולל `prisma/migrations` — <strong>כן</strong> ב־Git).</p>
+
+  <h2>3. החוזה מתרחב</h2>
+  <p>ב־`tasks.repository.ts`, ה־interface מקבל שתי מתודות, ו־`InMemoryTasksRepository` מקבל את הלוגיקה שהייתה ב־service:</p>
+```ts
+export interface TasksRepository {
+  list(query: ListQuery): Promise<TaskPage>;   // { data, meta }
+  stats(today: string): Promise<TaskStats>;    // { total, byStatus, overdue }
+  findById(id: number): Promise<Task | undefined>;
+  insert(data: Omit<Task, "id">): Promise<Task>;
+  update(id: number, changes: Partial<Omit<Task, "id">>): Promise<Task | undefined>;
+  delete(id: number): Promise<boolean>;
+}
+```
+  <p>וה־service: `list(query) { return this.repo.list(query); }`, `stats() { return this.repo.stats(today(this.now())); }`. הרץ את PR2-SERVICE, PR2-API ו־PR2-LIST — הם צריכים לעבור כמו קודם. זה refactor: מבנה חדש, התנהגות זהה, והבדיקות מוכיחות את זה.</p>
+
+  <h2>4. PrismaTasksRepository</h2>
+  <p>`src/tasks/tasks.prisma-repository.ts` — מחלקה שמקבלת `PrismaClient` ב־constructor ומממשת את ה־interface. שלושה דברים שצריך לשים לב אליהם:</p>
+  <ol>
+    <li><strong>המרות</strong>: במסד `dueDate` הוא `Date` (בחצות UTC) ו־`createdAt` הוא `Date`; ב־API הם מחרוזות (`"2026-12-31"`, ISO). פונקציה אחת `toTask(row)` לקריאה, ואחת `toData(task)` לכתיבה — לא לפזר המרות בכל מתודה.</li>
+    <li><strong>list במסד</strong>: `where` (status, priority, ו־`OR` של title/description עם `contains` + `mode: "insensitive"`), `orderBy` (כולל `{ dueDate: { sort, nulls: "last" } }`, ו־`{ id: "asc" }` כשובר שוויון), `skip`/`take`, ו־`count` עם אותו where. שתי השאילתות — במקביל עם `Promise.all`.</li>
+    <li><strong>"לא נמצא"</strong>: `update`/`delete` של id שלא קיים זורקים `P2025` — תרגם ל־`undefined`/`false`, כמו בחוזה. ה־service כבר יודע להפוך את זה ל־404.</li>
+  </ol>
+  <details><summary>💡 רמז: stats במסד</summary>
+    <p>`prisma.task.groupBy({ by: ["status"], _count: { _all: true } })` לספירה לפי סטטוס, ו־`count` עם `{ status: { not: "done" }, dueDate: { lt: new Date(today + "T00:00:00Z") } }` לאיחורים.</p>
+  </details>
+  <details><summary>💡 רמז: מיון לפי עדיפות</summary>
+    <p>ב־enum של PostgreSQL הסדר הוא סדר ההגדרה בסכמה — לכן `low, medium, high` (ולא לפי א״ב). `orderBy: { priority: "desc" }` עובד בלי טבלת דרגות.</p>
+  </details>
+
+  <h2>5. server.ts ו־seed</h2>
+```ts file=src/server.ts
+import "dotenv/config";
+import { createApp } from "./app.ts";
+import { createPrisma } from "./db.ts";
+import { PrismaTasksRepository } from "./tasks/tasks.prisma-repository.ts";
+
+const port = Number(process.env.PORT ?? 3000);
+if (!process.env.DATABASE_URL) throw new Error("חסר DATABASE_URL (ראה README)");
+const prisma = createPrisma(process.env.DATABASE_URL);
+
+createApp({
+  repository: new PrismaTasksRepository(prisma),
+  log: console.log,
+  corsOrigins: process.env.CORS_ORIGINS?.split(","),
+}).listen(port, () => console.log(`tasks-api רץ: http://localhost:${port}`));
+```
+  <p>`createApp` נשאר עם ברירת מחדל של InMemory — כך הבדיקות הישנות לא צריכות מסד. ו־`prisma/seed.ts` (עם `createMany` של כמה משימות לדוגמה) + `npm run db:seed`.</p>
+  <p>הרץ `npm run dev`, צור משימות מהדף של יחידה 15.5 — ועצור והפעל את השרת. המשימות נשארו. 🎉</p>
+
+  <h2>6. בדיקה ו־README</h2>
+```term
+% cd ~/dev/backend-course
+% npm run check PR2 -- --dir ~/dev/tasks-api
+```
+  <p>PR2-DB מריץ את ה־migrations שלך על schema זמני, יוצר Prisma Client מה־client שלך, ובודק CRUD, רשימה ו־stats מול המסד. (הוא משתמש ב־`COURSE_DATABASE_URL` מה־`.env` של תיקיית הקורס — לא נוגע ב־`tasks_dev`.)</p>
+  <p>עדכן את ה־README: דרישות (PostgreSQL), שלבי הפעלה (`createdb`, `.env`, `npm run db:migrate`, `npm run db:seed`, `npm run dev`), והורד את "PostgreSQL + Prisma" מ"מה הלאה". commit ו־push. הפתרון לשלב הזה: `19-prisma/solutions/tasks-api`.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"החלפנו את שכבת האחסון בלי לגעת ב־routes, והבדיקות הוכיחו שההתנהגות זהה" — זה משפט שמראיינים אוהבים לשמוע, כי הוא מראה הבנה של ארכיטקטורה ולא רק של ספרייה. ב־README וב־commits של הפרויקט זה נראה. ספר על זה בראיון.</p>
+  </div>

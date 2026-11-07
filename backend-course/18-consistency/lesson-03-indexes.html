@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indexes ו־EXPLAIN — פרק 18</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 18</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — Indexes ו־EXPLAIN</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה index, ואיך הוא עובד (בערך).</li>
+      <li><code>EXPLAIN</code>: Seq Scan מול Index Scan.</li>
+      <li>index על כמה עמודות, index חלקי, ומתי index לא עוזר.</li>
+    </ul>
+  </div>
+
+  <h2>1. בלי index</h2>
+<pre><code class="lang-sql">EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
+SELECT * FROM big_orders WHERE customer_id = 42;</code></pre>
+<pre class="terminal">                     QUERY PLAN
+-----------------------------------------------------
+ Seq Scan on big_orders (actual rows=100.00 loops=1)
+   Filter: (customer_id = 42)
+   Rows Removed by Filter: 199900
+(3 rows)</pre>
+  <p><code>Seq Scan</code> — המסד עבר על <strong>כל 200,000 השורות</strong> כדי למצוא 100 ("Rows Removed by Filter: 199900"). כמו לחפש שם בספר טלפונים לא ממוין: דף אחרי דף. (<code>EXPLAIN ANALYZE</code> מריץ את השאילתה באמת ומראה מה קרה; האפשרויות בסוגריים רק מסתירות מספרים שמשתנים מהרצה להרצה.)</p>
+  <p>ב־psql אפשר למדוד זמן: <code>\timing on</code>, ואז להריץ את השאילתה. אצלך זה יהיה בסביבות כמה מילישניות — עם 200 מיליון שורות, דקות.</p>
+
+  <h2>2. עם index</h2>
+<pre><code class="lang-sql">CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
+SELECT * FROM big_orders WHERE customer_id = 42;</code></pre>
+<pre class="terminal">CREATE INDEX
+                                     QUERY PLAN
+------------------------------------------------------------------------------------
+ Bitmap Heap Scan on big_orders (actual rows=100.00 loops=1)
+   Recheck Cond: (customer_id = 42)
+   Heap Blocks: exact=100
+   -&gt;  Bitmap Index Scan on big_orders_customer_id_idx (actual rows=100.00 loops=1)
+         Index Cond: (customer_id = 42)
+         Index Searches: 1
+(6 rows)</pre>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="B-tree: שורש, צמתים פנימיים, עלים שמצביעים על שורות">
+      <defs><marker id="bt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g class="mono" style="font-size:12px">
+        <rect x="300" y="15" width="120" height="30" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/><text x="360" y="35" text-anchor="middle">&lt; 1000 ≤</text>
+        <rect x="120" y="85" width="140" height="30" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="190" y="105" text-anchor="middle">&lt; 500 ≤</text>
+        <rect x="460" y="85" width="140" height="30" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="530" y="105" text-anchor="middle">&lt; 1500 ≤</text>
+        <rect x="40" y="155" width="130" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/><text x="105" y="175" text-anchor="middle">1 … 42 … 499</text>
+        <rect x="200" y="155" width="110" height="30" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="255" y="175" text-anchor="middle">500 …</text>
+        <rect x="420" y="155" width="110" height="30" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="475" y="175" text-anchor="middle">1000 …</text>
+        <rect x="560" y="155" width="110" height="30" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/><text x="615" y="175" text-anchor="middle">1500 …</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:1.5;fill:none">
+        <path d="M330 47 L 200 83" marker-end="url(#bt)" style="stroke:var(--green);stroke-width:3"/><path d="M390 47 L 520 83" marker-end="url(#bt)"/>
+        <path d="M160 117 L 110 153" marker-end="url(#bt)" style="stroke:var(--green);stroke-width:3"/><path d="M220 117 L 250 153" marker-end="url(#bt)"/>
+        <path d="M500 117 L 480 153" marker-end="url(#bt)"/><path d="M560 117 L 610 153" marker-end="url(#bt)"/>
+      </g>
+      <text x="360" y="210" text-anchor="middle" direction="rtl" style="font-size:12px">customer_id = 42: שלוש "קפיצות" מהשורש לעלה, ומשם ישר ל־100 השורות. בלי לגעת בשאר 199,900.</text>
+    </svg>
+    <figcaption>איור 1: B-tree (סוג ה־index הנפוץ) — עץ ממוין. גם במיליארד שורות, מספר הקפיצות הוא בערך 4–5.</figcaption>
+  </figure>
+  <p><code>Bitmap Index Scan</code> — המסד מצא דרך ה־index את מיקומי 100 השורות ("Heap Blocks: exact=100"), וקרא רק אותן. index הוא עותק ממוין של עמודה (או כמה), עם "כתובת" של כל שורה. כמו אינדקס בסוף ספר.</p>
+
+  <h2>3. המחיר</h2>
+  <ul>
+    <li><strong>כל כתיבה מעדכנת את כל ה־indexes</strong> של הטבלה. 10 indexes ← כל INSERT עושה 11 כתיבות.</li>
+    <li>מקום בדיסק ובזיכרון.</li>
+    <li>לכן: index לשאילתות שבאמת רצות הרבה ושצריכות אותו — לא "ליתר ביטחון" על כל עמודה.</li>
+  </ul>
+  <div class="table-wrap"><table>
+    <tr><th>כן — שקול index על</th><th>לא יעזור</th></tr>
+    <tr><td>עמודות ב־WHERE / JOIN של שאילתות נפוצות</td><td>טבלאות קטנות (מאות שורות) — סריקה מהירה ממילא</td></tr>
+    <tr><td>Foreign keys (<code>orders.customer_id</code>) — PostgreSQL <strong>לא</strong> יוצר להם index אוטומטית!</td><td>עמודה עם מעט ערכים שונים (<code>is_active</code>) כשרוב השורות מתאימות</td></tr>
+    <tr><td>עמודות ב־ORDER BY עם LIMIT ("20 האחרונות")</td><td><code>WHERE lower(email) = ...</code> כשה־index על <code>email</code> (פונקציה על העמודה)</td></tr>
+    <tr><td>(מפתח ראשי ו־UNIQUE — מקבלים index אוטומטית)</td><td><code>LIKE '%abc'</code> — אחוז בהתחלה, אי אפשר "לקפוץ" בעץ ממוין</td></tr>
+  </table></div>
+
+  <h2>4. index על כמה עמודות</h2>
+<pre><code class="lang-sql">CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);
+EXPLAIN (COSTS OFF)
+SELECT id, total FROM big_orders
+WHERE status = 'pending' AND created_at &gt;= '2025-12-01'
+ORDER BY created_at
+LIMIT 20;</code></pre>
+<pre class="terminal">CREATE INDEX
+                                                       QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------
+ Limit
+   -&gt;  Index Scan using big_orders_status_created_idx on big_orders
+         Index Cond: ((status = 'pending'::text) AND (created_at &gt;= '2025-12-01 00:00:00+02'::timestamp with time zone))
+(3 rows)</pre>
+  <p>index על <code>(status, created_at)</code> ממוין קודם לפי status ובתוכו לפי תאריך — כמו ספר טלפונים לפי שם משפחה ואז שם פרטי. הוא עוזר ל־<code>WHERE status = ...</code> ול־<code>WHERE status = ... AND created_at ...</code>, אבל <strong>לא</strong> ל־<code>WHERE created_at ...</code> לבד (כמו שספר טלפונים לא עוזר למצוא את כל מי ששמו "דנה"). כלל: עמודת השוויון ראשונה, עמודת הטווח/מיון אחריה.</p>
+  <h3>index חלקי ו־UNIQUE</h3>
+<pre><code class="lang-sql">-- רק ההזמנות הפתוחות (קטן יותר, ורוב השאילתות של המחסן עליהן)
+CREATE INDEX big_orders_open_idx ON big_orders (created_at) WHERE status IN ('paid', 'pending');
+
+-- אימייל ייחודי בלי תלות באותיות
+CREATE UNIQUE INDEX customers_email_lower_key ON customers (lower(email));</code></pre>
+  <div class="box tip">
+    <span class="box-title">💡 ומה עם הסקריפט שרץ על ייצור?</span>
+    <p><code>CREATE INDEX</code> רגיל נועל את הטבלה לכתיבה עד שהוא מסתיים — בטבלה גדולה זה דקות שבהן אי אפשר ליצור הזמנות. בייצור: <code>CREATE INDEX CONCURRENTLY</code> (איטי יותר, לא חוסם).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P18-E04">E04</a> · <a href="exercises.html#P18-E11">E11</a> · <a href="exercises.html#P18-E12">E12</a> · <a href="exercises.html#P18-E15">E15</a> · <a href="exercises.html#P18-E16">E16</a> · <a href="exercises.html#P18-E22">E22</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-concurrency.html"><small>הקודם</small>שיעור 2 — מקביליות ו־race conditions</a><a href="lesson-04-performance.html"><small>הבא</small>שיעור 4 — N+1 ו־pagination מהירה</a></div>
+</main>
+</body>
+</html>

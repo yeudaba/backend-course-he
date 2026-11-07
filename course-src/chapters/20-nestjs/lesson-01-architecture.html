@@ -1,0 +1,117 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>שלושת אבני הבניין: module, controller, provider.</li>
+      <li>Dependency injection — מה Nest עושה בשבילך.</li>
+      <li>decorators: מה זה, ולמה צריך build.</li>
+      <li>פרויקט חדש עם ה־CLI.</li>
+    </ul>
+  </div>
+
+  <h2>1. מה שכבר בנית — בשמות של Nest</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Express (פרויקט 2)</th><th>Nest</th></tr>
+    <tr><td>`tasks.routes.ts` — `router.get("/:id", ...)`</td><td>`TasksController` — `@Get(":id")`</td></tr>
+    <tr><td>`TasksService` (מחלקה רגילה)</td><td>`@Injectable() TasksService` — provider</td></tr>
+    <tr><td>`createApp()` יוצר repository ← service ← router ביד</td><td>Nest יוצר ומחבר לבד (DI), לפי `@Module`</td></tr>
+    <tr><td>`validate({ body: schema })`</td><td>DTO + `ValidationPipe`</td></tr>
+    <tr><td>`errorHandler`</td><td>exception filter</td></tr>
+    <tr><td>middleware של מפתח API</td><td>guard</td></tr>
+    <tr><td>middleware של לוג/זמנים</td><td>interceptor (או middleware)</td></tr>
+  </table></div>
+
+  <h2>2. שלוש אבני בניין</h2>
+```ts file=src/products/products.service.ts
+import { Injectable, NotFoundException } from "@nestjs/common";
+
+@Injectable()
+export class ProductsService {
+  private items = [{ id: 1, name: "Ceramic Mug", price: 39 }];
+
+  findOne(id: number) {
+    const product = this.items.find((p) => p.id === id);
+    if (!product) throw new NotFoundException(`מוצר ${id} לא נמצא`);
+    return product;
+  }
+}
+```
+```ts file=src/products/products.controller.ts
+import { Controller, Get, Param, ParseIntPipe } from "@nestjs/common";
+import { ProductsService } from "./products.service";
+
+@Controller("products")
+export class ProductsController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    return this.products.findOne(id);
+  }
+}
+```
+```ts file=src/products/products.module.ts
+import { Module } from "@nestjs/common";
+import { ProductsController } from "./products.controller";
+import { ProductsService } from "./products.service";
+
+@Module({
+  controllers: [ProductsController],
+  providers: [ProductsService],
+})
+export class ProductsModule {}
+```
+  <ul>
+    <li><strong>Controller</strong> — routes. `@Controller("products")` + `@Get(":id")` = `GET /products/:id`. מה שהמתודה מחזירה הופך ל־JSON עם 200 (או 201 ל־POST). `throw new NotFoundException(...)` ← 404.</li>
+    <li><strong>Provider</strong> — כל מה שמסומן `@Injectable()` ורשום ב־`providers`. כאן: הלוגיקה.</li>
+    <li><strong>Module</strong> — קובץ שאומר ל־Nest "בתחום הזה יש את ה־controllers וה־providers האלה". האפליקציה היא module ראשי (`AppModule`) שמייבא את כל השאר.</li>
+  </ul>
+  <p>שים לב: ה־imports בלי `.ts` בסוף. פרויקט Nest מתקמפל עם `tsc` (CommonJS), לא רץ ישירות כמו בפרקים הקודמים.</p>
+
+  <h2>3. Dependency injection</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="Nest DI container יוצר service ומעביר ל־controller">
+      <defs><marker id="di" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="260" y="20" width="200" height="70" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="30" y="120" width="230" height="60" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="460" y="120" width="230" height="60" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M320 92 L 170 116" marker-end="url(#di)"/>
+        <path d="M400 92 L 550 116" marker-end="url(#di)"/>
+        <path d="M262 150 H 456" marker-end="url(#di)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="360" y="48" direction="rtl" style="font-size:14px;font-weight:700">Nest (ה־"container")</text>
+        <text x="360" y="70" direction="rtl" style="font-size:11px">קורא את @Module ואת טיפוסי ה־constructor</text>
+        <text x="145" y="146" class="mono" style="font-size:12px;font-weight:700">new ProductsService()</text>
+        <text x="145" y="166" direction="rtl" style="font-size:11px">① יוצר פעם אחת (singleton)</text>
+        <text x="575" y="146" class="mono" style="font-size:12px;font-weight:700">new ProductsController(service)</text>
+        <text x="575" y="166" direction="rtl" style="font-size:11px">② מעביר אותו ב־constructor</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: בפרויקט 2 כתבת `new TasksService(new InMemoryTasksRepository())` ביד. Nest עושה את זה לבד — ויודע להחליף כל חוליה בבדיקות.</figcaption>
+  </figure>
+  <p>`constructor(private readonly products: ProductsService)` — שני דברים בשורה אחת: (1) Nest רואה שה־controller צריך `ProductsService` ומזריק אותו; (2) `private readonly` בפרמטר יוצר שדה במחלקה (קיצור של TypeScript — "parameter property"). בקוד של Nest תראה את זה בכל מקום.</p>
+
+  <h2>4. decorators — ולמה צריך build</h2>
+  <p>`@Controller("products")` הוא פונקציה שרצה על ה־class ומצמידה לה מידע ("זה controller, בכתובת products"). Nest קורא את המידע בעלייה ובונה את ה־routes. ואיך Nest יודע ש־constructor צריך `ProductsService`? TypeScript, עם `emitDecoratorMetadata`, שומר את טיפוסי הפרמטרים בקוד ה־JavaScript שהוא מייצר.</p>
+  <p>שני הדברים — decorators בסגנון הזה ו־parameter properties — הם <strong>לא</strong> "רק טיפוסים": הם דורשים קוד JavaScript נוסף. לכן Node לא יכול "למחוק טיפוסים ולהריץ" (כמו בפרקים 11–19), ופרויקט Nest מתקמפל עם `tsc` ל־`dist/`. ה־CLI עושה את זה בשבילך (`npm run start:dev`).</p>
+
+  <h2>5. פרויקט חדש</h2>
+```term
+% cd ~/dev
+% npx @nestjs/cli@12 new nest-playground --package-manager npm --strict
+% cd nest-playground
+% npm run start:dev
+```
+  <p>(דורש Node 24.) נוצר פרויקט עם `src/main.ts` (מפעיל), `app.module.ts`, controller ו־service לדוגמה, בדיקות (Jest) ו־`tsconfig.json` עם `experimentalDecorators` ו־`emitDecoratorMetadata`. פתח `http://localhost:3000` — "Hello World!". ו־resource שלם בפקודה אחת:</p>
+```term
+% npx nest generate resource products --no-spec
+```
+  <p>(בוחרים REST API.) נוצרים module, controller, service ו־DTOs — ו־`ProductsModule` נרשם אוטומטית ב־`AppModule`. נוח, אבל כדאי לכתוב את הראשונים ביד כדי להבין מה נוצר.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P20-E01">E01</a> · <a href="exercises.html#P20-E05">E05</a> · <a href="exercises.html#P20-E06">E06</a> · <a href="exercises.html#P20-E07">E07</a></p>
+  </div>

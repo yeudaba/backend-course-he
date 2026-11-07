@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>throw, try/catch ו־finally — פרק 8</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 8</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — throw, try/catch ו־finally</h1>
+  <p class="subtitle">⏱ ~35 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li><code>throw</code> — לעצור ולדווח "משהו לא בסדר".</li>
+      <li><code>try / catch / finally</code> — לתפוס שגיאה ולהמשיך בשליטה.</li>
+      <li>אובייקט השגיאה: <code>name</code>, <code>message</code>, <code>stack</code> ושדות משלך.</li>
+      <li>מתי <code>return null</code> ומתי <code>throw</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. <code>throw</code></h2>
+  <p>בפרק 5 החזרנו הודעת שגיאה או <code>null</code>. הבעיה: מי שקורא לפונקציה <strong>חייב לזכור</strong> לבדוק. אם הוא שוכח — הקוד ממשיך עם ערך שגוי. <code>throw</code> עוצר מיד, ואי אפשר "לשכוח" אותו:</p>
+<pre><code class="lang-js">function parseQuantity(input) {
+  const qty = Number(input);
+  if (!Number.isInteger(qty) || qty &lt; 1) {
+    throw new Error(`כמות לא תקינה: "${input}"`);
+  }
+  return qty;
+}
+
+console.log(parseQuantity("3"));
+console.log(parseQuantity("abc"));
+console.log("השורה הזו לא תרוץ");</code></pre>
+  <p>הפלט: <code>3</code>, ואז Node קורס עם הודעה שמתחילה ב־<code>Error: כמות לא תקינה: "abc"</code> ו־stack trace. <code>throw new Error(...)</code> יוצר אובייקט שגיאה עם הודעה, ו"זורק" אותו למעלה — לפונקציה שקראה, ולזו שקראה לה, עד שמישהו <strong>תופס</strong> אותו. אם אף אחד לא תופס — התוכנית נעצרת.</p>
+
+  <h2>2. <code>try / catch</code></h2>
+<pre><code class="lang-js">function parseQuantity(input) {
+  const qty = Number(input);
+  if (!Number.isInteger(qty) || qty &lt; 1) {
+    throw new Error(`כמות לא תקינה: "${input}"`);
+  }
+  return qty;
+}
+
+for (const input of ["3", "abc", "0", "7"]) {
+  try {
+    const qty = parseQuantity(input);
+    console.log(`✔ הוזמנו ${qty}`);
+  } catch (err) {
+    console.log(`✘ ${err.message}`);
+  }
+}
+console.log("סיימנו — התוכנית לא קרסה");</code></pre>
+<pre class="terminal">✔ הוזמנו 3
+✘ כמות לא תקינה: "abc"
+✘ כמות לא תקינה: "0"
+✔ הוזמנו 7
+סיימנו — התוכנית לא קרסה</pre>
+  <p>כל קלט נבדק בתוך <code>try</code> משלו. כשנזרקת שגיאה, ה־<code>catch</code> מדפיס אותה — והלולאה ממשיכה לקלט הבא. בלי <code>try/catch</code>, הקלט השני היה עוצר את כל התוכנית.</p>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="זרימה של try/catch כשנזרקת שגיאה">
+      <defs><marker id="at8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--red)"/></marker></defs>
+      <rect x="380" y="20" width="310" height="110" rx="10" style="fill:var(--green-soft);stroke:var(--green);stroke-width:2"/>
+      <rect x="380" y="150" width="310" height="55" rx="10" style="fill:var(--red-soft);stroke:var(--red);stroke-width:2"/>
+      <rect x="30" y="40" width="280" height="70" rx="10" style="fill:var(--svg-fill);stroke:var(--svg-stroke);stroke-width:2"/>
+      <g class="mono" style="font-size:13px">
+        <text x="395" y="45">try {</text>
+        <text x="410" y="70" style="fill:var(--red)">parseQuantity("abc") ✖</text>
+        <text x="410" y="95" style="fill:var(--muted)">console.log("✔ ...") ← מדולג</text>
+        <text x="395" y="120">}</text>
+        <text x="395" y="175">catch (err) {</text>
+        <text x="410" y="195">console.log(err.message)</text>
+        <text x="45" y="70">throw new Error(...)</text>
+        <text x="45" y="92" style="fill:var(--muted)">בתוך parseQuantity</text>
+      </g>
+      <g style="stroke:var(--red);stroke-width:2;fill:none">
+        <path d="M312 75 H 400" marker-end="url(#at8)"/>
+        <path d="M600 72 C 700 90, 700 150, 650 165" marker-end="url(#at8)"/>
+      </g>
+    </svg>
+    <figcaption>איור 1: ברגע ש־<code>throw</code> קורה, שאר בלוק ה־<code>try</code> מדולג, וקופצים ל־<code>catch</code> עם אובייקט השגיאה ב־<code>err</code>.</figcaption>
+  </figure>
+
+
+  <h2>3. <code>finally</code></h2>
+<pre><code class="lang-js">function processPayment(amount) {
+  console.log("פותח חיבור לחברת האשראי");
+  try {
+    if (amount &lt;= 0) {
+      throw new Error("סכום לא חוקי");
+    }
+    console.log(`חויב ${amount}`);
+    return "ok";
+  } catch (err) {
+    console.log(`נכשל: ${err.message}`);
+    return "failed";
+  } finally {
+    console.log("סוגר חיבור");
+  }
+}
+console.log(processPayment(50));
+console.log(processPayment(-1));</code></pre>
+<pre class="terminal">פותח חיבור לחברת האשראי
+חויב 50
+סוגר חיבור
+ok
+פותח חיבור לחברת האשראי
+נכשל: סכום לא חוקי
+סוגר חיבור
+failed</pre>
+  <p><code>finally</code> רץ <strong>תמיד</strong> — אחרי הצלחה, אחרי שגיאה, ואפילו אחרי <code>return</code>. מקום לניקוי: סגירת קבצים, שחרור חיבור למסד נתונים.</p>
+
+  <h2>4. אובייקט השגיאה</h2>
+<pre><code class="lang-js">try {
+  const user = null;
+  console.log(user.name);
+} catch (err) {
+  console.log(err.name);
+  console.log(err.message);
+  console.log(err instanceof TypeError);
+}
+
+const notFound = new Error("ההזמנה לא נמצאה");
+notFound.status = 404;
+notFound.orderId = 77;
+try {
+  throw notFound;
+} catch (err) {
+  console.log(`${err.status}: ${err.message} (#${err.orderId})`);
+}</code></pre>
+<pre class="terminal">TypeError
+Cannot read properties of null (reading 'name')
+true
+404: ההזמנה לא נמצאה (#77)</pre>
+  <p>גם שגיאות של JavaScript עצמה (<code>TypeError</code>, <code>SyntaxError</code> מ־<code>JSON.parse</code>) נתפסות כך. ואפשר להוסיף שדות משלך לשגיאה — למשל <code>status</code>, שבפרק 15 השרת ישתמש בו כדי להחזיר "404" במקום "500". (בפרק 12 נלמד ליצור סוגי שגיאות משלך עם <code>class NotFoundError extends Error</code>.)</p>
+
+  <h2>5. <code>null</code> או <code>throw</code>?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מצב</th><th>מה עדיף</th><th>דוגמה</th></tr>
+    <tr><td>"לא נמצא" הוא תוצאה <strong>רגילה וצפויה</strong></td><td><code>return null</code> (או <code>undefined</code>)</td><td><code>findUserByEmail</code> — אולי פשוט אין משתמש כזה</td></tr>
+    <tr><td>משהו <strong>לא אמור לקרות</strong>, או שאי אפשר להמשיך</td><td><code>throw</code></td><td>קלט לא חוקי, חיבור למסד נכשל, מצב בלתי אפשרי</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ לא לבלוע שגיאות</span>
+    <p><code>try { ... } catch (err) { }</code> — <code>catch</code> ריק — הוא אחד הדברים המסוכנים בקוד: השגיאה נעלמת בשקט, והבאג יתגלה הרבה יותר מאוחר במקום אחר. אם תופסים — <strong>עושים משהו</strong>: מדווחים, מחזירים תשובה מסודרת, או זורקים שוב (<code>throw err;</code>).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P08-E02">E02</a> · <a href="exercises.html#P08-E03">E03</a> · <a href="exercises.html#P08-E08">E08</a> · <a href="exercises.html#P08-E09">E09</a> · <a href="exercises.html#P08-E10">E10</a> · <a href="exercises.html#P08-E13">E13</a> · <a href="exercises.html#P08-E14">E14</a> · <a href="exercises.html#P08-E15">E15</a> · <a href="exercises.html#P08-E21">E21</a></p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>בכל שרת יש "error handler" מרכזי: כל שגיאה שלא נתפסה מגיעה אליו, נרשמת ביומן (log) עם ה־stack, והלקוח מקבל תשובה מסודרת בלי פרטים פנימיים. תבנה אחד כזה בפרק 15.</p>
+  </div>
+
+<div class="pager"><a href="lesson-01-modules.html"><small>הקודם</small>שיעור 1 — מודולים: קוד בכמה קבצים</a><a href="lesson-03-debugger.html"><small>הבא</small>שיעור 3 — stack trace וה־Debugger של VS Code</a></div>
+</main>
+</body>
+</html>

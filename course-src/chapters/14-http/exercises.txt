@@ -1,0 +1,1128 @@
+@@ P14-E01 | 1 | לפרק כתובות | 10 | שיעור 1
+@task
+<p>לכל כתובת — מה הפרוטוקול, ה־host, ה־port (אם לא כתוב — מה ברירת המחדל), ה־path וה־query?</p>
+<ol><li><code>http://localhost:4000/products?maxPrice=100</code></li><li><code>https://api.shop.co.il/v2/orders/17/items?page=2&amp;sort=-date</code></li><li><code>https://example.com</code></li></ol>
+<p>אחרי שענית — בדוק עם <code>new URL(...)</code> ב־Node.</p>
+@hint1
+<p>port לא כתוב ← <code>url.port</code> הוא מחרוזת ריקה, והדפדפן משתמש ב־80 (http) או 443 (https).</p>
+@hint2
+<p>path תמיד מתחיל ב־<code>/</code> — גם אם לא כתבו אותו.</p>
+@solution
+```js run
+for (const text of [
+  "http://localhost:4000/products?maxPrice=100",
+  "https://api.shop.co.il/v2/orders/17/items?page=2&sort=-date",
+  "https://example.com",
+]) {
+  const u = new URL(text);
+  console.log(u.protocol, u.hostname, u.port || "-", u.pathname, u.search || "-");
+}
+```
+```out
+http: localhost 4000 /products ?maxPrice=100
+https: api.shop.co.il - /v2/orders/17/items ?page=2&sort=-date
+https: example.com - / -
+```
+<p>בשתיים האחרונות ה־port הוא 443 (ברירת המחדל של https). ב־2: המשאב הוא "הפריטים של הזמנה 17", בגרסה 2 של ה־API; <code>sort=-date</code> היא מוסכמה נפוצה ל"מיון יורד לפי תאריך".</p>
+@mistakes
+<ul><li>לחשוב שה־query הוא חלק מה־path. השרת מקבל אותם בנפרד — routing לפי path, סינון לפי query.</li></ul>
+
+@@ P14-E02 | 1 | method ו־status | 15 | שיעור 1
+@task
+<p>לכל מצב ב־API של חנות — איזו בקשה (method + path) ואיזה status יחזיר השרת?</p>
+<ol><li>הצגת כל ההזמנות.</li><li>יצירת הזמנה חדשה.</li><li>בקשה להזמנה 999, שלא קיימת.</li><li>מחיקת הזמנה 7 (הצליח).</li><li>שינוי רק כתובת המשלוח של הזמנה 7.</li><li>הרשמה עם אימייל שכבר רשום.</li><li>בקשה להזמנות בלי טוקן.</li><li>משתמש רגיל מנסה למחוק הזמנה של משתמש אחר.</li><li>יצירת מוצר עם <code>"price": "abc"</code>.</li><li>מסד הנתונים לא זמין כרגע.</li></ol>
+@hint1
+<p>4xx — הלקוח צריך לשנות משהו. 5xx — הבעיה אצלנו.</p>
+@hint2
+<p>לא מחובר ← 401. מחובר אבל אסור ← 403.</p>
+@solution
+<ol><li><code>GET /orders</code> ← 200</li><li><code>POST /orders</code> ← 201, עם header <code>Location: /orders/42</code> והאובייקט החדש בגוף</li><li><code>GET /orders/999</code> ← 404</li><li><code>DELETE /orders/7</code> ← 204 (או 200 עם גוף)</li><li><code>PATCH /orders/7</code> עם <code>{"address": "..."}</code> ← 200</li><li><code>POST /users</code> ← 409 Conflict</li><li><code>GET /orders</code> ← 401</li><li><code>DELETE /orders/8</code> ← 403 (יש מערכות שמחזירות 404 כדי לא לחשוף שההזמנה קיימת — גם זה לגיטימי)</li><li><code>POST /products</code> ← 400 (או 422)</li><li>כל בקשה ← 503 (או 500)</li></ol>
+@mistakes
+<ul><li>להחזיר 200 עם <code>{"error": ...}</code> בגוף. הלקוח, הדפדפן, כלי הניטור ו־retry — כולם מסתכלים על ה־status.</li><li>500 על קלט לא תקין — זו לא תקלה שלנו.</li></ul>
+
+@@ P14-E03 | 1 | לקרוא בקשה גולמית | 10 | שיעור 2
+@task
+<p>זו בקשה שנתפסה ב־<code>curl -v</code>:</p>
+```text
+PATCH /orders/17?notify=false HTTP/1.1
+Host: api.shop.co.il
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+Content-Length: 20
+
+{"status":"shipped"}
+```
+<ol><li>מה הבקשה רוצה לעשות, ולאיזה משאב?</li><li>מה תפקיד <code>notify=false</code>, ולמה הוא ב־query ולא בגוף?</li><li>איך השרת יודע מי שלח את הבקשה?</li><li>מה יקרה אם נמחק את השורה <code>Content-Type</code>?</li><li>התשובה היא <code>HTTP/1.1 403 Forbidden</code>. מה זה אומר — ומה היה אומר 401?</li><li>החיבור נפל לפני שהגיעה תשובה. בטוח לשלוח שוב?</li></ol>
+@hint1
+<p>שורה ריקה מפרידה בין headers לגוף.</p>
+@hint2
+<p>idempotent: האם שליחה כפולה משנה את התוצאה?</p>
+@solution
+<ol><li>עדכון חלקי (PATCH) של הזמנה 17: הסטטוס יהיה "shipped".</li><li>אפשרות שמשנה <em>איך</em> לבצע (בלי לשלוח הודעה ללקוח), לא <em>מה</em> לשנות. מוסכמה, לא חוק — אפשר היה גם בגוף.</li><li>מהטוקן ב־<code>Authorization</code> — השרת stateless, אז כל בקשה מביאה את ההוכחה איתה.</li><li>השרת לא יודע שהגוף הוא JSON; שרת זהיר יחזיר 415 (כמו שרת ההדגמה), שרת אחר אולי יתעלם מהגוף.</li><li>הטוקן תקין והשרת יודע מי אתה — אבל אין לך הרשאה לעדכן את ההזמנה הזו. 401 היה אומר שהטוקן חסר, פג או לא תקין.</li><li>כן — לקבוע סטטוס "shipped" פעמיים נותן אותה תוצאה. (<code>{"addItem": 5}</code> כבר לא היה בטוח.)</li></ol>
+@mistakes
+<ul><li>לחשוב ש־PATCH תמיד idempotent — תלוי מה הוא עושה. "קבע ל־X" כן; "הוסף 1" לא.</li></ul>
+
+@@ P14-E04 | 1 | curl מול שרת ההדגמה | 15 | שיעור 3
+@task
+<p>הפעל את שרת ההדגמה (<code>node 14-http/files/demo-server.mjs</code>). בחלון Terminal שני, כתוב פקודת curl לכל משימה, והסבר את התוצאה:</p>
+<ol><li>מוצרים במחיר עד 100.</li><li>הגוף <strong>וה־status</strong> של <code>/secret</code> בלי טוקן.</li><li><code>/secret</code> עם הטוקן <code>let-me-in</code>.</li><li><code>PUT /products</code> — מה ה־status, ואיזה header אומר מה כן מותר?</li><li>POST של מוצר חדש <strong>בלי</strong> <code>-H "Content-Type: ..."</code>. למה זה נכשל?</li><li>מחק את מוצר 2, ואחר כך נסה להביא אותו.</li></ol>
+@hint1
+<p>query עם <code>&amp;</code> או <code>?</code> — עטוף את הכתובת במירכאות, אחרת zsh מנסה לפרש אותם.</p>
+@hint2
+<p><code>-i</code> מציג status ו־headers. <code>-X</code> בוחר method.</p>
+@solution
+```term
+% curl -s "localhost:4000/products?maxPrice=100"
+[{"id":2,"name":"עכבר","price":89}]
+% curl -i localhost:4000/secret
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json; charset=utf-8
+.. ...
+
+{"error":"צריך להתחבר"}
+% curl -s localhost:4000/secret -H "Authorization: Bearer let-me-in"
+{"secret":"🍪"}
+% curl -i -X PUT localhost:4000/products
+HTTP/1.1 405 Method Not Allowed
+Content-Type: application/json; charset=utf-8
+Allow: GET, POST
+.. ...
+
+{"error":"Method Not Allowed"}
+% curl -i -X POST localhost:4000/products -d '{"name":"מסך","price":899}'
+HTTP/1.1 415 Unsupported Media Type
+.. ...
+% curl -i -X DELETE localhost:4000/products/2
+HTTP/1.1 204 No Content
+.. ...
+% curl -s localhost:4000/products/2
+{"error":"המוצר לא נמצא"}
+```
+<p>ב־5: כש־curl מקבל <code>-d</code> בלי Content-Type, הוא שולח <code>application/x-www-form-urlencoded</code> (פורמט של טפסי HTML) — והשרת מסרב. זו טעות נפוצה מאוד מול כל API.</p>
+@mistakes
+<ul><li>לשכוח את <code>-i</code> ולחשוב ש"זה עבד" רק כי חזר JSON — גם שגיאה חוזרת כ־JSON.</li></ul>
+
+@@ P14-E05 | 1 | מה fetch עושה עם 404? | 10 | שיעור 4
+@task
+<p>מה ידפיס הקוד? האם יגיע ל־<code>catch</code>?</p>
+```js
+import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) => {
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "לא נמצא" }));
+});
+server.listen(0);
+await once(server, "listening");
+
+try {
+  const res = await fetch(`http://localhost:${server.address().port}/x`);
+  console.log("הגיעה תשובה:", res.ok, res.status);
+  const data = await res.json();
+  console.log(data.error);
+} catch (err) {
+  console.log("נזרקה שגיאה:", err.message);
+} finally {
+  server.close();
+}
+```
+@hint1
+<p>מבחינת fetch — הבקשה הצליחה: נשלחה, וחזרה תשובה.</p>
+@hint2
+<p><code>res.ok</code> הוא true רק ל־200–299.</p>
+@solution
+```js run mjs
+import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) => {
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "לא נמצא" }));
+});
+server.listen(0);
+await once(server, "listening");
+
+try {
+  const res = await fetch(`http://localhost:${server.address().port}/x`);
+  console.log("הגיעה תשובה:", res.ok, res.status);
+  const data = await res.json();
+  console.log(data.error);
+} catch (err) {
+  console.log("נזרקה שגיאה:", err.message);
+} finally {
+  server.close();
+}
+```
+```out
+הגיעה תשובה: false 404
+לא נמצא
+```
+<p>ה־catch לא רץ. אם הקוד היה מניח שהגוף הוא "ההזמנה" — היה ממשיך עם <code>{ error: ... }</code> כאילו זו הזמנה. לכן תמיד: <code>if (!res.ok) ...</code>.</p>
+@mistakes
+<ul><li>להסתמך על try/catch סביב fetch כדי "לתפוס 404".</li></ul>
+
+@@ P14-E06 | 2 | פירוק URL 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>14-http/starter/P14-E06.mjs</code> השלם <code>parseUrl(text)</code> שמחזירה:</p>
+<ul><li><code>protocol</code> — בלי הנקודתיים: <code>"https"</code>.</li><li><code>host</code>, <code>path</code>.</li><li><code>port</code> — <strong>מספר</strong>. לא כתוב ← 80 ל־http, 443 ל־https, <code>null</code> לאחרים.</li><li><code>query</code> — אובייקט רגיל: <code>{ maxPrice: "100" }</code>.</li></ul>
+<p>כתובת לא תקינה ← <code>Error(`כתובת לא תקינה: ${text}`)</code>.</p>
+@hint1
+<p><code>new URL(text)</code> זורק על כתובת לא תקינה — תפוס וזרוק שגיאה משלך.</p>
+@hint2
+<p><code>Object.fromEntries(url.searchParams)</code></p>
+@solution
+```js run mjs save=solutions/P14-E06.mjs
+// P14-E06
+const DEFAULT_PORTS = { "http:": 80, "https:": 443 };
+
+export function parseUrl(text) {
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error(`כתובת לא תקינה: ${text}`);
+  }
+  return {
+    protocol: url.protocol.slice(0, -1),
+    host: url.hostname,
+    port: url.port ? Number(url.port) : (DEFAULT_PORTS[url.protocol] ?? null),
+    path: url.pathname,
+    query: Object.fromEntries(url.searchParams),
+  };
+}
+
+console.log(JSON.stringify(parseUrl("http://localhost:4000/products?maxPrice=100&sort=price")));
+console.log(JSON.stringify(parseUrl("https://shop.co.il")));
+```
+```out
+{"protocol":"http","host":"localhost","port":4000,"path":"/products","query":{"maxPrice":"100","sort":"price"}}
+{"protocol":"https","host":"shop.co.il","port":443,"path":"/","query":{}}
+```
+@mistakes
+<ul><li>לפרק עם <code>split(":")</code> ו־<code>split("/")</code> — נשבר על פורטים, query, תווים מקודדים. יש <code>URL</code> מובנה.</li><li><code>Number(url.port)</code> כש־port ריק ← 0, לא ברירת המחדל.</li></ul>
+
+@@ P14-E07 | 2 | קטגוריות status 🤖 | 10 | שיעור 1
+@task
+<p>בקובץ <code>14-http/starter/P14-E07.mjs</code> השלם:</p>
+<ul><li><code>statusCategory(code)</code> ← <code>"success"</code> (2xx), <code>"redirect"</code> (3xx), <code>"client-error"</code> (4xx), <code>"server-error"</code> (5xx), אחרת <code>"unknown"</code> (גם למספר לא שלם).</li><li><code>shouldRetry(code)</code> ← <code>true</code> רק לתקלות זמניות שכדאי לנסות שוב: 408, 429, 500, 502, 503, 504.</li></ul>
+@hint1
+<p><code>Math.floor(code / 100)</code> נותן את הספרה הראשונה.</p>
+@hint2
+<p><code>new Set([...]).has(code)</code></p>
+@solution
+```js run mjs save=solutions/P14-E07.mjs
+// P14-E07
+const CATEGORIES = { 2: "success", 3: "redirect", 4: "client-error", 5: "server-error" };
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+
+export function statusCategory(code) {
+  if (!Number.isInteger(code)) return "unknown";
+  return CATEGORIES[Math.floor(code / 100)] ?? "unknown";
+}
+
+export function shouldRetry(code) {
+  return RETRYABLE.has(code);
+}
+
+console.log([200, 204, 301, 404, 429, 503, 99].map(statusCategory).join(" "));
+console.log([400, 404, 429, 500, 503].map(shouldRetry).join(" "));
+```
+```out
+success success redirect client-error client-error server-error unknown
+false false true true true
+```
+<p>למה לא לנסות שוב 400 או 404? כי אותה בקשה תקבל אותה תשובה. ניסיון חוזר עוזר רק כשהבעיה זמנית. (501 Not Implemented הוא 5xx שגם לא כדאי לנסות שוב.)</p>
+@mistakes
+<ul><li><code>code &gt;= 500</code> בלבד — מפספס את 429 ו־408, ותופס את 501.</li></ul>
+
+@@ P14-E08 | 2 | פירוק headers 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>14-http/starter/P14-E08.mjs</code> השלם <code>parseHeaders(lines)</code> — מקבלת מערך שורות <code>"Name: value"</code> ומחזירה אובייקט:</p>
+<ul><li>שמות באותיות קטנות (כמו ב־Node).</li><li>מפרידים לפי הנקודתיים <strong>הראשונות</strong> בלבד (<code>"Authorization: Basic a:b"</code>), ומורידים רווחים מסביב.</li><li>אותו header פעמיים ← הערכים מחוברים ב־<code>", "</code>.</li><li>שורה בלי <code>:</code> ← <code>Error(`header לא תקין: ${line}`)</code>.</li></ul>
+@hint1
+<p><code>line.indexOf(":")</code>, ואז <code>slice</code> לשני הצדדים.</p>
+@hint2
+<p><code>result[name] = name in result ? `${result[name]}, ${value}` : value</code></p>
+@solution
+```js run mjs save=solutions/P14-E08.mjs
+// P14-E08
+export function parseHeaders(lines) {
+  const result = {};
+  for (const line of lines) {
+    const i = line.indexOf(":");
+    if (i <= 0) throw new Error(`header לא תקין: ${line}`);
+    const name = line.slice(0, i).trim().toLowerCase();
+    const value = line.slice(i + 1).trim();
+    result[name] = name in result ? `${result[name]}, ${value}` : value;
+  }
+  return result;
+}
+
+console.log(JSON.stringify(parseHeaders(["Content-Type: application/json", "Accept: text/html", "accept: application/json", "Authorization: Basic a:b"])));
+```
+```out
+{"content-type":"application/json","accept":"text/html, application/json","authorization":"Basic a:b"}
+```
+@mistakes
+<ul><li><code>line.split(":")</code> — חותך את <code>"Basic a:b"</code> ומאבד חלק מהערך. אותו דבר בכל header עם כתובת (<code>http://</code>).</li></ul>
+
+@@ P14-E09 | 2 | בניית query string 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>14-http/starter/P14-E09.mjs</code> השלם <code>buildQuery(params)</code>:</p>
+<ul><li>מחזירה <code>"?a=1&amp;b=2"</code>, או <code>""</code> אם אין אף פרמטר.</li><li>מדלגת על <code>undefined</code> ו־<code>null</code> — אבל לא על <code>0</code>, <code>false</code> או <code>""</code>.</li><li>מערך ← אותו מפתח כמה פעמים: <code>{ tag: ["a", "b"] }</code> ← <code>tag=a&amp;tag=b</code>.</li><li>קידוד נכון של רווחים, עברית ו־<code>&amp;</code> — בלי לקודד ידנית.</li></ul>
+@hint1
+<p><code>new URLSearchParams()</code> ו־<code>append(key, value)</code> מקודדים בשבילך.</p>
+@hint2
+<p><code>const s = sp.toString(); return s ? "?" + s : "";</code></p>
+@solution
+```js run mjs save=solutions/P14-E09.mjs
+// P14-E09
+export function buildQuery(params) {
+  const sp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    for (const v of Array.isArray(value) ? value : [value]) sp.append(key, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
+console.log(buildQuery({ page: 2, tag: ["a", "b"], q: "red & blue", skip: undefined }));
+console.log(JSON.stringify(buildQuery({ skip: null })));
+```
+```out
+?page=2&tag=a&tag=b&q=red+%26+blue
+""
+```
+<p>שים לב ל־<code>%26</code>: בלי קידוד, <code>q=red & blue</code> היה נקרא כפרמטר <code>q=red </code> ועוד פרמטר בשם <code> blue</code>.</p>
+@mistakes
+<ul><li>לחבר מחרוזות ידנית (<code>`?q=${q}`</code>) — שובר ערכים עם <code>&amp;</code>, <code>=</code> או <code>#</code>.</li></ul>
+
+@@ P14-E10 | 2 | מבקשה לפקודת curl 🤖 | 15 | שיעור 3
+@task
+<p>כלים כמו DevTools יודעים "Copy as cURL". בקובץ <code>14-http/starter/P14-E10.mjs</code> השלם <code>toCurl({ method, url, headers, body })</code>:</p>
+<ul><li>method ברירת מחדל <code>"GET"</code>; רק אם אינו GET ← <code>-X METHOD</code>.</li><li>הכתובת, כל header (<code>-H 'Name: value'</code>) והגוף (<code>-d '...'</code>) — בתוך מירכאות בודדות.</li><li>גוף שהוא אובייקט ← <code>JSON.stringify</code>, ואם אין header בשם content-type (בלי תלות באותיות) ← מוסיפים <code>Content-Type: application/json</code> אחרי ה־headers הקיימים.</li><li>גרש בתוך ערך ← <code>'\''</code> (סוגרים, גרש מוגן, פותחים).</li></ul>
+<p>סדר: <code>curl [-X M] 'url' [-H ...] [-d ...]</code>, מופרד ברווח אחד.</p>
+@hint1
+<p><code>const q = (s) =&gt; `'${s.replaceAll("'", `'\\''`)}'`;</code></p>
+@hint2
+<p>בנה מערך חלקים ובסוף <code>join(" ")</code>.</p>
+@solution
+```js run mjs save=solutions/P14-E10.mjs
+// P14-E10
+const quote = (s) => `'${String(s).replaceAll("'", `'\\''`)}'`;
+
+export function toCurl({ method = "GET", url, headers = {}, body }) {
+  const parts = ["curl"];
+  if (method !== "GET") parts.push("-X", method);
+  parts.push(quote(url));
+  const allHeaders = { ...headers };
+  let data = body;
+  if (body !== undefined && typeof body !== "string") {
+    data = JSON.stringify(body);
+    const hasType = Object.keys(headers).some((h) => h.toLowerCase() === "content-type");
+    if (!hasType) allHeaders["Content-Type"] = "application/json";
+  }
+  for (const [name, value] of Object.entries(allHeaders)) parts.push("-H", quote(`${name}: ${value}`));
+  if (data !== undefined) parts.push("-d", quote(data));
+  return parts.join(" ");
+}
+
+console.log(toCurl({ url: "http://localhost:4000/products" }));
+console.log(toCurl({ method: "POST", url: "http://localhost:4000/products", body: { name: "it's", price: 5 } }));
+```
+```out
+curl 'http://localhost:4000/products'
+curl -X POST 'http://localhost:4000/products' -H 'Content-Type: application/json' -d '{"name":"it'\''s","price":5}'
+```
+<p>נסה להריץ את השורה השנייה מול שרת ההדגמה — היא עובדת, גם עם הגרש.</p>
+@mistakes
+<ul><li>מירכאות כפולות סביב ה־JSON — ה־shell "אוכל" את המירכאות שבתוכו.</li></ul>
+
+@@ P14-E11 | 2 | השרת הראשון שלך 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E11.mjs</code> השלם <code>createHelloServer()</code> שמחזירה <code>http.Server</code> (לא מפעילה <code>listen</code> — הבדיקות עושות זאת):</p>
+<ul><li><code>GET /</code> ← 200, <code>{ "message": "שלום" }</code>.</li><li><code>GET /time</code> ← 200, <code>{ "now": "&lt;ISO&gt;" }</code> (<code>new Date().toISOString()</code>).</li><li>method אחר על כתובות אלה ← 405, עם <code>Allow: GET</code>.</li><li>כל כתובת אחרת ← 404, <code>{ "error": "לא נמצא" }</code>.</li><li>בכל התשובות: <code>Content-Type: application/json; charset=utf-8</code>. query לא משנה את ה־routing (<code>/?x=1</code> הוא <code>/</code>).</li></ul>
+<p>להרצה ידנית: הוסף בתחתית <code>createHelloServer().listen(3000)</code> ובדוק עם curl — ואז מחק.</p>
+@hint1
+<p>פונקציית עזר <code>send(res, status, body, headers)</code> חוסכת חזרות.</p>
+@hint2
+<p><code>new URL(req.url, "http://localhost").pathname</code></p>
+@solution
+```js save=solutions/P14-E11.mjs
+// P14-E11
+import http from "node:http";
+
+function send(res, status, body, headers = {}) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+const routes = {
+  "/": () => ({ message: "שלום" }),
+  "/time": () => ({ now: new Date().toISOString() }),
+};
+
+export function createHelloServer() {
+  return http.createServer((req, res) => {
+    const { pathname } = new URL(req.url, "http://localhost");
+    const route = routes[pathname];
+    if (!route) return send(res, 404, { error: "לא נמצא" });
+    if (req.method !== "GET") return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET" });
+    send(res, 200, route());
+  });
+}
+```
+<p>מבנה "טבלת routes" (אובייקט של path ← פונקציה) קורא הרבה יותר טוב משרשרת if־ים, וזה בדיוק מה ש־Express עושה בשבילך.</p>
+@mistakes
+<ul><li>להשוות <code>req.url === "/"</code> — <code>/?x=1</code> יחזיר 404.</li><li>לשכוח <code>return</code> אחרי <code>send</code> ← שתי תשובות לאותה בקשה, ושגיאה <code>ERR_HTTP_HEADERS_SENT</code>.</li></ul>
+
+@@ P14-E12 | 2 | getJson עם timeout 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E12.mjs</code> השלם <code>getJson(url, { timeoutMs = 3000 } = {})</code>:</p>
+<ul><li>תשובה 2xx ← הגוף כאובייקט.</li><li>תשובה אחרת ← <code>Error(`HTTP ${status}`)</code>.</li><li>השרת לא ענה תוך <code>timeoutMs</code> ← הבקשה מבוטלת והשגיאה נזרקת (<code>err.name === "TimeoutError"</code> — זה מה ש־AbortSignal.timeout זורק).</li></ul>
+@hint1
+<p><code>fetch(url, { signal: AbortSignal.timeout(timeoutMs) })</code></p>
+@hint2
+<p>אין צורך ב־try/catch — שגיאת ה־timeout צריכה פשוט לעלות למעלה.</p>
+@solution
+```js save=solutions/P14-E12.mjs
+// P14-E12
+export async function getJson(url, { timeoutMs = 3000 } = {}) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+```
+<p>ארבע שורות — וזה ההבדל בין שרת שנתקע כשספק חיצוני איטי, לשרת שמחזיר שגיאה ברורה אחרי 3 שניות. בפרויקטים אמיתיים כל קריאה החוצה צריכה timeout.</p>
+@mistakes
+<ul><li><code>setTimeout</code> שרק "מדפיס שעבר זמן" — הבקשה עדיין רצה ותופסת חיבור. רק <code>signal</code> באמת מבטל אותה.</li></ul>
+
+@@ P14-E13 | 3 | לפרק בקשה גולמית 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>14-http/starter/P14-E13.mjs</code> השלם <code>parseRequest(raw)</code>, שמקבלת בקשת HTTP כטקסט (שורות מופרדות ב־<code>\r\n</code> או <code>\n</code>) ומחזירה:</p>
+<ul><li><code>method</code>, <code>path</code> (בלי query), <code>query</code> (אובייקט), <code>headers</code> (שמות באותיות קטנות).</li><li><code>body</code>: אחרי השורה הריקה הראשונה. ריק ← <code>undefined</code>. אם <code>content-type</code> מכיל <code>json</code> ← אובייקט (<code>JSON.parse</code>), אחרת — המחרוזת.</li><li>שורה ראשונה שאין בה בדיוק 3 חלקים ← <code>Error("שורת בקשה לא תקינה")</code>.</li></ul>
+@hint1
+<p>קודם <code>raw.replaceAll("\r\n", "\n")</code>, ואז <code>indexOf("\n\n")</code> מפריד head מגוף.</p>
+@hint2
+<p>ה־path וה־query: <code>new URL(target, "http://x")</code>.</p>
+@solution
+```js run mjs save=solutions/P14-E13.mjs
+// P14-E13
+export function parseRequest(raw) {
+  const text = raw.replaceAll("\r\n", "\n");
+  const split = text.indexOf("\n\n");
+  const head = split === -1 ? text : text.slice(0, split);
+  const rawBody = split === -1 ? "" : text.slice(split + 2);
+  const [requestLine, ...headerLines] = head.split("\n");
+
+  const parts = requestLine.split(" ");
+  if (parts.length !== 3) throw new Error("שורת בקשה לא תקינה");
+  const [method, target] = parts;
+  const url = new URL(target, "http://x");
+
+  const headers = {};
+  for (const line of headerLines) {
+    const i = line.indexOf(":");
+    headers[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+  }
+
+  let body;
+  if (rawBody !== "") {
+    body = headers["content-type"]?.includes("json") ? JSON.parse(rawBody) : rawBody;
+  }
+  return { method, path: url.pathname, query: Object.fromEntries(url.searchParams), headers, body };
+}
+
+const raw = "PATCH /orders/17?notify=false HTTP/1.1\r\nHost: api.shop.co.il\r\nContent-Type: application/json\r\n\r\n{\"status\":\"shipped\"}";
+console.log(JSON.stringify(parseRequest(raw)));
+```
+```out
+{"method":"PATCH","path":"/orders/17","query":{"notify":"false"},"headers":{"host":"api.shop.co.il","content-type":"application/json"},"body":{"status":"shipped"}}
+```
+<p>זה (בגרסה פשוטה מאוד) מה ש־<code>node:http</code> עושה לפני שהוא קורא ל־handler שלך — ומה ש־Express מוסיף מעליו (<code>req.query</code>, <code>req.body</code>).</p>
+@mistakes
+<ul><li>לפצל את כל הטקסט לפי <code>\n</code> ולחפש שורה ריקה — גוף JSON מרובה שורות יישבר.</li></ul>
+
+@@ P14-E14 | 3 | לבנות תשובה גולמית 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>14-http/starter/P14-E14.mjs</code> השלם <code>buildResponse(status, body, headers = {})</code> שמחזירה את התשובה כטקסט עם <code>\r\n</code>:</p>
+<ul><li>שורה ראשונה: <code>HTTP/1.1 201 Created</code> — לפי המפה <code>STATUS_TEXT</code> שבקובץ. status שלא במפה ← <code>Error(`status לא מוכר: ${status}`)</code>.</li><li>אחריה ה־headers שקיבלת, לפי הסדר.</li><li>אם יש גוף: מחרוזת ← כמו שהיא; אחרת ← <code>JSON.stringify</code> ו־<code>Content-Type: application/json; charset=utf-8</code> (אם לא נשלח content-type). ובכל מקרה — <code>Content-Length</code> ב<strong>בתים</strong>.</li><li>שורה ריקה, ואז הגוף.</li><li>204 עם גוף ← <code>Error("204 לא יכול להכיל גוף")</code>.</li></ul>
+@hint1
+<p><code>Buffer.byteLength("שלום")</code> הוא 8, לא 4 — כל אות עברית היא 2 בתים ב־UTF-8.</p>
+@hint2
+<p>בנה מערך שורות ו־<code>join("\r\n")</code>.</p>
+@solution
+```js run mjs save=solutions/P14-E14.mjs
+// P14-E14
+export const STATUS_TEXT = {
+  200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request", 401: "Unauthorized",
+  403: "Forbidden", 404: "Not Found", 409: "Conflict", 500: "Internal Server Error",
+};
+
+export function buildResponse(status, body, headers = {}) {
+  const text = STATUS_TEXT[status];
+  if (!text) throw new Error(`status לא מוכר: ${status}`);
+  if (status === 204 && body !== undefined) throw new Error("204 לא יכול להכיל גוף");
+
+  const all = { ...headers };
+  let payload = "";
+  if (body !== undefined) {
+    payload = typeof body === "string" ? body : JSON.stringify(body);
+    const hasType = Object.keys(headers).some((h) => h.toLowerCase() === "content-type");
+    if (typeof body !== "string" && !hasType) all["Content-Type"] = "application/json; charset=utf-8";
+    all["Content-Length"] = Buffer.byteLength(payload);
+  }
+  const lines = [`HTTP/1.1 ${status} ${text}`, ...Object.entries(all).map(([k, v]) => `${k}: ${v}`)];
+  return lines.join("\r\n") + "\r\n\r\n" + payload;
+}
+
+console.log(buildResponse(201, { id: 3, name: "מסך" }, { Location: "/products/3" }));
+```
+```out
+HTTP/1.1 201 Created
+Location: /products/3
+Content-Type: application/json; charset=utf-8
+Content-Length: 24
+
+{"id":3,"name":"מסך"}
+```
+@mistakes
+<ul><li><code>payload.length</code> — סופר תווים, לא בתים. עם עברית הלקוח יחתוך את הגוף באמצע.</li></ul>
+
+@@ P14-E15 | 3 | לקרוא קובץ .http 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>14-http/starter/P14-E15.mjs</code> השלם <code>parseHttpFile(text)</code> — "מנוע" מוקטן של REST Client. מחזירה מערך <code>{ name, method, url, headers, body }</code>:</p>
+<ul><li>שורות <code>@name = value</code> (לפני ה־<code>###</code> הראשון) מגדירות משתנים.</li><li>כל שורה שמתחילה ב־<code>###</code> פותחת בקשה חדשה; מה שאחריה (בלי רווחים) הוא <code>name</code>.</li><li>בתוך בקשה: מדלגים על שורות ריקות ועל הערות (<code>#</code> או <code>//</code>) עד שורת <code>METHOD URL</code>; אחריה headers (אובייקט, שמות כמו שנכתבו) עד שורה ריקה; כל השאר — <code>body</code> (אחרי trim; ריק ← <code>undefined</code>).</li><li><code>{{name}}</code> בכתובת, ב־headers ובגוף ← ערך המשתנה. משתנה לא מוגדר ← <code>Error(`משתנה לא מוגדר: ${name}`)</code>.</li><li>בקשה בלי שורת <code>METHOD URL</code> — לא נכנסת לתוצאה.</li></ul>
+@hint1
+<p>שלב 1: לחלק את הטקסט לבלוקים (מערך של מערכי שורות) לפי <code>###</code>. שלב 2: לפרק כל בלוק.</p>
+@hint2
+<p><code>s.replace(/\{\{(\w+)\}\}/g, (_, n) =&gt; ...)</code></p>
+@solution
+```js run mjs save=solutions/P14-E15.mjs
+// P14-E15
+function substitute(s, vars) {
+  return s.replace(/\{\{(\w+)\}\}/g, (_, name) => {
+    if (!(name in vars)) throw new Error(`משתנה לא מוגדר: ${name}`);
+    return vars[name];
+  });
+}
+
+export function parseHttpFile(text) {
+  const vars = {};
+  const blocks = [];
+  let current = null;
+  for (const line of text.replaceAll("\r\n", "\n").split("\n")) {
+    if (line.startsWith("###")) {
+      current = { name: line.slice(3).trim(), lines: [] };
+      blocks.push(current);
+    } else if (current) {
+      current.lines.push(line);
+    } else {
+      const m = line.match(/^@(\w+)\s*=\s*(.*)$/);
+      if (m) vars[m[1]] = m[2].trim();
+    }
+  }
+
+  const requests = [];
+  for (const { name, lines } of blocks) {
+    let i = 0;
+    const isSkippable = (l) => l.trim() === "" || l.startsWith("#") || l.startsWith("//");
+    while (i < lines.length && isSkippable(lines[i])) i++;
+    if (i === lines.length) continue;
+    const [method, url] = lines[i].trim().split(/\s+/);
+    i++;
+    const headers = {};
+    for (; i < lines.length && lines[i].trim() !== ""; i++) {
+      const c = lines[i].indexOf(":");
+      headers[lines[i].slice(0, c).trim()] = substitute(lines[i].slice(c + 1).trim(), vars);
+    }
+    const body = lines.slice(i).join("\n").trim();
+    requests.push({ name, method, url: substitute(url, vars), headers, body: body === "" ? undefined : substitute(body, vars) });
+  }
+  return requests;
+}
+
+const file = `@base = http://localhost:4000
+@token = let-me-in
+
+### כל המוצרים
+GET {{base}}/products
+
+### אזור מוגן
+# דורש טוקן
+GET {{base}}/secret
+Authorization: Bearer {{token}}
+`;
+for (const r of parseHttpFile(file)) console.log(JSON.stringify(r));
+```
+```out
+{"name":"כל המוצרים","method":"GET","url":"http://localhost:4000/products","headers":{}}
+{"name":"אזור מוגן","method":"GET","url":"http://localhost:4000/secret","headers":{"Authorization":"Bearer let-me-in"}}
+```
+<p>(<code>body: undefined</code> לא מופיע ב־JSON.stringify — כך עובד JSON.)</p>
+@mistakes
+<ul><li>להחליף משתנים בכל הטקסט לפני הפירוק — אז משתנה לא מוגדר בהערה יפיל את כל הקובץ.</li></ul>
+
+@@ P14-E16 | 3 | router עם פרמטרים 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E16.mjs</code> השלם <code>createRouter()</code> שמחזירה <code>{ add, match }</code>:</p>
+<ul><li><code>add(method, pattern, handler)</code> — pattern כמו <code>"/products/:id/reviews"</code>.</li><li><code>match(method, path)</code>:<ul><li>נמצא route מתאים ← <code>{ status: 200, handler, params }</code> (למשל <code>{ id: "7" }</code>, אחרי <code>decodeURIComponent</code>).</li><li>ה־path מתאים ל־routes אבל לא ל־method ← <code>{ status: 405, allow: ["GET", "DELETE"] }</code> (לפי סדר ההוספה).</li><li>שום דבר ← <code>{ status: 404 }</code>.</li></ul></li><li>הסדר קובע: route שנוסף קודם מנצח (<code>/products/new</code> לפני <code>/products/:id</code>). סלאשים כפולים או בסוף לא משנים (<code>/products/</code> = <code>/products</code>).</li></ul>
+@hint1
+<p>שמור כל route כמערך חלקים: <code>pattern.split("/").filter(Boolean)</code>. השווה חלק־חלק.</p>
+@hint2
+<p>חלק שמתחיל ב־<code>:</code> מתאים לכל ערך, ונכנס ל־params.</p>
+@solution
+```js run mjs save=solutions/P14-E16.mjs
+// P14-E16
+const segments = (p) => p.split("/").filter(Boolean);
+
+function matchParts(pattern, parts) {
+  if (pattern.length !== parts.length) return null;
+  const params = {};
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i].startsWith(":")) params[pattern[i].slice(1)] = decodeURIComponent(parts[i]);
+    else if (pattern[i] !== parts[i]) return null;
+  }
+  return params;
+}
+
+export function createRouter() {
+  const routes = [];
+  return {
+    add(method, pattern, handler) {
+      routes.push({ method, pattern: segments(pattern), handler });
+    },
+    match(method, path) {
+      const parts = segments(path);
+      const allow = [];
+      for (const route of routes) {
+        const params = matchParts(route.pattern, parts);
+        if (!params) continue;
+        if (route.method === method) return { status: 200, handler: route.handler, params };
+        allow.push(route.method);
+      }
+      return allow.length > 0 ? { status: 405, allow } : { status: 404 };
+    },
+  };
+}
+
+const router = createRouter();
+router.add("GET", "/products/:id", "getOne");
+router.add("DELETE", "/products/:id", "remove");
+const m = router.match("GET", "/products/7");
+console.log(m.status, m.handler, m.params);
+console.log(router.match("PUT", "/products/7"), router.match("GET", "/nope"));
+```
+```out
+200 getOne { id: '7' }
+{ status: 405, allow: [ 'GET', 'DELETE' ] } { status: 404 }
+```
+<p>זה לב ה־routing של Express (פרק 15) — כולל <code>req.params</code>.</p>
+@mistakes
+<ul><li>להחזיר 404 ברגע שה־method לא מתאים — מפספס את ה־405 ואת ה־route הבא באותו path.</li></ul>
+
+@@ P14-E17 | 3 | לקרוא גוף JSON בבטחה 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E17.mjs</code> (המחלקה <code>HttpError</code> כבר כתובה) השלם <code>readJsonBody(req, { limit = 1_000_000 } = {})</code>. <code>req</code> הוא stream עם <code>req.headers</code>. זרוק <code>HttpError</code>:</p>
+<ul><li>415 <code>"Content-Type חייב להיות application/json"</code> — אם ה־header לא מכיל <code>application/json</code> (בדוק <strong>לפני</strong> שקוראים).</li><li>413 <code>"הגוף גדול מדי"</code> — ברגע שנאספו יותר מ־<code>limit</code> בתים (לא לחכות לסוף!).</li><li>400 <code>"גוף ריק"</code>, ו־400 <code>"JSON לא תקין"</code>.</li></ul>
+<p>שים לב: חתיכה (chunk) יכולה להיגמר באמצע אות עברית. אסוף <code>Buffer</code>־ים, וחבר ל־מחרוזת רק בסוף.</p>
+@hint1
+<p><code>for await (const chunk of req)</code>; <code>Buffer.from(chunk)</code> עובד גם אם ה־chunk הוא מחרוזת.</p>
+@hint2
+<p><code>Buffer.concat(chunks).toString("utf8")</code></p>
+@solution
+```js run mjs save=solutions/P14-E17.mjs
+// P14-E17
+import { Readable } from "node:stream";
+
+export class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
+export async function readJsonBody(req, { limit = 1_000_000 } = {}) {
+  if (!req.headers["content-type"]?.includes("application/json")) {
+    throw new HttpError(415, "Content-Type חייב להיות application/json");
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.from(chunk);
+    size += buf.length;
+    if (size > limit) throw new HttpError(413, "הגוף גדול מדי");
+    chunks.push(buf);
+  }
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (text.trim() === "") throw new HttpError(400, "גוף ריק");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(400, "JSON לא תקין");
+  }
+}
+
+// אות עברית (2 בתים) שנחתכת בין שתי חתיכות:
+const bytes = Buffer.from('{"name":"שלום"}');
+const req = Readable.from([bytes.subarray(0, 10), bytes.subarray(10)]);
+req.headers = { "content-type": "application/json" };
+console.log(await readJsonBody(req));
+```
+```out
+{ name: 'שלום' }
+```
+<p>עם <code>raw += chunk</code> (כמו בשרת ההדגמה) הדוגמה הזו הייתה מקבלת תו פגום. בשרת ההדגמה זה "עובד" כי הבקשות קטנות ומגיעות בחתיכה אחת — באג שמופיע רק בעומס או עם קבצים גדולים.</p>
+@mistakes
+<ul><li>לבדוק את הגודל רק בסוף — תוקף שולח 2GB והשרת אוסף הכול לזיכרון לפני שמסרב.</li></ul>
+
+@@ P14-E18 | 3 | שרת פתקים מלא 🤖 | 35 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E18.mjs</code> השלם <code>createNotesServer()</code> — API מלא לפתקים, בזיכרון (לכל שרת רשימה משלו), רק עם <code>node:http</code>:</p>
+<div class="table-wrap"><table><tr><th>בקשה</th><th>תשובה</th></tr>
+<tr><td><code>GET /notes</code></td><td>200, מערך הפתקים</td></tr>
+<tr><td><code>POST /notes</code> <code>{ "text": "..." }</code></td><td>201, <code>{ id, text, done: false }</code> + <code>Location: /notes/&lt;id&gt;</code>. ה־id מתחיל ב־1.</td></tr>
+<tr><td><code>GET /notes/:id</code></td><td>200 או 404</td></tr>
+<tr><td><code>PATCH /notes/:id</code> <code>{ "text"?, "done"? }</code></td><td>200 עם הפתק המעודכן; 404</td></tr>
+<tr><td><code>DELETE /notes/:id</code></td><td>204 בלי גוף; 404</td></tr></table></div>
+<ul><li><code>text</code> תקין: מחרוזת, אחרי trim באורך 1–200 (נשמר אחרי trim). <code>done</code>: boolean. ב־PATCH חייב להיות לפחות אחד מהם. אחרת ← 400.</li><li>JSON לא תקין ← 400. method אחר ← 405 עם <code>Allow</code>. כתובת אחרת ← 404.</li><li>כל שגיאה: <code>{ "error": "..." }</code>, ותמיד <code>Content-Type: application/json; charset=utf-8</code> (חוץ מ־204).</li></ul>
+@hint1
+<p>התחל משרת ההדגמה (<code>14-http/files/demo-server.mjs</code>) — המבנה כמעט זהה.</p>
+@hint2
+<p>פונקציה אחת <code>validateNote(body, { partial })</code> משרתת גם POST וגם PATCH.</p>
+@solution
+```js save=solutions/P14-E18.mjs
+// P14-E18
+import http from "node:http";
+
+function send(res, status, body, headers = {}) {
+  if (status === 204) {
+    res.writeHead(204, headers);
+    return res.end();
+  }
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "null");
+}
+
+// מחזירה הודעת שגיאה, או null אם תקין
+function validateNote(body, { partial }) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return "הגוף חייב להיות אובייקט";
+  if (partial && body.text === undefined && body.done === undefined) return "צריך text או done";
+  if ((!partial || body.text !== undefined) && (typeof body.text !== "string" || body.text.trim().length < 1 || body.text.trim().length > 200)) {
+    return "text: מחרוזת של 1–200 תווים";
+  }
+  if (body.done !== undefined && typeof body.done !== "boolean") return "done: true או false";
+  return null;
+}
+
+export function createNotesServer() {
+  const notes = [];
+  let nextId = 1;
+
+  return http.createServer(async (req, res) => {
+    const parts = new URL(req.url, "http://localhost").pathname.split("/").filter(Boolean);
+    try {
+      if (parts[0] !== "notes" || parts.length > 2) return send(res, 404, { error: "לא נמצא" });
+
+      if (parts.length === 1) {
+        if (req.method === "GET") return send(res, 200, notes);
+        if (req.method === "POST") {
+          const body = await readJson(req);
+          const error = validateNote(body, { partial: false });
+          if (error) return send(res, 400, { error });
+          const note = { id: nextId++, text: body.text.trim(), done: false };
+          notes.push(note);
+          return send(res, 201, note, { Location: `/notes/${note.id}` });
+        }
+        return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET, POST" });
+      }
+
+      const note = notes.find((n) => n.id === Number(parts[1]));
+      if (!["GET", "PATCH", "DELETE"].includes(req.method)) {
+        return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET, PATCH, DELETE" });
+      }
+      if (!note) return send(res, 404, { error: "הפתק לא נמצא" });
+      if (req.method === "GET") return send(res, 200, note);
+      if (req.method === "DELETE") {
+        notes.splice(notes.indexOf(note), 1);
+        return send(res, 204);
+      }
+      const body = await readJson(req);
+      const error = validateNote(body, { partial: true });
+      if (error) return send(res, 400, { error });
+      if (body.text !== undefined) note.text = body.text.trim();
+      if (body.done !== undefined) note.done = body.done;
+      return send(res, 200, note);
+    } catch (err) {
+      if (err instanceof SyntaxError) return send(res, 400, { error: "JSON לא תקין" });
+      console.error(err);
+      send(res, 500, { error: "שגיאה פנימית" });
+    }
+  });
+}
+```
+<p>שים לב כמה מהקוד הוא "צנרת" (פירוק כתובת, קריאת גוף, status, headers) לעומת לוגיקה. בפרק 15 נכתוב את אותו API ב־Express — ונראה כמה ממנו נעלם.</p>
+@mistakes
+<ul><li>להשוות <code>n.id === parts[1]</code> — מספר מול מחרוזת, תמיד false.</li><li>לבדוק <code>if (!body.text)</code> — מחרוזת של רווחים עוברת, ו־<code>{ "text": 5 }</code> נשמר כמספר.</li></ul>
+
+@@ P14-E19 | 3 | ניסיון חוזר חכם 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E19.mjs</code> השלם <code>fetchWithRetry(url, init = {}, { retries = 2, delayMs = 200 } = {})</code>:</p>
+<ul><li>מנסה עד <code>1 + retries</code> פעמים.</li><li>מנסה שוב רק על תקלה זמנית: status 408, 429, 500, 502, 503, 504 — או שגיאת רשת (fetch זרק).</li><li>בין ניסיונות — המתנה שמכפילה את עצמה: <code>delayMs</code>, <code>2×delayMs</code>, <code>4×delayMs</code>...</li><li>מחזירה את ה־<code>Response</code> (גם 404 — זו לא תקלה זמנית, מחזירים מיד). נגמרו הניסיונות ← מחזירה את התשובה האחרונה, או זורקת את השגיאה האחרונה.</li></ul>
+@hint1
+<p>לולאת <code>for (let attempt = 0; attempt &lt;= retries; attempt++)</code>.</p>
+@hint2
+<p><code>await new Promise((r) =&gt; setTimeout(r, delayMs * 2 ** attempt))</code></p>
+@solution
+```js save=solutions/P14-E19.mjs
+// P14-E19
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function fetchWithRetry(url, init = {}, { retries = 2, delayMs = 200 } = {}) {
+  let lastError;
+  let lastResponse;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) await sleep(delayMs * 2 ** (attempt - 1));
+    try {
+      lastResponse = await fetch(url, init);
+      lastError = undefined;
+      if (!RETRYABLE.has(lastResponse.status)) return lastResponse;
+    } catch (err) {
+      lastError = err;
+      lastResponse = undefined;
+    }
+  }
+  if (lastError) throw lastError;
+  return lastResponse;
+}
+```
+<p>שני דברים חשובים בעולם האמיתי: (1) ניסיון חוזר מתאים רק לבקשות idempotent — POST של הזמנה צריך "מפתח idempotency" (פרויקט הדגל); (2) מערכות גדולות מוסיפות "jitter" (רעש אקראי) להמתנה, כדי שאלף לקוחות לא ינסו שוב באותה מילישנייה.</p>
+@mistakes
+<ul><li>לנסות שוב על כל status שאינו ok — 400 יישלח 3 פעמים ויקבל 400 שלוש פעמים.</li><li>ניסיון חוזר בלי המתנה — מכה בשרת שכבר מתקשה.</li></ul>
+
+@@ P14-E20 | 4 | שרת עם שלושה באגים 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>14-http/starter/P14-E20.mjs</code> השרת "עובד" בדפדפן, אבל: (1) לקוח שבודק את <code>Content-Type</code> של <code>/health</code> לא מזהה JSON; (2) בקשה ל־<code>/old-users</code> נתקעת ולא חוזרת; (3) כתובת שלא קיימת מחזירה 200, וכלי הניטור מדווח "הכול תקין". תקן את שלושתם. (ל־<code>/old-users</code> צריך לחזור 301 עם <code>Location: /users</code>.)</p>
+@hint1
+<p><code>res.writeHead</code> לא שולח את התשובה — רק <code>res.end</code>.</p>
+@hint2
+<p>בדוק כל ענף: מה ה־status, האם יש Content-Type, והאם יש <code>end</code>.</p>
+@solution
+```js save=solutions/P14-E20.mjs
+// P14-E20: מתוקן
+import http from "node:http";
+
+const JSON_TYPE = { "Content-Type": "application/json; charset=utf-8" };
+
+export function createServer() {
+  return http.createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, JSON_TYPE);
+      res.end(JSON.stringify({ ok: true }));
+    } else if (req.url === "/users") {
+      res.writeHead(200, JSON_TYPE);
+      res.end(JSON.stringify([{ id: 1, name: "דנה" }]));
+    } else if (req.url === "/old-users") {
+      res.writeHead(301, { Location: "/users" });
+      res.end();
+    } else {
+      res.writeHead(404, JSON_TYPE);
+      res.end(JSON.stringify({ error: "לא נמצא" }));
+    }
+  });
+}
+```
+<p>באג 2 הוא הכי מסוכן: בקשות תקועות לא נראות בשום יומן שגיאות — רק החיבורים מצטברים עד שהשרת נחנק.</p>
+@mistakes
+<ul><li>לתקן את 3 על ידי בדיקה בצד הלקוח (<code>if (data.error)</code>) — ה־status הוא החוזה, ושאר הכלים (ניטור, cache, retry) מסתכלים רק עליו.</li></ul>
+
+@@ P14-E21 | 4 | לקוח שתמיד "מצליח" 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E21.mjs</code>, <code>createProduct(baseUrl, product)</code> אמורה לשלוח POST ל־<code>/products</code> ולהחזיר את המוצר שנוצר. בפועל השרת מחזיר 415, והפונקציה מחזירה <code>{ error: ... }</code> כאילו זה מוצר. תקן כך ש:</p>
+<ul><li>הבקשה נשלחת נכון (JSON + header מתאים).</li><li>תשובה שאינה 2xx ← <code>Error(`HTTP ${status}: ${error}`)</code>, כאשר <code>error</code> הוא השדה מגוף התשובה.</li><li>יש timeout של 5 שניות.</li></ul>
+@hint1
+<p>מה נשלח כשמעבירים ל־<code>body</code> אובייקט רגיל? (<code>String({})</code>)</p>
+@hint2
+<p>שלושה דברים: <code>JSON.stringify</code>, <code>headers</code>, <code>res.ok</code>. ועוד <code>signal</code>.</p>
+@solution
+```js save=solutions/P14-E21.mjs
+// P14-E21: מתוקן
+export async function createProduct(baseUrl, product) {
+  const res = await fetch(`${baseUrl}/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(product),
+    signal: AbortSignal.timeout(5000),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${data.error}`);
+  return data;
+}
+```
+@mistakes
+<ul><li>לתקן רק את ה־stringify — בלי Content-Type, שרת ההדגמה עדיין מחזיר 415.</li></ul>
+
+@@ P14-E22 | 4 | השרת שקורס מבקשה אחת 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E22.mjs</code> שרת סופר מילים: <code>POST /count</code> עם <code>{ "word": "..." }</code> מעלה מונה, ו־<code>GET /count/:word</code> מחזיר אותו. בעיות:</p>
+<ol><li>בקשה עם JSON שבור <strong>מפילה את כל השרת</strong> (נסה: <code>curl -X POST localhost:3000/count -d '{oops'</code>).</li><li>הספירה הראשונה מחזירה <code>null</code> (ב־JSON זה <code>NaN</code>).</li><li><code>GET /count/שלום</code> מחזיר תמיד 0, גם אחרי ספירה.</li></ol>
+<p>תקן: JSON שבור, או <code>word</code> שאינו מחרוזת לא ריקה ← 400 <code>{ "error": ... }</code>; ספירה נכונה; מילה שלא נספרה ← <code>count: 0</code>.</p>
+@hint1
+<p>handler שהוא <code>async</code> וזורק ← unhandled rejection ← Node מפיל את התהליך. ושים לב איך נראה <code>req.url</code> כשהכתובת בעברית.</p>
+@hint2
+<p><code>(counts[word] ?? 0) + 1</code>, ו־<code>decodeURIComponent</code>.</p>
+@solution
+```js save=solutions/P14-E22.mjs
+// P14-E22: מתוקן
+import http from "node:http";
+
+function send(res, status, body) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+export function createCounterServer() {
+  const counts = {};
+  return http.createServer(async (req, res) => {
+    try {
+      if (req.method === "POST" && req.url === "/count") {
+        let raw = "";
+        for await (const chunk of req) raw += chunk;
+        const { word } = JSON.parse(raw);
+        if (typeof word !== "string" || word.trim() === "") return send(res, 400, { error: "word חובה" });
+        counts[word] = (counts[word] ?? 0) + 1;
+        return send(res, 200, { word, count: counts[word] });
+      }
+      if (req.method === "GET" && req.url.startsWith("/count/")) {
+        const word = decodeURIComponent(req.url.slice("/count/".length));
+        return send(res, 200, { word, count: counts[word] ?? 0 });
+      }
+      send(res, 404, { error: "לא נמצא" });
+    } catch (err) {
+      if (err instanceof SyntaxError) return send(res, 400, { error: "JSON לא תקין" });
+      console.error(err);
+      send(res, 500, { error: "שגיאה פנימית" });
+    }
+  });
+}
+```
+<p>באג 1 הוא שבירת שרת על ידי כל משתמש אנונימי — Denial of Service בבקשה אחת. (גם <code>JSON.parse("null")</code> היה מפיל את ה־destructuring — ה־catch תופס גם את זה, כ־500. ניסיון לשפר: לבדוק שהגוף הוא אובייקט ולהחזיר 400.)</p>
+@mistakes
+<ul><li>לעטוף רק את <code>JSON.parse</code> — שגיאה אחרת בהמשך עדיין מפילה את השרת. try/catch אחד סביב כל ה־handler.</li></ul>
+
+@@ P14-E23 | 4 | חיפוש עם query שבור 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>14-http/starter/P14-E23.mjs</code>, <code>parseSearch(url)</code> מפרקת ידנית את ה־query של <code>/products?q=...&amp;page=...</code>. בעיות:</p>
+<ol><li><code>parseSearch("/products")</code> (בלי <code>?</code>) קורס.</li><li><code>?q=%D7%9E%D7%A1%D7%9A</code> (כך הדפדפן שולח "מסך") — החיפוש לא מוצא כלום. וגם <code>q=red+shoes</code>.</li><li><code>?page=2</code> ← <code>nextPage</code> יוצא <code>"21"</code>.</li></ol>
+<p>תקן. התוצאה: <code>{ q, page, nextPage }</code> — <code>q</code> ברירת מחדל <code>""</code>, <code>page</code> מספר (ברירת מחדל 1).</p>
+@hint1
+<p>יש מחלקה מובנית שעושה את כל זה נכון.</p>
+@hint2
+<p><code>new URL(url, "http://x").searchParams</code></p>
+@solution
+```js run mjs save=solutions/P14-E23.mjs
+// P14-E23: מתוקן
+export function parseSearch(url) {
+  const params = new URL(url, "http://x").searchParams;
+  const page = Number(params.get("page") ?? 1);
+  return { q: params.get("q") ?? "", page, nextPage: page + 1 };
+}
+
+console.log(parseSearch("/products"), parseSearch("/products?q=%D7%9E%D7%A1%D7%9A&page=2"), parseSearch("/products?q=red+shoes"));
+```
+```out
+{ q: '', page: 1, nextPage: 2 } { q: 'מסך', page: 2, nextPage: 3 } { q: 'red shoes', page: 1, nextPage: 2 }
+```
+<p>ניסיון לשפר: מה יקרה עם <code>?page=abc</code> או <code>?page=-3</code>? (רמז: NaN.) בפרק 15 נבדוק את ה־query עם Zod.</p>
+@mistakes
+<ul><li>להוסיף <code>decodeURIComponent</code> בלבד — <code>+</code> לא הופך לרווח. ב־query, <code>+</code> הוא רווח; URLSearchParams יודע את זה.</li></ul>
+
+@@ P14-E24 | 5 | אתגר: Express משלך 🤖 | 50 | כל הפרק
+@task
+<p>בקובץ <code>14-http/starter/P14-E24.mjs</code> בנה <code>createApp()</code> — מסגרת זעירה בסגנון Express:</p>
+```js
+const app = createApp();
+app.use((req, res, next) => { console.log(req.method, req.path); next(); });
+app.get("/products/:id", (req, res) => res.json({ id: req.params.id, sort: req.query.sort }));
+app.post("/products", (req, res) => res.status(201).json(req.body));
+const server = app.listen(3000);
+```
+<ul><li><code>get</code>, <code>post</code>, <code>put</code>, <code>patch</code>, <code>delete</code> (path עם <code>:params</code>), ו־<code>use(fn)</code> ל־middleware שרץ לפני כל route לפי הסדר; middleware ממשיך רק אם קרא <code>next()</code>.</li><li><code>req.path</code>, <code>req.query</code> (אובייקט), <code>req.params</code>, ו־<code>req.body</code> — JSON שנקרא אוטומטית כשה־Content-Type הוא JSON (אחרת <code>undefined</code>). JSON שבור ← 400.</li><li><code>res.status(code)</code> (מחזיר את <code>res</code> לשרשור), <code>res.json(obj)</code> (ברירת מחדל 200). ב־<code>res.status(204).json()</code> אין גוף.</li><li>handler (רגיל או async) שזורק ← 500 <code>{ "error": "שגיאה פנימית" }</code>; אבל אם לשגיאה יש <code>status</code> ← אותו status ו־<code>{ "error": err.message }</code>.</li><li>אין route ← 404 <code>{ "error": "לא נמצא" }</code>. path קיים עם method אחר ← 405.</li><li><code>listen(port, cb)</code> ← מחזיר את ה־<code>http.Server</code>.</li></ul>
+@hint1
+<p>שלב 1: שרת שמכין req/res (path, query, body, status, json). שלב 2: router מ־E16. שלב 3: שרשרת middleware.</p>
+@hint2
+<p>middleware: <code>let i = 0; const next = async () =&gt; { const fn = stack[i++]; if (fn) await fn(req, res, next); else await runRoute(); }</code></p>
+@solution
+```js run mjs save=solutions/P14-E24.mjs
+// P14-E24
+import fs from "node:fs";
+import http from "node:http";
+
+const segments = (p) => p.split("/").filter(Boolean);
+
+function matchParts(pattern, parts) {
+  if (pattern.length !== parts.length) return null;
+  const params = {};
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i].startsWith(":")) params[pattern[i].slice(1)] = decodeURIComponent(parts[i]);
+    else if (pattern[i] !== parts[i]) return null;
+  }
+  return params;
+}
+
+async function readBody(req) {
+  if (!req.headers["content-type"]?.includes("application/json")) return undefined;
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (text === "") return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error("JSON לא תקין"), { status: 400 });
+  }
+}
+
+function enhance(res) {
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (body) => {
+    if (res.statusCode === 204) return res.end();
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(body));
+  };
+}
+
+export function createApp() {
+  const middleware = [];
+  const routes = [];
+
+  async function route(req, res) {
+    const parts = segments(req.path);
+    const allow = [];
+    for (const r of routes) {
+      const params = matchParts(r.pattern, parts);
+      if (!params) continue;
+      if (r.method !== req.method) {
+        allow.push(r.method);
+        continue;
+      }
+      req.params = params;
+      return r.handler(req, res);
+    }
+    if (allow.length > 0) {
+      res.setHeader("Allow", allow.join(", "));
+      return res.status(405).json({ error: "Method Not Allowed" });
+    }
+    res.status(404).json({ error: "לא נמצא" });
+  }
+
+  async function handle(req, res) {
+    enhance(res);
+    try {
+      const url = new URL(req.url, "http://localhost");
+      req.path = url.pathname;
+      req.query = Object.fromEntries(url.searchParams);
+      req.params = {};
+      req.body = await readBody(req);
+      let i = 0;
+      const next = async () => {
+        const fn = middleware[i++];
+        if (fn) await fn(req, res, next);
+        else await route(req, res);
+      };
+      await next();
+    } catch (err) {
+      if (res.headersSent) return res.end();
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      res.status(500).json({ error: "שגיאה פנימית" });
+    }
+  }
+
+  const app = {
+    use(fn) {
+      middleware.push(fn);
+    },
+    listen(port, cb) {
+      return http.createServer(handle).listen(port, cb);
+    },
+  };
+  for (const method of ["get", "post", "put", "patch", "delete"]) {
+    app[method] = (pattern, handler) => routes.push({ method: method.toUpperCase(), pattern: segments(pattern), handler });
+  }
+  return app;
+}
+
+// הדגמה — רק כשמריצים את הקובץ ישירות (node P14-E24.mjs), לא כשהבדיקות טוענות אותו
+if (fs.realpathSync(process.argv[1]) === import.meta.filename) {
+  const app = createApp();
+  app.get("/products/:id", (req, res) => res.json({ id: req.params.id, sort: req.query.sort }));
+  const server = app.listen(0, async () => {
+    const res = await fetch(`http://localhost:${server.address().port}/products/7?sort=price`);
+    console.log(res.status, await res.json());
+    server.close();
+  });
+}
+```
+```out
+200 { id: '7', sort: 'price' }
+```
+<p>בנית את רוב מה ש־Express עושה. עכשיו, כשתראה בפרק 15 <code>app.get(...)</code>, <code>next()</code> או "error middleware" — תדע בדיוק מה קורה מאחורי הקלעים.</p>
+@mistakes
+<ul><li>לא לעשות <code>await</code> ל־handler — שגיאה ב־handler async לא נתפסת, והשרת קורס (כמו ב־E22).</li></ul>
+
+@@ P14-E25 | 5 | אתגר: הגבלת קצב (rate limit) 🤖 | 35 | כל הפרק
+@task
+<p>הגנה בסיסית מפני לקוח ששולח אלפי בקשות. בקובץ <code>14-http/starter/P14-E25.mjs</code> השלם <code>createLimitedServer({ limit, windowMs, now = Date.now })</code>:</p>
+<ul><li>מזהה לקוח: ה־header <code>X-Client-Id</code>, או <code>"anonymous"</code>.</li><li>"חלון קבוע": החלון של לקוח מתחיל בבקשה הראשונה שלו, ונמשך <code>windowMs</code>. אחריו — מתחיל חלון חדש מאפס.</li><li>בתוך החלון, עד <code>limit</code> בקשות ← 200 <code>{ "ok": true }</code> עם <code>X-RateLimit-Remaining</code> (כמה נשארו).</li><li>מעבר לזה ← 429 <code>{ "error": "יותר מדי בקשות" }</code>, עם <code>Retry-After</code> — שניות שלמות (עיגול למעלה) עד סוף החלון, ו־<code>X-RateLimit-Remaining: 0</code>.</li><li>הזמן נלקח מ־<code>now()</code> — כך הבדיקות "מזיזות שעון" בלי לחכות.</li></ul>
+@hint1
+<p><code>Map</code> מלקוח ל־<code>{ start, count }</code>.</p>
+@hint2
+<p>חלון נגמר כש־<code>now() - start &gt;= windowMs</code>. Retry-After: <code>Math.ceil((start + windowMs - now()) / 1000)</code>.</p>
+@solution
+```js save=solutions/P14-E25.mjs
+// P14-E25
+import http from "node:http";
+
+export function createLimitedServer({ limit, windowMs, now = Date.now }) {
+  const windows = new Map();
+
+  return http.createServer((req, res) => {
+    const client = req.headers["x-client-id"] ?? "anonymous";
+    const t = now();
+    let w = windows.get(client);
+    if (!w || t - w.start >= windowMs) {
+      w = { start: t, count: 0 };
+      windows.set(client, w);
+    }
+    w.count++;
+
+    const headers = { "Content-Type": "application/json; charset=utf-8" };
+    if (w.count > limit) {
+      headers["Retry-After"] = String(Math.ceil((w.start + windowMs - t) / 1000));
+      headers["X-RateLimit-Remaining"] = "0";
+      res.writeHead(429, headers);
+      return res.end(JSON.stringify({ error: "יותר מדי בקשות" }));
+    }
+    headers["X-RateLimit-Remaining"] = String(limit - w.count);
+    res.writeHead(200, headers);
+    res.end(JSON.stringify({ ok: true }));
+  });
+}
+```
+<p>שתי חולשות לחשוב עליהן: (1) ה־Map גדל לנצח — לקוחות ישנים לא נמחקים (פתרון: ניקוי תקופתי, או Redis עם תפוגה — פרק 26); (2) עם שני עותקים של השרת, לכל אחד מונה משלו, והלקוח מקבל פי 2. גם את זה פותר Redis. ומזהה שהלקוח שולח בעצמו אפשר לזייף — בפועל מגבילים לפי IP או לפי משתמש מחובר.</p>
+@mistakes
+<ul><li><code>Retry-After</code> במילישניות — התקן מגדיר שניות.</li></ul>

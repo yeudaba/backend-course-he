@@ -1,0 +1,128 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>CRUD: `findMany`, `findUnique`, `create`, `update`, `delete`.</li>
+      <li>סינון, `select`/`include`, מיון ו־pagination.</li>
+      <li>עדכונים אטומיים, transactions, ושגיאות (P2002, P2025).</li>
+      <li>SQL ישיר — בבטחה.</li>
+    </ul>
+  </div>
+
+  <h2>1. קריאה</h2>
+```ts
+const beans = await prisma.product.findMany({
+  where: {
+    isActive: true,
+    category: { name: "beans" },                    // סינון לפי קשר — Prisma עושה את ה־JOIN
+    name: { contains: "bean", mode: "insensitive" }, // ILIKE '%bean%'
+    price: { gte: 20, lte: 100 },
+  },
+  select: { id: true, name: true, price: true },
+  orderBy: [{ price: "desc" }, { id: "asc" }],
+  skip: 0,
+  take: 10,
+});
+
+const dana = await prisma.customer.findUnique({ where: { email: "dana@example.com" } }); // או null
+const total = await prisma.product.count({ where: { isActive: true } });
+```
+  <div class="table-wrap"><table>
+    <tr><th>Prisma</th><th>SQL</th></tr>
+    <tr><td>`{ price: 10 }`</td><td>`price = 10`</td></tr>
+    <tr><td>`{ price: { gt, gte, lt, lte } }`</td><td>`>`, `>=`, `<`, `<=`</td></tr>
+    <tr><td>`{ status: { in: ["paid", "pending"] } }`</td><td>`IN (...)`</td></tr>
+    <tr><td>`{ city: null }` · `{ city: { not: null } }`</td><td>`IS NULL` · `IS NOT NULL`</td></tr>
+    <tr><td>`{ OR: [{...}, {...}] }` · `{ NOT: {...} }`</td><td>`OR` · `NOT`</td></tr>
+    <tr><td>`{ orders: { some: {...} } }` · `none` · `every`</td><td>`EXISTS (...)` / `NOT EXISTS`</td></tr>
+  </table></div>
+  <p>`findUnique` — רק לפי שדה ייחודי (`id`, `email`), ומחזיר `null` אם אין. `findFirst` — לפי כל תנאי, את הראשון.</p>
+
+  <h2>2. include: קשרים בלי N+1</h2>
+```ts
+const orders = await prisma.order.findMany({
+  where: { customerId: 1 },
+  orderBy: { createdAt: "desc" },
+  include: {
+    items: { include: { product: { select: { name: true } } } },
+  },
+});
+// orders[0].items[0].product.name  ← מוקלד
+```
+  <p>Prisma מריץ שאילתה לכל "רמה" (הזמנות; כל הפריטים שלהן בבת אחת; כל המוצרים בבת אחת) ומחבר בזיכרון — בדיוק "אפשרות 2" משיעור N+1 בפרק 18. אבל לולאה עם `findUnique` לכל פריט — זה עדיין N+1, גם ב־Prisma.</p>
+  <p>ולראות מה Prisma שולח: `new PrismaClient({ adapter, log: ["query"] })` — כל שאילתה מודפסת. שווה להפעיל מדי פעם בפיתוח.</p>
+
+  <h2>3. כתיבה</h2>
+```ts
+const customer = await prisma.customer.create({
+  data: { fullName: "Lior Katz", email: "lior@example.com", joinedOn: new Date("2026-11-01") },
+});
+
+const order = await prisma.order.create({            // nested create — הזמנה ופריטים, ב־transaction אחד
+  data: {
+    customerId: customer.id,
+    items: { create: [{ productId: 1, quantity: 2, unitPrice: 89.9 }] },
+  },
+  include: { items: true },
+});
+
+await prisma.product.update({ where: { id: 1 }, data: { stock: { decrement: 2 } } }); // stock = stock - 2
+await prisma.customer.delete({ where: { id: customer.id } });
+```
+
+  <h2>4. שגיאות</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קוד</th><th>מתי</th><th>HTTP</th></tr>
+    <tr><td>`P2002`</td><td>הפרת unique (אימייל כפול)</td><td>409</td></tr>
+    <tr><td>`P2025`</td><td>`update`/`delete` של רשומה שלא קיימת</td><td>404</td></tr>
+    <tr><td>`P2003`</td><td>הפרת foreign key (מחיקת קטגוריה עם מוצרים / הזמנה ללקוח שלא קיים)</td><td>409 / 400</td></tr>
+  </table></div>
+```ts
+import { Prisma } from "./generated/prisma/client.ts";
+
+try {
+  return await prisma.customer.create({ data });
+} catch (err) {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    throw new HttpError(409, "EMAIL_TAKEN", "האימייל כבר רשום");
+  }
+  throw err; // כל השאר — לא שלנו לתרגם. errorHandler יחזיר 500
+}
+```
+
+  <h2>5. עדכון אטומי ו־transactions</h2>
+```ts
+// הורדת מלאי בלי מרוץ — updateMany עם תנאי (כמו P18-E10)
+const { count } = await prisma.product.updateMany({
+  where: { id: productId, stock: { gte: qty } },
+  data: { stock: { decrement: qty } },
+});
+if (count === 0) throw new AppError("OUT_OF_STOCK");
+
+// interactive transaction — כמה פעולות, הכול או כלום
+const order = await prisma.$transaction(async (tx) => {
+  const p = await tx.product.updateMany({ where: { id: 1, stock: { gte: 1 } }, data: { stock: { decrement: 1 } } });
+  if (p.count === 0) throw new AppError("OUT_OF_STOCK");  // זריקה ← ROLLBACK
+  return tx.order.create({ data: { customerId: 1, items: { create: [{ productId: 1, quantity: 1, unitPrice: 89.9 }] } } });
+});
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ tx, לא prisma</span>
+    <p>בתוך ה־callback — כל הפעולות דרך `tx`. שאילתה דרך `prisma` רצה <em>מחוץ</em> ל־transaction (חיבור אחר!), ולא תתבטל בכישלון — אותו באג כמו `pool.query("BEGIN")` בפרק 18.</p>
+  </div>
+
+  <h2>6. SQL ישיר</h2>
+```ts
+const rows = await prisma.$queryRaw<{ category: string; revenue: number }[]>`
+  SELECT c.name AS category, SUM(oi.quantity * oi.unit_price)::float AS revenue
+  FROM order_items oi
+  JOIN products p ON p.id = oi.product_id
+  JOIN categories c ON c.id = p.category_id
+  WHERE p.price > ${minPrice}
+  GROUP BY c.name`;
+```
+  <p>דוחות עם GROUP BY על כמה טבלאות, חלונות, CTE — ב־SQL זה פשוט יותר. `$queryRaw` עם <strong>template literal</strong> (הגרש ההפוך) הופך כל `${...}` לפרמטר — בטוח מ־injection. `$queryRawUnsafe("..." + x)` — לא בטוח, ולא צריך כמעט אף פעם.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19-E04">E04</a> · <a href="exercises.html#P19-E06">E06</a> עד <a href="exercises.html#P19-E19">E19</a> · <a href="exercises.html#P19-E20">E20</a> עד <a href="exercises.html#P19-E23">E23</a> — ואת האתגרים <a href="exercises.html#P19-E24">E24</a> ו־<a href="exercises.html#P19-E25">E25</a>.</p>
+  </div>

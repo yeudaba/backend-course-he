@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controllers, DTOs ו־validation — פרק 20</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — Controllers, DTOs ו־validation</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>decorators של routes ופרמטרים.</li>
+      <li>DTOs עם class-validator, ו־<code>ValidationPipe</code>.</li>
+      <li>status codes ו־exceptions.</li>
+    </ul>
+  </div>
+
+  <h2>1. Routes ופרמטרים</h2>
+<pre><code class="lang-ts">@Controller("products")
+export class ProductsController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Get()                                    // GET /products?page=2
+  list(@Query() query: ListProductsQuery) { return this.products.list(query); }
+
+  @Get(":id")                               // GET /products/7
+  findOne(@Param("id", ParseIntPipe) id: number) { return this.products.findOne(id); }
+
+  @Post()                                   // POST /products — 201 אוטומטית
+  create(@Body() dto: CreateProductDto) { return this.products.create(dto); }
+
+  @Patch(":id")
+  update(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateProductDto) { return this.products.update(id, dto); }
+
+  @Delete(":id")
+  @HttpCode(204)                            // בלי זה — 200
+  remove(@Param("id", ParseIntPipe) id: number) { this.products.remove(id); }
+}</code></pre>
+  <div class="table-wrap"><table>
+    <tr><th>Decorator</th><th>מקביל ב־Express</th></tr>
+    <tr><td><code>@Param("id")</code></td><td><code>req.params.id</code></td></tr>
+    <tr><td><code>@Query()</code> · <code>@Query("page")</code></td><td><code>req.query</code> · <code>req.query.page</code></td></tr>
+    <tr><td><code>@Body()</code></td><td><code>req.body</code></td></tr>
+    <tr><td><code>@Headers("x-api-key")</code></td><td><code>req.get("x-api-key")</code></td></tr>
+    <tr><td><code>@HttpCode(204)</code> · <code>@Header("Cache-Control", "...")</code></td><td><code>res.status(204)</code> · <code>res.set(...)</code></td></tr>
+  </table></div>
+  <p><code>ParseIntPipe</code> — pipe שממיר את <code>"7"</code> ל־7, ואם זה לא מספר — 400 עוד לפני שה־handler רץ. אפשר גם async: מתודה שמחזירה Promise — Nest מחכה, ושגיאה נתפסת.</p>
+
+  <h2>2. DTO + ValidationPipe</h2>
+<span class="file-label">src/products/dto/create-product.dto.ts</span>
+<pre><code class="lang-ts">import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Length, Max, Min } from "class-validator";
+
+export class CreateProductDto {
+  @IsString() @Length(2, 80)
+  name: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) @Max(100_000)
+  price: number;
+
+  @IsInt() @Min(0)
+  stock: number;
+
+  @IsOptional() @IsBoolean()
+  isActive?: boolean;
+}</code></pre>
+<span class="file-label">src/main.ts</span>
+<pre><code class="lang-ts">app.useGlobalPipes(new ValidationPipe({
+  whitelist: true,              // שדות בלי decorators — נמחקים
+  forbidNonWhitelisted: true,   // ...או, עם זה, 400
+  transform: true,              // הגוף הופך למופע של ה־DTO, ו־query/params מומרים לטיפוסים
+}));</code></pre>
+<pre class="terminal"><span class="prompt">% </span>curl -s -X POST localhost:3000/products -H "Content-Type: application/json" -d '{"name":"X","price":0,"extra":1}'
+{"message":["property extra should not exist","name must be longer than or equal to 2 characters","price must not be less than 0.01","stock must be an integer number"],"error":"Bad Request","statusCode":400}</pre>
+  <p>(פלט אמיתי מאותו מבנה — ראה E08.) הרעיון זהה ל־Zod בפרק 15: מתארים קלט תקין פעם אחת. ההבדל: ב־Nest הסכמה היא <strong>class</strong> עם decorators, וה־class משמש גם כטיפוס TypeScript (וגם ל־Swagger, בשיעור 4).</p>
+  <div class="box tip">
+    <span class="box-title">💡 query מגיע כמחרוזת — גם כאן</span>
+    <p><code>?page=2</code> הוא <code>"2"</code>. עם <code>transform: true</code> ו־<code>@Type(() =&gt; Number)</code> (מ־<code>class-transformer</code>) על השדה ב־DTO של ה־query — הוא הופך למספר לפני הבדיקה. זה ה־<code>z.coerce</code> של Nest.</p>
+  </div>
+  <p>ול־PATCH: <code>export class UpdateProductDto extends PartialType(CreateProductDto) {}</code> (מ־<code>@nestjs/swagger</code>) — כל השדות הופכים לאופציונליים, עם אותם חוקים.</p>
+
+  <h2>3. Exceptions</h2>
+  <div class="table-wrap"><table>
+    <tr><th>זורקים</th><th>status</th></tr>
+    <tr><td><code>BadRequestException</code></td><td>400</td></tr>
+    <tr><td><code>UnauthorizedException</code> · <code>ForbiddenException</code></td><td>401 · 403</td></tr>
+    <tr><td><code>NotFoundException</code></td><td>404</td></tr>
+    <tr><td><code>ConflictException</code></td><td>409</td></tr>
+    <tr><td><code>UnprocessableEntityException</code></td><td>422</td></tr>
+    <tr><td><code>HttpException(body, status)</code></td><td>כל status</td></tr>
+    <tr><td>כל שגיאה אחרת (<code>throw new Error(...)</code>)</td><td>500, "Internal server error" — בלי פרטים</td></tr>
+  </table></div>
+  <p>התשובה כברירת מחדל: <code>{"message": "...", "error": "Not Found", "statusCode": 404}</code>. רוצה את המבנה מפרק 15 (<code>{"error": {"code", "message"}}</code>)? exception filter — בשיעור הבא.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P20-E02">E02</a> · <a href="exercises.html#P20-E08">E08</a> · <a href="exercises.html#P20-E09">E09</a> · <a href="exercises.html#P20-E10">E10</a> · <a href="exercises.html#P20-E16">E16</a> · <a href="exercises.html#P20-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-architecture.html"><small>הקודם</small>שיעור 1 — Modules, controllers ו־providers</a><a href="lesson-03-di.html"><small>הבא</small>שיעור 3 — Dependency injection, guards ו־filters</a></div>
+</main>
+</body>
+</html>

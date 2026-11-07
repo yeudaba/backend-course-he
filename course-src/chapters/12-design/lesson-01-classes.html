@@ -1,0 +1,116 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מחלקה: שדות, constructor, מתודות ו־`this`.</li>
+      <li>שדות פרטיים (`#`) ו־`readonly` — לשמור על אובייקט במצב תקין.</li>
+      <li>getters ו־`static`.</li>
+      <li>מתי מחלקה, ומתי פונקציות ואובייקטים פשוטים.</li>
+    </ul>
+  </div>
+
+  <h2>1. מחלקה = תבנית</h2>
+  <p>בפרק 8 כתבת פונקציות בנק שמקבלות חשבון ומחזירות חשבון חדש. מחלקה מחברת את הנתונים (יתרה) עם הפעולות המותרות עליהם (הפקדה, משיכה) ביחידה אחת:</p>
+```ts run
+class BankAccount {
+  readonly owner: string;
+  #balance = 0;
+
+  constructor(owner: string, initial = 0) {
+    this.owner = owner;
+    this.deposit(initial);
+  }
+
+  get balance(): number {
+    return this.#balance;
+  }
+
+  deposit(amount: number): void {
+    if (amount < 0) {
+      throw new Error("סכום שלילי");
+    }
+    this.#balance += amount;
+  }
+
+  withdraw(amount: number): void {
+    if (amount > this.#balance) {
+      throw new Error("אין מספיק יתרה");
+    }
+    this.#balance -= amount;
+  }
+}
+
+const acc = new BankAccount("דנה", 100);
+acc.withdraw(30);
+console.log(acc.owner, acc.balance);
+```
+```out
+דנה 70
+```
+  <div class="table-wrap"><table>
+    <tr><th>חלק</th><th>מה זה</th></tr>
+    <tr><td>`class BankAccount`</td><td>הגדרת התבנית. שם באות גדולה (PascalCase) — מוסכמה</td></tr>
+    <tr><td>`readonly owner: string;`</td><td>שדה ציבורי שלא משתנה אחרי האתחול</td></tr>
+    <tr><td>`#balance = 0;`</td><td><strong>שדה פרטי</strong> — רק קוד בתוך המחלקה רואה אותו</td></tr>
+    <tr><td>`constructor(...)`</td><td>רץ ב־`new`, מאתחל את המופע</td></tr>
+    <tr><td>`this`</td><td>"המופע הזה" (`acc`)</td></tr>
+    <tr><td>`get balance()`</td><td>נקרא כמו שדה (`acc.balance`, בלי סוגריים), אבל מחושב — וקריאה בלבד</td></tr>
+    <tr><td>`new BankAccount(...)`</td><td>יוצר <strong>מופע</strong> חדש</td></tr>
+  </table></div>
+
+  <h2>2. למה פרטי?</h2>
+  <p>בלי `#`, כל קוד יכול לכתוב `acc.balance = -1000000`. עם `#balance`, הדרך <strong>היחידה</strong> לשנות יתרה היא דרך `deposit`/`withdraw` — שבודקות. זה נקרא <strong>encapsulation</strong> ("כימוס"): המחלקה מבטיחה שהאובייקט תמיד במצב חוקי.</p>
+```ts tsc
+class BankAccount {
+  #balance = 0;
+  get balance(): number {
+    return this.#balance;
+  }
+}
+const acc = new BankAccount();
+acc.#balance = 1000000;
+acc.balance = 5;
+```
+```out
+snippet.ts(8,5): error TS18013: Property '#balance' is not accessible outside class 'BankAccount' because it has a private identifier.
+snippet.ts(9,5): error TS2540: Cannot assign to 'balance' because it is a read-only property.
+```
+  <div class="box tip">
+    <span class="box-title">💡 `#` מול `private`</span>
+    <p>יש ב־TypeScript גם `private balance = 0`. ההבדל: `private` נבדק רק ב־TypeScript (בזמן ריצה השדה גלוי), `#` נאכף גם בזמן ריצה. ב־NestJS תראה הרבה `private` — ובמיוחד בכתיב מקוצר בתוך ה־constructor (`constructor(private repo: Repo)`). את הכתיב המקוצר הזה <strong>Node לא יודע להריץ ישירות</strong> מקובץ `.ts` — הוא דורש קומפילציה עם `tsc`, ולכן בקורס עד פרק 20 נכתוב את השדות במפורש.</p>
+  </div>
+
+  <h2>3. `static`</h2>
+```ts run
+class Money {
+  static readonly CURRENCY = "₪";
+  static fromAgorot(agorot: number): Money {
+    return new Money(agorot / 100);
+  }
+  readonly amount: number;
+  constructor(amount: number) {
+    this.amount = Math.round(amount * 100) / 100;
+  }
+  toString(): string {
+    return `${Money.CURRENCY}${this.amount.toFixed(2)}`;
+  }
+}
+console.log(String(Money.fromAgorot(1990)));
+```
+```out
+₪19.90
+```
+  <p>`static` — שייך למחלקה, לא למופע: `Money.CURRENCY`, `Money.fromAgorot(...)`. נוח לקבועים ול"מפעלים" (פונקציות שיוצרות מופעים בדרכים שונות). ו־`toString()` — JavaScript קוראת לה כשממירים את האובייקט למחרוזת.</p>
+
+  <h2>4. מחלקה או אובייקט פשוט?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מחלקה</th><th>`type` + אובייקט פשוט + פונקציות</th></tr>
+    <tr><td>יש מצב פנימי שצריך להגן עליו (יתרה, מלאי)</td><td>נתונים שעוברים בין שכבות (מה שמגיע מ־JSON, מהמסד)</td></tr>
+    <tr><td>שירות עם תלויות (service, repository)</td><td>חישובים טהורים</td></tr>
+    <tr><td>סוגי שגיאות</td><td>DTOs — אובייקטים שנשלחים ברשת</td></tr>
+  </table></div>
+  <p>שים לב: `JSON.stringify` של מופע לא כולל שדות `#` ולא מתודות, ו־`JSON.parse` מחזיר אובייקט פשוט — <strong>לא</strong> מופע של המחלקה. לכן נתונים שעוברים ברשת או נשמרים — אובייקטים פשוטים. מחלקות — ללוגיקה.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P12-E01">E01</a> · <a href="exercises.html#P12-E02">E02</a> · <a href="exercises.html#P12-E06">E06</a> · <a href="exercises.html#P12-E07">E07</a> · <a href="exercises.html#P12-E08">E08</a> · <a href="exercises.html#P12-E13">E13</a> · <a href="exercises.html#P12-E20">E20</a></p>
+  </div>

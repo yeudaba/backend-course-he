@@ -1,0 +1,98 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מודלים, טיפוסים ו־attributes.</li>
+      <li>קשרים: אחד־לרבים, רבים־לרבים, `onDelete`.</li>
+      <li>migrations: מה נוצר, מה נכנס ל־Git, ומה מריצים בייצור.</li>
+    </ul>
+  </div>
+
+  <h2>1. מודל</h2>
+  <p>פתח את `19-prisma/files/prisma/schema.prisma`. מודל אחד ממנו:</p>
+```text
+model Customer {
+  id       Int      @id @default(autoincrement())
+  fullName String   @map("full_name")
+  email    String   @unique
+  city     String?
+  joinedOn DateTime @map("joined_on") @db.Date
+  orders   Order[]
+
+  @@map("customers")
+}
+```
+  <div class="table-wrap"><table>
+    <tr><th>Prisma</th><th>PostgreSQL</th><th>בקוד</th></tr>
+    <tr><td>`Int`</td><td>`integer`</td><td>`number`</td></tr>
+    <tr><td>`String`</td><td>`text`</td><td>`string`</td></tr>
+    <tr><td>`String?`</td><td>`text` (nullable)</td><td>`string | null`</td></tr>
+    <tr><td>`Boolean`</td><td>`boolean`</td><td>`boolean`</td></tr>
+    <tr><td>`Decimal @db.Decimal(10, 2)`</td><td>`numeric(10,2)`</td><td>`Decimal` (אובייקט — `Number(x)` או `x.toNumber()`)</td></tr>
+    <tr><td>`DateTime @db.Timestamptz(3)`</td><td>`timestamptz`</td><td>`Date`</td></tr>
+    <tr><td>`DateTime @db.Date`</td><td>`date`</td><td>`Date` (בחצות UTC)</td></tr>
+    <tr><td>`enum OrderStatus { ... }`</td><td>`CREATE TYPE ... AS ENUM`</td><td>`"pending" | "paid" | ...`</td></tr>
+  </table></div>
+  <div class="table-wrap"><table>
+    <tr><th>Attribute</th><th>מה עושה</th></tr>
+    <tr><td>`@id @default(autoincrement())`</td><td>מפתח ראשי ממוספר</td></tr>
+    <tr><td>`@unique` · `@@unique([a, b])`</td><td>ייחודי (עמודה / צירוף)</td></tr>
+    <tr><td>`@default(now())` · `@updatedAt`</td><td>זמן יצירה / מתעדכן אוטומטית בכל update (על ידי Prisma)</td></tr>
+    <tr><td>`@map("full_name")` · `@@map("customers")`</td><td>שם העמודה/הטבלה במסד — camelCase בקוד, snake_case במסד</td></tr>
+    <tr><td>`@@index([customerId, createdAt])`</td><td>index (פרק 18)</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ `DateTime` לבד = timestamp בלי אזור זמן</span>
+    <p>בלי `@db.Timestamptz(3)`, Prisma יוצר `timestamp(3)` — "ערום", בלי אזור זמן. בפרק 16 ראינו למה זה רע. הוסף `@db.Timestamptz(3)` לכל שדה זמן.</p>
+  </div>
+
+  <h2>2. קשרים</h2>
+```text
+model Order {
+  id         Int         @id @default(autoincrement())
+  customerId Int         @map("customer_id")
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  items      OrderItem[]
+  ...
+}
+```
+  <ul>
+    <li><strong>אחד־לרבים</strong>: בצד ה"רבים" — עמודת FK (`customerId`) ושדה קשר (`customer`) עם `@relation(fields, references)`. בצד ה"אחד" — מערך (`orders Order[]`). שדות הקשר לא קיימים במסד; הם בשביל ה־client (`include: { customer: true }`).</li>
+    <li><strong>רבים־לרבים</strong>: מודל קישור מפורש (`ProductTag` עם `@@id([productId, tagId])`), כמו בפרק 17. (ל־Prisma יש גם קשר "מובלע", אבל המפורש גמיש יותר — אפשר להוסיף לו שדות כמו "מתי נוסף".)</li>
+    <li><strong>`onDelete`</strong>: ברירת המחדל — מחיקה חסומה כשיש "ילדים". `onDelete: Cascade` על `OrderItem.order` — מחיקת הזמנה מוחקת את פריטיה. (`SetNull` — לקשר אופציונלי.)</li>
+  </ul>
+
+  <h2>3. Migrations</h2>
+  <p>נניח שמוסיפים לקוח VIP: בסכמה, ב־`Customer`: `isVip Boolean @default(false) @map("is_vip")`. ואז:</p>
+```term
+% npx prisma migrate dev --name add_customer_is_vip
+Applying migration `20261105093000_add_customer_is_vip`
+% npx prisma generate
+```
+```sql file=prisma/migrations/20261105093000_add_customer_is_vip/migration.sql
+-- AlterTable
+ALTER TABLE "customers" ADD COLUMN     "is_vip" BOOLEAN NOT NULL DEFAULT false;
+```
+  <p>Prisma השווה את הסכמה למצב האחרון של ה־migrations, וכתב את ה־SQL שמגשר. זה הקובץ שנכנס ל־Git, ורץ — בדיוק כך — אצל חבר הצוות, בבדיקות ובייצור.</p>
+  <div class="table-wrap"><table>
+    <tr><th>פקודה</th><th>מתי</th><th>מה עושה</th></tr>
+    <tr><td>`migrate dev`</td><td>פיתוח</td><td>יוצר migration חדש מהשינויים בסכמה ומריץ. אם המסד "התפזר" — מציע לאפס (ומוחק נתונים!)</td></tr>
+    <tr><td>`migrate deploy`</td><td>ייצור, CI</td><td>מריץ רק migrations שעוד לא רצו. לא יוצר, לא מאפס, לא שואל</td></tr>
+    <tr><td>`migrate reset`</td><td>פיתוח</td><td>מוחק הכול ומריץ את כל ה־migrations מהתחלה</td></tr>
+    <tr><td>`migrate status`</td><td>תמיד</td><td>אילו migrations רצו ואילו לא</td></tr>
+    <tr><td>`db seed`</td><td>פיתוח</td><td>מריץ את פקודת ה־seed מ־`prisma.config.ts`</td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ חוקי הברזל</span>
+    <ul>
+      <li>לא עורכים migration שכבר רץ אצל מישהו אחר (או בייצור) — יוצרים חדש.</li>
+      <li>לא מריצים `migrate dev` או `reset` מול ייצור — רק `deploy`.</li>
+      <li>שינוי "הורס" (מחיקת עמודה, שינוי טיפוס) — קרא את ה־SQL שנוצר לפני שמריצים. Prisma מזהיר, אבל אתה אחראי.</li>
+      <li>עמודה חובה חדשה בטבלה עם נתונים? `@default(...)`, או שלושה שלבים כמו ב־P16-E19 (Prisma ייתן לערוך את ה־SQL עם `--create-only`).</li>
+    </ul>
+  </div>
+  <p>ו־`npx prisma studio` — ממשק בדפדפן לראות ולערוך נתונים. נוח לבדיקות מהירות (בפיתוח בלבד).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19-E03">E03</a> · <a href="exercises.html#P19-E05">E05</a></p>
+  </div>
