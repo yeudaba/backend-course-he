@@ -16,12 +16,11 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳",
 };
 
 // מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
 const PLANNED = [
-  { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 23", icon: "🐳", title: "Linux ו־Docker", topics: "Dockerfile, Compose, volumes — הכול עולה בפקודה אחת" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 24", icon: "🏭", title: "API של מוצר אמיתי", topics: "logs, request ID, אזורי זמן, idempotency, rate limit" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 25", icon: "🚀", title: "CI ופריסה", topics: "GitHub Actions, secrets, healthcheck, HTTPS — קישור חי" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרויקט 3", icon: "☕", title: "פרויקט הדגל: חנות ציוד קפה", topics: "JWT, עגלה←הזמנה, transactions, idempotency, Docker, CI" },
@@ -138,6 +137,7 @@ const md = `<!-- נוצר אוטומטית: node course-src/scripts/make-readme.
   ${badge("NestJS", "12", "E0234E", "nestjs")}
   ${badge("JWT", "auth", "000000", "jsonwebtokens")}
   ${badge("Jest", "30", "C21325", "jest")}
+  ${badge("Docker", "compose", "2496ED", "docker")}
 </p>
 
 <p align="center">
@@ -234,7 +234,8 @@ flowchart LR
   B --> C["🐈 שלב ג׳ · פרק 20<br/>NestJS + Swagger<br/>אותו API בדיוק"]:::done
   C --> D["🔐 שלב ד׳ · פרק 21<br/>משתמשים, JWT, roles<br/>כל אחד רואה רק את שלו"]:::done
   D --> E["🧪 שלב ה׳ · פרק 22<br/>unit · e2e · integration<br/>Jest + supertest"]:::done
-  E --> F["🐳🚀 פרקים 23–25<br/>Docker · CI<br/>קישור חי"]:::planned
+  E --> F["🐳 שלב ו׳ · פרק 23<br/>Dockerfile + Compose<br/>הכול בפקודה אחת"]:::done
+  F --> G["🚀 פרקים 24–25<br/>CI · פריסה<br/>קישור חי"]:::planned
   classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef planned fill:#f1f5f9,stroke:#94a3b8,color:#475569,stroke-dasharray: 5 5
 \`\`\`
@@ -277,7 +278,7 @@ flowchart LR
 | | פרויקט | מה | מצב |
 |:-:|---|---|:-:|
 | 💰 | **פרויקט 1** — מנהל הוצאות CLI | JavaScript, קבצים, ארגון קוד ובדיקות | ✅ |
-| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ה׳ — נשארו Docker ופריסה |
+| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ו׳ — נשארה פריסה |
 | ☕ | **פרויקט 3** — חנות ציוד קפה (הדגל) | נבנה מאפס: עגלה←הזמנה, מלאי ב־transaction, idempotency, תשלום מדומה, CI וקישור חי | 🗓️ |
 
 ---
@@ -376,7 +377,7 @@ node course-src/scripts/make-readme.mjs # README מעודכן
 | 🗄️ | מסד נתונים | PostgreSQL 18 · SQL · Prisma 7 (\`@prisma/adapter-pg\`) |
 | 🔐 | אבטחה | bcryptjs · JWT (\`@nestjs/jwt\`) · refresh tokens · OWASP API Top 10 |
 | 🧪 | בדיקות | \`node:test\` · Jest + ts-jest · supertest · מסד בדיקות · mutation testing · בודק אוטומטי בעברית |
-| 🐳 | תשתית (בהמשך) | Docker · Compose · GitHub Actions · Redis |
+| 🐳 | תשתית | Linux ו־bash · Docker · Docker Compose · nginx — ובהמשך GitHub Actions ו־Redis |
 
 ---
 

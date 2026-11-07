@@ -140,6 +140,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרק 20 הושלם: 25 תרגילים, 20 בדיקות + PR2-NEST — **ירוק**.
 - פרק 21 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-AUTH + PR2-AUTH-DB — **ירוק**.
 - פרק 22 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-TESTS — **ירוק**.
+- פרק 23 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-DOCKER — **ירוק** (בדיקות Docker אמיתיות: build, run, compose).
 - **מפרק 22 האימות רץ על Node 24** (כמו אצל הלומד): `PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify`. כל הקורס (0–21) עבר גם על Node 24 בלי שינוי.
 
 ---
@@ -187,6 +188,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 20 | `20-nestjs` | modules, DI, DTOs, pipes, guards, interceptors, filters, Swagger. 25 תרגילים (כל תרגיל = קובץ `.ts` עצמאי שנטען עם `loadNest`). `starter/tsconfig.json` ל־VS Code. שיעור 4 = **פרויקט 2 שלב ג׳** (PR2-NEST) | ✔ |
 | 21 | `21-auth` | bcrypt (bcryptjs), JWT (@nestjs/jwt), refresh tokens אטומים (SHA-256 במסד) עם rotation וזיהוי שימוש חוזר, roles, בעלות (404), OWASP API Top 10. שיעור 5 = **פרויקט 2 שלב ד׳**. בדיקות PR2-AUTH (בזיכרון) ו־PR2-AUTH-DB (PostgreSQL אמיתי) | ✔ |
 | 22 | `22-testing` | node:test, assert, גבולות, כפילים (mock.fn, mock.timers), זמן ו־TZ, HTTP ו־מסד בדיקות, builders, Jest/supertest ב־Nest, coverage, mutation testing. **רוב התרגילים: הלומד כותב בדיקות, והבודק מריץ אותן על הקוד התקין ועל מוטנטים** (`tools/mutation.mjs`, `files/<id>/mutants.json`). שיעור 5 = **פרויקט 2 שלב ה׳** (PR2-TESTS) | ✔ |
+| 23 | `23-docker` | Linux ו־bash (הרשאות, תהליכים, pipelines, סקריפט בטוח), Docker (image/container/volume/port), Dockerfile (cache, .dockerignore, multi-stage, USER, HEALTHCHECK), Compose (רשת, healthcheck+condition, משתנים, override). תרגילי shell נבדקים על fixtures (`tools/shell.mjs`); תרגילי Docker — build/run/compose אמיתיים (`tools/docker.mjs`). שיעור 5 = **פרויקט 2 שלב ו׳** (PR2-DOCKER) | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -237,8 +239,14 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - `test/clock.ts` (TestClock), `test/helpers.ts` (`createTestApp`, `signUp`), `test/db.ts` (`createTestDatabase`: schema אקראי + migrations, `reset` עם TRUNCATE, `close`). `DATABASE_URL_TEST`.
   - 31 בדיקות unit+e2e (~2 שניות) ו־6 integration.
   - **PR2-TESTS**: (1) לפחות 2 unit, e2e אחד, integration אחד; (2) `npm test` עובר עם 20+ בדיקות; (3) int עוברות עם `DATABASE_URL_TEST=COURSE_DATABASE_URL`; (4) הבדיקות של הלומד מועתקות לעותק של **הפתרון של הקורס** (בתוך `<chapter>/.build/`) ועוברות; (5) על 7 מוטנטים בפתרון — נכשלות. מוטנטים: בעלות ב־InMemory findById, dueDate היום, rotation, תוקף ×4, hash בתשובה, RolesGuard, user enumeration. ~20 שניות.
+- **שלב ו׳** (`23-docker/solutions/tasks-api`): Docker.
+  - Dockerfile multi-stage (`node:24-alpine`): build (`npm ci`, `prisma generate`, `npm run build`) ← runtime (`npm ci --omit=dev --omit=optional`, רק `dist`, `USER node`, HEALTHCHECK עם wget). **435MB** (827MB בלי `--omit=optional`; 2.54GB ב־Dockerfile נאיבי על `node:24`).
+  - `--omit=optional` כי `prisma` ו־`typescript` הם optional peers של `@prisma/client` ← npm מסמן `devOptional` ו־`--omit=dev` לא מסיר אותם.
+  - `dotenv` עבר ל־dependencies (main.ts מייבא אותו בזמן ריצה). `package-lock.json` נמצא בפתרון (npm ci צריך אותו).
+  - compose.yaml: `db` (postgres:18-alpine, healthcheck, volume ל־`/var/lib/postgresql`), `migrate` (`target: build`, `prisma migrate deploy`, depends_on db healthy), `api` (`${API_PORT:-3000}`, `JWT_SECRET:?`, depends_on migrate `service_completed_successfully`), `web` (nginx:1.29-alpine על web/, `${WEB_PORT:-5500}`). seed: `docker compose run --rm migrate npm run db:seed`.
+  - **PR2-DOCKER**: סטטי (multi-stage, סדר cache, USER, בלי `COPY . .` אחרון, .dockerignore) + `compose config` + live: up --build --wait בפרויקט מבודד, הרשמה/כניסה/משימה, `id -u` ≠ 0, down/up ← הנתונים נשארים. ~45 שניות עם cache.
+  - **תוקן גם בשלבים ג׳–ה׳**: `typescript` ב־package.json של הפתרונות היה `^5.9.0`, אבל `@nestjs/schematics` 12 דורש `>=6` ← `npm install` נכשל עם ERESOLVE. עכשיו `^6.0.2` (כמו תבנית Nest 12). האימות של הקורס עדיין מקמפל עם TS 5.9 מ־course-src — וה־build ב־Docker מוכיח שהקוד מתקמפל גם עם TS 6.0.3.
 - **השלבים שנשארו** (לפי האפיון):
-  - פרק 23 — Docker.
   - פרק 25 — פריסה.
 
 ### "גילויים" מהדרך שחייבים לזכור
@@ -275,20 +283,20 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרק 23 (Linux ו־Docker) + פרויקט 2: עולה בפקודה אחת
-פרקים 20–22 **הושלמו**. **Docker עובד בסביבת הענן** (dockerd מופעל ע"י cloud-setup.sh) — אפשר לאמת דוגמאות Docker באמת. Docker Hub נגיש (משכנו postgres:18).
-נקודות מפרק 22:
-- **mutation testing כבודק**: `tools/mutation.mjs` → `checkSpec(testUrl, id)`. `files/<id>/<subject>.ts` (הקוד התקין) + `mutants.json` עם `subject`, `mutants[{desc, replace:[[from,to]]}]`, ואופציונלי `variants` (מימושים תקינים אחרים — חייבים לעבור), `dates` (מריץ עם `--import tools/fake-now.mjs` ו־`FAKE_NOW`), `env` (למשל TZ), `extra` (קבצי עזר). כל `from` חייב להופיע בקוד — אחרת "תקלה בבודק". בתרגילים: `starter/<id>.ts` = הקוד התקין, `starter/<id>.spec.ts` = שלד עם `test.todo`. בבנייה: הפתרון (spec) נשמר מ־`save=`, ו־subject נמצא ב־`solutions/` הסטטי.
-- strip-types לא תומך ב־parameter properties (`constructor(private x)`) — בקבצים שרצים ישירות, שדות רגילים.
-- `node:test`: `assert.rejects` בלי await — הבדיקה "✔" אבל הקובץ נכשל ("generated asynchronous activity after the test ended"). דפוסי "ירוק תמיד" אמיתיים: try/catch בולע, לולאה על רשימה ריקה, השוואה לאותו אובייקט.
-- `Number(" ")` הוא 0 — מקרה בדיקה טוב לוולידציה של ספרות (`"12345678a"` לא מספיק: NaN נכשל ממילא).
-- **בעיה פתוחה (לבדוק):** ב־Node 24, הרצת קובץ `.ts` עם `import` מתיקיית הקורס מדפיסה `MODULE_TYPELESS_PACKAGE_JSON` (אין `"type"` ב־package.json של הקורס). הבודק מריץ עם `--no-warnings`, אבל הלומד בהרצה ידנית רואה את האזהרה. `"type": "module"` עלול לשבור קבצי `.js` CommonJS בפרקים המוקדמים — לבדוק לפני שינוי.
+### 7.1 הצעד הבא המיידי — פרק 24 (API של מוצר אמיתי)
+לפי האפיון: logs, request ID, תאריכים ואזורי זמן, idempotency, rate limit. אחריו פרק 25 (CI ופריסה — GitHub Actions; ה־image של שלב ו׳ הוא מה שנפרס), ופרויקט 3.
+נקודות מפרק 23:
+- **Docker בענן:** `cloud-setup.sh` מפעיל dockerd, ובונה `node:24-alpine` **מקומי** שסומך על תעודת ה־proxy של הסביבה (`/root/.ccr/ca-bundle.crt`) — בלעדיו `npm` בתוך build נכשל עם `self-signed certificate in certificate chain`. ה־Dockerfiles של הקורס לא משתנים. ל־`node:24` (debian) צריך אותו טריק אם משתמשים בו.
+- `build.mjs` תומך ב־```` ```bash run ```` (רץ בתיקייה זמנית, `LC_ALL=C`). **פלטים של כלי GNU** (`ls` וכו') — אימות פרק 23 רק בענן/לינוקס, לא במק.
+- Dockerfile לא תומך בהערה בסוף שורה (`WORKDIR /app # x` שבור) — רק בשורה משלה.
+- PostgreSQL 18 image: volume ב־`/var/lib/postgresql`, `PGDATA=/var/lib/postgresql/18/docker`. mount ל־`/var/lib/postgresql/data` ← הקונטיינר מסרב לעלות (ההודעה מצוטטת בשיעור 4).
+- bash של macOS הוא 3.2: בלי מערכים אסוציאטיביים, בלי `${x,,}`; `wc -l` ב־BSD מרפד רווחים. פתרונות התרגילים נכתבו בהתאם, והבודק מנרמל רווחים.
+- תרגילי Docker: תיקייה לכל תרגיל (`starter/P23-E12/` עם האפליקציה + Dockerfile/compose), `save=solutions/P23-E12/Dockerfile`, ו־`solutions/` הסטטי מכיל את כל הקבצים. קבצים כמו `.env` ו־`node_modules` (שב־.gitignore) **נוצרים בבדיקה** בעותק זמני (E13).
 
 ### 7.2 שאר הקורס (לפי האפיון, סעיף 8)
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 23 | Linux ו־Docker | **Docker לא מותקן במחשב** — לסמן דוגמאות כ"לא אומת" או לבקש התקנה. פקודות Linux, Dockerfile, Compose, volumes. פרויקט 2 עולה בפקודה אחת |
 | 24 | API של מוצר אמיתי | logs, request ID, תאריכים ואזורי זמן, idempotency, rate limit |
 | 25 | CI ופריסה | GitHub Actions, secrets, פריסה חינמית, healthcheck, HTTPS. קישור חי לפרויקט |
 | 🏗️ | **פרויקט 3 — הדגל** | מערכת הזמנות: חנות ציוד קפה. דרישות מלאות באפיון, סעיף 10.3: JWT ותפקידים, CRUD למנהל, חיפוש ו־pagination, עגלה←הזמנה עם שמירת מחיר, transaction נגד מלאי שלילי, idempotency key, תשלום מדומה, בדיקות unit+e2e כולל מרוץ, Swagger, `docker compose up`, CI, קישור חי, דף HTML. **נבנה מאפס בלי העתקה מפרויקט 2.** README לפי הדרישות באפיון |
@@ -345,6 +353,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~פרקים 20–22~~ ✔ הושלמו. **עכשיו: פרק 23** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
-4. **להמשיך לפרק 23 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
+3. ~~פרקים 20–23~~ ✔ הושלמו. **עכשיו: פרק 24** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
+4. **להמשיך לפרק 24 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).
