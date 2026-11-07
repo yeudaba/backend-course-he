@@ -16,12 +16,11 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭",
 };
 
 // מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
 const PLANNED = [
-  { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 24", icon: "🏭", title: "API של מוצר אמיתי", topics: "logs, request ID, אזורי זמן, idempotency, rate limit" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 25", icon: "🚀", title: "CI ופריסה", topics: "GitHub Actions, secrets, healthcheck, HTTPS — קישור חי" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרויקט 3", icon: "☕", title: "פרויקט הדגל: חנות ציוד קפה", topics: "JWT, עגלה←הזמנה, transactions, idempotency, Docker, CI" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 26", icon: "⚡", title: "Cache ותורים", topics: "Redis דרך Docker" },
@@ -235,38 +234,42 @@ flowchart LR
   C --> D["🔐 שלב ד׳ · פרק 21<br/>משתמשים, JWT, roles<br/>כל אחד רואה רק את שלו"]:::done
   D --> E["🧪 שלב ה׳ · פרק 22<br/>unit · e2e · integration<br/>Jest + supertest"]:::done
   E --> F["🐳 שלב ו׳ · פרק 23<br/>Dockerfile + Compose<br/>הכול בפקודה אחת"]:::done
-  F --> G["🚀 פרקים 24–25<br/>CI · פריסה<br/>קישור חי"]:::planned
+  F --> G["🏭 שלב ז׳ · פרק 24<br/>לוגים · request ID · אזורי זמן<br/>Idempotency-Key · rate limit"]:::done
+  G --> H["🚀 פרק 25<br/>CI · פריסה<br/>קישור חי"]:::planned
   classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef planned fill:#f1f5f9,stroke:#94a3b8,color:#475569,stroke-dasharray: 5 5
 \`\`\`
 
-### הארכיטקטורה (שלב ד׳)
+### הארכיטקטורה (שלב ז׳)
 
 \`\`\`mermaid
 flowchart LR
-  Client(["🌐 דף HTML / REST Client / Swagger"]) -->|"Authorization: Bearer"| G1
+  Client(["🌐 דף HTML / REST Client / Swagger"]) -->|"Bearer · X-Request-Id · Idempotency-Key"| M
   subgraph Nest["NestJS — tasks-api"]
     direction LR
-    G1["🛡️ JwtAuthGuard<br/>401"] --> G2["👮 RolesGuard<br/>403"] --> P["🧪 ZodValidationPipe<br/>400"] --> C["🎮 Controller<br/>@CurrentUser()"] --> S["⚙️ Service<br/>כללים עסקיים"] --> R["📦 Repository<br/>WHERE owner_id"]
+    M["🪪 request ID<br/>AsyncLocalStorage<br/>שורת לוג JSON"] --> G1["🛡️ JwtAuthGuard<br/>401"] --> G2["👮 RolesGuard<br/>403"] --> P["🧪 ZodValidationPipe<br/>400"] --> C["🎮 Controller<br/>@CurrentUser()"] --> I["🔁 Idempotency<br/>422 · 409 · replay"] --> S["⚙️ Service<br/>היום לפי אזור הזמן"] --> R["📦 Repository<br/>WHERE owner_id"]
+    RL["⏱️ AuthRateLimitGuard<br/>429 · Retry-After"]
     F["🧯 HttpErrorFilter<br/>{ error: { code, message } }"]
   end
-  R --> DB[("🐘 PostgreSQL<br/>users · tasks · refresh_tokens")]
+  M -.->|"/auth/login · register"| RL
+  R --> DB[("🐘 PostgreSQL<br/>users · tasks · refresh_tokens<br/>idempotency_keys")]
+  M --> LOG[["📜 stdout<br/>JSON logs"]]
   G1 -.-> F
   P -.-> F
   S -.-> F
 \`\`\`
 
 <details>
-<summary>🔌 <b>ה־endpoints של שלב ד׳</b></summary>
+<summary>🔌 <b>ה־endpoints (שלב ז׳)</b></summary>
 
 | בקשה | מי | תשובה |
 |---|---|---|
-| \`POST /auth/register\` | כולם | 201 משתמש (בלי hash) · 409 \`EMAIL_TAKEN\` |
-| \`POST /auth/login\` | כולם | access (15 דק׳) + refresh (7 ימים) · 401 \`INVALID_CREDENTIALS\` |
+| \`POST /auth/register\` | כולם | 201 משתמש (בלי hash, עם \`timeZone\`) · 409 \`EMAIL_TAKEN\` · 429 |
+| \`POST /auth/login\` | כולם | access (15 דק׳) + refresh (7 ימים) · 401 \`INVALID_CREDENTIALS\` · 429 \`TOO_MANY_REQUESTS\` |
 | \`POST /auth/refresh\` | כולם | זוג חדש (rotation + זיהוי שימוש חוזר) |
 | \`POST /auth/logout\` | כולם | 204 |
-| \`GET /auth/me\` | מחובר | המשתמש |
-| \`GET/POST/PATCH/DELETE /tasks\` | מחובר | רק המשימות **שלו** · של אחר ← 404 |
+| \`GET /auth/me\` · \`PATCH /auth/me\` | מחובר | המשתמש · עדכון אזור זמן |
+| \`GET/POST/PATCH/DELETE /tasks\` | מחובר | רק המשימות **שלו** · של אחר ← 404 · POST עם \`Idempotency-Key\` |
 | \`GET /tasks/stats\` | מחובר | סטטיסטיקה אישית |
 | \`GET /users\` | admin | כל המשתמשים · 403 \`FORBIDDEN\` |
 | \`GET /health\`, \`/docs\` | כולם | בריאות, Swagger |
@@ -278,7 +281,7 @@ flowchart LR
 | | פרויקט | מה | מצב |
 |:-:|---|---|:-:|
 | 💰 | **פרויקט 1** — מנהל הוצאות CLI | JavaScript, קבצים, ארגון קוד ובדיקות | ✅ |
-| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ו׳ — נשארה פריסה |
+| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פרודקשן ← פריסה | 🔄 שלב ז׳ — נשארה פריסה |
 | ☕ | **פרויקט 3** — חנות ציוד קפה (הדגל) | נבנה מאפס: עגלה←הזמנה, מלאי ב־transaction, idempotency, תשלום מדומה, CI וקישור חי | 🗓️ |
 
 ---

@@ -26,7 +26,7 @@
 
 | 📚 פרקים ופרויקטים מוכנים | 🎓 שיעורים | ✍️ תרגילים | 🤖 קובצי בדיקה | ▶️ דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **27** | **115** | **595** | **380** | **568** |
+| **28** | **120** | **620** | **402** | **574** |
 
 </div>
 
@@ -83,7 +83,7 @@ flowchart LR
   P0["🟨 <b>חטיבה א׳</b><br/>יסודות JavaScript<br/><br/>✅ 0 · 1 · 2 · 3 · 4<br/>✅ 5 · 6 · 7 · 8 · 9<br/>✅ 10<br/>🏗️ פרויקט 1 ✅<br/><br/><b>12/12</b>"]:::done
   P1["🔷 <b>חטיבה ב׳</b><br/>TypeScript + Node.js<br/><br/>✅ 11 · 12 · 13 · 14<br/><br/><b>4/4</b>"]:::done
   P2["🗄️ <b>חטיבה ג׳</b><br/>שרת, מסד נתונים + HTML בסיסי<br/><br/>✅ 15 · 15.5 · 16 · 17 · 18<br/>✅ 19<br/>🏗️ פרויקט 2 ✅<br/><br/><b>7/7</b>"]:::done
-  P3["🏭 <b>חטיבה ד׳</b><br/>רמת תעשייה<br/><br/>✅ 20 · 21 · 22 · 23<br/>▫️ 24 · 25<br/>🏗️ פרויקט 3 ▫️<br/><br/><b>4/7</b>"]:::progress
+  P3["🏭 <b>חטיבה ד׳</b><br/>רמת תעשייה<br/><br/>✅ 20 · 21 · 22 · 23 · 24<br/>▫️ 25<br/>🏗️ פרויקט 3 ▫️<br/><br/><b>5/7</b>"]:::progress
   P4["💼 <b>חטיבה ה׳</b><br/>ראיונות והרחבות<br/><br/>▫️ 26 · 27 · 28 · 29 · 30<br/><br/><b>0/5</b>"]:::planned
   P0 --> P1
   P1 --> P2
@@ -191,7 +191,7 @@ flowchart LR
 | 🔐 | [פרק 21](backend-course/21-auth/index.html) | **כניסה והרשאות** | 5 | 25 | 🤖 22 | ✅ |
 | 🧪 | [פרק 22](backend-course/22-testing/index.html) | **בדיקות** | 5 | 25 | 🤖 21 | ✅ |
 | 🐳 | [פרק 23](backend-course/23-docker/index.html) | **Linux ו־Docker** | 5 | 25 | 🤖 21 | ✅ |
-| 🏭 | פרק 24 | **API של מוצר אמיתי** <br><sub>logs, request ID, אזורי זמן, idempotency, rate limit</sub> | | | | 🗓️ |
+| 🏭 | [פרק 24](backend-course/24-production/index.html) | **מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב** | 5 | 25 | 🤖 22 | ✅ |
 | 🚀 | פרק 25 | **CI ופריסה** <br><sub>GitHub Actions, secrets, healthcheck, HTTPS — קישור חי</sub> | | | | 🗓️ |
 | ☕ | פרויקט 3 | **פרויקט הדגל: חנות ציוד קפה** <br><sub>JWT, עגלה←הזמנה, transactions, idempotency, Docker, CI</sub> | | | | 🗓️ |
 
@@ -204,6 +204,7 @@ flowchart LR
 | 🔐 **פרק 21** | 1. סיסמאות: hashing ו־bcrypt<br>2. JWT ו־guard של התחברות<br>3. refresh tokens ויציאה<br>4. הרשאות, בעלות ו־OWASP<br>5. פרויקט 2, שלב ד׳: משתמשים <sub>🤖 PR2-AUTH</sub> |
 | 🧪 **פרק 22** | 1. למה, מה, ו־node:test<br>2. כפילים, זמן וקוד בדיק<br>3. בדיקות HTTP ומסד בדיקות<br>4. Jest, Nest, כיסוי ו־mutation testing<br>5. פרויקט 2, שלב ה׳: בדיקות <sub>🤖 PR2-TESTS</sub> |
 | 🐳 **פרק 23** | 1. Linux ו־shell למפתחי Backend<br>2. Docker: images, containers ו־volumes<br>3. Dockerfile טוב<br>4. Docker Compose<br>5. פרויקט 2, שלב ו׳: הכול בפקודה אחת <sub>🤖 PR2-DOCKER</sub> |
+| 🏭 **פרק 24** | 1. לוגים מובנים ו־request ID<br>2. זמן, אזורי זמן ושעון קיץ<br>3. Idempotency: לשלוח שוב בלי לחשוש<br>4. הגבלת קצב וכיבוי מסודר<br>5. פרויקט 2, שלב ז׳: מוכן לפרודקשן <sub>🤖 PR2-PROD</sub> |
 
 </details>
 
@@ -231,38 +232,42 @@ flowchart LR
   C --> D["🔐 שלב ד׳ · פרק 21<br/>משתמשים, JWT, roles<br/>כל אחד רואה רק את שלו"]:::done
   D --> E["🧪 שלב ה׳ · פרק 22<br/>unit · e2e · integration<br/>Jest + supertest"]:::done
   E --> F["🐳 שלב ו׳ · פרק 23<br/>Dockerfile + Compose<br/>הכול בפקודה אחת"]:::done
-  F --> G["🚀 פרקים 24–25<br/>CI · פריסה<br/>קישור חי"]:::planned
+  F --> G["🏭 שלב ז׳ · פרק 24<br/>לוגים · request ID · אזורי זמן<br/>Idempotency-Key · rate limit"]:::done
+  G --> H["🚀 פרק 25<br/>CI · פריסה<br/>קישור חי"]:::planned
   classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef planned fill:#f1f5f9,stroke:#94a3b8,color:#475569,stroke-dasharray: 5 5
 ```
 
-### הארכיטקטורה (שלב ד׳)
+### הארכיטקטורה (שלב ז׳)
 
 ```mermaid
 flowchart LR
-  Client(["🌐 דף HTML / REST Client / Swagger"]) -->|"Authorization: Bearer"| G1
+  Client(["🌐 דף HTML / REST Client / Swagger"]) -->|"Bearer · X-Request-Id · Idempotency-Key"| M
   subgraph Nest["NestJS — tasks-api"]
     direction LR
-    G1["🛡️ JwtAuthGuard<br/>401"] --> G2["👮 RolesGuard<br/>403"] --> P["🧪 ZodValidationPipe<br/>400"] --> C["🎮 Controller<br/>@CurrentUser()"] --> S["⚙️ Service<br/>כללים עסקיים"] --> R["📦 Repository<br/>WHERE owner_id"]
+    M["🪪 request ID<br/>AsyncLocalStorage<br/>שורת לוג JSON"] --> G1["🛡️ JwtAuthGuard<br/>401"] --> G2["👮 RolesGuard<br/>403"] --> P["🧪 ZodValidationPipe<br/>400"] --> C["🎮 Controller<br/>@CurrentUser()"] --> I["🔁 Idempotency<br/>422 · 409 · replay"] --> S["⚙️ Service<br/>היום לפי אזור הזמן"] --> R["📦 Repository<br/>WHERE owner_id"]
+    RL["⏱️ AuthRateLimitGuard<br/>429 · Retry-After"]
     F["🧯 HttpErrorFilter<br/>{ error: { code, message } }"]
   end
-  R --> DB[("🐘 PostgreSQL<br/>users · tasks · refresh_tokens")]
+  M -.->|"/auth/login · register"| RL
+  R --> DB[("🐘 PostgreSQL<br/>users · tasks · refresh_tokens<br/>idempotency_keys")]
+  M --> LOG[["📜 stdout<br/>JSON logs"]]
   G1 -.-> F
   P -.-> F
   S -.-> F
 ```
 
 <details>
-<summary>🔌 <b>ה־endpoints של שלב ד׳</b></summary>
+<summary>🔌 <b>ה־endpoints (שלב ז׳)</b></summary>
 
 | בקשה | מי | תשובה |
 |---|---|---|
-| `POST /auth/register` | כולם | 201 משתמש (בלי hash) · 409 `EMAIL_TAKEN` |
-| `POST /auth/login` | כולם | access (15 דק׳) + refresh (7 ימים) · 401 `INVALID_CREDENTIALS` |
+| `POST /auth/register` | כולם | 201 משתמש (בלי hash, עם `timeZone`) · 409 `EMAIL_TAKEN` · 429 |
+| `POST /auth/login` | כולם | access (15 דק׳) + refresh (7 ימים) · 401 `INVALID_CREDENTIALS` · 429 `TOO_MANY_REQUESTS` |
 | `POST /auth/refresh` | כולם | זוג חדש (rotation + זיהוי שימוש חוזר) |
 | `POST /auth/logout` | כולם | 204 |
-| `GET /auth/me` | מחובר | המשתמש |
-| `GET/POST/PATCH/DELETE /tasks` | מחובר | רק המשימות **שלו** · של אחר ← 404 |
+| `GET /auth/me` · `PATCH /auth/me` | מחובר | המשתמש · עדכון אזור זמן |
+| `GET/POST/PATCH/DELETE /tasks` | מחובר | רק המשימות **שלו** · של אחר ← 404 · POST עם `Idempotency-Key` |
 | `GET /tasks/stats` | מחובר | סטטיסטיקה אישית |
 | `GET /users` | admin | כל המשתמשים · 403 `FORBIDDEN` |
 | `GET /health`, `/docs` | כולם | בריאות, Swagger |
@@ -274,7 +279,7 @@ flowchart LR
 | | פרויקט | מה | מצב |
 |:-:|---|---|:-:|
 | 💰 | **פרויקט 1** — מנהל הוצאות CLI | JavaScript, קבצים, ארגון קוד ובדיקות | ✅ |
-| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ו׳ — נשארה פריסה |
+| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פרודקשן ← פריסה | 🔄 שלב ז׳ — נשארה פריסה |
 | ☕ | **פרויקט 3** — חנות ציוד קפה (הדגל) | נבנה מאפס: עגלה←הזמנה, מלאי ב־transaction, idempotency, תשלום מדומה, CI וקישור חי | 🗓️ |
 
 ---
@@ -305,7 +310,7 @@ flowchart LR
 ├── 🖼️ docs/readme/                  ← תמונות ל־README
 ├── 📦 backend-course/              ← ★ מה שהלומד מקבל (נבנה אוטומטית, חוץ מ־00-setup)
 │   ├── README.html · glossary.html · assets/
-│   ├── 00-setup/ … 23-docker/
+│   ├── 00-setup/ … 24-production/
 │   └── tools/                      ← הבודק: check · load · sql · nest · reporter
 └── 📝 course-src/                  ← ★ המקור — כאן עורכים
     ├── build.mjs                   ← בנייה + אימות
