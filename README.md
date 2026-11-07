@@ -12,6 +12,7 @@
   <img alt="Prisma 7" src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white">
   <img alt="NestJS 12" src="https://img.shields.io/badge/NestJS-12-E0234E?style=for-the-badge&logo=nestjs&logoColor=white">
   <img alt="JWT auth" src="https://img.shields.io/badge/JWT-auth-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white">
+  <img alt="Jest 30" src="https://img.shields.io/badge/Jest-30-C21325?style=for-the-badge&logo=jest&logoColor=white">
 </p>
 
 <p align="center">
@@ -24,7 +25,7 @@
 
 | 📚 פרקים ופרויקטים מוכנים | 🎓 שיעורים | ✍️ תרגילים | 🤖 קובצי בדיקה | ▶️ דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **25** | **105** | **545** | **338** | **560** |
+| **26** | **110** | **570** | **359** | **564** |
 
 </div>
 
@@ -51,6 +52,7 @@
 ### 🔬 איך מבטיחים שזה נכון
 - ▶️ **כל דוגמה רצה** בזמן הבנייה, והפלט חייב להיות זהה למה שכתוב בשיעור
 - 🤖 **כל בדיקה** חייבת לעבור על הפתרון — **ולהיכשל** על קובץ ההתחלה
+- 🧬 **מפרק 22, הלומד כותב בדיקות** — והבודק מכניס באגים לקוד (mutation testing) ובודק שהן תופסות אותם
 - 🗄️ **SQL מול PostgreSQL 18 אמיתי**, כולל מרוצים עם שני חיבורים
 - 🌐 **CORS ודפי HTML** נבדקים בדפדפן אמיתי
 - 🧾 אף פלט או הודעת שגיאה לא "הומצאו"
@@ -80,7 +82,7 @@ flowchart LR
   P0["🟨 <b>חטיבה א׳</b><br/>יסודות JavaScript<br/><br/>✅ 0 · 1 · 2 · 3 · 4<br/>✅ 5 · 6 · 7 · 8 · 9<br/>✅ 10<br/>🏗️ פרויקט 1 ✅<br/><br/><b>12/12</b>"]:::done
   P1["🔷 <b>חטיבה ב׳</b><br/>TypeScript + Node.js<br/><br/>✅ 11 · 12 · 13 · 14<br/><br/><b>4/4</b>"]:::done
   P2["🗄️ <b>חטיבה ג׳</b><br/>שרת, מסד נתונים + HTML בסיסי<br/><br/>✅ 15 · 15.5 · 16 · 17 · 18<br/>✅ 19<br/>🏗️ פרויקט 2 ✅<br/><br/><b>7/7</b>"]:::done
-  P3["🏭 <b>חטיבה ד׳</b><br/>רמת תעשייה<br/><br/>✅ 20 · 21<br/>▫️ 22 · 23 · 24 · 25<br/>🏗️ פרויקט 3 ▫️<br/><br/><b>2/7</b>"]:::progress
+  P3["🏭 <b>חטיבה ד׳</b><br/>רמת תעשייה<br/><br/>✅ 20 · 21 · 22<br/>▫️ 23 · 24 · 25<br/>🏗️ פרויקט 3 ▫️<br/><br/><b>3/7</b>"]:::progress
   P4["💼 <b>חטיבה ה׳</b><br/>ראיונות והרחבות<br/><br/>▫️ 26 · 27 · 28 · 29 · 30<br/><br/><b>0/5</b>"]:::planned
   P0 --> P1
   P1 --> P2
@@ -186,7 +188,7 @@ flowchart LR
 |:-:|---|---|:-:|:-:|:-:|:-:|
 | 🐈 | [פרק 20](backend-course/20-nestjs/index.html) | **NestJS** | 4 | 25 | 🤖 21 | ✅ |
 | 🔐 | [פרק 21](backend-course/21-auth/index.html) | **כניסה והרשאות** | 5 | 25 | 🤖 22 | ✅ |
-| 🧪 | פרק 22 | **בדיקות** <br><sub>unit, integration, e2e, mocks, מסד בדיקות</sub> | | | | 🗓️ |
+| 🧪 | [פרק 22](backend-course/22-testing/index.html) | **בדיקות** | 5 | 25 | 🤖 21 | ✅ |
 | 🐳 | פרק 23 | **Linux ו־Docker** <br><sub>Dockerfile, Compose, volumes — הכול עולה בפקודה אחת</sub> | | | | 🗓️ |
 | 🏭 | פרק 24 | **API של מוצר אמיתי** <br><sub>logs, request ID, אזורי זמן, idempotency, rate limit</sub> | | | | 🗓️ |
 | 🚀 | פרק 25 | **CI ופריסה** <br><sub>GitHub Actions, secrets, healthcheck, HTTPS — קישור חי</sub> | | | | 🗓️ |
@@ -199,6 +201,7 @@ flowchart LR
 |---|---|
 | 🐈 **פרק 20** | 1. Modules, controllers ו־providers<br>2. Controllers, DTOs ו־validation<br>3. Dependency injection, guards ו־filters<br>4. Swagger, בדיקות ופרויקט 2 ב־Nest <sub>🤖 PR2-NEST</sub> |
 | 🔐 **פרק 21** | 1. סיסמאות: hashing ו־bcrypt<br>2. JWT ו־guard של התחברות<br>3. refresh tokens ויציאה<br>4. הרשאות, בעלות ו־OWASP<br>5. פרויקט 2, שלב ד׳: משתמשים <sub>🤖 PR2-AUTH</sub> |
+| 🧪 **פרק 22** | 1. למה, מה, ו־node:test<br>2. כפילים, זמן וקוד בדיק<br>3. בדיקות HTTP ומסד בדיקות<br>4. Jest, Nest, כיסוי ו־mutation testing<br>5. פרויקט 2, שלב ה׳: בדיקות <sub>🤖 PR2-TESTS</sub> |
 
 </details>
 
@@ -224,7 +227,8 @@ flowchart LR
   A["🟢 שלב א׳ · פרק 15<br/>Express 5 + Zod<br/>repository בזיכרון"]:::done --> B["🗄️ שלב ב׳ · פרק 19<br/>PostgreSQL + Prisma<br/>סינון ומיון במסד"]:::done
   B --> C["🐈 שלב ג׳ · פרק 20<br/>NestJS + Swagger<br/>אותו API בדיוק"]:::done
   C --> D["🔐 שלב ד׳ · פרק 21<br/>משתמשים, JWT, roles<br/>כל אחד רואה רק את שלו"]:::done
-  D --> E["🧪🐳🚀 פרקים 22–25<br/>בדיקות · Docker · CI<br/>קישור חי"]:::planned
+  D --> E["🧪 שלב ה׳ · פרק 22<br/>unit · e2e · integration<br/>Jest + supertest"]:::done
+  E --> F["🐳🚀 פרקים 23–25<br/>Docker · CI<br/>קישור חי"]:::planned
   classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef planned fill:#f1f5f9,stroke:#94a3b8,color:#475569,stroke-dasharray: 5 5
 ```
@@ -267,7 +271,7 @@ flowchart LR
 | | פרויקט | מה | מצב |
 |:-:|---|---|:-:|
 | 💰 | **פרויקט 1** — מנהל הוצאות CLI | JavaScript, קבצים, ארגון קוד ובדיקות | ✅ |
-| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ד׳ מתוך ה׳ |
+| ✅ | **פרויקט 2** — tasks-api | Express ← Prisma ← NestJS ← Auth ← בדיקות ← Docker ← פריסה | 🔄 שלב ה׳ — נשארו Docker ופריסה |
 | ☕ | **פרויקט 3** — חנות ציוד קפה (הדגל) | נבנה מאפס: עגלה←הזמנה, מלאי ב־transaction, idempotency, תשלום מדומה, CI וקישור חי | 🗓️ |
 
 ---
@@ -298,7 +302,7 @@ flowchart LR
 ├── 🖼️ docs/readme/                  ← תמונות ל־README
 ├── 📦 backend-course/              ← ★ מה שהלומד מקבל (נבנה אוטומטית, חוץ מ־00-setup)
 │   ├── README.html · glossary.html · assets/
-│   ├── 00-setup/ … 21-auth/
+│   ├── 00-setup/ … 22-testing/
 │   └── tools/                      ← הבודק: check · load · sql · nest · reporter
 └── 📝 course-src/                  ← ★ המקור — כאן עורכים
     ├── build.mjs                   ← בנייה + אימות
@@ -339,8 +343,9 @@ npm run check PR2-AUTH -- --dir ~/dev/tasks-api
 
 ```bash
 cd course-src && npm ci && cd ..
-# בענן/לינוקס (PostgreSQL ב־Docker):
+# בענן/לינוקס (PostgreSQL ב־Docker + Node 24):
 bash course-src/scripts/cloud-setup.sh
+export PATH=/opt/node24/bin:$PATH
 ```
 
 ```bash
@@ -364,7 +369,7 @@ node course-src/scripts/make-readme.mjs # README מעודכן
 | 🌐 | שרת | Express 5 · NestJS 12 · Zod 4 · class-validator · Swagger |
 | 🗄️ | מסד נתונים | PostgreSQL 18 · SQL · Prisma 7 (`@prisma/adapter-pg`) |
 | 🔐 | אבטחה | bcryptjs · JWT (`@nestjs/jwt`) · refresh tokens · OWASP API Top 10 |
-| 🧪 | בדיקות | `node:test` · בודק אוטומטי בעברית · Jest (בפרויקט Nest) |
+| 🧪 | בדיקות | `node:test` · Jest + ts-jest · supertest · מסד בדיקות · mutation testing · בודק אוטומטי בעברית |
 | 🐳 | תשתית (בהמשך) | Docker · Compose · GitHub Actions · Redis |
 
 ---
