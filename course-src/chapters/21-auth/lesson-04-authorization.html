@@ -1,0 +1,112 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>401, 403 ו־404 — מתי כל אחד.</li>
+      <li>תפקידים עם <code>@Roles()</code> ו־guard.</li>
+      <li>בעלות על מידע: הפרצה מספר 1 ב־API, ואיך הקוד שלך נמנע ממנה.</li>
+      <li>mass assignment, ועוד כמה פריטים מרשימת OWASP.</li>
+    </ul>
+  </div>
+
+  <h2>1. 401, 403, 404</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מצב</th><th>status</th><th>בפרויקט</th></tr>
+    <tr><td>אין טוקן, או טוקן לא תקין/פג תוקף</td><td><strong>401</strong> Unauthorized (בפועל: "לא מזוהה")</td><td><code>UNAUTHORIZED</code> / <code>INVALID_TOKEN</code></td></tr>
+    <tr><td>מזוהה, אבל אין לו הרשאה לפעולה (משתמש רגיל ב־<code>/users</code>)</td><td><strong>403</strong> Forbidden</td><td><code>FORBIDDEN</code></td></tr>
+    <tr><td>מזוהה, מבקש משאב של מישהו אחר</td><td><strong>404</strong> Not Found</td><td><code>TASK_NOT_FOUND</code></td></tr>
+  </table></div>
+  <p>למה 404 ולא 403 במקרה השלישי? 403 אומר "יש כאן משימה מספר 17, היא פשוט לא שלך" — וזה כבר מידע: כמה משימות יש במערכת, אילו מספרים קיימים. מבחינת יוסי, המשימה של דנה <em>לא קיימת</em>. (403 נשאר למצב שבו הפעולה עצמה אסורה לך, לא האובייקט.)</p>
+
+  <h2>2. תפקידים</h2>
+```ts file=src/auth/roles.guard.ts
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext) {
+    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, [context.getHandler(), context.getClass()]);
+    if (!roles || roles.length === 0) return true;                  // בלי @Roles — כל מחובר
+    const user = context.switchToHttp().getRequest().user;
+    if (!user || !roles.includes(user.role)) throw new HttpError(403, "FORBIDDEN", "אין הרשאה");
+    return true;
+  }
+}
+
+// שימוש:
+@Controller("users")
+@Roles("admin")
+export class UsersController { ... }
+```
+  <p>שני guards גלובליים, וה<strong>סדר</strong> ביניהם הוא סדר הרישום ב־providers: קודם <code>JwtAuthGuard</code> (שקובע <code>req.user</code>, או 401), אחר כך <code>RolesGuard</code> (403). הפוך — RolesGuard היה רץ בלי <code>req.user</code>, ומשתמש לא מחובר היה מקבל 403 במקום 401.</p>
+  <p>ומאיפה ה־<code>role</code>? מה־JWT. זה מהיר (בלי מסד), אבל אם admin מוריד למישהו הרשאה — הטוקן הישן עדיין אומר <code>admin</code> עד שיפוג. עוד סיבה לתוקף קצר.</p>
+
+  <h2>3. בעלות על מידע — BOLA / IDOR</h2>
+  <p>ברשימת <a href="https://owasp.org/API-Security/editions/2023/en/0x11-t10/" target="_blank">OWASP API Security Top 10 (2023)</a>, מקום ראשון: <strong>Broken Object Level Authorization</strong>. בעברית: "שיניתי את המספר ב־URL וקיבלתי את ההזמנה של מישהו אחר". זה לא דורש שום כלי — רק סקרנות.</p>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="יוסי מבקש את משימה 1 של דנה ומקבל 404">
+      <defs><marker id="bo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="580" y="30" width="120" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="580" y="110" width="120" height="40" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="30" y="60" width="300" height="70" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="640" y="55" direction="rtl">דנה (sub=1)</text>
+        <text x="640" y="135" direction="rtl">יוסי (sub=2)</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M576 50 L 334 80" marker-end="url(#bo)"/>
+        <path d="M576 130 L 334 110" marker-end="url(#bo)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px">
+        <text x="455" y="55">GET /tasks/1 ← 200</text>
+        <text x="455" y="140">GET /tasks/1 ← 404</text>
+        <text x="180" y="90">WHERE id = 1</text>
+        <text x="180" y="112">AND owner_id = :sub</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: ה־owner מגיע מהטוקן, לא מהבקשה. ה־repository פשוט לא יודע להחזיר משימה של מישהו אחר.</figcaption>
+  </figure>
+```ts file=src/tasks/tasks.prisma-repository.ts
+async findById(ownerId: number, id: number) {
+  const row = await this.prisma.task.findFirst({ where: { id, ownerId } });
+  return row ? toTask(row) : undefined;
+}
+
+async update(ownerId: number, id: number, changes: Partial<Omit<Task, "id">>) {
+  const { count } = await this.prisma.task.updateMany({ where: { id, ownerId }, data: toData(changes) });
+  return count === 1 ? this.findById(ownerId, id) : undefined;
+}
+```
+  <p>שלושה כללים שעושים את זה בטוח:</p>
+  <ol>
+    <li><strong>הבעלים מגיע מהטוקן</strong> (<code>@CurrentUser()</code>) — אף פעם לא מ־<code>?userId=</code> או מהגוף.</li>
+    <li><strong>הבעלות חלק מה־WHERE</strong>, בכל פעולה — גם ב־update וב־delete, לא רק ב־get. הבאג הנפוץ: בודקים בעלות ב־<code>GET /tasks/:id</code>, ושוכחים ב־<code>DELETE</code> (E22).</li>
+    <li><strong>ב־repository, לא ב־controller</strong>: כל פונקציה מקבלת <code>ownerId</code> כפרמטר חובה. אי אפשר "לשכוח" — TypeScript לא יקמפל.</li>
+  </ol>
+
+  <h2>4. Mass assignment</h2>
+  <p>מקום שלישי ברשימה: <strong>Broken Object Property Level Authorization</strong> — הלקוח קובע שדה שהוא לא אמור לקבוע. הקלאסיקה:</p>
+```term
+% curl -X POST localhost:3000/auth/register -H "Content-Type: application/json" -d '{"email":"evil@example.com","password":"my-long-password","role":"admin"}'
+```
+  <p>אם הקוד עושה <code>users.insert({ ...body, passwordHash })</code> — יש לנו admin חדש. אצלנו זה נחסם פעמיים: <code>registerSchema</code> הוא <code>z.strictObject</code> (שדה לא מוכר ← 400), וה־service קובע <code>role: "user"</code> במפורש. אותו דבר ב־PATCH של משימה: <code>updateTaskSchema</code> לא מכיר <code>ownerId</code>. הכלל: <strong>רשימה מפורשת של מה מותר</strong>, לא "הכול חוץ מ־".</p>
+
+  <h2>5. עוד מהרשימה — בקצרה</h2>
+  <div class="table-wrap"><table>
+    <tr><th>OWASP API 2023</th><th>מה זה</th><th>אצלנו</th></tr>
+    <tr><td>API2 — Broken Authentication</td><td>כניסה חלשה: בלי הגבלת ניסיונות, סיסמאות גלויות, טוקנים בלי תוקף</td><td>bcrypt, תוקף קצר, rotation. הגבלת ניסיונות — E19, ופרק 24</td></tr>
+    <tr><td>API4 — Unrestricted Resource Consumption</td><td>בלי הגבלות: <code>?limit=1000000</code>, גוף ענק, בלי rate limit</td><td><code>limit</code> עד 50; גוף JSON מעל 100kb ← 413 (ברירת המחדל של Nest). rate limit — פרק 24</td></tr>
+    <tr><td>API5 — Broken Function Level Authorization</td><td>משתמש רגיל מגיע לפעולת admin</td><td><code>@Roles("admin")</code> + guard גלובלי (default deny)</td></tr>
+    <tr><td>API8 — Security Misconfiguration</td><td>stack traces בתשובה, CORS פתוח לכולם, סודות בקוד</td><td>filter עם 500 כללי, CORS לרשימה מפורשת, <code>.env</code></td></tr>
+  </table></div>
+  <p>ועוד שלושה הרגלים: <strong>SQL injection</strong> — Prisma ו־<code>pg</code> עם פרמטרים (<code>$1</code>) מגנים, אבל רק אם לא מדביקים מחרוזות ל־<code>$queryRawUnsafe</code>. <strong>HTTPS</strong> — בלי זה, הטוקן עובר ברשת כטקסט (פרק 25). <strong>תלויות</strong> — <code>npm audit</code> מדי פעם.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ אבטחה היא לא פיצ'ר בסוף</span>
+    <p>שים לב שאף אחד מהפריטים כאן לא היה "קוד אבטחה" נפרד: WHERE עם ownerId, schema מחמיר, הודעת שגיאה אחידה. אבטחה היא הרבה החלטות קטנות בקוד רגיל. ולכן בודקים אותה כמו כל דבר אחר — PR2-AUTH מנסה בדיוק את התקיפות מהשיעור.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P21-E03">E03</a> · <a href="exercises.html#P21-E05">E05</a> · <a href="exercises.html#P21-E08">E08</a> · <a href="exercises.html#P21-E13">E13</a> · <a href="exercises.html#P21-E14">E14</a> · <a href="exercises.html#P21-E19">E19</a> · <a href="exercises.html#P21-E22">E22</a> · <a href="exercises.html#P21-E25">E25</a></p>
+  </div>

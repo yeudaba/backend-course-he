@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>refresh tokens ויציאה — פרק 21</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 21</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — refresh tokens ויציאה</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה שני טוקנים: access קצר ו־refresh ארוך.</li>
+      <li>refresh token אטום, שנשמר במסד כ־hash.</li>
+      <li>rotation, זיהוי שימוש חוזר, ויציאה.</li>
+      <li>איפה הלקוח שומר טוקנים — ומה הסיכון בכל מקום.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדילמה</h2>
+  <p>JWT אי אפשר לבטל: אם הוא נגנב, הוא עובד עד ה־<code>exp</code> שלו. אז נקצר אותו — 15 דקות. אבל אז המשתמש צריך להקליד סיסמה כל רבע שעה. הפתרון המקובל — שני טוקנים:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Access token</th><th>Refresh token</th></tr>
+    <tr><td>מה זה</td><td>JWT חתום</td><td>מחרוזת אקראית ("אטומה")</td></tr>
+    <tr><td>תוקף</td><td>15 דקות</td><td>7 ימים</td></tr>
+    <tr><td>נשלח אל</td><td>כל בקשה (<code>Authorization</code>)</td><td>רק <code>POST /auth/refresh</code></td></tr>
+    <tr><td>השרת בודק</td><td>חתימה + exp, בלי מסד</td><td>במסד: קיים? לא בוטל? לא פג?</td></tr>
+    <tr><td>אפשר לבטל?</td><td>לא (רק לחכות 15 דקות)</td><td>כן — מיד</td></tr>
+  </table></div>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="ציר זמן: access token מתחלף כל 15 דקות בעזרת refresh token">
+      <defs><marker id="rt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <path d="M690 120 H 30" style="stroke:var(--svg-stroke);stroke-width:2;fill:none" marker-end="url(#rt)"/>
+      <g style="stroke-width:2">
+        <rect x="560" y="40" width="120" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="430" y="40" width="120" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="40" width="120" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="170" y="80" width="510" height="26" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px">
+        <text x="620" y="60">access 1</text><text x="490" y="60">access 2</text><text x="360" y="60">access 3</text>
+      </g>
+      <text x="425" y="98" text-anchor="middle" direction="rtl" style="font-size:12px">refresh token — כל החלפה נותנת גם refresh חדש</text>
+      <g text-anchor="middle" style="font-size:11px;fill:var(--muted)">
+        <text x="680" y="140">10:00 כניסה</text><text x="555" y="140">10:15</text><text x="425" y="140">10:30</text>
+      </g>
+      <text x="230" y="60" text-anchor="middle" direction="rtl" style="font-size:12px;fill:var(--muted)">...עד 7 ימים בלי סיסמה</text>
+    </svg>
+    <figcaption>איור 1: המשתמש מקליד סיסמה פעם אחת. גניבה של access token "שווה" לכל היותר 15 דקות.</figcaption>
+  </figure>
+
+  <h2>2. refresh token אטום, ו־hash במסד</h2>
+  <p>ה־refresh token לא צריך להכיל מידע — השרת ממילא בודק אותו במסד. לכן הוא פשוט 32 בתים אקראיים:</p>
+<pre><code class="lang-ts">import { createHash, randomBytes } from "node:crypto";
+
+const token = randomBytes(32).toString("base64url");
+const hash = createHash("sha256").update(token).digest("hex");
+console.log(token.length, hash.length);
+console.log(createHash("sha256").update("abc").digest("hex"));</code></pre>
+<pre class="terminal">43 64
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</pre>
+  <p>הלקוח מקבל את <code>token</code> (43 תווים). במסד, בעמודה <code>token_hash</code>, נשמר רק ה־SHA-256 שלו — מאותה סיבה שלא שומרים סיסמאות: מי שקורא את הטבלה לא יכול להשתמש במה שמצא. ולמה כאן SHA-256 המהיר מספיק, כשבסיסמאות אמרנו שהוא לא? כי לטוקן יש 256 ביט אקראיים — אין "רשימת טוקנים נפוצים" לנחש מתוכה. וצריך לחפש לפיו (<code>WHERE token_hash = ?</code>) — מה שאי אפשר עם bcrypt, שנותן hash שונה בכל פעם.</p>
+
+  <h2>3. Rotation וזיהוי שימוש חוזר</h2>
+  <p>כל refresh token עובד <strong>פעם אחת</strong>: <code>POST /auth/refresh</code> מבטל אותו ומחזיר זוג חדש. למה? כי אז אפשר לזהות גניבה:</p>
+<span class="file-label">src/auth/auth.service.ts</span>
+<pre><code class="lang-ts">async refresh(refreshToken: string) {
+  const record = await this.refreshTokens.findByHash(sha256(refreshToken));
+  if (!record) throw invalidRefresh();
+  const now = this.clock.now().toISOString();
+  if (record.revokedAt !== null) {
+    // טוקן שכבר הוחלף — חוזר. אחד משניים (המשתמש או התוקף) מחזיק עותק ישן
+    await this.refreshTokens.revokeAllForUser(record.userId, now);
+    throw invalidRefresh();
+  }
+  if (record.expiresAt &lt;= now) throw invalidRefresh();
+  if (!(await this.refreshTokens.revoke(record.id, now))) throw invalidRefresh();
+  const user = await this.users.findById(record.userId);
+  if (!user) throw invalidRefresh();
+  return this.issueTokens(user);
+}</code></pre>
+  <p>תרחיש: תוקף גנב את ה־refresh token של דנה. אם הוא משתמש בו ראשון — הוא מקבל זוג חדש, אבל כשהדפדפן של דנה ינסה את אותו טוקן, השרת יראה טוקן שכבר בוטל, ויבטל <em>הכול</em> — כולל מה שהתוקף קיבל. ואם דנה ראשונה — התוקף הוא זה שנתקע. בשני המקרים הגניבה מתגלה ונעצרת, ודנה רק צריכה להתחבר שוב.</p>
+  <div class="box tip">
+    <span class="box-title">💡 שתי בקשות באותו רגע</span>
+    <p><code>revoke</code> הוא <code>UPDATE ... WHERE id = ? AND revoked_at IS NULL</code>, ובודקים כמה שורות השתנו. אם שתי בקשות עם אותו טוקן מגיעות יחד — רק אחת תקבל 1 (פרק 18: בדיקה ושינוי באותה פקודה, בלי חלון ביניהם). ב־Prisma: <code>updateMany</code> ו־<code>count</code>.</p>
+  </div>
+
+  <h2>4. יציאה</h2>
+  <p><code>POST /auth/logout</code> עם ה־refresh token ← מבטלים אותו, ו־204. (גם על טוקן לא מוכר — 204: אין סיבה לספר.) ה־access token? ממשיך לעבוד עד שיפוג — זה המחיר של JWT, ולכן 15 דקות ולא יום. כשצריך יותר (למשל "צא מכל המכשירים" אחרי החלפת סיסמה): מבטלים את כל ה־refresh tokens של המשתמש, ואם חייבים גם מיידיות — שומרים <code>tokenVersion</code> במשתמש ובודקים אותו ב־guard (וזה כבר שאילתה למסד בכל בקשה).</p>
+
+  <h2>5. איפה הלקוח שומר את הטוקנים?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מקום</th><th>XSS (סקריפט זר בדף)</th><th>הערות</th></tr>
+    <tr><td>משתנה בזיכרון</td><td>קשה יותר לגנוב</td><td>נעלם ברענון הדף — לכן משלבים עם refresh</td></tr>
+    <tr><td><code>localStorage</code></td><td>❌ כל סקריפט קורא</td><td>נשאר לתמיד. נפוץ, אבל לא מומלץ ל־refresh token</td></tr>
+    <tr><td><code>sessionStorage</code></td><td>❌ כל סקריפט קורא</td><td>נמחק כשסוגרים את הלשונית</td></tr>
+    <tr><td>cookie עם <code>HttpOnly; Secure; SameSite</code></td><td>✔ JavaScript לא רואה אותו</td><td>הדפדפן שולח לבד. צריך הגנה מ־CSRF (ש־SameSite נותן ברובה)</td></tr>
+  </table></div>
+  <p>בדף ההדגמה של פרויקט 2: ה־access token בזיכרון, וה־refresh ב־<code>sessionStorage</code> — פשוט ומובן, ומספיק להדגמה. במוצר אמיתי, הבחירה הבטוחה היא refresh token ב־cookie עם <code>HttpOnly</code> שמוגבל לנתיב <code>/auth</code>. וחשוב מכל: ההגנה הטובה ביותר מגניבת טוקנים היא לא לאפשר XSS מלכתחילה — <code>textContent</code> ולא <code>innerHTML</code> (יחידה 15.5).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P21-E04">E04</a> · <a href="exercises.html#P21-E15">E15</a> · <a href="exercises.html#P21-E16">E16</a> · <a href="exercises.html#P21-E17">E17</a> · <a href="exercises.html#P21-E23">E23</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-jwt.html"><small>הקודם</small>שיעור 2 — JWT ו־guard של התחברות</a><a href="lesson-04-authorization.html"><small>הבא</small>שיעור 4 — הרשאות, בעלות ו־OWASP</a></div>
+</main>
+</body>
+</html>

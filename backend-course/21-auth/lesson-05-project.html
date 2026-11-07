@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פרויקט 2, שלב ד׳: משתמשים — פרק 21</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 21</a> ‹ שיעור 5</div>
+  <h1>שיעור 5 — פרויקט 2, שלב ד׳: משתמשים</h1>
+  <p class="subtitle">⏱ ~90 דקות · 🤖 PR2-AUTH</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>פרויקט 2, שלב ד׳: משתמשים, כניסה, refresh tokens ותפקידים.</li>
+      <li>migration שמוסיף בעלים לטבלה קיימת — ומה עושים עם השורות שכבר שם.</li>
+      <li>דף ההדגמה עם כניסה. בסוף: PR2-AUTH ו־PR2-AUTH-DB עוברים.</li>
+    </ul>
+  </div>
+
+  <h2>1. היעד</h2>
+  <div class="table-wrap"><table>
+    <tr><th>בקשה</th><th>מי</th><th>תשובה</th></tr>
+    <tr><td><code>POST /auth/register</code> <code>{ email, password }</code></td><td>כולם</td><td>201 <code>{ id, email, role, createdAt }</code> · 409 <code>EMAIL_TAKEN</code></td></tr>
+    <tr><td><code>POST /auth/login</code></td><td>כולם</td><td>200 <code>{ accessToken, refreshToken, tokenType, expiresIn }</code> · 401 <code>INVALID_CREDENTIALS</code></td></tr>
+    <tr><td><code>POST /auth/refresh</code> <code>{ refreshToken }</code></td><td>כולם</td><td>200 זוג חדש · 401 <code>INVALID_REFRESH_TOKEN</code></td></tr>
+    <tr><td><code>POST /auth/logout</code> <code>{ refreshToken }</code></td><td>כולם</td><td>204</td></tr>
+    <tr><td><code>GET /auth/me</code></td><td>מחובר</td><td>המשתמש (בלי hash)</td></tr>
+    <tr><td><code>/tasks</code> — כל מה שהיה</td><td>מחובר</td><td>אותו API בדיוק — רק על המשימות <strong>שלו</strong>. של אחר ← 404</td></tr>
+    <tr><td><code>GET /users</code></td><td>admin</td><td>כל המשתמשים · 403 <code>FORBIDDEN</code></td></tr>
+    <tr><td><code>GET /health</code>, <code>/docs</code></td><td>כולם</td><td>כמו קודם</td></tr>
+  </table></div>
+  <p>בלי טוקן ← 401 <code>UNAUTHORIZED</code>; טוקן לא תקין או שפג ← 401 <code>INVALID_TOKEN</code>. הסיסמה: 8 תווים עד 72 בתים. access token ל־15 דקות, refresh ל־7 ימים — מתוך <code>.env</code>.</p>
+
+  <h2>2. הכנה</h2>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev/tasks-api
+<span class="prompt">% </span>git switch -c auth
+<span class="prompt">% </span>npm install bcryptjs @nestjs/jwt</pre>
+  <p>וב־<code>.env</code> (ותעדכן גם <code>.env.example</code>, בלי הערך) — סוד אקראי:</p>
+<pre class="terminal"><span class="prompt">% </span>node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"</pre>
+  <p>העתק את הפלט ל־<code>JWT_SECRET=...</code>.</p>
+
+  <h2>3. המסד: users, refresh_tokens, ו־owner לכל משימה</h2>
+<span class="file-label">prisma/schema.prisma</span>
+<pre><code class="lang-ts">enum Role {
+  user
+  admin
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  role          Role           @default(user)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  tasks         Task[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Task {
+  id      Int  @id @default(autoincrement())
+  ownerId Int  @map("owner_id")
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // ... שאר השדות כמו קודם
+  @@index([ownerId, status, createdAt])
+  @@map("tasks")
+}</code></pre>
+  <p>וה־migration — הפעם קודם יוצרים, קוראים, ורק אז מריצים:</p>
+<pre class="terminal"><span class="prompt">% </span>npx prisma migrate dev --create-only --name add_users
+<span class="dim">Prisma Migrate created the following migration without applying it 20261107055700_add_users</span></pre>
+  <p>בראש הקובץ שנוצר Prisma משאיר אזהרה: <code>Added the required column <code>owner_id</code> to the <code>tasks</code> table without a default value. This is not possible if the table is not empty.</code> — והוא צודק: ל־<code>owner_id</code> יש <code>NOT NULL</code>, ולמשימות שכבר בטבלה אין בעלים. בפיתוח הפתרון פשוט: מוסיפים בראש הקובץ <code>DELETE FROM "tasks";</code> (ה־seed ייצור נתונים חדשים), ואז <code>npx prisma migrate dev</code> ו־<code>npx prisma generate</code>.</p>
+  <div class="box tip">
+    <span class="box-title">💡 ובפרודקשן?</span>
+    <p>אצל משתמשים אמיתיים לא מוחקים נתונים. עושים את זה בשלושה migrations: (1) <strong>expand</strong> — מוסיפים <code>owner_id</code> כ־nullable; (2) <strong>backfill</strong> — ממלאים (למשל: כל המשימות הישנות שייכות למשתמש "ראשי"); (3) <strong>contract</strong> — <code>SET NOT NULL</code>. כך אף שלב לא נכשל, והאפליקציה עובדת לאורך כל הדרך. שאלה שאוהבים בראיונות.</p>
+  </div>
+
+  <h2>4. הקבצים</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>מה</th></tr>
+    <tr><td><code>src/config.ts</code></td><td>חדש: <code>ConfigModule</code> גלובלי עם <code>CONFIG</code> (Zod על ה־env, כמו P20-E17) ו־<code>CLOCK</code> (עבר לכאן מ־<code>tasks.tokens.ts</code>, שממשיך לייצא אותו)</td></tr>
+    <tr><td><code>src/users/users.repository.ts</code></td><td><code>User</code>, <code>toPublicUser</code>, token <code>USERS_REPOSITORY</code>, ו־<code>InMemoryUsersRepository</code> (לבדיקות)</td></tr>
+    <tr><td><code>src/users/users.prisma-repository.ts</code></td><td>עם Prisma; <code>insert</code> תופס <code>P2002</code> ומחזיר <code>undefined</code></td></tr>
+    <tr><td><code>src/users/users.controller.ts</code></td><td><code>GET /users</code> עם <code>@Roles("admin")</code></td></tr>
+    <tr><td><code>src/auth/auth.schema.ts</code></td><td><code>registerSchema</code> (strict, 72 בתים), <code>loginSchema</code>, <code>refreshSchema</code></td></tr>
+    <tr><td><code>src/auth/password.service.ts</code></td><td>bcrypt: <code>hash</code>, <code>verify</code>, <code>verifyAgainstDummy</code></td></tr>
+    <tr><td><code>src/auth/refresh-tokens.repository.ts</code> + <code>.prisma-repository.ts</code></td><td><code>insert</code>, <code>findByHash</code>, <code>revoke</code> (אטומי), <code>revokeAllForUser</code> — בזיכרון וב־Prisma</td></tr>
+    <tr><td><code>src/auth/auth.service.ts</code></td><td><code>register</code>, <code>login</code>, <code>refresh</code>, <code>logout</code>, <code>me</code>, <code>verifyAccessToken</code></td></tr>
+    <tr><td><code>src/auth/auth.decorators.ts</code></td><td><code>@Public()</code>, <code>@Roles()</code>, <code>@CurrentUser()</code></td></tr>
+    <tr><td><code>src/auth/jwt-auth.guard.ts</code>, <code>roles.guard.ts</code></td><td>שני ה־guards (שיעורים 2 ו־4)</td></tr>
+    <tr><td><code>src/auth/auth.controller.ts</code>, <code>auth.module.ts</code></td><td>ה־routes; <code>JwtModule.registerAsync</code> עם <code>inject: [CONFIG]</code>, ושני <code>APP_GUARD</code> — בסדר הנכון</td></tr>
+    <tr><td><code>src/tasks/*</code></td><td>כל פונקציה ב־repository וב־service מקבלת <code>ownerId</code>; ה־controller מעביר <code>user.id</code> מ־<code>@CurrentUser()</code></td></tr>
+    <tr><td><code>src/health.controller.ts</code></td><td><code>@Public()</code></td></tr>
+    <tr><td><code>src/app.setup.ts</code></td><td><code>.addBearerAuth()</code> ב־Swagger (וב־controllers: <code>@ApiBearerAuth()</code>) — בתיעוד יופיע כפתור Authorize</td></tr>
+    <tr><td><code>prisma/seed.ts</code></td><td>שלושה משתמשים (אחד admin), עם <code>bcrypt.hash</code>, ומשימות לכל אחד</td></tr>
+    <tr><td><code>web/</code></td><td>טופס כניסה/הרשמה, <code>Authorization</code> בכל בקשה, ו־refresh אוטומטי על 401</td></tr>
+  </table></div>
+  <details><summary>💡 רמז: ה־repository בזיכרון שומר ownerId, אבל לא מחזיר אותו</summary>
+    <p><code>type StoredTask = Task &amp; { ownerId: number }</code> בפנים, ו־<code>strip</code> שמסיר אותו בכל החזרה — ה־API נשאר זהה לשלבים הקודמים.</p>
+  </details>
+  <details><summary>💡 רמז: למה ה־CLOCK והקונפיג "גלובליים"?</summary>
+    <p>גם <code>TasksService</code> וגם <code>AuthService</code> צריכים שעון, ו־<code>JwtModule</code> צריך את הסוד. <code>@Global()</code> על <code>ConfigModule</code> חוסך לייבא אותו בכל מקום — ובבדיקות <code>overrideProvider(CONFIG)</code> מחליף אותו לכולם, כולל את הסוד של <code>JwtModule</code>.</p>
+  </details>
+  <details><summary>💡 רמז: update בלי חלון בין "בדקתי" ל"שיניתי"</summary>
+    <p><code>prisma.task.updateMany({ where: { id, ownerId }, data })</code> מחזיר <code>{ count }</code>. 0 ← לא קיים או לא שלך (ובשני המקרים: 404). ואז <code>findFirst</code> כדי להחזיר את המשימה המעודכנת.</p>
+  </details>
+
+  <h2>5. להריץ ולבדוק</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run db:seed
+<span class="dim">✔ 3 משתמשים, 3 משימות</span>
+<span class="prompt">% </span>npm run start:dev</pre>
+  <p>פתח את <code>requests.http</code> — יש בו את כל הזרימה: כניסה (התשובה נשמרת במשתנה <code>login</code>), בקשות עם הטוקן, ניסיון לגשת למשימה של משתמש אחר, refresh, ו־register עם <code>role</code>. ו־<code>/docs</code>: לחץ Authorize, הדבק את ה־accessToken, ו־"Try it out". ואז הדף: <code>npm run web</code>, היכנס כ־<code>dana@example.com</code> / <code>dana-password-1</code>, רענן את הדף (נשארת מחובר — בזכות ה־refresh token), ונסה את <code>yossi@example.com</code>: רשימה אחרת לגמרי.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run build
+<span class="prompt">% </span>cd ~/dev/backend-course
+<span class="prompt">% </span>npm run check PR2-AUTH -- --dir ~/dev/tasks-api
+<span class="prompt">% </span>npm run check PR2-AUTH-DB -- --dir ~/dev/tasks-api</pre>
+  <p>PR2-AUTH מריץ את הקוד המקומפל עם repositories בזיכרון ושעון מזויף: הרשמה, כניסה (כולל שאותה תשובה חוזרת לאימייל לא רשום), טוקן מזויף, תוקף אחרי 15 דקות, משימות של אחר (GET/PATCH/DELETE ← 404), rotation ושימוש חוזר, ו־<code>/users</code>. PR2-AUTH-DB עושה את אותו הדבר מול PostgreSQL אמיתי, ובודק מה נשמר בטבלאות: hash ולא סיסמה, SHA-256 ולא טוקן, <code>owner_id</code>, ו־<code>ON DELETE CASCADE</code>. (PR2-NEST של פרק 20 כבר לא יעבור — הוא שולח בקשות בלי טוקן. זה צפוי.)</p>
+  <p>commit, מיזוג ל־main, push — ועדכן את ה־README: איך נרשמים, איך מתחברים ב־Swagger, ואילו משתמשי דמו יש ב־seed. הפתרון לשלב הזה: <code>21-auth/solutions/tasks-api</code>.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות שחוזרות בראיונות Backend: "איך שומרים סיסמאות?" (ולא לענות "מצפינים"), "מה יש בתוך JWT ומה החתימה מבטיחה?", "איך מבטלים JWT?", "access מול refresh — למה שניים?", "מה ההבדל בין 401 ל־403?", "מה זה IDOR ואיך מונעים?". ובמשימות בית — כמעט תמיד "הוסף משתמשים, וכל משתמש רואה רק את שלו". עכשיו יש לך קוד שעונה על כל אחת, ובדיקות שמוכיחות את זה. ובצד המעשי: במקומות רבים לא כותבים את כל זה מאפס, אלא משתמשים בשירות זהות (Auth0, Cognito, Keycloak, Clerk) — אבל גם אז צריך להבין טוקנים, תפקידים ובעלות, כי ה־API שלך הוא שבודק אותם.</p>
+  </div>
+
+<div class="pager"><a href="lesson-04-authorization.html"><small>הקודם</small>שיעור 4 — הרשאות, בעלות ו־OWASP</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

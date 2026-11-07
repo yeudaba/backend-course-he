@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JWT ו־guard של התחברות — פרק 21</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 21</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — JWT ו־guard של התחברות</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>session מול טוקן: איך השרת "זוכר" שהתחברת.</li>
+      <li>JWT מבפנים — מה כתוב בו, ומה החתימה מבטיחה.</li>
+      <li>guard גלובלי ב־Nest: <code>@Public()</code> ו־<code>@CurrentUser()</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. אחרי הכניסה — איך השרת יודע מי אתה?</h2>
+  <p>HTTP לא זוכר כלום: כל בקשה עומדת לבד (פרק 14). אחרי כניסה מוצלחת השרת נותן ללקוח "כרטיס", והלקוח מציג אותו בכל בקשה. יש שתי דרכים נפוצות:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Session</th><th>JWT</th></tr>
+    <tr><td>מה הלקוח מקבל</td><td>מזהה אקראי (<code>sid=...</code>), בדרך כלל ב־cookie</td><td>טוקן חתום שמכיל את המידע עצמו (<code>sub</code>, <code>role</code>, <code>exp</code>)</td></tr>
+    <tr><td>מה השרת בודק</td><td>מחפש את ה־sid במסד/Redis</td><td>בודק חתימה ותוקף — <strong>בלי מסד</strong></td></tr>
+    <tr><td>יציאה / ביטול</td><td>מוחקים את ה־session — מיידי</td><td>אי אפשר "לבטל" טוקן חתום עד שיפוג — לכן תוקף קצר (שיעור 3)</td></tr>
+    <tr><td>מתאים ל</td><td>אתר אחד עם שרת אחד</td><td>API, אפליקציות מובייל, כמה שרתים</td></tr>
+  </table></div>
+  <p>שתיהן לגיטימיות. בפרויקט נשתמש ב־JWT — הנפוץ ב־API ובמשרות Node — ונשלב אותו עם refresh token ששמור במסד, שנותן את היתרון של session (ביטול).</p>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="כניסה מחזירה טוקן, וכל בקשה אחר כך שולחת אותו ב־Authorization">
+      <defs><marker id="jw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="20" width="140" height="170" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="140" height="170" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="630" y="105">לקוח</text>
+        <text x="90" y="105">שרת</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 50 H 166" marker-end="url(#jw)"/>
+        <path d="M164 85 H 554" marker-end="url(#jw)"/>
+        <path d="M556 140 H 166" marker-end="url(#jw)"/>
+        <path d="M164 172 H 554" marker-end="url(#jw)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="360" y="43">POST /auth/login {email, password}</text>
+        <text x="360" y="78">{ accessToken: "eyJhbGci..." }</text>
+        <text x="360" y="133">GET /tasks  Authorization: Bearer eyJhbGci...</text>
+        <text x="360" y="165">200 { data: [...] }  (sub=1)</text>
+      </g>
+      <text x="90" y="135" text-anchor="middle" direction="rtl" style="font-size:11px">בודק חתימה + exp</text>
+      <text x="90" y="150" text-anchor="middle" direction="rtl" style="font-size:11px">בלי מסד</text>
+    </svg>
+    <figcaption>איור 1: הסיסמה נשלחת פעם אחת. אחר כך — רק הטוקן.</figcaption>
+  </figure>
+
+  <h2>2. JWT מבפנים</h2>
+  <p>JWT הם שלושה חלקים מופרדים בנקודה: <code>header.payload.signature</code>. שני הראשונים הם סתם JSON ב־Base64url — <strong>encoding, לא הצפנה</strong>:</p>
+<pre><code class="lang-ts">import { JwtService } from "@nestjs/jwt";
+
+const jwt = new JwtService({ secret: "dev-secret-change-me" });
+const token = await jwt.signAsync({ sub: 7, role: "user", iat: 1793872800 }, { expiresIn: 900 });
+console.log(token);
+
+const [header, payload] = token.split(".");
+console.log(Buffer.from(header, "base64url").toString());
+console.log(Buffer.from(payload, "base64url").toString());
+console.log(new Date(1793873700 * 1000).toISOString());</code></pre>
+<pre class="terminal">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjcsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkzODcyODAwLCJleHAiOjE3OTM4NzM3MDB9.QT1ABbJSLN52igDEm7RWMNKP7edBYZ2wiegfpgQwUhY
+{"alg":"HS256","typ":"JWT"}
+{"sub":7,"role":"user","iat":1793872800,"exp":1793873700}
+2026-11-05T10:15:00.000Z</pre>
+  <p>כל אחד שמחזיק את הטוקן יכול לקרוא את ה־payload — גם בלי הסוד (נסה להדביק טוקן ב־<a href="https://jwt.io" target="_blank">jwt.io</a>). לכן <strong>לא שמים ב־JWT שום דבר סודי</strong>: לא סיסמה, לא מספר כרטיס, ובדרך כלל גם לא אימייל. מה שכן: <code>sub</code> (subject — מזהה המשתמש), <code>role</code>, ו־<code>iat</code>/<code>exp</code> (מתי נוצר ועד מתי — בשניות מאז 1970, UTC).</p>
+
+  <h2>3. החתימה — מה היא מבטיחה</h2>
+  <p>החלק השלישי הוא HMAC-SHA256 של שני הראשונים, עם הסוד שרק השרת יודע. אז מה קורה אם המשתמש משנה את ה־payload ל־<code>"role":"admin"</code>?</p>
+<pre><code class="lang-ts">import { JwtService } from "@nestjs/jwt";
+
+const jwt = new JwtService({ secret: "dev-secret-change-me" });
+const token = await jwt.signAsync({ sub: 7, role: "user", iat: 1793872800 }, { expiresIn: 900 });
+const [header, , signature] = token.split(".");
+const evil = Buffer.from(JSON.stringify({ sub: 7, role: "admin", iat: 1793872800, exp: 1793873700 })).toString("base64url");
+const forged = `${header}.${evil}.${signature}`;
+
+try {
+  await jwt.verifyAsync(forged, { clockTimestamp: 1793872800 });
+} catch (err) {
+  console.log("verify:", err.name, "—", err.message);
+}
+console.log("decode:", jwt.decode(forged));</code></pre>
+<pre class="terminal">verify: JsonWebTokenError — invalid signature
+decode: { sub: 7, role: 'admin', iat: 1793872800, exp: 1793873700 }</pre>
+  <p><code>verify</code> מחשב את החתימה מחדש ומגלה שהיא לא מתאימה. <code>decode</code> — <strong>לא בודק כלום</strong>, רק מפענח Base64. זה אחד הבאגים הנפוצים והמסוכנים בקוד אמיתי (תמצא אותו ב־E20): מי שמשתמש ב־<code>decode</code> כדי "לדעת מי המשתמש" — נתן לכל אחד להיות admin.</p>
+  <p>ומה עם תוקף? <code>exp</code> נבדק בתוך <code>verify</code>:</p>
+<pre><code class="lang-ts">import { JwtService } from "@nestjs/jwt";
+
+const jwt = new JwtService({ secret: "dev-secret-change-me" });
+const token = await jwt.signAsync({ sub: 7, iat: 1793872800 }, { expiresIn: 900 });
+for (const seconds of [899, 900]) {
+  try {
+    await jwt.verifyAsync(token, { clockTimestamp: 1793872800 + seconds });
+    console.log(seconds, "ok");
+  } catch (err) {
+    console.log(seconds, err.name);
+  }
+}</code></pre>
+<pre class="terminal">899 ok
+900 TokenExpiredError</pre>
+  <p><code>clockTimestamp</code> — "מה השעה עכשיו" לצורך הבדיקה. בקוד רגיל לא מעבירים אותו (ברירת המחדל: השעון של המחשב). אנחנו מעבירים אותו מה־<code>CLOCK</code> — כדי שהבדיקות יוכלו "להזיז את הזמן" 15 דקות קדימה, בלי לחכות.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ הסוד</span>
+    <p>מי שיודע את <code>JWT_SECRET</code> יכול להנפיק טוקן לכל משתמש, כולל admin. לכן: לפחות 32 תווים אקראיים (<code>node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"</code>), רק ב־<code>.env</code> ובהגדרות השרת — לא בקוד ולא ב־Git — וסוד שונה לפיתוח ולפרודקשן. בפרויקט, <code>loadConfig</code> מסרב לעלות עם סוד קצר. ועוד דבר: מגדירים <code>algorithms: ["HS256"]</code> ב־verify — כדי שטוקן שמצהיר על אלגוריתם אחר (למשל <code>"none"</code>) לא יתקבל.</p>
+  </div>
+
+  <h2>4. ב־Nest: guard גלובלי</h2>
+  <p>ב־E14 של פרק 20 שמת <code>@UseGuards(ApiKeyGuard)</code> על route. עם משתמשים זה הפוך: <strong>כמעט הכול</strong> דורש התחברות, ורק מעט routes פתוחים (health, register, login). אז רושמים guard גלובלי, ומסמנים את היוצאים מן הכלל:</p>
+<span class="file-label">src/auth/jwt-auth.guard.ts</span>
+<pre><code class="lang-ts">@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector, private readonly auth: AuthService) {}
+
+  async canActivate(context: ExecutionContext) {
+    const isPublic = this.reflector.getAllAndOverride&lt;boolean&gt;(IS_PUBLIC, [context.getHandler(), context.getClass()]);
+    if (isPublic) return true;
+    const req = context.switchToHttp().getRequest();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new HttpError(401, "UNAUTHORIZED", "נדרשת התחברות");
+    req.user = await this.auth.verifyAccessToken(match[1]);   // 401 INVALID_TOKEN אם לא תקין
+    return true;
+  }
+}</code></pre>
+<span class="file-label">src/auth/auth.decorators.ts</span>
+<pre><code class="lang-ts">export const Public = () =&gt; SetMetadata(IS_PUBLIC, true);
+
+export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext): AuthUser =&gt; {
+  return ctx.switchToHttp().getRequest().user;
+});</code></pre>
+  <ul>
+    <li><strong><code>SetMetadata</code> ו־<code>Reflector</code></strong>: decorator ששומר מידע על מתודה או class, ו־guard שקורא אותו. <code>getAllAndOverride</code> בודק קודם את המתודה ואחר כך את ה־class — כך <code>@Public()</code> עובד על שניהם.</li>
+    <li><strong>רישום</strong>: <code>{ provide: APP_GUARD, useClass: JwtAuthGuard }</code> ב־module. בזכות DI, ה־guard מקבל את <code>AuthService</code> ו־<code>Reflector</code>.</li>
+    <li><strong><code>@CurrentUser()</code></strong>: במקום <code>@Req() req</code> ו־<code>req.user</code> בכל handler — decorator שמחזיר בדיוק את מה שצריך: <code>list(@CurrentUser() user: AuthUser)</code>.</li>
+    <li><strong>"Bearer"</strong> — לפי התקן, בלי תלות באותיות (<code>/i</code>). קטן, אבל לקוחות שולחים גם <code>bearer</code>.</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 "default deny"</span>
+    <p>למה guard גלובלי עדיף על <code>@UseGuards</code> בכל controller? כי מי שמוסיף מחר controller חדש ושוכח — מקבל route <em>מוגן</em>, לא פתוח. שכחה צריכה להיכשל לכיוון הבטוח. זה עיקרון שחוזר בכל אבטחה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P21-E02">E02</a> · <a href="exercises.html#P21-E09">E09</a> · <a href="exercises.html#P21-E10">E10</a> · <a href="exercises.html#P21-E11">E11</a> · <a href="exercises.html#P21-E12">E12</a> · <a href="exercises.html#P21-E20">E20</a> · <a href="exercises.html#P21-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-passwords.html"><small>הקודם</small>שיעור 1 — סיסמאות: hashing ו־bcrypt</a><a href="lesson-03-refresh.html"><small>הבא</small>שיעור 3 — refresh tokens ויציאה</a></div>
+</main>
+</body>
+</html>

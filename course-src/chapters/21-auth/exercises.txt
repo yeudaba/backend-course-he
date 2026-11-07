@@ -1,0 +1,1873 @@
+@@ P21-E01 | 1 | hash, הצפנה או encoding? | 10 | שיעור 1
+@task
+<p>לכל משפט — נכון או לא, ולמה:</p>
+<ol><li>"אנחנו שומרים את הסיסמאות מוצפנות עם AES, אז גם אם המסד דולף — אין בעיה."</li><li>"שמרנו את הסיסמה ב־Base64, כך שאי אפשר לקרוא אותה במבט."</li><li>"<code>sha256(password)</code> הוא hash חד־כיווני, אז הוא מתאים לסיסמאות."</li><li>"אם שני משתמשים בחרו את אותה סיסמה, ב־bcrypt יהיה להם אותו hash."</li><li>"כדי לבדוק כניסה, מחשבים <code>bcrypt.hash(password)</code> ומשווים ל־hash שבמסד עם <code>===</code>."</li><li>"שירות 'שכחתי סיסמה' צריך לשלוח למשתמש את הסיסמה שלו במייל."</li></ol>
+@hint1
+<p>טבלת שלוש השורות בתחילת שיעור 1.</p>
+@hint2
+<p>חשוב מה יש לתוקף שמחזיק עותק של המסד <em>וגם</em> של קוד השרת וה־env.</p>
+@solution
+<ol><li><strong>לא.</strong> הצפנה הפיכה — מי שמשיג את המפתח (שיושב באותו שרת, ב־env) מקבל את כל הסיסמאות. ומי שעובד בחברה עם גישה למפתח — גם.</li><li><strong>לא.</strong> Base64 הוא encoding: <code>Buffer.from(x, "base64").toString()</code> וזהו. זו לא הגנה בכלל.</li><li><strong>לא.</strong> הוא חד־כיווני, אבל <strong>מהיר</strong> ובלי salt: תוקף מנחש מיליארדי סיסמאות נפוצות בשנייה, וכל ניחוש נבדק מול כל המשתמשים בבת אחת.</li><li><strong>לא.</strong> ל־bcrypt יש salt אקראי חדש בכל hash — ראית בשיעור ש־<code>a === b</code> הוא <code>false</code>.</li><li><strong>לא.</strong> בגלל ה־salt, hash חדש לעולם לא יהיה שווה לישן. משתמשים ב־<code>bcrypt.compare(password, hash)</code>, שקורא את ה־salt מתוך ה־hash.</li><li><strong>לא — ואם זה אפשרי, משהו שבור.</strong> השרת לא אמור להיות <em>מסוגל</em> לשחזר סיסמה. "שכחתי סיסמה" שולח קישור חד־פעמי עם טוקן אקראי לקביעת סיסמה חדשה.</li></ol>
+@mistakes
+<ul><li>להשתמש ב"מוצפן" כמילה כללית ל"מוגן". בראיון — "שומרים hash איטי עם salt (bcrypt או Argon2)", לא "מצפינים".</li></ul>
+
+@@ P21-E02 | 1 | לפרק JWT ביד | 10 | שיעור 2
+@task
+<p>הלקוח קיבל את הטוקן:</p>
+<pre><code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjcsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkzODcyODAwLCJleHAiOjE3OTM4NzM3MDB9.QT1ABbJSLN52igDEm7RWMNKP7edBYZ2wiegfpgQwUhY</code></pre>
+<p>(א) בלי הסוד — מה אפשר לדעת ממנו? פענח ב־Node (<code>Buffer.from(..., "base64url")</code>). (ב) עד מתי הוא תקף, בשעון ישראל? (ג) המשתמש משנה בדפדפן את <code>"role":"user"</code> ל־<code>"admin"</code> ושולח. מה יקרה, ולמה? (ד) מפתח הציע להוסיף ל־payload את האימייל ואת מספר הטלפון "כדי לחסוך שאילתה". מה דעתך?</p>
+@hint1
+<p>שלושה חלקים, מופרדים בנקודה. שני הראשונים — JSON.</p>
+@hint2
+<p><code>exp</code> הוא שניות מאז 1970 ב־UTC: <code>new Date(exp * 1000)</code>. בנובמבר ישראל ב־UTC+2.</p>
+@solution
+<p>(א) כל אחד יכול לקרוא את ה־header ואת ה־payload:</p>
+```ts
+const [h, p] = token.split(".");
+console.log(Buffer.from(h, "base64url").toString()); // {"alg":"HS256","typ":"JWT"}
+console.log(Buffer.from(p, "base64url").toString()); // {"sub":7,"role":"user","iat":1793872800,"exp":1793873700}
+```
+<p>משתמש 7, תפקיד user, נוצר ב־<code>1793872800</code>. מה שאי אפשר בלי הסוד: לבדוק שהחתימה אמיתית, או ליצור חתימה חדשה.</p>
+<p>(ב) <code>new Date(1793873700 * 1000).toISOString()</code> ← <code>2026-11-05T10:15:00.000Z</code>, כלומר 12:15 בשעון ישראל. 900 שניות (15 דקות) אחרי <code>iat</code>.</p>
+<p>(ג) השרת מחשב את החתימה מחדש על ה־header וה־payload <em>ששונו</em>, ומקבל משהו אחר ממה שכתוב בחלק השלישי ← <code>invalid signature</code> ← 401. (אלא אם השרת משתמש ב־<code>decode</code> במקום <code>verify</code> — ראה E20.)</p>
+<p>(ד) לא. ה־payload קריא לכל מי שמחזיק את הטוקן — כולל תוספי דפדפן, לוגים של proxy, וכל מי שהטוקן דלף אליו. ובנוסף: אם המשתמש מחליף טלפון, הטוקן ממשיך "לטעון" את הישן עד שיפוג. ב־JWT שמים מזהים וזכויות (<code>sub</code>, <code>role</code>), לא פרטים אישיים.</p>
+@mistakes
+<ul><li>לחשוב שה־payload מוצפן כי "הוא נראה כמו ג'יבריש". זה Base64url.</li><li>לשכוח ש־<code>exp</code> בשניות, ו־<code>new Date()</code> מצפה למילישניות ← תאריך ב־1970.</li></ul>
+
+@@ P21-E03 | 1 | 401, 403 או 404? | 10 | שיעור 4
+@task
+<p>ב־tasks-api (שלב ד׳): דנה (user, id=1) ויוסי (user, id=2), ומשימה 5 שייכת לדנה. מה ה־status בכל מקרה, ולמה?</p>
+<ol><li><code>GET /tasks/5</code> בלי header של Authorization.</li><li><code>GET /tasks/5</code> עם הטוקן של דנה, אבל 20 דקות אחרי הכניסה.</li><li><code>GET /tasks/5</code> עם הטוקן של יוסי.</li><li><code>GET /users</code> עם הטוקן של דנה.</li><li><code>DELETE /tasks/999</code> עם הטוקן של דנה (אין משימה כזו).</li><li><code>POST /auth/login</code> עם סיסמה שגויה.</li></ol>
+@hint1
+<p>401 — "לא יודע מי אתה". 403 — "יודע, ואסור". 404 — "אין (בשבילך)".</p>
+@hint2
+<p>מה יוסי יכול ללמוד אם (3) יחזיר 403?</p>
+@solution
+<ol><li><strong>401</strong> <code>UNAUTHORIZED</code> — אין זהות בכלל.</li><li><strong>401</strong> <code>INVALID_TOKEN</code> ("פג תוקף הטוקן") — הטוקן כבר לא מוכיח זהות. הלקוח צריך לעשות refresh ולנסות שוב.</li><li><strong>404</strong> <code>TASK_NOT_FOUND</code> — מבחינת יוסי המשימה לא קיימת. 403 היה מגלה לו ש־5 קיים (ומאפשר לסרוק אילו מספרים קיימים).</li><li><strong>403</strong> <code>FORBIDDEN</code> — דנה מזוהה, אבל הפעולה עצמה אסורה לתפקיד שלה. כאן אין מה להסתיר: כולם יודעים שיש <code>/users</code>.</li><li><strong>404</strong> — בדיוק כמו (3). וזה העיקר: יוסי לא יכול להבדיל בין "לא קיים" ל"לא שלך".</li><li><strong>401</strong> <code>INVALID_CREDENTIALS</code>.</li></ol>
+@mistakes
+<ul><li>403 על משאב של משתמש אחר — "נכון" מבחינת השם, ודולף מבחינת אבטחה.</li><li>403 כשאין טוקן — הלקוח לא יבין שצריך להתחבר. 401 אומר "תתחבר"; 403 אומר "גם אם תתחבר — לא".</li></ul>
+
+@@ P21-E04 | 1 | שני טוקנים — למה? | 10 | שיעור 3
+@task
+<p>(א) למה לא לתת access token אחד ל־7 ימים? (ב) למה לא refresh token שהוא JWT (בלי מסד)? (ג) תוקף גנב את ה־refresh token של דנה ביום שני ב־09:00, והשתמש בו ב־09:05. דנה פתחה את הלפטופ ב־09:30. מה קורה, צעד אחר צעד? (ד) ומה אם התוקף גנב רק את ה־access token?</p>
+@hint1
+<p>מה אפשר לבטל, ומה לא?</p>
+@hint2
+<p>(ג) — עקוב אחרי <code>refresh()</code> בשיעור 3: מה רואה השרת כשהדפדפן של דנה שולח טוקן שכבר הוחלף?</p>
+@solution
+<p>(א) JWT אי אפשר לבטל — הוא תקף עד <code>exp</code>. טוקן גנוב היה עובד שבוע, גם אחרי יציאה וגם אחרי החלפת סיסמה.</p>
+<p>(ב) כל הערך של ה־refresh token הוא שאפשר <strong>לבטל</strong> אותו (יציאה, החלפת סיסמה, זיהוי גניבה) ולוודא שהוא חד־פעמי. לשם כך השרת צריך לזכור מה ניתן ומה כבר נוצל — כלומר מסד. ואם ממילא בודקים במסד, אין סיבה שהוא יהיה JWT: מחרוזת אקראית מספיקה.</p>
+<p>(ג) 09:05: התוקף שולח את הטוקן ← השרת מבטל אותו ומחזיר לתוקף זוג חדש (A2, R2). 09:30: הדפדפן של דנה שולח את אותו טוקן ← השרת רואה טוקן <em>שכבר בוטל</em> ← מבטל את <strong>כל</strong> ה־refresh tokens של דנה (כולל R2 של התוקף) ← 401 לדנה, שמתחברת מחדש עם סיסמה. התוקף נשאר עם A2 בלבד — עד 15 דקות מ־09:05, כלומר כבר לא תקף. (במערכת אמיתית גם שולחים לדנה מייל: "זיהינו כניסה חשודה".)</p>
+<p>(ד) הוא עובד עד שיפוג — לכל היותר 15 דקות. זה המחיר של JWT, ולכן התוקף קצר.</p>
+@mistakes
+<ul><li>לחשוב שיציאה "מבטלת" את ה־access token. היא מבטלת רק את ה־refresh.</li></ul>
+
+@@ P21-E05 | 1 | מצא את הפרצות | 15 | שיעור 4
+@task
+<p>קוד שנכתב בלחץ של דדליין. מצא לפחות שש בעיות אבטחה, וכתוב לכל אחת מה התוקף עושה ואיך מתקנים:</p>
+```ts
+const JWT_SECRET = "secret";
+
+@Post("register")
+async register(@Body() body: any) {
+  const user = await this.prisma.user.create({ data: { ...body, password: body.password } });
+  return user;
+}
+
+@Post("login")
+async login(@Body() { email, password }: any) {
+  console.log("login attempt", email, password);
+  const user = await this.prisma.user.findUnique({ where: { email } });
+  if (!user) throw new NotFoundException("אין משתמש עם האימייל הזה");
+  if (user.password !== password) throw new UnauthorizedException("סיסמה שגויה");
+  return { token: jwt.sign({ sub: user.id, role: user.role, email, password }, JWT_SECRET) };
+}
+
+@Get("orders/:id")
+async order(@Param("id") id: string) {
+  return this.prisma.order.findUnique({ where: { id: Number(id) } });
+}
+```
+@hint1
+<p>עבור שורה אחר שורה. בכל שורה שאל: מה אם הלקוח שולח משהו שלא ציפיתי? ומה אם מישהו קורא את זה?</p>
+@hint2
+<p>יש בעיות בסוד, ב־body, בלוג, בהודעות השגיאה, בהשוואה, בטוקן (שלוש!), וב־route האחרון.</p>
+@solution
+<ol><li><strong>סוד קצר וקבוע בקוד</strong> — "secret" ננחש תוך שניות, ונמצא בכל עותק של הקוד ב־Git. ← סוד אקראי ארוך מ־env.</li><li><strong>סיסמה נשמרת כמו שהיא</strong> (<code>password: body.password</code>) ← <code>bcrypt.hash</code>, ועמודה בשם <code>passwordHash</code>.</li><li><strong>mass assignment</strong> — <code>...body</code> מאפשר לשלוח <code>"role":"admin"</code>. ← schema מחמיר (strict), ושדות מפורשים.</li><li><strong>מחזירים את כל המשתמש</strong> מההרשמה — כולל הסיסמה. ← <code>toPublicUser</code>.</li><li><strong>סיסמה בלוג</strong> ← לעולם לא. לכל היותר האימייל, ובזהירות.</li><li><strong>user enumeration</strong> — 404 "אין משתמש" מול 401 "סיסמה שגויה". ← אותה תשובה (401) לשניהם, ו־compare מול hash דמה.</li><li><strong>השוואה ישירה</strong> (<code>!==</code>) — נובעת מבעיה 2. ← <code>bcrypt.compare</code>.</li><li><strong>הסיסמה והאימייל בתוך ה־JWT</strong> — כל אחד קורא את ה־payload. ← רק <code>sub</code> ו־<code>role</code>.</li><li><strong>JWT בלי <code>expiresIn</code></strong> — תקף לנצח. ← 15 דקות + refresh.</li><li><strong>IDOR</strong> ב־<code>orders/:id</code> — אין התחברות ואין בדיקת בעלות: כל אחד עובר על כל ההזמנות. ← guard, ו־<code>where: { id, userId: user.id }</code> עם 404.</li></ol>
+@mistakes
+<ul><li>למצוא את הבעיות ה"גדולות" ולפספס את הלוג — בפועל, לוגים הם אחד המקומות הנפוצים לדליפת סיסמאות.</li></ul>
+
+@@ P21-E06 | 2 | hash לסיסמאות 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>21-auth/starter/P21-E06.ts</code> כתוב שלוש פונקציות עם <code>bcryptjs</code>:</p>
+<ul><li><code>hashPassword(password, rounds = 12)</code> ← hash. סיסמה ריקה ← <code>Error("סיסמה ריקה")</code>.</li><li><code>verifyPassword(password, hash)</code> ← <code>true</code>/<code>false</code>.</li><li><code>needsRehash(hash, rounds = 12)</code> ← <code>true</code> אם ה־cost שב־hash <strong>נמוך</strong> מ־<code>rounds</code>.</li></ul>
+@hint1
+<p><code>bcrypt.hash</code>, <code>bcrypt.compare</code>, <code>bcrypt.getRounds</code> — כולם בשיעור 1.</p>
+@hint2
+<p><code>hashPassword</code> היא <code>async</code>, אז <code>throw</code> בתוכה הופך ל־Promise שנדחה — וזה מה שהבודק מצפה (<code>assert.rejects</code>).</p>
+@solution
+```ts save=solutions/P21-E06.ts
+// P21-E06
+import bcrypt from "bcryptjs";
+
+export async function hashPassword(password: string, rounds = 12): Promise<string> {
+  if (password.length === 0) throw new Error("סיסמה ריקה");
+  return bcrypt.hash(password, rounds);
+}
+
+export function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+
+// hash ישן עם cost נמוך מהנוכחי? בכניסה הבאה (כשיש לנו את הסיסמה) — מחשבים מחדש
+export function needsRehash(hash: string, rounds = 12): boolean {
+  return bcrypt.getRounds(hash) < rounds;
+}
+```
+<p>למה <code>needsRehash</code>? כי cost טוב היום יהיה חלש בעוד כמה שנים (מחשבים מתחזקים). אי אפשר לחשב hash חדש בלי הסיסמה — אבל בכניסה מוצלחת הסיסמה בידיים: <code>if (needsRehash(user.passwordHash)) save(await hashPassword(password))</code>. כך המשתמשים "משתדרגים" בהדרגה, בלי שאף אחד יקליד סיסמה מחדש.</p>
+@mistakes
+<ul><li><code>hash === await hashPassword(password)</code> במקום <code>compare</code> — תמיד <code>false</code> (salt).</li><li>לשכוח <code>await</code> לפני <code>bcrypt.compare</code> ← Promise הוא "truthy", וכל סיסמה עוברת!</li></ul>
+
+@@ P21-E07 | 2 | מדיניות סיסמאות 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>21-auth/starter/P21-E07.ts</code> כתוב <code>validatePassword(password, email)</code> שמחזירה מערך של בעיות, <strong>לפי הסדר הזה</strong> (מערך ריק = תקין):</p>
+<ol><li><code>"לפחות 8 תווים"</code> — פחות מ־8 תווים.</li><li><code>"עד 72 בתים"</code> — יותר מ־72 בתים ב־UTF-8.</li><li><code>"סיסמה נפוצה מדי"</code> — ב־<code>COMMON_PASSWORDS</code>, בלי תלות באותיות.</li><li><code>"הסיסמה לא יכולה להכיל את האימייל"</code> — מכילה את החלק שלפני ה־@ (בלי תלות באותיות), אם הוא באורך 3 ומעלה.</li></ol>
+<p>לא מחייבים אות גדולה, מספר או סימן — עברית ורווחים מותרים.</p>
+@hint1
+<p><code>Buffer.byteLength(password, "utf8")</code> — בתים, לא תווים.</p>
+@hint2
+<p>"תווים": <code>[...password].length</code> סופר נכון גם אימוג'י (ש־<code>.length</code> סופר כ־2).</p>
+@solution
+```ts save=solutions/P21-E07.ts
+// P21-E07
+export const COMMON_PASSWORDS = ["password", "12345678", "123456789", "qwerty123", "iloveyou", "11111111", "password1", "abcd1234"];
+
+export function validatePassword(password: string, email: string): string[] {
+  const problems: string[] = [];
+  if ([...password].length < 8) problems.push("לפחות 8 תווים");
+  if (Buffer.byteLength(password, "utf8") > 72) problems.push("עד 72 בתים");
+  if (COMMON_PASSWORDS.includes(password.toLowerCase())) problems.push("סיסמה נפוצה מדי");
+  const local = email.split("@")[0].toLowerCase();
+  if (local.length >= 3 && password.toLowerCase().includes(local)) problems.push("הסיסמה לא יכולה להכיל את האימייל");
+  return problems;
+}
+```
+<p>למה להחזיר <em>רשימה</em> ולא לזרוק בבעיה הראשונה? כי הלקוח (טופס ההרשמה) יכול להציג את כולן בבת אחת. ולמה אין "חייב אות גדולה"? כי זה מוביל ל־<code>Password1</code> — שנמצא ברשימה. אורך, וחסימת סיסמאות מוכרות, מגנים יותר.</p>
+@mistakes
+<ul><li><code>password.length &gt; 72</code> — סופר תווים. 40 אותיות בעברית הן 80 בתים, ו־bcrypt יחתוך בשקט.</li><li>לבדוק את האימייל כולו (<code>dana@example.com</code>) במקום את החלק המקומי — אף אחד לא כותב את הכתובת המלאה בסיסמה, אבל <code>dana123</code> נפוץ מאוד.</li></ul>
+
+@@ P21-E08 | 2 | הרשמה 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>21-auth/starter/P21-E08.ts</code>:</p>
+<ul><li><code>RegisterDto</code>: email תקין (עד 254 תווים) — אחרי <code>trim</code> ו־<code>toLowerCase</code>; password מחרוזת, 8 תווים לפחות.</li><li><code>UsersService.register(dto)</code>: hash עם <code>BCRYPT_ROUNDS</code> (token), ids מ־1, <code>role: "user"</code> תמיד. אימייל קיים ← 409 <code>"האימייל כבר רשום"</code>. מחזיר את המשתמש <strong>בלי</strong> <code>passwordHash</code>. ו־<code>findByEmail(email)</code>.</li><li><code>POST /auth/register</code> ← 201.</li></ul>
+<p>הבודק מפעיל את ה־ValidationPipe מפרק 20 (<code>whitelist</code>, <code>forbidNonWhitelisted</code>, <code>transform</code>), ושולח גם <code>"  Dana@Example.com "</code> וגם <code>"role": "admin"</code>.</p>
+@hint1
+<p>אם תנרמל את האימייל רק ב־service — <code>@IsEmail()</code> ייכשל קודם על הרווחים. צריך לנרמל <em>לפני</em> הבדיקה.</p>
+@hint2
+<p><code>@Transform(({ value }) =&gt; ...)</code> מ־<code>class-transformer</code> רץ (עם <code>transform: true</code>) לפני ה־decorators של class-validator.</p>
+@solution
+```ts save=solutions/P21-E08.ts
+// P21-E08
+import { Body, ConflictException, Controller, Inject, Injectable, Module, Post } from "@nestjs/common";
+import bcrypt from "bcryptjs";
+import { Transform } from "class-transformer";
+import { IsEmail, IsString, MaxLength, MinLength } from "class-validator";
+
+export const BCRYPT_ROUNDS = "BCRYPT_ROUNDS";
+
+export class RegisterDto {
+  // רץ לפני הבדיקה (transform: true): "  Dana@Example.com " ← "dana@example.com"
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
+  @IsEmail()
+  @MaxLength(254)
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: "user" | "admin";
+}
+
+@Injectable()
+export class UsersService {
+  private readonly users: User[] = [];
+
+  constructor(@Inject(BCRYPT_ROUNDS) private readonly rounds: number) {}
+
+  findByEmail(email: string) {
+    return this.users.find((u) => u.email === email);
+  }
+
+  async register(dto: RegisterDto) {
+    const email = dto.email;
+    if (this.findByEmail(email)) throw new ConflictException("האימייל כבר רשום");
+    const user: User = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(dto.password, this.rounds), role: "user" };
+    this.users.push(user);
+    const { passwordHash, ...publicUser } = user; // hash לא יוצא החוצה
+    return publicUser;
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly users: UsersService) {}
+
+  @Post("register")
+  register(@Body() dto: RegisterDto) {
+    return this.users.register(dto);
+  }
+}
+
+@Module({
+  controllers: [AuthController],
+  providers: [UsersService, { provide: BCRYPT_ROUNDS, useValue: 12 }],
+})
+export class AuthModule {}
+```
+<p>ה־<code>role</code> נחסם פעמיים: <code>forbidNonWhitelisted</code> מחזיר <code>{"message":["property role should not exist"],"error":"Bad Request","statusCode":400}</code> (פלט אמיתי), וגם אם מישהו יכבה את זה מחר — ה־service קובע <code>role: "user"</code> בעצמו. שתי שכבות הגנה, כל אחת מספיקה לבד.</p>
+@mistakes
+<ul><li><code>{ ...dto, passwordHash, role: "user" }</code> — עובד כאן, אבל ה־<code>password</code> המקורי נשמר במשתמש! בונים את האובייקט משדות מפורשים.</li><li><code>return user</code> — עם ה־hash.</li></ul>
+
+@@ P21-E09 | 2 | כניסה ו־JWT 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E09.ts</code> יש <code>UsersService</code> עם שני משתמשים (dana ו־admin). כתוב <code>AuthService</code> ו־<code>AuthController</code>:</p>
+<ul><li><code>POST /auth/login</code> <code>{ email, password }</code> ← <strong>200</strong> <code>{ accessToken, tokenType: "Bearer", expiresIn: 900 }</code>.</li><li>ה־payload: <code>sub</code> (id) ו־<code>role</code> בלבד, תוקף 15 דקות. הסוד — <code>JWT_SECRET</code> (כבר ב־<code>JwtModule.register</code>).</li><li>אימייל לא קיים או סיסמה שגויה ← 401 <code>"אימייל או סיסמה שגויים"</code> — אותה תשובה בדיוק.</li></ul>
+@hint1
+<p>ה־<code>JwtService</code> מוזרק (כי <code>JwtModule</code> ב־imports): <code>this.jwt.signAsync(payload, { expiresIn: 900 })</code>.</p>
+@hint2
+<p>POST מחזיר 201 כברירת מחדל — כניסה לא "יוצרת משאב", אז <code>@HttpCode(200)</code>.</p>
+@solution
+```ts save=solutions/P21-E09.ts
+// P21-E09
+import { Body, Controller, HttpCode, Injectable, Module, OnModuleInit, Post, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import bcrypt from "bcryptjs";
+
+export const JWT_SECRET = "e09-secret-for-exercises-only-0123456789";
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: "user" | "admin";
+}
+
+@Injectable()
+export class UsersService implements OnModuleInit {
+  private users: User[] = [];
+
+  async onModuleInit() {
+    this.users = [
+      { id: 1, email: "dana@example.com", passwordHash: await bcrypt.hash("dana-password-1", 4), role: "user" },
+      { id: 2, email: "admin@example.com", passwordHash: await bcrypt.hash("admin-password-1", 4), role: "admin" },
+    ];
+  }
+
+  findByEmail(email: string) {
+    return this.users.find((u) => u.email === email);
+  }
+}
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  async login(email: string, password: string) {
+    const user = this.users.findByEmail(String(email).trim().toLowerCase());
+    // אותה שגיאה לשני המקרים
+    if (!user || !(await bcrypt.compare(String(password), user.passwordHash))) {
+      throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    }
+    const accessToken = await this.jwt.signAsync({ sub: user.id, role: user.role }, { expiresIn: 900 });
+    return { accessToken, tokenType: "Bearer", expiresIn: 900 };
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  @Post("login")
+  @HttpCode(200)
+  login(@Body() body: { email: string; password: string }) {
+    return this.auth.login(body.email, body.password);
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [AuthController],
+  providers: [UsersService, AuthService],
+})
+export class AuthModule {}
+```
+<p>שים לב שהבודק מאמת את הטוקן עם <code>new JwtService({ secret: JWT_SECRET }).verifyAsync(...)</code> — כלומר כל שרת שמכיר את הסוד יכול לבדוק אותו, בלי לשאול את המסד. זה כל הרעיון של JWT. (בפרויקט גם משווים זמנים עם hash דמה — E18.)</p>
+@mistakes
+<ul><li>להכניס את האימייל ל־payload "בשביל הנוחות".</li><li>לשכוח <code>expiresIn</code> ← טוקן לנצח.</li></ul>
+
+@@ P21-E10 | 2 | guard של JWT 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E10.ts</code> השלם את <code>JwtAuthGuard</code>, והפעל אותו על <code>GET /me</code> בלבד (<code>/hello</code> נשאר פתוח):</p>
+<ul><li>header <code>Authorization: Bearer &lt;token&gt;</code> — "Bearer" בלי תלות באותיות.</li><li>אין header, או לא Bearer ← 401 <code>"נדרשת התחברות"</code>.</li><li>טוקן לא תקין — לא JWT, חתום בסוד אחר, או שפג ← 401 <code>"טוקן לא תקין"</code>.</li><li>תקין ← <code>req.user = { id: sub, role }</code>, ו־<code>/me</code> מחזיר אותו.</li></ul>
+@hint1
+<p><code>/^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "")</code>.</p>
+@hint2
+<p><code>verifyAsync</code> זורק על כל בעיה. תפוס, וזרוק <code>UnauthorizedException</code> משלך — אחרת השגיאה של הספרייה הופכת ל־500.</p>
+@solution
+```ts save=solutions/P21-E10.ts
+// P21-E10
+import { CanActivate, Controller, ExecutionContext, Get, Injectable, Module, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e10-secret-for-exercises-only-0123456789";
+
+export interface AuthUser {
+  id: number;
+  role: string;
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly jwt: JwtService) {}
+
+  async canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub: number; role: string }>(match[1], { algorithms: ["HS256"] });
+      req.user = { id: payload.sub, role: payload.role };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller()
+export class ProfileController {
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  me(@Req() req: { user: AuthUser }) {
+    return req.user;
+  }
+
+  @Get("hello")
+  hello() {
+    return { hello: "world" };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [ProfileController],
+  providers: [JwtAuthGuard],
+})
+export class ProfileModule {}
+```
+<p><code>algorithms: ["HS256"]</code> — רשימה מפורשת של מה שמקבלים. טוקן שה־header שלו מצהיר על אלגוריתם אחר נדחה, גם אם מישהו ינסה טריקים.</p>
+@mistakes
+<ul><li><code>return false</code> במקום לזרוק ← Nest מחזיר 403 "Forbidden resource" (E21).</li><li><code>authorization.split(" ")[1]</code> — עם שני רווחים, או בלי רווח, מקבלים <code>undefined</code> או מחרוזת ריקה.</li></ul>
+
+@@ P21-E11 | 2 | guard גלובלי ו־@Public 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E11.ts</code>:</p>
+<ul><li><code>Public()</code> — decorator עם <code>SetMetadata(IS_PUBLIC, true)</code>.</li><li><code>CurrentUser</code> — עם <code>createParamDecorator</code>, מחזיר את <code>req.user</code>.</li><li><code>JwtAuthGuard</code> — כמו E10, אבל מדלג על routes ו־controllers עם <code>@Public()</code>. רשום אותו גלובלית עם <code>APP_GUARD</code>.</li><li><code>GET /notes/mine</code> ← <code>{ owner: user.id, notes: ["הפתק של משתמש 5"] }</code> (עם ה־id). <code>GET /notes/public</code> — פתוח (על המתודה). כל <code>/info</code> — פתוח (על ה־class).</li></ul>
+@hint1
+<p><code>this.reflector.getAllAndOverride(IS_PUBLIC, [context.getHandler(), context.getClass()])</code>.</p>
+@hint2
+<p>ה־guard צריך <code>Reflector</code> ו־<code>JwtService</code> ב־constructor. עם <code>APP_GUARD</code> + <code>useClass</code>, Nest מזריק אותם.</p>
+@solution
+```ts save=solutions/P21-E11.ts
+// P21-E11
+import {
+  CanActivate, Controller, createParamDecorator, ExecutionContext, Get, Injectable, Module, SetMetadata, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e11-secret-for-exercises-only-0123456789";
+
+export interface AuthUser {
+  id: number;
+  role: string;
+}
+
+export const IS_PUBLIC = "isPublic";
+export const Public = () => SetMetadata(IS_PUBLIC, true);
+
+export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext): AuthUser => {
+  return ctx.switchToHttp().getRequest().user;
+});
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext) {
+    // getAllAndOverride: קודם המתודה, אחר כך ה־class
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [context.getHandler(), context.getClass()])) return true;
+    const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub: number; role: string }>(match[1]);
+      req.user = { id: payload.sub, role: payload.role };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller("notes")
+export class NotesController {
+  @Get("mine")
+  mine(@CurrentUser() user: AuthUser) {
+    return { owner: user.id, notes: [`הפתק של משתמש ${user.id}`] };
+  }
+
+  @Public()
+  @Get("public")
+  publicNotes() {
+    return { notes: ["פתק לכולם"] };
+  }
+}
+
+@Public()
+@Controller("info")
+export class InfoController {
+  @Get()
+  info() {
+    return { name: "notes-api", version: "1.0" };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [NotesController, InfoController],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+})
+export class NotesModule {}
+```
+<p>"default deny": controller חדש שמישהו יוסיף מחר מוגן אוטומטית. כדי לפתוח משהו — צריך לכתוב <code>@Public()</code> במפורש, וזה בולט ב־code review.</p>
+@mistakes
+<ul><li><code>reflector.get(IS_PUBLIC, context.getHandler())</code> בלבד ← <code>@Public()</code> על class לא עובד (E21).</li></ul>
+
+@@ P21-E12 | 2 | תוקף לפי שעון 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E12.ts</code> תקן את <code>TokenService</code>:</p>
+<ul><li><code>issue(userId)</code> — <code>iat</code> לפי <code>CLOCK</code> (בשניות), ו־<code>exp</code> = <code>iat</code> + 900.</li><li><code>verify(token)</code> — בודק לפי <code>CLOCK</code>. פג ← 401 <code>"פג תוקף הטוקן"</code>; כל בעיה אחרת ← 401 <code>"טוקן לא תקין"</code>.</li></ul>
+<p>הבודק מזיז את השעון: 10:14:59 עדיין תקין, 10:15:00 כבר לא.</p>
+@hint1
+<p>ב־<code>signAsync</code>, <code>iat</code> שבתוך ה־payload קובע גם ממנו נספר <code>expiresIn</code>.</p>
+@hint2
+<p><code>verifyAsync(token, { clockTimestamp })</code>, ו־<code>err.name === "TokenExpiredError"</code>.</p>
+@solution
+```ts save=solutions/P21-E12.ts
+// P21-E12
+import { Inject, Injectable, Module, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+
+export const CLOCK = "CLOCK";
+export const ACCESS_TTL_SECONDS = 900;
+export interface Clock {
+  now(): Date;
+}
+
+@Injectable()
+export class TokenService {
+  constructor(
+    private readonly jwt: JwtService,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  private nowSeconds() {
+    return Math.floor(this.clock.now().getTime() / 1000);
+  }
+
+  issue(userId: number): Promise<string> {
+    // iat מהשעון שלנו — ו־exp מחושב ממנו
+    return this.jwt.signAsync({ sub: userId, iat: this.nowSeconds() }, { expiresIn: ACCESS_TTL_SECONDS });
+  }
+
+  async verify(token: string): Promise<{ userId: number }> {
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub: number }>(token, { clockTimestamp: this.nowSeconds() });
+      return { userId: payload.sub };
+    } catch (err) {
+      const expired = err instanceof Error && err.name === "TokenExpiredError";
+      throw new UnauthorizedException(expired ? "פג תוקף הטוקן" : "טוקן לא תקין");
+    }
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: "e12-secret-for-exercises-only-0123456789" })],
+  providers: [TokenService, { provide: CLOCK, useValue: { now: () => new Date() } }],
+  exports: [TokenService],
+})
+export class TokensModule {}
+```
+<p>למה זה חשוב? בלי שעון מוזרק, הבדיקה של "פג תוקף" צריכה לחכות 15 דקות, או ליצור טוקן עם תאריך בעבר ולקוות שהחישוב נכון. עם <code>CLOCK</code> — בודקים את הגבול בדיוק, בשנייה.</p>
+@mistakes
+<ul><li><code>Date.now()</code> במקום <code>Math.floor(... / 1000)</code> ← <code>iat</code> במילישניות, וכל טוקן "נוצר בעתיד הרחוק".</li></ul>
+
+@@ P21-E13 | 3 | תפקידים 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>21-auth/starter/P21-E13.ts</code> יש <code>FakeAuthGuard</code> שמדמה התחברות (headers <code>x-user-id</code> ו־<code>x-user-role</code>). כתוב:</p>
+<ul><li><code>Roles(...roles)</code> ו־<code>RolesGuard</code>: בלי <code>@Roles</code> — כל מחובר עובר; עם — רק התפקידים שברשימה, אחרת 403 <code>"אין הרשאה"</code>.</li><li><code>/reports</code> — <code>manager</code> או <code>admin</code> (על ה־class). <code>DELETE /reports/:id</code> — רק <code>admin</code> (על המתודה).</li><li>רשום את שני ה־guards גלובלית, בסדר הנכון: משתמש לא מחובר צריך לקבל 401, לא 403.</li></ul>
+@hint1
+<p>אותו <code>getAllAndOverride</code> כמו ב־<code>@Public()</code>: מה שעל המתודה גובר על מה שעל ה־class.</p>
+@hint2
+<p>כמה <code>APP_GUARD</code> ב־providers — רצים לפי סדר הרישום.</p>
+@solution
+```ts save=solutions/P21-E13.ts
+// P21-E13
+import {
+  CanActivate, Controller, Delete, ExecutionContext, ForbiddenException, Get, HttpCode, Injectable, Module, Param,
+  SetMetadata, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+
+export type Role = "user" | "manager" | "admin";
+
+// מדמה התחברות בשביל התרגיל (במקום JWT): x-user-id ו־x-user-role ב־headers
+@Injectable()
+export class FakeAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    const id = Number(req.get("x-user-id"));
+    if (!Number.isInteger(id) || id < 1) throw new UnauthorizedException("נדרשת התחברות");
+    req.user = { id, role: req.get("x-user-role") ?? "user" };
+    return true;
+  }
+}
+
+export const ROLES = "roles";
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES, roles);
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, [context.getHandler(), context.getClass()]);
+    if (!roles || roles.length === 0) return true;
+    const user = context.switchToHttp().getRequest().user;
+    if (!user || !roles.includes(user.role)) throw new ForbiddenException("אין הרשאה");
+    return true;
+  }
+}
+
+@Controller("reports")
+@Roles("manager", "admin")
+export class ReportsController {
+  @Get()
+  list() {
+    return [{ id: 1, title: "מכירות נובמבר" }];
+  }
+
+  @Delete(":id")
+  @Roles("admin") // מחליף את מה שעל ה־class
+  @HttpCode(204)
+  remove(@Param("id") id: string) {}
+}
+
+@Controller("profile")
+export class ProfileController {
+  @Get()
+  profile() {
+    return { ok: true };
+  }
+}
+
+@Module({
+  controllers: [ReportsController, ProfileController],
+  providers: [
+    { provide: APP_GUARD, useClass: FakeAuthGuard }, // קודם "מי אתה"
+    { provide: APP_GUARD, useClass: RolesGuard }, // אחר כך "מה מותר"
+  ],
+})
+export class ReportsModule {}
+```
+<p>"Override" ולא "merge": על <code>DELETE</code>, <code>@Roles("admin")</code> <em>מחליף</em> את <code>("manager", "admin")</code> של ה־class — ולכן manager מקבל 403. אם היית רוצה איחוד, היית משתמש ב־<code>getAllAndMerge</code>.</p>
+@mistakes
+<ul><li>RolesGuard לפני FakeAuthGuard ← אין עדיין <code>req.user</code>, ומשתמש לא מחובר מקבל 403.</li><li><code>roles.includes(user.role)</code> כש־<code>roles</code> הוא <code>undefined</code> ← קריסה (500). קודם בודקים שיש בכלל <code>@Roles</code>.</li></ul>
+
+@@ P21-E14 | 3 | כל אחד את שלו 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>21-auth/starter/P21-E14.ts</code> — פתקים של כמה משתמשים. השלם את <code>NotesService</code>:</p>
+<ul><li><code>GET /notes</code> ← רק של המשתמש המחובר. <code>?all=true</code> ← כולם, אבל רק ל־admin (אחרת 403).</li><li><code>GET</code>, <code>PATCH</code>, <code>DELETE</code> ל־<code>/notes/:id</code> — רק על פתק שלו. של מישהו אחר (או לא קיים) ← 404 <code>"פתק 1 לא נמצא"</code>.</li></ul>
+@hint1
+<p>פונקציה פרטית אחת, <code>findOwn(user, id)</code>, שכל שלוש הפעולות משתמשות בה.</p>
+@hint2
+<p>התנאי הוא <code>n.id === id &amp;&amp; n.ownerId === user.id</code> — בבת אחת. לא "מצא, ואז בדוק בעלים" עם הודעה אחרת.</p>
+@solution
+```ts save=solutions/P21-E14.ts
+// P21-E14
+import {
+  Body, CanActivate, Controller, Delete, ExecutionContext, ForbiddenException, Get, HttpCode, Injectable, Module,
+  NotFoundException, Param, ParseIntPipe, Patch, Query, Req, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+
+interface AuthUser {
+  id: number;
+  role: "user" | "admin";
+}
+
+// מדמה התחברות בשביל התרגיל (במקום JWT): x-user-id ו־x-user-role ב־headers
+@Injectable()
+export class FakeAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    const id = Number(req.get("x-user-id"));
+    if (!Number.isInteger(id) || id < 1) throw new UnauthorizedException("נדרשת התחברות");
+    req.user = { id, role: req.get("x-user-role") ?? "user" };
+    return true;
+  }
+}
+
+export interface Note {
+  id: number;
+  ownerId: number;
+  text: string;
+}
+
+@Injectable()
+export class NotesService {
+  private readonly notes: Note[] = [
+    { id: 1, ownerId: 1, text: "הפתק של דנה" },
+    { id: 2, ownerId: 2, text: "הפתק של יוסי" },
+    { id: 3, ownerId: 1, text: "עוד פתק של דנה" },
+  ];
+
+  list(user: AuthUser, all: boolean) {
+    if (all && user.role !== "admin") throw new ForbiddenException("רק admin רואה הכול");
+    return all ? this.notes : this.notes.filter((n) => n.ownerId === user.id);
+  }
+
+  // בעלות בכל פעולה. של מישהו אחר ← 404, כאילו לא קיים
+  private findOwn(user: AuthUser, id: number) {
+    const note = this.notes.find((n) => n.id === id && n.ownerId === user.id);
+    if (!note) throw new NotFoundException(`פתק ${id} לא נמצא`);
+    return note;
+  }
+
+  get(user: AuthUser, id: number) {
+    return this.findOwn(user, id);
+  }
+
+  update(user: AuthUser, id: number, text: string) {
+    const note = this.findOwn(user, id);
+    note.text = text;
+    return note;
+  }
+
+  remove(user: AuthUser, id: number) {
+    const note = this.findOwn(user, id);
+    this.notes.splice(this.notes.indexOf(note), 1);
+  }
+}
+
+@Controller("notes")
+export class NotesController {
+  constructor(private readonly notes: NotesService) {}
+
+  @Get()
+  list(@Req() req: { user: AuthUser }, @Query("all") all?: string) {
+    return this.notes.list(req.user, all === "true");
+  }
+
+  @Get(":id")
+  get(@Req() req: { user: AuthUser }, @Param("id", ParseIntPipe) id: number) {
+    return this.notes.get(req.user, id);
+  }
+
+  @Patch(":id")
+  update(@Req() req: { user: AuthUser }, @Param("id", ParseIntPipe) id: number, @Body() body: { text: string }) {
+    return this.notes.update(req.user, id, String(body.text));
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  remove(@Req() req: { user: AuthUser }, @Param("id", ParseIntPipe) id: number) {
+    this.notes.remove(req.user, id);
+  }
+}
+
+@Module({
+  controllers: [NotesController],
+  providers: [NotesService, { provide: APP_GUARD, useClass: FakeAuthGuard }],
+})
+export class NotesModule {}
+```
+<p><code>findOwn</code> היא כל הסיפור: אין דרך להגיע לפתק בלי לעבור דרכה. במסד זה ה־<code>WHERE id = ? AND owner_id = ?</code> מהשיעור. ו־<code>?all=true</code> הוא דוגמה לפעולה שהיא עצמה אסורה (403), להבדיל מאובייקט של אחר (404).</p>
+@mistakes
+<ul><li>לבדוק בעלות ב־<code>get</code> ולשכוח ב־<code>remove</code> — בדיוק הבאג של E22.</li><li><code>throw new ForbiddenException()</code> כשהפתק של מישהו אחר — מגלה שהוא קיים.</li></ul>
+
+@@ P21-E15 | 3 | refresh token אטום 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>21-auth/starter/P21-E15.ts</code> השלם את <code>RefreshTokenService</code>:</p>
+<ul><li><code>issue(userId)</code> ← 32 בתים אקראיים ב־base64url (43 תווים). באחסון (<code>records</code>) המפתח הוא ה־SHA-256 (hex) של הטוקן — לא הטוקן. תוקף: 7 ימים לפי <code>CLOCK</code>.</li><li><code>rotate(token)</code> ← <code>{ userId, refreshToken }</code> חדש, והישן לא עובד יותר. לא קיים / כבר נוצל / פג ← 401 <code>"צריך להתחבר מחדש"</code>.</li></ul>
+@hint1
+<p><code>randomBytes(32).toString("base64url")</code> ו־<code>createHash("sha256").update(token).digest("hex")</code>.</p>
+@hint2
+<p>"פג" — כש־<code>expiresAt &lt;= now</code>. בדיוק 7 ימים אחרי — כבר לא.</p>
+@solution
+```ts save=solutions/P21-E15.ts
+// P21-E15
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+export const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+interface Record {
+  userId: number;
+  expiresAt: number;
+  usedAt: number | null;
+}
+
+@Injectable()
+export class RefreshTokenService {
+  // המפתח הוא ה־hash של הטוקן — הטוקן עצמו לא נשמר בשום מקום
+  private readonly records = new Map<string, Record>();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  issue(userId: number): string {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, expiresAt: this.clock.now().getTime() + REFRESH_TTL_MS, usedAt: null });
+    return token;
+  }
+
+  rotate(token: string): { userId: number; refreshToken: string } {
+    const record = this.records.get(sha256(token));
+    const now = this.clock.now().getTime();
+    if (!record || record.usedAt !== null || record.expiresAt <= now) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.usedAt = now; // פעם אחת בלבד
+    return { userId: record.userId, refreshToken: this.issue(record.userId) };
+  }
+
+  storedKeys(): string[] {
+    return [...this.records.keys()];
+  }
+}
+```
+<p>שים לב ש־<code>storedKeys()</code> מחזיר רק hashes: אם מישהו ישפוך את ה־Map (או את הטבלה) — אין לו אף טוקן שעובד. ולמה SHA-256 ולא bcrypt? כי הטוקן אקראי לגמרי (אין מה לנחש), וכי צריך לחפש לפיו — bcrypt נותן hash שונה בכל פעם.</p>
+@mistakes
+<ul><li><code>Math.random().toString(36)</code> — לא מספיק אקראי לאבטחה. תמיד <code>crypto.randomBytes</code>.</li><li>למחוק את הרשומה הישנה במקום לסמן אותה — עובד כאן, אבל אז אי אפשר לזהות שימוש חוזר (E16).</li></ul>
+
+@@ P21-E16 | 3 | משפחות של טוקנים 🤖 | 25 | שיעור 3
+@task
+<p>בפרויקט, שימוש חוזר מבטל את <strong>כל</strong> הטוקנים של המשתמש — גם בטלפון, שלא קרה לו כלום. בקובץ <code>21-auth/starter/P21-E16.ts</code> עשה את זה מדויק יותר:</p>
+<ul><li><code>login(userId)</code> ← טוקן חדש ב"משפחה" חדשה (כניסה = מכשיר).</li><li><code>rotate(token)</code> ← טוקן חדש <strong>באותה משפחה</strong>, והישן מבוטל.</li><li>שימוש בטוקן מבוטל ← מבטלים את כל המשפחה שלו (ורק אותה), ו־401.</li><li><code>activeCount(userId)</code> ← כמה טוקנים פעילים יש למשתמש. תוקף: 7 ימים.</li></ul>
+@hint1
+<p>לכל רשומה: <code>{ userId, familyId, expiresAt, revoked }</code>. <code>familyId</code> — מחרוזת אקראית שנוצרת ב־<code>login</code>.</p>
+@hint2
+<p>ב־<code>rotate</code>, הסדר: לא קיים ← 401; מבוטל ← בטל משפחה, 401; פג ← 401; אחרת — בטל וצור חדש עם אותו <code>familyId</code>.</p>
+@solution
+```ts save=solutions/P21-E16.ts
+// P21-E16
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+interface Record {
+  userId: number;
+  familyId: string; // כל הטוקנים שנולדו מאותה כניסה (אותו מכשיר)
+  expiresAt: number;
+  revoked: boolean;
+}
+
+@Injectable()
+export class RefreshTokenService {
+  private readonly records = new Map<string, Record>();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  private store(userId: number, familyId: string) {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, familyId, expiresAt: this.clock.now().getTime() + TTL_MS, revoked: false });
+    return token;
+  }
+
+  // כניסה חדשה = משפחה חדשה
+  login(userId: number): string {
+    return this.store(userId, randomBytes(8).toString("hex"));
+  }
+
+  rotate(token: string): { userId: number; refreshToken: string } {
+    const record = this.records.get(sha256(token));
+    if (!record) throw new UnauthorizedException("צריך להתחבר מחדש");
+    if (record.revoked) {
+      // שימוש חוזר: מישהו מחזיק עותק. מבטלים את כל המשפחה — רק המכשיר הזה, לא את כל המכשירים
+      for (const r of this.records.values()) if (r.familyId === record.familyId) r.revoked = true;
+      throw new UnauthorizedException("צריך להתחבר מחדש");
+    }
+    if (record.expiresAt <= this.clock.now().getTime()) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.revoked = true;
+    return { userId: record.userId, refreshToken: this.store(record.userId, record.familyId) };
+  }
+
+  activeCount(userId: number): number {
+    return [...this.records.values()].filter((r) => r.userId === userId && !r.revoked).length;
+  }
+}
+```
+<p>rotation עם זיהוי שימוש חוזר מופיע בהמלצות האבטחה של OAuth, ו"משפחה" (token family) הוא המונח שספקי זהות כמו Auth0 משתמשים בו. התוקף שגנב מהלפטופ נחסם, הלפטופ מתחבר מחדש — והטלפון לא מרגיש כלום.</p>
+@mistakes
+<ul><li>לבטל את המשפחה רק כשהטוקן <em>המבוטל</em> חוזר, אבל לשכוח שהחדש (שבידי התוקף או המשתמש) באותה משפחה — אז הוא ממשיך לעבוד.</li></ul>
+
+@@ P21-E17 | 3 | יציאה והחלפת סיסמה 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>21-auth/starter/P21-E17.ts</code> השלם את <code>AccountService</code>:</p>
+<ul><li><code>logout(token)</code> — מבטל את ה־refresh token הזה בלבד. טוקן לא מוכר — לא עושה כלום (בלי שגיאה).</li><li><code>changePassword(userId, oldPassword, newPassword)</code>:
+<ul><li>הסיסמה הנוכחית שגויה ← 401 <code>"הסיסמה הנוכחית שגויה"</code>.</li><li>חדשה קצרה מ־8 ← 400 <code>"לפחות 8 תווים"</code>; זהה לישנה ← 400 <code>"הסיסמה החדשה זהה לישנה"</code>.</li><li>הצלחה ← hash חדש, וכל ה־refresh tokens של המשתמש מבוטלים.</li></ul></li></ul>
+@hint1
+<p>למה לדרוש את הסיסמה הישנה, אם המשתמש כבר מחובר?</p>
+@hint2
+<p>הבדיקות לפי הסדר: קודם הישנה (401), ורק אחר כך החדשה (400). כך ניסיון "לנחש" לא מקבל רמזים על מדיניות.</p>
+@solution
+```ts save=solutions/P21-E17.ts
+// P21-E17
+import { createHash, randomBytes } from "node:crypto";
+import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import bcrypt from "bcryptjs";
+
+export const BCRYPT_ROUNDS = "BCRYPT_ROUNDS";
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+}
+
+@Injectable()
+export class AccountService {
+  private readonly users: User[] = [];
+  private readonly refreshTokens = new Map<string, { userId: number; revoked: boolean }>();
+
+  constructor(@Inject(BCRYPT_ROUNDS) private readonly rounds: number) {}
+
+  async createUser(email: string, password: string) {
+    const user = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(password, this.rounds) };
+    this.users.push(user);
+    return user.id;
+  }
+
+  async login(email: string, password: string): Promise<string> {
+    const user = this.users.find((u) => u.email === email);
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    const token = randomBytes(32).toString("base64url");
+    this.refreshTokens.set(sha256(token), { userId: user.id, revoked: false });
+    return token;
+  }
+
+  isActive(token: string): boolean {
+    const record = this.refreshTokens.get(sha256(token));
+    return record !== undefined && !record.revoked;
+  }
+
+  logout(token: string): void {
+    const record = this.refreshTokens.get(sha256(token));
+    if (record) record.revoked = true; // טוקן לא מוכר — פשוט לא עושים כלום
+  }
+
+  async changePassword(userId: number, oldPassword: string, newPassword: string): Promise<void> {
+    const user = this.users.find((u) => u.id === userId);
+    if (!user) throw new NotFoundException("משתמש לא נמצא");
+    // מי שמחזיק טוקן גנוב לא יכול להחליף סיסמה בלי לדעת את הישנה
+    if (!(await bcrypt.compare(oldPassword, user.passwordHash))) throw new UnauthorizedException("הסיסמה הנוכחית שגויה");
+    if (newPassword.length < 8) throw new BadRequestException("לפחות 8 תווים");
+    if (newPassword === oldPassword) throw new BadRequestException("הסיסמה החדשה זהה לישנה");
+    user.passwordHash = await bcrypt.hash(newPassword, this.rounds);
+    // "צא מכל המכשירים": אם הסיסמה דלפה, גם הטוקנים שנוצרו איתה לא בטוחים
+    for (const record of this.refreshTokens.values()) if (record.userId === userId) record.revoked = true;
+  }
+}
+```
+<p>הסיסמה הישנה נדרשת כי "מחובר" לא אומר "זה באמת הוא": אולי מישהו גנב טוקן, או ישב ליד מחשב פתוח. בלי הישנה — הוא היה מחליף סיסמה ונועל את הבעלים בחוץ. וביטול כל הטוקנים — כי אם המשתמש מחליף סיסמה בגלל חשד, הוא מצפה שכל מי שהיה מחובר ייזרק החוצה.</p>
+@mistakes
+<ul><li>לבטל את הטוקנים <em>לפני</em> הבדיקות ← ניסיון כושל עם סיסמה שגויה מנתק את המשתמש מכל המכשירים (התקפת "ניתוק" פשוטה).</li></ul>
+
+@@ P21-E18 | 3 | לא לגלות מי רשום 🤖 | 20 | שיעור 1
+@task
+<p>בקובץ <code>21-auth/starter/P21-E18.ts</code>:</p>
+<ol><li>תקן את <code>login</code>: אותה הודעה בכל כישלון — <code>"אימייל או סיסמה שגויים"</code> — ו־<code>compare</code> של ה־hasher נקרא <strong>בדיוק פעם אחת</strong> בכל ניסיון, גם כשאין משתמש כזה (מול hash "דמה").</li><li>תקן את <code>safeEqual(a, b)</code> כך שתשווה בזמן קבוע, עם <code>timingSafeEqual</code> — גם כשהאורכים שונים (ואז <code>false</code>, לא חריגה).</li></ol>
+<p>הבודק מזריק hasher מזויף שסופר קריאות.</p>
+@hint1
+<p>את ה־hash הדמה מחשבים פעם אחת (ושומרים את ה־Promise), לא בכל ניסיון.</p>
+@hint2
+<p><code>timingSafeEqual</code> זורק כשהאורכים שונים. אם תעביר לו את ה־SHA-256 של שני הצדדים — הם תמיד 32 בתים.</p>
+@solution
+```ts save=solutions/P21-E18.ts
+// P21-E18
+import { createHash, timingSafeEqual } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const PASSWORD_HASHER = "PASSWORD_HASHER";
+export interface PasswordHasher {
+  hash(password: string): Promise<string>;
+  compare(password: string, hash: string): Promise<boolean>;
+}
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+}
+
+@Injectable()
+export class LoginService {
+  private readonly users: User[] = [];
+  private dummyHash?: Promise<string>;
+
+  constructor(@Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher) {}
+
+  async addUser(email: string, password: string) {
+    this.users.push({ id: this.users.length + 1, email, passwordHash: await this.hasher.hash(password) });
+  }
+
+  async login(email: string, password: string): Promise<{ userId: number }> {
+    const user = this.users.find((u) => u.email === email);
+    // compare רץ בדיוק פעם אחת בכל מקרה — גם כשאין משתמש
+    this.dummyHash ??= this.hasher.hash("dummy-password-nobody-knows");
+    const ok = await this.hasher.compare(password, user ? user.passwordHash : await this.dummyHash);
+    if (!user || !ok) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    return { userId: user.id };
+  }
+}
+
+// השוואה בזמן קבוע: === עוצר בתו הראשון שונה, ולכן "מדליף" כמה תווים נכונים
+export function safeEqual(a: string, b: string): boolean {
+  // hash קודם — כך שני הצדדים באותו אורך, ו־timingSafeEqual לא זורק
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+```
+<p>למה זה חשוב: בלי hash דמה, "אין משתמש" חוזר תוך מילישנייה ו"סיסמה שגויה" אחרי עשירית שנייה — וזה מספיק כדי לבנות רשימת לקוחות. ו־<code>===</code> על מחרוזות עוצר בתו הראשון שונה: מדידה זהירה מגלה כמה תווים מההתחלה נכונים, וכך אפשר לנחש מפתח תו אחר תו. (ב־E25 תשתמש ב־<code>timingSafeEqual</code> על מפתחות API.)</p>
+@mistakes
+<ul><li><code>if (a.length !== b.length) return false</code> לפני <code>timingSafeEqual</code> — מדליף את האורך. ה־hash פותר גם את זה.</li></ul>
+
+@@ P21-E19 | 3 | נעילה אחרי ניסיונות כושלים 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>21-auth/starter/P21-E19.ts</code> — הגנה מניחוש סיסמאות (OWASP API2):</p>
+<ul><li><code>LoginAttemptsService</code> עם <code>CLOCK</code>: <code>recordFailure(email)</code>, <code>reset(email)</code>, ו־<code>retryAfterSeconds(email)</code> ← 0 אם מותר, אחרת כמה שניות לחכות.</li><li>הכלל: 5 כישלונות בתוך 15 דקות ← נעול, עד 15 דקות אחרי הכישלון הראשון מבין החמישה.</li><li><code>POST /auth/login</code>: נעול ← 429 עם <code>Retry-After</code> (גם אם הסיסמה נכונה!). כישלון ← רושמים, 401. הצלחה ← מאפסים.</li><li>האימייל מנורמל (<code>trim</code>, <code>toLowerCase</code>) — אחרת <code>DANA@</code> עוקף את המונה.</li></ul>
+@hint1
+<p>לכל אימייל — מערך של זמני כישלון. בכל פעם מסננים את מה שישן מ־15 דקות.</p>
+@hint2
+<p>אם יש 5 ומעלה בחלון: נפתח ב־<code>list[list.length - 5] + WINDOW_MS</code>. ו־<code>Math.ceil</code> לשניות.</p>
+@solution
+```ts save=solutions/P21-E19.ts
+// P21-E19
+import { Body, Controller, HttpCode, HttpException, HttpStatus, Inject, Injectable, Module, Post, Res, UnauthorizedException } from "@nestjs/common";
+import type { Response } from "express";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+export const MAX_FAILURES = 5;
+export const WINDOW_MS = 15 * 60 * 1000;
+
+@Injectable()
+export class LoginAttemptsService {
+  // לכל אימייל: מתי היו הכישלונות האחרונים
+  private readonly failures = new Map<string, number[]>();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  private recent(email: string) {
+    const now = this.clock.now().getTime();
+    const list = (this.failures.get(email) ?? []).filter((t) => now - t < WINDOW_MS);
+    this.failures.set(email, list);
+    return list;
+  }
+
+  // כמה שניות לחכות, או 0 אם מותר לנסות
+  retryAfterSeconds(email: string): number {
+    const list = this.recent(email);
+    if (list.length < MAX_FAILURES) return 0;
+    const unlockAt = list[list.length - MAX_FAILURES] + WINDOW_MS;
+    return Math.ceil((unlockAt - this.clock.now().getTime()) / 1000);
+  }
+
+  recordFailure(email: string) {
+    this.failures.set(email, [...this.recent(email), this.clock.now().getTime()]);
+  }
+
+  reset(email: string) {
+    this.failures.delete(email);
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly attempts: LoginAttemptsService) {}
+
+  @Post("login")
+  @HttpCode(200)
+  login(@Body() body: { email: string; password: string }, @Res({ passthrough: true }) res: Response) {
+    const email = String(body.email).trim().toLowerCase(); // אחרת Dana@ ו־dana@ — שני מונים
+    const wait = this.attempts.retryAfterSeconds(email);
+    if (wait > 0) {
+      res.setHeader("Retry-After", String(wait));
+      throw new HttpException("יותר מדי ניסיונות. נסה שוב מאוחר יותר", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    // בתרגיל: סיסמה "נכונה" היא correct-password (בפרויקט — bcrypt)
+    if (body.password !== "correct-password") {
+      this.attempts.recordFailure(email);
+      throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    }
+    this.attempts.reset(email);
+    return { ok: true };
+  }
+}
+
+@Module({
+  controllers: [AuthController],
+  providers: [LoginAttemptsService, { provide: CLOCK, useValue: { now: () => new Date() } }],
+})
+export class AuthModule {}
+```
+<p>למה גם סיסמה נכונה נחסמת בזמן נעילה? אחרת התוקף פשוט ממשיך לנחש, ומחכה לתשובה שאינה 429 — כלומר הנעילה לא עוצרת כלום. החיסרון: תוקף יכול לנעול משתמש אמיתי בכוונה (לכן נעילה <em>זמנית</em>, ולכן בפרודקשן מוסיפים גם הגבלה לפי IP — פרק 24).</p>
+@mistakes
+<ul><li>לא לנרמל את האימייל — חמישה ניסיונות לכל גרסת אותיות.</li><li>לשמור את המונה בזיכרון השרת כשיש כמה שרתים — כל אחד סופר לבד. בפרק 26 — Redis.</li></ul>
+
+@@ P21-E20 | 4 | שלוש תקלות של כניסה 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E20.ts</code>:</p>
+<ol><li><code>POST /auth/register</code> מחזיר (פלט אמיתי): <code>{"id":1,"email":"d@x.com","passwordHash":"$2b$04$Ve/WtZi2…","role":"user"}</code>.</li><li><code>POST /auth/login</code> עם הסיסמה הנכונה ← 401 <code>"אימייל או סיסמה שגויים"</code>. תמיד.</li><li>הכי חמור: אחרי שתתקן את (2), נסה טוקן שה־payload שלו שונה ל־<code>"role":"admin"</code> — <code>GET /auth/me</code> מקבל אותו.</li></ol>
+@hint1
+<p>(2): מה יש ב־<code>user.passwordHash</code>, ולמה הוא אף פעם לא שווה לסיסמה?</p>
+@hint2
+<p>(3): <code>decode</code> מול <code>verifyAsync</code> — שיעור 2, סעיף 3.</p>
+@solution
+```ts save=solutions/P21-E20.ts
+// P21-E20: מתוקן
+import { Body, Controller, Get, Headers, HttpCode, Injectable, Module, Post, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import bcrypt from "bcryptjs";
+
+export const JWT_SECRET = "e20-secret-for-exercises-only-0123456789";
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: "user" | "admin";
+}
+
+@Injectable()
+export class AuthService {
+  private readonly users: User[] = [];
+
+  constructor(private readonly jwt: JwtService) {}
+
+  async register(email: string, password: string) {
+    const user: User = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(password, 4), role: "user" };
+    this.users.push(user);
+    const { passwordHash, ...publicUser } = user; // ← תקלה 3: ה־hash יצא בתשובה
+    return publicUser;
+  }
+
+  async login(email: string, password: string) {
+    const user = this.users.find((u) => u.email === email);
+    // ← תקלה 2: היה password === user.passwordHash — סיסמה אף פעם לא שווה ל־hash שלה
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    return { accessToken: await this.jwt.signAsync({ sub: user.id, role: user.role }, { expiresIn: 900 }) };
+  }
+
+  async whoAmI(authorization: string | undefined) {
+    const token = /^Bearer\s+(\S+)$/i.exec(authorization ?? "")?.[1];
+    if (!token) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      // ← תקלה 1: היה jwt.decode — מפענח בלי לבדוק חתימה. כל אחד יכול "להיות" admin
+      const payload = await this.jwt.verifyAsync<{ sub: number; role: string }>(token);
+      return { id: payload.sub, role: payload.role };
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  @Post("register")
+  register(@Body() body: { email: string; password: string }) {
+    return this.auth.register(body.email, body.password);
+  }
+
+  @Post("login")
+  @HttpCode(200)
+  login(@Body() body: { email: string; password: string }) {
+    return this.auth.login(body.email, body.password);
+  }
+
+  @Get("me")
+  me(@Headers("authorization") authorization?: string) {
+    return this.auth.whoAmI(authorization);
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [AuthController],
+  providers: [AuthService],
+})
+export class AuthModule {}
+```
+<p>(3) הוא באג אמיתי ונפוץ: מי שרוצה "רק לקרוא את ה־id מהטוקן" ומשתמש ב־<code>decode</code> — כי זה סינכרוני, כי לא צריך סוד, כי "בטח בדקנו את זה במקום אחר". <code>decode</code> רק לתצוגה (למשל בצד הלקוח, להציג שם). בשרת — תמיד <code>verify</code>.</p>
+@mistakes
+<ul><li>לתקן את (2) עם <code>await bcrypt.hash(password) === user.passwordHash</code> — salt שונה, תמיד false.</li></ul>
+
+@@ P21-E21 | 4 | guard עם שלוש תקלות 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>21-auth/starter/P21-E21.ts</code> (פלטים אמיתיים):</p>
+<ol><li>לקוח ששולח <code>Authorization: bearer eyJ…</code> (אותיות קטנות) מקבל 401 <code>"נדרשת התחברות"</code>.</li><li><code>GET /status</code> — על ה־controller יש <code>@Public()</code> — מחזיר 401.</li><li>טוקן לא תקין מחזיר <code>{"message":"Forbidden resource","error":"Forbidden","statusCode":403}</code> במקום 401.</li></ol>
+@hint1
+<p>(1) מה ה־regex? (2) מאיפה ה־Reflector קורא?</p>
+@hint2
+<p>(3) מה Nest עושה כש־<code>canActivate</code> מחזיר <code>false</code>?</p>
+@solution
+```ts save=solutions/P21-E21.ts
+// P21-E21: מתוקן
+import {
+  CanActivate, Controller, ExecutionContext, Get, Injectable, Module, SetMetadata, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e21-secret-for-exercises-only-0123456789";
+export const IS_PUBLIC = "isPublic";
+export const Public = () => SetMetadata(IS_PUBLIC, true);
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext) {
+    // ← תקלה 2: היה reflector.get(IS_PUBLIC, context.getHandler()) — @Public() על ה־class לא נקרא
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [context.getHandler(), context.getClass()])) return true;
+    const req = context.switchToHttp().getRequest<Request & { user?: unknown }>();
+    // ← תקלה 1: היה /^Bearer (.+)$/ — "bearer" באותיות קטנות נכשל
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync<{ sub: number }>(match[1]);
+      req.user = { id: payload.sub };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין"); // ← תקלה 3: היה return false ← 403 במקום 401
+    }
+  }
+}
+
+@Controller("tasks")
+export class TasksController {
+  @Get()
+  list() {
+    return [{ id: 1, title: "משימה סודית" }];
+  }
+}
+
+@Public()
+@Controller("status")
+export class StatusController {
+  @Get()
+  status() {
+    return { ok: true };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [TasksController, StatusController],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+})
+export class AppModule {}
+```
+<p>(3) הוא הקטן והמבלבל: 403 אומר ללקוח "אתה מחובר, ואסור לך" — אז הוא לא ינסה refresh. 401 אומר "הטוקן שלך לא טוב" — והדף מבצע refresh או שולח לכניסה. ה־status הוא חלק מהחוזה.</p>
+@mistakes
+<ul><li>לתקן את (2) עם <code>@Public()</code> על כל מתודה — עובד, עד שמישהו מוסיף מתודה ושוכח.</li></ul>
+
+@@ P21-E22 | 4 | שלוש פרצות IDOR 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>21-auth/starter/P21-E22.ts</code> כל משתמש אמור לראות ולשנות רק את הפתקים שלו. אבל יוסי (id=2) יכול:</p>
+<ol><li>למחוק את הפתק של דנה: <code>DELETE /notes/1</code> ← 204.</li><li>לקרוא את הפתקים של דנה: <code>GET /notes?ownerId=1</code>.</li><li>"להעביר" לדנה פתק שלו (או להפך): <code>PATCH /notes/2</code> עם <code>{"ownerId":1}</code>.</li></ol>
+<p>תקן את שלושתם. (הבודק מפעיל ValidationPipe עם whitelist.)</p>
+@hint1
+<p>(1) השווה את <code>remove</code> ל־<code>update</code>. (2) מאיפה מגיע ה־owner?</p>
+@hint2
+<p>(3) מה ה־DTO מרשה, ומה <code>Object.assign</code> עושה עם כל מה שה־DTO מרשה?</p>
+@solution
+```ts save=solutions/P21-E22.ts
+// P21-E22: מתוקן
+import {
+  Body, CanActivate, Controller, Delete, ExecutionContext, Get, HttpCode, Injectable, Module, NotFoundException, Param,
+  ParseIntPipe, Patch, Req, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { IsOptional, IsString, Length } from "class-validator";
+
+interface AuthUser {
+  id: number;
+}
+
+// מדמה התחברות בשביל התרגיל (במקום JWT): x-user-id ב־header
+@Injectable()
+export class FakeAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    const id = Number(req.get("x-user-id"));
+    if (!Number.isInteger(id) || id < 1) throw new UnauthorizedException("נדרשת התחברות");
+    req.user = { id };
+    return true;
+  }
+}
+
+export class UpdateNoteDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  text?: string;
+  // ← תקלה 3: היה כאן ownerId — הלקוח יכול היה "להעביר" פתק למשתמש אחר
+}
+
+interface Note {
+  id: number;
+  ownerId: number;
+  text: string;
+}
+
+@Injectable()
+export class NotesService {
+  private readonly notes: Note[] = [
+    { id: 1, ownerId: 1, text: "הפתק של דנה" },
+    { id: 2, ownerId: 2, text: "הפתק של יוסי" },
+  ];
+
+  private findOwn(userId: number, id: number) {
+    const note = this.notes.find((n) => n.id === id && n.ownerId === userId);
+    if (!note) throw new NotFoundException(`פתק ${id} לא נמצא`);
+    return note;
+  }
+
+  // ← תקלה 2: היה list(ownerId) עם ?ownerId= מה־query. הבעלים מגיע מהטוקן בלבד
+  list(userId: number) {
+    return this.notes.filter((n) => n.ownerId === userId);
+  }
+
+  update(userId: number, id: number, dto: UpdateNoteDto) {
+    const note = this.findOwn(userId, id);
+    if (dto.text !== undefined) note.text = dto.text;
+    return note;
+  }
+
+  remove(userId: number, id: number) {
+    const note = this.findOwn(userId, id); // ← תקלה 1: היה find לפי id בלבד
+    this.notes.splice(this.notes.indexOf(note), 1);
+  }
+}
+
+@Controller("notes")
+export class NotesController {
+  constructor(private readonly notes: NotesService) {}
+
+  @Get()
+  list(@Req() req: { user: AuthUser }) {
+    return this.notes.list(req.user.id);
+  }
+
+  @Patch(":id")
+  update(@Req() req: { user: AuthUser }, @Param("id", ParseIntPipe) id: number, @Body() dto: UpdateNoteDto) {
+    return this.notes.update(req.user.id, id, dto);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  remove(@Req() req: { user: AuthUser }, @Param("id", ParseIntPipe) id: number) {
+    this.notes.remove(req.user.id, id);
+  }
+}
+
+@Module({
+  controllers: [NotesController],
+  providers: [NotesService, { provide: APP_GUARD, useClass: FakeAuthGuard }],
+})
+export class NotesModule {}
+```
+<p>שלוש הפרצות הן בדיוק שלושת הכללים מהשיעור: בעלות בכל פעולה (1), הבעלים מהטוקן בלבד (2), ורשימה מפורשת של שדות שמותר לשנות (3). ב־(3) תוקנו שני דברים: <code>ownerId</code> יצא מה־DTO (ולכן whitelist מחזיר 400), ו־<code>Object.assign(note, dto)</code> הוחלף בהשמה של שדה מפורש — הגנה שנייה, למקרה שמישהו יוסיף שדה ל־DTO מחר.</p>
+@mistakes
+<ul><li>לתקן את (2) עם "אם <code>ownerId</code> שונה מהמשתמש ← 403" — עדיין מגלה מידע, ומסבך. פשוט מתעלמים מהפרמטר.</li></ul>
+
+@@ P21-E23 | 4 | refresh token שבור 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>21-auth/starter/P21-E23.ts</code> שלוש תקלות:</p>
+<ol><li>מי שמקבל עותק של האחסון (<code>storedKeys()</code>) מקבל טוקנים שעובדים.</li><li>אחרי <code>rotate(t1)</code> — <code>t1</code> ממשיך לעבוד.</li><li>"7 ימים" נגמרים אחרי כ־10 דקות.</li></ol>
+@hint1
+<p>(3): כמה מילישניות ביום?</p>
+@hint2
+<p>(1): המפתח של ה־Map צריך להיות <code>sha256(token)</code> — גם ב־set וגם ב־get.</p>
+@solution
+```ts save=solutions/P21-E23.ts
+// P21-E23: מתוקן
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000; // ← תקלה 3: היה 24 * 60 * 60 — שניות, לא מילישניות
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+@Injectable()
+export class RefreshTokenService {
+  // ← תקלה 1: היה Map לפי הטוקן עצמו. מי שקורא את האחסון — מקבל טוקנים עובדים
+  private readonly records = new Map<string, { userId: number; expiresAt: number; used: boolean }>();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  issue(userId: number): string {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, expiresAt: this.clock.now().getTime() + 7 * DAY_MS, used: false });
+    return token;
+  }
+
+  rotate(token: string) {
+    const record = this.records.get(sha256(token));
+    if (!record || record.used || record.expiresAt <= this.clock.now().getTime()) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.used = true; // ← תקלה 2: הישן לא סומן — עבד שוב ושוב
+    return { userId: record.userId, refreshToken: this.issue(record.userId) };
+  }
+
+  storedKeys(): string[] {
+    return [...this.records.keys()];
+  }
+}
+```
+<p>(3) הוא באג יחידות קלאסי: <code>24 * 60 * 60</code> הוא מספר השניות ביום, ו־<code>Date.getTime()</code> במילישניות. שבעה "ימים" כאלה הם 604,800 מילישניות — קצת יותר מ־10 דקות. בדיקה עם שעון מזויף תופסת את זה מיד; בדיקה ידנית "התחברתי וזה עבד" — לא.</p>
+@mistakes
+<ul><li>לתקן את (1) רק ב־<code>set</code> ← כל ה־<code>get</code> נכשלים, ואף טוקן לא עובד.</li></ul>
+
+@@ P21-E24 | 5 | אתגר: סימניות עם משתמשים 🤖 | 90 | כל הפרק
+@task
+<p>בקובץ <code>21-auth/starter/P21-E24.ts</code> בנה את <code>BookmarksAppModule</code> — כל מה שבפרק, בקובץ אחד, בזיכרון:</p>
+<div class="table-wrap"><table><tr><th>בקשה</th><th>התנהגות</th></tr>
+<tr><td><code>POST /auth/register</code> <code>{ email, password }</code></td><td>email תקין (מנורמל), password 8+ ← 201 <code>{ id, email, role: "user" }</code>. קיים ← 409. שדה נוסף (role) ← 400</td></tr>
+<tr><td><code>POST /auth/login</code></td><td>200 <code>{ accessToken, refreshToken }</code> · 401 — אותה תשובה לאימייל לא רשום ולסיסמה שגויה</td></tr>
+<tr><td><code>POST /auth/refresh</code> <code>{ refreshToken }</code></td><td>200 זוג חדש; rotation; שימוש חוזר ← מבטל את כל הטוקנים של המשתמש</td></tr>
+<tr><td><code>POST /auth/logout</code> <code>{ refreshToken }</code></td><td>204</td></tr>
+<tr><td><code>GET /auth/me</code></td><td><code>{ id, email, role }</code></td></tr>
+<tr><td><code>POST /bookmarks</code> <code>{ url, title }</code></td><td>url עם פרוטוקול, title 1–200 ← 201 <code>{ id, url, title }</code></td></tr>
+<tr><td><code>GET /bookmarks</code>, <code>DELETE /bookmarks/:id</code></td><td>רק של המשתמש; של אחר ← 404</td></tr>
+<tr><td><code>GET /admin/users</code></td><td>רק admin ← רשימה בלי hash; אחרת 403</td></tr></table></div>
+<p>access token לפי <code>CONFIG.accessTtlSeconds</code> (900) ו־<code>CLOCK</code>; refresh לפי <code>CONFIG.refreshTtlDays</code>; bcrypt לפי <code>CONFIG.bcryptRounds</code>. guards גלובליים, <code>@Public()</code>, <code>@Roles()</code>, ו־ValidationPipe גלובלי <strong>בתוך</strong> המודול (<code>APP_PIPE</code>). הבודק יוצר admin דרך <code>UsersService.create(email, password, "admin")</code>.</p>
+@hint1
+<p>התחל מ־E11 (guard ו־decorators), E13 (roles), E15 (refresh) ו־E14 (בעלות). <code>CoreModule</code> כבר מוכן — אל תזיז את <code>CONFIG</code> ממנו.</p>
+@hint2
+<p><code>JwtModule.registerAsync({ imports: [CoreModule], inject: [CONFIG], useFactory: (c) =&gt; ({ secret: c.jwtSecret }) })</code> — ה־factory של JwtModule רץ בתוך module משלו, ורואה רק את מה שמייבאים אליו.</p>
+@solution
+```ts save=solutions/P21-E24.ts
+// P21-E24
+import { createHash, randomBytes } from "node:crypto";
+import {
+  Body, CanActivate, ConflictException, Controller, createParamDecorator, Delete, ExecutionContext, ForbiddenException, Get,
+  HttpCode, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, SetMetadata, UnauthorizedException,
+  ValidationPipe,
+} from "@nestjs/common";
+import { APP_GUARD, APP_PIPE, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import bcrypt from "bcryptjs";
+import { IsEmail, IsString, IsUrl, Length, MinLength } from "class-validator";
+import type { Request } from "express";
+
+// ---------- tokens ----------
+export const CLOCK = "CLOCK";
+export const CONFIG = "CONFIG";
+export interface Clock {
+  now(): Date;
+}
+export interface Config {
+  jwtSecret: string;
+  accessTtlSeconds: number;
+  refreshTtlDays: number;
+  bcryptRounds: number;
+}
+type Role = "user" | "admin";
+interface AuthUser {
+  id: number;
+  role: Role;
+}
+
+// ---------- decorators ----------
+const IS_PUBLIC = "isPublic";
+const ROLES = "roles";
+export const Public = () => SetMetadata(IS_PUBLIC, true);
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES, roles);
+export const CurrentUser = createParamDecorator((_d: unknown, ctx: ExecutionContext): AuthUser => ctx.switchToHttp().getRequest().user);
+
+// ---------- DTOs ----------
+export class CredentialsDto {
+  @IsEmail() email: string;
+  @IsString() @MinLength(8) password: string;
+}
+export class RefreshDto {
+  @IsString() @MinLength(1) refreshToken: string;
+}
+export class CreateBookmarkDto {
+  @IsUrl({ require_protocol: true }) url: string;
+  @IsString() @Length(1, 200) title: string;
+}
+
+// ---------- users ----------
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: Role;
+}
+const toPublic = ({ passwordHash, ...user }: User) => user;
+
+@Injectable()
+export class UsersService {
+  private readonly users: User[] = [];
+
+  constructor(@Inject(CONFIG) private readonly config: Config) {}
+
+  async create(email: string, password: string, role: Role = "user") {
+    email = email.trim().toLowerCase();
+    if (this.users.some((u) => u.email === email)) throw new ConflictException("האימייל כבר רשום");
+    const user = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(password, this.config.bcryptRounds), role };
+    this.users.push(user);
+    return toPublic(user);
+  }
+
+  findByEmail(email: string) {
+    return this.users.find((u) => u.email === email.trim().toLowerCase());
+  }
+
+  findById(id: number) {
+    return this.users.find((u) => u.id === id);
+  }
+
+  list() {
+    return this.users.map(toPublic);
+  }
+}
+
+// ---------- auth ----------
+const sha256 = (v: string) => createHash("sha256").update(v).digest("hex");
+const relogin = () => new UnauthorizedException("צריך להתחבר מחדש");
+
+@Injectable()
+export class AuthService {
+  private readonly refresh = new Map<string, { userId: number; expiresAt: number; revoked: boolean }>();
+  private readonly dummy: Promise<string>;
+
+  constructor(
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+    @Inject(CONFIG) private readonly config: Config,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {
+    this.dummy = bcrypt.hash("dummy-password-nobody-knows", config.bcryptRounds);
+  }
+
+  private nowSeconds() {
+    return Math.floor(this.clock.now().getTime() / 1000);
+  }
+
+  private async issue(user: User) {
+    const accessToken = await this.jwt.signAsync({ sub: user.id, role: user.role, iat: this.nowSeconds() }, { expiresIn: this.config.accessTtlSeconds });
+    const refreshToken = randomBytes(32).toString("base64url");
+    this.refresh.set(sha256(refreshToken), { userId: user.id, expiresAt: this.clock.now().getTime() + this.config.refreshTtlDays * 86_400_000, revoked: false });
+    return { accessToken, refreshToken };
+  }
+
+  async login(email: string, password: string) {
+    const user = this.users.findByEmail(email);
+    const ok = await bcrypt.compare(password, user ? user.passwordHash : await this.dummy);
+    if (!user || !ok) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    return this.issue(user);
+  }
+
+  async rotate(token: string) {
+    const record = this.refresh.get(sha256(token));
+    if (!record) throw relogin();
+    if (record.revoked) {
+      for (const r of this.refresh.values()) if (r.userId === record.userId) r.revoked = true;
+      throw relogin();
+    }
+    if (record.expiresAt <= this.clock.now().getTime()) throw relogin();
+    record.revoked = true;
+    const user = this.users.findById(record.userId);
+    if (!user) throw relogin();
+    return this.issue(user);
+  }
+
+  logout(token: string) {
+    const record = this.refresh.get(sha256(token));
+    if (record) record.revoked = true;
+  }
+
+  async verify(token: string): Promise<AuthUser> {
+    try {
+      const p = await this.jwt.verifyAsync<{ sub: number; role: Role }>(token, { clockTimestamp: this.nowSeconds() });
+      return { id: p.sub, role: p.role };
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector, private readonly auth: AuthService) {}
+
+  async canActivate(context: ExecutionContext) {
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [context.getHandler(), context.getClass()])) return true;
+    const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    req.user = await this.auth.verify(match[1]);
+    return true;
+  }
+}
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext) {
+    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, [context.getHandler(), context.getClass()]);
+    if (!roles?.length) return true;
+    const user = context.switchToHttp().getRequest().user as AuthUser | undefined;
+    if (!user || !roles.includes(user.role)) throw new ForbiddenException("אין הרשאה");
+    return true;
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly auth: AuthService, private readonly users: UsersService) {}
+
+  @Public() @Post("register")
+  register(@Body() dto: CredentialsDto) {
+    return this.users.create(dto.email, dto.password); // role תמיד user
+  }
+
+  @Public() @Post("login") @HttpCode(200)
+  login(@Body() dto: CredentialsDto) {
+    return this.auth.login(dto.email, dto.password);
+  }
+
+  @Public() @Post("refresh") @HttpCode(200)
+  refresh(@Body() dto: RefreshDto) {
+    return this.auth.rotate(dto.refreshToken);
+  }
+
+  @Public() @Post("logout") @HttpCode(204)
+  logout(@Body() dto: RefreshDto) {
+    this.auth.logout(dto.refreshToken);
+  }
+
+  @Get("me")
+  me(@CurrentUser() user: AuthUser) {
+    const found = this.users.findById(user.id);
+    if (!found) throw new UnauthorizedException("טוקן לא תקין");
+    return toPublic(found);
+  }
+}
+
+// ---------- bookmarks ----------
+interface Bookmark {
+  id: number;
+  ownerId: number;
+  url: string;
+  title: string;
+}
+
+@Injectable()
+export class BookmarksService {
+  private readonly items: Bookmark[] = [];
+  private nextId = 1;
+
+  list(ownerId: number) {
+    return this.items.filter((b) => b.ownerId === ownerId).map(({ ownerId: _o, ...b }) => b);
+  }
+
+  create(ownerId: number, dto: CreateBookmarkDto) {
+    const item = { id: this.nextId++, ownerId, url: dto.url, title: dto.title };
+    this.items.push(item);
+    return { id: item.id, url: item.url, title: item.title };
+  }
+
+  remove(ownerId: number, id: number) {
+    const index = this.items.findIndex((b) => b.id === id && b.ownerId === ownerId);
+    if (index === -1) throw new NotFoundException(`סימנייה ${id} לא נמצאה`);
+    this.items.splice(index, 1);
+  }
+}
+
+@Controller("bookmarks")
+export class BookmarksController {
+  constructor(private readonly bookmarks: BookmarksService) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthUser) {
+    return this.bookmarks.list(user.id);
+  }
+
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookmarkDto) {
+    return this.bookmarks.create(user.id, dto);
+  }
+
+  @Delete(":id") @HttpCode(204)
+  remove(@CurrentUser() user: AuthUser, @Param("id", ParseIntPipe) id: number) {
+    this.bookmarks.remove(user.id, id);
+  }
+}
+
+@Controller("admin")
+@Roles("admin")
+export class AdminController {
+  constructor(private readonly users: UsersService) {}
+
+  @Get("users")
+  listUsers() {
+    return this.users.list();
+  }
+}
+
+// CONFIG ו־CLOCK ב־module משלהם: JwtModule.registerAsync צריך לייבא אותו כדי לקבל את CONFIG
+@Module({
+  providers: [
+    { provide: CLOCK, useValue: { now: () => new Date() } },
+    { provide: CONFIG, useValue: { jwtSecret: "change-me-change-me-change-me-0123456789", accessTtlSeconds: 900, refreshTtlDays: 7, bcryptRounds: 12 } },
+  ],
+  exports: [CLOCK, CONFIG],
+})
+export class CoreModule {}
+
+@Module({
+  imports: [
+    CoreModule,
+    JwtModule.registerAsync({ imports: [CoreModule], inject: [CONFIG], useFactory: (c: Config) => ({ secret: c.jwtSecret }) }),
+  ],
+  controllers: [AuthController, BookmarksController, AdminController],
+  providers: [
+    UsersService,
+    AuthService,
+    BookmarksService,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_PIPE, useFactory: () => new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }) },
+  ],
+})
+export class BookmarksAppModule {}
+```
+<p>מה שכדאי לשים לב אליו: <strong>CoreModule</strong> — בלי <code>imports: [CoreModule]</code> ב־registerAsync מקבלים (פלט אמיתי): <code>Nest can't resolve dependencies of the JWT_MODULE_OPTIONS (?). Please make sure that the argument "CONFIG" at index [0] is available in the JwtModule module.</code> — שים לב: "in the JwtModule module", לא במודול שלך. <strong>ה־hash הדמה</strong> מחושב פעם אחת ב־constructor. <strong>הבעלות</strong> בכל פעולה של bookmarks. ו־<strong>override</strong> ל־CONFIG בבדיקה (bcryptRounds: 4) משפיע גם על הסוד של JwtModule — כי הוא נקרא ממנו.</p>
+@mistakes
+<ul><li>להשאיר <code>ownerId</code> בתשובה של bookmarks — לא אסון, אבל מיותר. API מחזיר מה שהלקוח צריך.</li><li><code>@Public()</code> על <code>AuthController</code> כולו ← גם <code>/auth/me</code> פתוח, ו־<code>@CurrentUser()</code> מחזיר <code>undefined</code>.</li></ul>
+
+@@ P21-E25 | 5 | אתגר: מפתחות API 🤖 | 60 | שיעור 4
+@task
+<p>לא כל לקוח הוא אדם עם סיסמה: סקריפט של CI או שירות אחר צריכים <strong>מפתח API</strong>. בקובץ <code>21-auth/starter/P21-E25.ts</code>:</p>
+<ul><li><code>POST /keys</code> <code>{ name, scopes }</code> (משתמש מחובר, דרך <code>FakeAuthGuard</code>) ← 201 <code>{ id, name, prefix, scopes, key }</code>. המפתח: <code>tk_&lt;8 hex&gt;_&lt;32 תווי base64url&gt;</code>, ו־<code>prefix</code> הם 8 ה־hex. scopes: <code>"read"</code> / <code>"write"</code> (ברירת מחדל <code>["read"]</code>). <strong>המפתח המלא מוחזר רק כאן</strong> — נשמרים רק prefix ו־SHA-256.</li><li><code>GET /keys</code> ← המפתחות של המשתמש: <code>{ id, name, prefix, scopes, createdAt, lastUsedAt, revoked }</code>. <code>DELETE /keys/:id</code> ← 204; של אחר ← 404.</li><li><code>GET /data</code> (scope read) ו־<code>POST /data</code> (scope write) — עם header <code>X-Api-Key</code> ו־<code>ApiKeyGuard</code>: חסר ← 401 <code>"חסר X-Api-Key"</code>; לא תקין/מבוטל ← 401 <code>"מפתח לא תקין"</code>; בלי scope ← 403 <code>"למפתח אין הרשאת write"</code>. מחזירים <code>{ data: [1, 2, 3], owner }</code> / <code>{ saved: true, owner }</code>, ומעדכנים <code>lastUsedAt</code> לפי <code>CLOCK</code>.</li></ul>
+@hint1
+<p>חיפוש לפי <code>prefix</code> (מהיר, לא סודי), ואז השוואת hash עם <code>timingSafeEqual</code>.</p>
+@hint2
+<p><code>@RequireScope("write")</code> = <code>SetMetadata</code>, וה־guard קורא אותו עם <code>reflector.get(SCOPE, context.getHandler())</code>.</p>
+@solution
+```ts save=solutions/P21-E25.ts
+// P21-E25
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  Body, CanActivate, Controller, Delete, ExecutionContext, ForbiddenException, Get, HttpCode, Inject, Injectable, Module,
+  NotFoundException, Param, ParseIntPipe, Post, Req, SetMetadata, UnauthorizedException, UseGuards,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+export type Scope = "read" | "write";
+
+// מדמה התחברות של משתמש (במקום JWT): x-user-id ב־header — לניהול המפתחות
+@Injectable()
+export class FakeAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    const id = Number(req.get("x-user-id"));
+    if (!Number.isInteger(id) || id < 1) throw new UnauthorizedException("נדרשת התחברות");
+    req.user = { id };
+    return true;
+  }
+}
+
+interface ApiKeyRecord {
+  id: number;
+  userId: number;
+  name: string;
+  prefix: string;
+  hash: string;
+  scopes: Scope[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+const sha256 = (v: string) => createHash("sha256").update(v).digest();
+const KEY_FORMAT = /^tk_([0-9a-f]{8})_[A-Za-z0-9_-]{32}$/;
+
+@Injectable()
+export class ApiKeysService {
+  private readonly keys: ApiKeyRecord[] = [];
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  // המפתח המלא מוחזר פעם אחת בלבד. נשמרים: prefix (לחיפוש ולתצוגה) ו־hash
+  create(userId: number, name: string, scopes: Scope[]) {
+    const prefix = randomBytes(4).toString("hex");
+    const key = `tk_${prefix}_${randomBytes(24).toString("base64url")}`;
+    const record: ApiKeyRecord = {
+      id: this.keys.length + 1, userId, name, prefix, hash: sha256(key).toString("hex"), scopes,
+      createdAt: this.clock.now().toISOString(), lastUsedAt: null, revokedAt: null,
+    };
+    this.keys.push(record);
+    return { id: record.id, name, prefix, scopes, key };
+  }
+
+  list(userId: number) {
+    return this.keys
+      .filter((k) => k.userId === userId)
+      .map(({ id, name, prefix, scopes, createdAt, lastUsedAt, revokedAt }) => ({ id, name, prefix, scopes, createdAt, lastUsedAt, revoked: revokedAt !== null }));
+  }
+
+  revoke(userId: number, id: number) {
+    const record = this.keys.find((k) => k.id === id && k.userId === userId);
+    if (!record) throw new NotFoundException(`מפתח ${id} לא נמצא`);
+    record.revokedAt ??= this.clock.now().toISOString();
+  }
+
+  authenticate(key: string): { userId: number; scopes: Scope[] } | undefined {
+    const prefix = KEY_FORMAT.exec(key)?.[1];
+    if (!prefix) return undefined;
+    const record = this.keys.find((k) => k.prefix === prefix && k.revokedAt === null);
+    if (!record || !timingSafeEqual(sha256(key), Buffer.from(record.hash, "hex"))) return undefined;
+    record.lastUsedAt = this.clock.now().toISOString();
+    return { userId: record.userId, scopes: record.scopes };
+  }
+}
+
+const SCOPE = "scope";
+export const RequireScope = (scope: Scope) => SetMetadata(SCOPE, scope);
+
+@Injectable()
+export class ApiKeyGuard implements CanActivate {
+  constructor(private readonly keys: ApiKeysService, private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    const key = req.get("x-api-key");
+    if (!key) throw new UnauthorizedException("חסר X-Api-Key");
+    const auth = this.keys.authenticate(key);
+    if (!auth) throw new UnauthorizedException("מפתח לא תקין");
+    const scope = this.reflector.get<Scope | undefined>(SCOPE, context.getHandler());
+    if (scope && !auth.scopes.includes(scope)) throw new ForbiddenException(`למפתח אין הרשאת ${scope}`);
+    req.apiKey = auth;
+    return true;
+  }
+}
+
+@Controller("keys")
+@UseGuards(FakeAuthGuard)
+export class KeysController {
+  constructor(private readonly keys: ApiKeysService) {}
+
+  @Post()
+  create(@Req() req: { user: { id: number } }, @Body() body: { name: string; scopes: Scope[] }) {
+    const scopes = (Array.isArray(body.scopes) ? body.scopes : []).filter((s): s is Scope => s === "read" || s === "write");
+    return this.keys.create(req.user.id, String(body.name), scopes.length ? scopes : ["read"]);
+  }
+
+  @Get()
+  list(@Req() req: { user: { id: number } }) {
+    return this.keys.list(req.user.id);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  revoke(@Req() req: { user: { id: number } }, @Param("id", ParseIntPipe) id: number) {
+    this.keys.revoke(req.user.id, id);
+  }
+}
+
+@Controller("data")
+@UseGuards(ApiKeyGuard)
+export class DataController {
+  @Get()
+  @RequireScope("read")
+  read(@Req() req: { apiKey: { userId: number } }) {
+    return { data: [1, 2, 3], owner: req.apiKey.userId };
+  }
+
+  @Post()
+  @RequireScope("write")
+  write(@Req() req: { apiKey: { userId: number } }) {
+    return { saved: true, owner: req.apiKey.userId };
+  }
+}
+
+@Module({
+  controllers: [KeysController, DataController],
+  providers: [ApiKeysService, FakeAuthGuard, ApiKeyGuard, { provide: CLOCK, useValue: { now: () => new Date() } }],
+})
+export class ApiKeysModule {}
+```
+<p>זה המבנה של מפתחות אמיתיים (GitHub, Stripe ודומיהם): קידומת שמזהה את סוג המפתח (<code>tk_</code>) — כך כלים שסורקים קוד ב־Git מזהים מפתח שדלף; prefix גלוי שמאפשר להציג "tk_3f9a…" ברשימה ולמצוא את הרשומה בלי לסרוק הכול; ו־hash בלבד במסד. ו־scopes: מפתח של CI שרק קורא לא צריך הרשאת כתיבה — אם הוא ידלוף, הנזק מוגבל ("least privilege").</p>
+@mistakes
+<ul><li>להחזיר את המפתח ב־<code>GET /keys</code> — ואז כל מי שרואה את הרשימה (או את הלוגים) מקבל אותו.</li><li><code>record.hash === sha256(key)</code> עם <code>===</code> — עובד, אבל מדליף תזמון (E18).</li></ul>
