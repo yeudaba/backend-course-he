@@ -114,7 +114,7 @@ function checkRun(run, expected, ctx) {
   // בתוך course-src, כדי שדוגמאות עם import "express" ימצאו את node_modules שלו
   fs.mkdirSync(path.join(SRC, ".run"), { recursive: true });
   const dir = fs.mkdtempSync(path.join(SRC, ".run", "run-"));
-  const ext = run.lang === "ts" ? ".ts" : run.lang === "sql" ? ".sql" : run.attrs.mjs ? ".mjs" : ".js";
+  const ext = run.lang === "ts" ? ".ts" : run.lang === "sql" ? ".sql" : run.lang === "bash" ? ".sh" : run.attrs.mjs ? ".mjs" : ".js";
   const file = path.join(dir, "snippet" + ext);
   fs.writeFileSync(file, run.code);
   const nodeArgs = run.lang === "ts" ? ["--experimental-strip-types", "--no-warnings", file] : [file];
@@ -129,6 +129,9 @@ function checkRun(run, expected, ctx) {
     r = psql([], { file, schema: "snippet", keepGoing: Boolean(run.attrs.continue), merge: Boolean(run.attrs.stderr) }); // continue: להמשיך אחרי שגיאה
     r.stdout = r.stdout.replace(/^psql:[^:]+:\d+: /gm, ""); // כמו שהלומד יראה ב־psql אינטראקטיבי
     r.stderr = r.stderr.replace(/^psql:[^:]+:\d+: /gm, "");
+  } else if (run.lang === "bash") {
+    // פרק 23: פקודות shell. בתיקייה זמנית ריקה, עם locale קבוע (סדר מיון זהה בכל מחשב)
+    r = spawnSync("bash", [file], { encoding: "utf8", cwd: dir, timeout: 15000, env: { ...process.env, LC_ALL: "C" } });
   } else if (run.attrs.tsc) {
     const tsc = path.join(SRC, "node_modules", "typescript", "bin", "tsc");
     r = spawnSync("node", [tsc, "--noEmit", "--strict", "--target", "es2022", "--pretty", "false", "--skipLibCheck", "snippet.ts"], { encoding: "utf8", cwd: dir });

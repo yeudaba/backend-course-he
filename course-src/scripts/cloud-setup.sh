@@ -10,6 +10,14 @@ cd "$(dirname "$0")/.."
 if ! docker info >/dev/null 2>&1; then (nohup dockerd >/tmp/dockerd.log 2>&1 &); for i in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; fi
 docker start course-pg >/dev/null 2>&1 || docker run -d --name course-pg -p 5433:5432 \
   -e POSTGRES_HOST_AUTH_METHOD=trust -e TZ=Asia/Jerusalem postgres:18 -c timezone=Asia/Jerusalem >/dev/null
+# פרק 23: בענן, HTTPS יוצא עובר דרך proxy עם תעודה משלו — npm בתוך קונטיינר נכשל ("self-signed certificate").
+# בונים כאן (רק בסביבה הזו!) node:24-alpine מקומי שסומך על התעודה. ה־Dockerfiles של הקורס לא משתנים.
+if [ -f /root/.ccr/ca-bundle.crt ] && ! docker run --rm node:24-alpine test -f /usr/local/share/proxy-ca.crt 2>/dev/null; then
+  ca=$(mktemp -d); cp /root/.ccr/ca-bundle.crt "$ca/proxy-ca.crt"
+  printf 'FROM node:24-alpine\nCOPY proxy-ca.crt /usr/local/share/proxy-ca.crt\nRUN cat /usr/local/share/proxy-ca.crt >> /etc/ssl/certs/ca-certificates.crt\nENV NODE_EXTRA_CA_CERTS=/usr/local/share/proxy-ca.crt\n' > "$ca/Dockerfile"
+  docker pull -q node:24-alpine >/dev/null && docker build -q -t node:24-alpine "$ca" >/dev/null
+fi
+docker pull -q postgres:18-alpine >/dev/null 2>&1 || true
 if [ ! -x /opt/pg18/bin/psql ]; then
   mkdir -p /opt/pg18img/lib /opt/pg18/bin
   docker cp course-pg:/usr/lib/postgresql/18 /opt/pg18img/
