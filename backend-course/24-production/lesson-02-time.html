@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>זמן, אזורי זמן ושעון קיץ — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — זמן, אזורי זמן ושעון קיץ</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>רגע (instant) מול תאריך ושעה מקומיים — שני דברים שונים.</li>
+      <li>אזורי זמן ו־offset, ולמה שומרים <code>Asia/Jerusalem</code> ולא <code>+02:00</code>.</li>
+      <li>שעון קיץ: יום של 23 שעות, שעה שלא קיימת, ושעה שקורית פעמיים.</li>
+      <li>"היום" של המשתמש — הבאג שהפרויקט שלך מכיל עד השיעור הזה.</li>
+      <li>מה שומרים במסד, ובאיזה טיפוס.</li>
+    </ul>
+  </div>
+
+  <h2>1. הבאג</h2>
+  <p>דנה בישראל. 00:30 בלילה, 5 בנובמבר. היא יוצרת משימה ל"היום" — <code>dueDate: "2026-11-05"</code>. עד שלב ו׳, השרת בודק <code>dueDate &lt; today</code>, כש־<code>today</code> הוא <code>clock.now().toISOString().slice(0, 10)</code>. ב־00:30 בישראל, ב־UTC השעה 22:30 — ו"היום" של השרת הוא עדיין 4 בנובמבר. דנה בסדר. אבל בצד השני: ב־00:30 היא מנסה ליצור משימה ל"אתמול", 4 בנובמבר — והשרת מקבל, כי בשבילו זה "היום". ומשימה עם יעד 4 בנובמבר לא נספרת "באיחור" עד 02:00 בלילה שלה.</p>
+  <p>הבדיקות עברו, כי הן רצות ב־UTC, בשעות העבודה. הבאג מופיע רק אצל משתמשים, רק בלילה.</p>
+
+  <h2>2. רגע מול תאריך מקומי</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="אותו רגע — 22:30 UTC — הוא 4 בנובמבר ב־UTC ו־5 בנובמבר בישראל">
+      <g style="stroke-width:2">
+        <rect x="40" y="40" width="640" height="40" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="40" y="120" width="640" height="40" rx="6" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="40" y="40" width="490" height="40" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="40" y="120" width="410" height="40" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="450" y="120" width="230" height="40" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="530" y="40" width="150" height="40" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <path d="M490 25 V 175" style="stroke:var(--red);stroke-width:2.5;stroke-dasharray:6 4"/>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:12px">
+        <text x="285" y="65">UTC · Nov 4</text><text x="605" y="65">Nov 5</text>
+        <text x="245" y="145">Asia/Jerusalem · Nov 4</text><text x="565" y="145">Nov 5</text>
+        <text x="490" y="18" style="font-weight:700">22:30Z</text>
+        <text x="490" y="192">00:30 (+02:00)</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: רגע אחד (הקו האדום). ב־UTC — עוד 4 בנובמבר; בישראל — כבר 5. "איזה יום" אין לו תשובה בלי "איפה".</figcaption>
+  </figure>
+  <ul>
+    <li><strong>רגע</strong> (instant) — נקודה אחת על ציר הזמן, זהה בכל העולם. <code>Date</code> ב־JavaScript, <code>timestamptz</code> ב־PostgreSQL. מתי נוצרה משימה, מתי פג טוקן.</li>
+    <li><strong>תאריך מקומי</strong> — יום בלוח השנה, בלי שעה ובלי מקום. תאריך יעד, יום הולדת. <code>DATE</code> ב־PostgreSQL, ו־<code>"YYYY-MM-DD"</code> ב־API.</li>
+    <li><strong>שעה על השעון</strong> + <strong>אזור</strong> — "09:00 בישראל". כוונה של אדם: תזכורת, שעת פתיחה.</li>
+  </ul>
+  <p>ההמרה בין רגע לתאריך מקומי דורשת אזור זמן. ב־JavaScript — <code>Intl.DateTimeFormat</code> עם <code>timeZone</code>:</p>
+<pre><code class="lang-ts">const at = new Date("2026-11-04T22:30:00Z");
+const localDate = (d: Date, timeZone: string) =&gt;
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+
+console.log(localDate(at, "UTC"), localDate(at, "Asia/Jerusalem"), localDate(at, "America/New_York"));
+console.log(at.toISOString().slice(0, 10), "← תמיד UTC");</code></pre>
+<pre class="terminal">2026-11-04 2026-11-05 2026-11-04
+2026-11-04 ← תמיד UTC</pre>
+  <p>(<code>en-CA</code> — כי הפורמט שלו הוא בדיוק <code>YYYY-MM-DD</code>.) ובלי <code>timeZone</code>? <code>at.toLocaleDateString("he-IL")</code> מחזיר <code>5.11.2026</code> ב־Mac שלך (שמוגדר לישראל) ו־<code>4.11.2026</code> בקונטיינר (UTC) — אותו קוד, תוצאות שונות, לפי המחשב שמריץ. לכן בשרת <strong>תמיד</strong> מעבירים <code>timeZone</code> במפורש.</p>
+
+  <h2>3. אזור זמן הוא לא offset</h2>
+  <p><code>+02:00</code> הוא ההפרש מ־UTC <em>ברגע מסוים</em>. <code>Asia/Jerusalem</code> הוא אזור עם <strong>חוקים</strong>: +02:00 בחורף, +03:00 בקיץ, ומתי עוברים. החוקים משתנים (מדינות מבטלות שעון קיץ, מזיזות תאריכים), ומסד הנתונים של IANA — שמגיע עם Node ועם מערכת ההפעלה — מתעדכן. לכן שומרים את שם האזור, לא offset. בפרויקט: עמודה <code>time_zone</code> למשתמש, עם ברירת מחדל <code>UTC</code>, ובדיקה ש־<code>new Intl.DateTimeFormat("en", { timeZone })</code> לא זורק (E11).</p>
+
+  <h2>4. שעון קיץ</h2>
+  <p>ב־2026, ישראל עוברת לשעון קיץ ביום שישי, 27 במרץ, ב־02:00 — השעון קופץ ל־03:00. וחוזרת ב־25 באוקטובר, ב־02:00 — השעון חוזר ל־01:00. מה זה אומר (פלטים אמיתיים):</p>
+<pre><code class="lang-ts">const il = (iso: string) =&gt; new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem", timeZoneName: "short" });
+
+console.log(il("2026-03-26T23:59:00Z"));
+console.log(il("2026-03-27T00:00:00Z"), "← דקה אחר כך");
+console.log(il("2026-10-24T22:30:00Z"));
+console.log(il("2026-10-24T23:30:00Z"), "← שעה אחר כך — אותה שעה על השעון");
+
+const hours = (a: string, b: string) =&gt; (Date.parse(b) - Date.parse(a)) / 3600000;
+console.log("27.3 ארוך", hours("2026-03-27T00:00:00+02:00", "2026-03-28T00:00:00+03:00"), "שעות");
+console.log("25.10 ארוך", hours("2026-10-25T00:00:00+03:00", "2026-10-26T00:00:00+02:00"), "שעות");</code></pre>
+<pre class="terminal">2026-03-27 1:59:00 GMT+2
+2026-03-27 3:00:00 GMT+3 ← דקה אחר כך
+2026-10-25 1:30:00 GMT+3
+2026-10-25 1:30:00 GMT+2 ← שעה אחר כך — אותה שעה על השעון
+27.3 ארוך 23 שעות
+25.10 ארוך 25 שעות</pre>
+  <p>שלוש מסקנות:</p>
+  <ul>
+    <li><strong>יום ≠ 24 שעות.</strong> "מחר באותה שעה" הוא לא <code>+ 86_400_000</code>. מחברים <em>ימים בלוח השנה</em> ומחשבים מחדש (E13).</li>
+    <li><strong>יש שעות שלא קיימות.</strong> 02:30 ב־27 במרץ — אין. תזכורת ב־02:30 צריכה החלטה: הנוהג (וגם של <code>Temporal</code>, ה־API החדש של JavaScript) — לזוז קדימה כמו השעון, ל־03:30.</li>
+    <li><strong>יש שעות שקורות פעמיים.</strong> 01:30 ב־25 באוקטובר. תזכורת שרצה פעמיים — באג; הנוהג: המופע הראשון (E12, E25).</li>
+  </ul>
+  <p>ואיך מחשבים "חצות בישראל ב־27.3 — איזה רגע זה"? אין ב־<code>Date</code> פונקציה כזו. הרעיון (E12): מוצאים את ה־offset באזור לפני ואחרי, מנסים את שניהם, ובודקים איזה מהם באמת מראה את השעה המבוקשת על השעון. כשתוכל להסתמך על <code>Temporal</code> — <code>Temporal.PlainDate.from("2026-03-27").toZonedDateTime("Asia/Jerusalem")</code> עושה את זה בשבילך.</p>
+
+  <h2>5. במסד ובפרויקט</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מה</th><th>PostgreSQL</th><th>API</th><th>בפרויקט</th></tr>
+    <tr><td>רגע</td><td><code>timestamptz</code></td><td><code>"2026-11-04T22:30:00.000Z"</code></td><td><code>createdAt</code>, <code>expires_at</code></td></tr>
+    <tr><td>יום בלוח השנה</td><td><code>date</code></td><td><code>"2026-11-05"</code></td><td><code>dueDate</code></td></tr>
+    <tr><td>אזור</td><td><code>text</code></td><td><code>"Asia/Jerusalem"</code></td><td><code>users.time_zone</code> — חדש</td></tr>
+  </table></div>
+  <p><code>timestamptz</code>, למרות השם, לא שומר אזור — הוא שומר רגע (ב־UTC), ומציג לפי ה־<code>timezone</code> של החיבור. לכן ב־Prisma הגדרנו <code>timezone=UTC</code> (פרק 19). ו־<code>date</code> הוא פשוט יום — בלי הפתעות.</p>
+  <p>התיקון בפרויקט: <code>TasksService</code> לא שואל "מה התאריך בשרת" אלא "מה התאריך <strong>אצל המשתמש</strong>": קורא את ה־<code>timeZone</code> שלו, ומחשב <code>localDate(clock.now(), timeZone)</code>. אותו דבר ב־<code>overdue</code> של <code>/tasks/stats</code>. ובהרשמה ובעדכון (<code>PATCH /auth/me</code>) — הלקוח שולח את האזור; בדפדפן הוא ב־<code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P24-E03">E03</a> · <a href="exercises.html#P24-E11">E11</a> · <a href="exercises.html#P24-E12">E12</a> · <a href="exercises.html#P24-E13">E13</a> · <a href="exercises.html#P24-E21">E21</a> · <a href="exercises.html#P24-E25">E25</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-logging.html"><small>הקודם</small>שיעור 1 — לוגים מובנים ו־request ID</a><a href="lesson-03-idempotency.html"><small>הבא</small>שיעור 3 — Idempotency: לשלוח שוב בלי לחשוש</a></div>
+</main>
+</body>
+</html>

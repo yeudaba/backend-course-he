@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>לוגים מובנים ו־request ID — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — לוגים מובנים ו־request ID</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה <code>console.log("משהו נכשל")</code> לא מספיק בשרת אמיתי.</li>
+      <li>לוגים מובנים: שורת JSON לכל אירוע, ורמות.</li>
+      <li>מה <strong>אסור</strong> לכתוב ללוג.</li>
+      <li>request ID — לעקוב אחרי בקשה אחת, מהלקוח ועד השורה בלוג.</li>
+      <li>AsyncLocalStorage — "משתנה של הבקשה", שעובר דרך await.</li>
+    </ul>
+  </div>
+
+  <h2>1. "משהו נכשל"</h2>
+  <p>לקוחה כותבת לתמיכה: "ניסיתי לשמור משימה ויצאה שגיאה". בשרת רצות מאות בקשות בדקה, והלוג נראה ככה:</p>
+<pre><code class="lang-text">Server started
+error!
+Error: connect ECONNREFUSED 127.0.0.1:5432
+user logged in
+error!</code></pre>
+  <p>איזו מהשגיאות שלה? מתי? איזה נתיב? כמה זמן לקח? אין לדעת. לוג טוב עונה על השאלות האלה בלי לפתוח את הקוד — ובשביל זה כל שורה צריכה <strong>שדות</strong>, לא משפט.</p>
+
+  <h2>2. לוג מובנה: שורת JSON לכל אירוע</h2>
+<pre><code class="lang-text">{"time":"2026-11-07T15:30:24.134Z","level":"warn","msg":"request","requestId":"support-ticket-4512","userId":1,"method":"GET","path":"/tasks/999","status":404,"durationMs":6}</code></pre>
+  <p>(שורה אמיתית מהפרויקט, שלב ז׳.) כל שורה היא אובייקט: אפשר לסנן <code>status &gt;= 500</code>, לספור בקשות לפי <code>path</code>, לחשב ממוצע של <code>durationMs</code>, ולמצוא את כל מה שקרה למשתמש 1. כלים כמו CloudWatch, Datadog או Grafana Loki (פרק 25) קוראים JSON בלי הגדרות. ובטרמינל — <code>grep</code>, או <code>jq</code> שמבין JSON.</p>
+  <p>שלושה כללים: <strong>שורה אחת</strong> לאירוע (<code>JSON.stringify</code> בלי רווחים — ירידת שורה באמצע שוברת את האיסוף); <strong>אותם שמות שדות</strong> בכל המערכת (<code>userId</code>, לא פעם <code>user_id</code> ופעם <code>uid</code>); ו<strong>זמן ב־ISO, ב־UTC</strong>.</p>
+  <div class="table-wrap"><table>
+    <tr><th>רמה</th><th>מתי</th><th>דוגמה</th></tr>
+    <tr><td><code>error</code></td><td>משהו נשבר אצלנו, ומישהו צריך לטפל</td><td>500, המסד לא זמין, חריגה לא צפויה</td></tr>
+    <tr><td><code>warn</code></td><td>לא תקין, אבל צפוי — בדרך כלל אשמת הלקוח</td><td>4xx, ניסיון כניסה שנכשל, 429</td></tr>
+    <tr><td><code>info</code></td><td>אירועים רגילים שרוצים לספור ולמצוא</td><td>בקשה שהצליחה, השרת עלה</td></tr>
+    <tr><td><code>debug</code></td><td>פרטים לחיפוש באג — כבוי בפרודקשן</td><td>SQL, ערכי ביניים, healthcheck מוצלח</td></tr>
+  </table></div>
+  <p>הרמה נקבעת ב־<code>LOG_LEVEL</code>: בפרודקשן <code>info</code>, וכשמחפשים באג — <code>debug</code> לכמה דקות. (ההשוואה — לפי מספר, לא לפי מחרוזת: <code>"error" &lt; "info"</code> הוא <code>true</code> ב־JavaScript, ו־logger שמשווה מחרוזות זורק בדיוק את השגיאות. E20.)</p>
+
+  <h2>3. מה אסור לכתוב ללוג</h2>
+  <p>לוגים נשמרים חודשים, מגובים, נשלחים לשירות חיצוני, וכל המפתחים (ולפעמים התמיכה) קוראים אותם. ערך שנכתב ללוג — <strong>דלף</strong>. לכן אף פעם: סיסמאות, טוקנים (access, refresh, איפוס סיסמה), header של <code>Authorization</code>, cookies, מספרי כרטיס אשראי. ובזהירות: מידע אישי (אימייל, טלפון, כתובת) — <code>userId</code> מספיק כדי למצוא.</p>
+  <p>שתי הגנות: (1) לא לכתוב <code>req.body</code> או אובייקט שלם "בשביל הדיבוג"; (2) <strong>redact</strong> ב־logger עצמו — רשת ביטחון שמחליפה כל שדה בשם <code>password</code>/<code>token</code>/... ב־<code>"[REDACTED]"</code>, בכל עומק (E07). ועוד מקום שבו סודות מסתתרים: ה־query string. <code>/reset-password?token=…</code> — לכן ב־<code>path</code> כותבים בלי query.</p>
+
+  <h2>4. request ID</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="request ID עובר מהלקוח, דרך השרת, אל כל שורות הלוג ואל התשובה">
+      <defs><marker id="rq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="590" y="60" width="115" height="70" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="270" y="40" width="180" height="110" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="200" height="170" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M586 80 H 454" marker-end="url(#rq)"/>
+        <path d="M454 115 H 586" marker-end="url(#rq)"/>
+        <path d="M266 95 H 224" marker-end="url(#rq)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="647" y="90">client</text><text x="360" y="64">API</text><text x="120" y="44">logs</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="520" y="72">X-Request-Id?</text>
+        <text x="520" y="133">X-Request-Id: a1b2</text>
+        <text x="360" y="88">requestId = a1b2</text>
+        <text x="360" y="108">AsyncLocalStorage</text>
+        <text x="120" y="80">a1b2 "db query slow"</text>
+        <text x="120" y="104">a1b2 "error ECONNRESET"</text>
+        <text x="120" y="128">a1b2 "request" 500</text>
+        <text x="120" y="160">f9c0 "request" 200</text>
+      </g>
+      <text x="647" y="112" text-anchor="middle" style="font-size:11px" direction="rtl">מציג / שומר</text>
+    </svg>
+    <figcaption>איור 1: לכל בקשה מזהה. הוא חוזר ללקוח ב־header, ומופיע בכל שורה שהבקשה כתבה. אחר כך: <code>grep a1b2</code> — וכל הסיפור מולך.</figcaption>
+  </figure>
+  <p>השרת קובע מזהה לכל בקשה: אם הלקוח (או שירות אחר במערכת) שלח <code>X-Request-Id</code> תקין — משתמשים בו; אחרת <code>randomUUID()</code>. המזהה חוזר ב־header של התשובה, וה־frontend יכול להציג אותו בהודעת שגיאה ("קוד לתמיכה: …"). מהפרויקט (פלט אמיתי, מקוצר):</p>
+<pre class="terminal"><span class="prompt">% </span>curl -si localhost:3000/tasks/999 -H "Authorization: Bearer $TOKEN" -H "X-Request-Id: support-ticket-4512"
+<span class="dim">HTTP/1.1 404 Not Found</span>
+<span class="dim">X-Request-Id: support-ticket-4512</span>
+<span class="dim">{"error":{"code":"TASK_NOT_FOUND","message":"משימה 999 לא נמצאה"}}</span></pre>
+  <p>"תקין" — חשוב: המזהה נכתב לכל שורת לוג, אז לא מקבלים מבחוץ מחרוזת באורך מגה־בייט או עם מרכאות וסוגריים. <code>/^[A-Za-z0-9._-]{1,64}$/</code>, ואם לא — מזהה חדש (E08). והשורה עצמה נכתבת ב־<code>res.on("finish")</code> — כשכבר ידועים ה־status והמשך (E09).</p>
+
+  <h2>5. AsyncLocalStorage: "המשתנה של הבקשה"</h2>
+  <p>ה־middleware יודע את ה־requestId. אבל שורת לוג מתוך ה־repository — שלא מקבל <code>req</code> — איך תדע? להעביר <code>requestId</code> כפרמטר לכל פונקציה? ומשתנה גלובלי לא עובד, כי Node מטפל בהרבה בקשות במקביל: בזמן ש־א׳ מחכה למסד, ב׳ רצה.</p>
+<pre><code class="lang-ts">import { AsyncLocalStorage } from "node:async_hooks";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const als = new AsyncLocalStorage&lt;{ requestId: string }&gt;();
+let current = ""; // הגרסה הנאיבית: משתנה גלובלי
+
+async function handle(id: string, ms: number) {
+  current = id;
+  await als.run({ requestId: id }, async () =&gt; {
+    await sleep(ms); // "שאילתה למסד"
+    console.log(`expected=${id}  global=${current}  als=${als.getStore()?.requestId}`);
+  });
+}
+
+await Promise.all([handle("r-1", 20), handle("r-2", 10)]);</code></pre>
+<pre class="terminal">expected=r-2  global=r-2  als=r-2
+expected=r-1  global=r-2  als=r-1</pre>
+  <p>הגלובלי "נדרס" על ידי הבקשה השנייה, ו־r-1 כותבת ללוג את המזהה של r-2. <code>AsyncLocalStorage</code> (מובנה ב־Node) שומר ערך לכל "שרשרת" אסינכרונית: מה שהתחיל בתוך <code>als.run(store, fn)</code> — כל await, setTimeout ו־Promise שנוצרו ממנו — רואה את אותו store. ה־middleware עוטף את <code>next()</code> ב־<code>run</code>, וה־logger קורא <code>getStore()</code>. כך כל שורה, מכל מקום בקוד, כוללת <code>requestId</code> ו־<code>userId</code> (E10).</p>
+
+  <h2>6. לאן הלוגים הולכים</h2>
+  <p>לא לקובץ. אפליקציה כותבת ל־<strong>stdout</strong>, שורה אחרי שורה — וזהו. Docker אוסף (<code>docker compose logs api</code>), ופלטפורמת הענן (פרק 25) שולחת לכלי חיפוש. ככה האפליקציה לא מתעסקת בסיבוב קבצים, בדיסק מלא ובהרשאות. (זה אחד מעקרונות <em>The Twelve-Factor App</em> — "logs as event streams".)</p>
+  <div class="box tip">
+    <span class="box-title">💡 ספריות</span>
+    <p>בעבודה כמעט תמיד יש ספרייה: <strong>pino</strong> (מהירה מאוד, JSON כברירת מחדל, עם <code>child</code> ו־<code>redact</code>) או winston. ב־Nest — <code>nestjs-pino</code>. הן עושות את מה שכתבת בתרגילים, ועוד: כתיבה אסינכרונית, פורמט קריא בפיתוח (<code>pino-pretty</code>). בפרויקט כתבנו logger קטן בעצמנו כדי לראות את כל החלקים — ובראיון "מה pino עושה בשבילך" היא שאלה שתדע לענות עליה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P24-E01">E01</a> · <a href="exercises.html#P24-E02">E02</a> · <a href="exercises.html#P24-E06">E06</a> · <a href="exercises.html#P24-E07">E07</a> · <a href="exercises.html#P24-E08">E08</a> · <a href="exercises.html#P24-E09">E09</a> · <a href="exercises.html#P24-E10">E10</a> · <a href="exercises.html#P24-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 24</a><a href="lesson-02-time.html"><small>הבא</small>שיעור 2 — זמן, אזורי זמן ושעון קיץ</a></div>
+</main>
+</body>
+</html>

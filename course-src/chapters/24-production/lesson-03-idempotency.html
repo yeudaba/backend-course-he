@@ -1,0 +1,132 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>הבעיה: הבקשה נשלחה, התשובה אבדה. בוצע או לא?</li>
+      <li>אילו methods בטוחים לשליחה חוזרת — ואילו לא.</li>
+      <li><code>Idempotency-Key</code>: איך Stripe ודומיו מונעים חיוב כפול.</li>
+      <li>טביעת אצבע, מה שומרים, ולכמה זמן.</li>
+      <li>מרוץ: שתי בקשות עם אותו מפתח באותו רגע — והמסד כפתרון.</li>
+    </ul>
+  </div>
+
+  <h2>1. התשובה שאבדה</h2>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="הלקוח שולח POST, השרת יוצר משימה, התשובה אובדת, הלקוח שולח שוב ונוצרת משימה שנייה">
+      <defs><marker id="id1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--muted);stroke-width:2"><path d="M600 30 V 210"/><path d="M120 30 V 210"/></g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700"><text x="600" y="22">client</text><text x="120" y="22">API</text></g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M596 50 H 124" marker-end="url(#id1)"/>
+        <path d="M124 90 H 380" style="stroke:var(--red);stroke-dasharray:6 4"/>
+        <path d="M596 140 H 124" marker-end="url(#id1)"/>
+        <path d="M124 180 H 596" marker-end="url(#id1)"/>
+      </g>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:12px">
+        <text x="360" y="44">POST /tasks {"title":"חלב"}</text>
+        <text x="360" y="134">POST /tasks {"title":"חלב"}</text>
+        <text x="360" y="174">201 {"id": 8}</text>
+        <text x="250" y="84">201 {"id": 7}</text>
+      </g>
+      <g style="font-size:12px" direction="rtl">
+        <text x="390" y="112" text-anchor="middle" style="fill:var(--red)">✖ הרשת נפלה</text>
+        <text x="110" y="70" text-anchor="end">נוצרה 7</text>
+        <text x="110" y="160" text-anchor="end">נוצרה 8 😬</text>
+        <text x="610" y="115">timeout — לנסות שוב?</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: הלקוח לא יכול לדעת אם הבקשה הראשונה בוצעה. אם הוא שולח שוב — כפילות. אם לא — אולי שום דבר לא נשמר.</figcaption>
+  </figure>
+  <p>זה לא מקרה נדיר: טלפון שעובר מ־Wi-Fi לסלולר, load balancer שמנתק אחרי 30 שניות, ספריית HTTP ש"מנסה שוב אוטומטית". במשימות — מעצבן. בתשלומים, בהזמנות, בהעברות כספים — אסון.</p>
+
+  <h2>2. idempotent</h2>
+  <p>פעולה <strong>idempotent</strong> — אם מבצעים אותה פעם אחת או עשר, המצב בשרת בסוף זהה. (לא בהכרח אותה <em>תשובה</em>: DELETE שני מחזיר 404, אבל המשימה מחוקה בשני המקרים.)</p>
+  <div class="table-wrap"><table>
+    <tr><th>method</th><th>idempotent?</th><th>למה</th></tr>
+    <tr><td><code>GET</code>, <code>HEAD</code></td><td>✔ (וגם safe)</td><td>לא משנים כלום</td></tr>
+    <tr><td><code>PUT</code></td><td>✔</td><td>"המשאב הוא בדיוק זה"</td></tr>
+    <tr><td><code>DELETE</code></td><td>✔</td><td>"המשאב לא קיים"</td></tr>
+    <tr><td><code>PATCH</code></td><td>תלוי</td><td><code>{"status":"done"}</code> — כן. <code>{"balanceDelta":-100}</code> — לא</td></tr>
+    <tr><td><code>POST</code></td><td>✖</td><td>"צור עוד אחד"</td></tr>
+  </table></div>
+  <p>אז עם GET, PUT ו־DELETE שולחים שוב בלי לחשוב. הבעיה היא POST — ושם נכנס המפתח.</p>
+
+  <h2>3. Idempotency-Key</h2>
+  <p>הלקוח מייצר מזהה <strong>לפני</strong> השליחה הראשונה (<code>crypto.randomUUID()</code>), ושולח אותו ב־header בכל ניסיון. השרת זוכר: "המפתח הזה, של המשתמש הזה — כבר בוצע, וזו הייתה התשובה". בניסיון חוזר הוא מחזיר את אותה תשובה — בלי לבצע שוב. מהפרויקט (פלט אמיתי, מקוצר):</p>
+```term
+% curl -si -X POST localhost:3000/tasks -H "Authorization: Bearer $TOKEN" \
+..   -H 'content-type: application/json' -H 'Idempotency-Key: 3f1c9a7e-new-task' -d '{"title":"לשלם חשבון חשמל"}'
+.. HTTP/1.1 201 Created
+.. Location: /tasks/1
+.. {"id":1,"title":"לשלם חשבון חשמל","description":null,"status":"todo",…}
+% # אותה בקשה, אותו מפתח:
+.. HTTP/1.1 201 Created
+.. Idempotent-Replayed: true
+.. Location: /tasks/1
+.. {"id":1,"title":"לשלם חשבון חשמל","status":"todo",…}
+% # אותו מפתח, תוכן אחר:
+.. {"error":{"code":"IDEMPOTENCY_KEY_REUSED","message":"המפתח כבר שימש לבקשה עם תוכן אחר"}}
+```
+  <p>(ושמת לב שבתשובה השנייה סדר השדות שונה? היא מגיעה מעמודת <code>jsonb</code> במסד — ו־PostgreSQL שומר מפתחות של jsonb בסדר משלו. לפי JSON זה אותו אובייקט בדיוק, ולקוח תקין לא תלוי בסדר. אבל אם אי פעם תשווה תשובות כמחרוזות — זו הסיבה שזה ייכשל.)</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="מצבי מפתח: חדש, בטיפול, הושלם; ומה מחזירים בכל מצב">
+      <defs><marker id="id2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="30" width="140" height="56" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="300" y="30" width="160" height="56" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="20" y="30" width="180" height="56" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 58 H 464" marker-end="url(#id2)"/>
+        <path d="M296 58 H 204" marker-end="url(#id2)"/>
+        <path d="M380 90 C 380 130, 600 130, 620 90" marker-end="url(#id2)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700"><text x="630" y="54">אין מפתח</text><text x="380" y="54">בטיפול</text><text x="110" y="54">הושלם</text></g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="630" y="74">→ execute</text><text x="380" y="74">status = null</text><text x="110" y="74">status + body</text>
+        <text x="510" y="50">reserve</text><text x="250" y="50">2xx / 4xx</text>
+      </g>
+      <text x="500" y="140" text-anchor="middle" style="font-size:11px" direction="rtl">נכשל (5xx או חריגה): המפתח נמחק</text>
+      <g style="font-size:12px" direction="rtl" text-anchor="start">
+        <text x="700" y="180">בקשה עם מפתח קיים, תוכן אחר ← 422 IDEMPOTENCY_KEY_REUSED</text>
+        <text x="700" y="200">…ובטיפול ← 409 IDEMPOTENCY_IN_PROGRESS (הלקוח מחכה ומנסה שוב)</text>
+        <text x="700" y="220">…והושלם ← אותו status ואותו body, עם Idempotent-Replayed: true</text>
+      </g>
+    </svg>
+    <figcaption>איור 2: מחזור החיים של מפתח. (ב־"אין מפתח" — גם מפתח שפג תוקפו.)</figcaption>
+  </figure>
+  <p>ההחלטות שבתוך האיור:</p>
+  <ul>
+    <li><strong>בהיקף של משתמש.</strong> המפתח הוא <code>(userId, key)</code>. מפתח גלובלי = יוסי ששולח במקרה את אותו מפתח מקבל את המשימה של דנה (E22).</li>
+    <li><strong>טביעת אצבע.</strong> sha256 של גוף הבקשה (ובמקרה הכללי גם method ונתיב). אותו מפתח עם תוכן אחר הוא באג אצל הלקוח — מחזירים 422, לא את התשובה הישנה בשקט.</li>
+    <li><strong>מה שומרים.</strong> תשובה סופית — 2xx וגם 4xx (שליחה חוזרת של בקשה לא תקינה תיכשל שוב בכל מקרה). <strong>לא</strong> 5xx: זה "לא הצלחנו", ובשביל ניסיון חוזר בדיוק כזה המנגנון קיים. בפרויקט: פעולה שזרקה שגיאה — <code>release</code>, והמפתח פנוי.</li>
+    <li><strong>לכמה זמן.</strong> ניסיונות חוזרים קורים תוך שניות עד שעות. Stripe שומר 24 שעות; גם אנחנו (<code>IDEMPOTENCY_TTL_HOURS</code>). אחר כך המפתח "חדש".</li>
+    <li><strong>חובה או רשות?</strong> בפרויקט — רשות: בלי header, POST עובד כרגיל. ב־API של תשלומים — כדאי לחייב (E24).</li>
+  </ul>
+
+  <h2>4. המרוץ</h2>
+  <p>"נבדוק אם המפתח קיים, ואם לא — נבצע ונשמור". נשמע נכון. אבל ספריית HTTP שולחת שוב אחרי timeout קצר — בזמן שהבקשה הראשונה <em>עדיין רצה</em>. שתיהן בודקות, שתיהן לא מוצאות, ושתיהן מבצעות. הרצנו גרסה כזו — SELECT ואז INSERT — עם 20 בקשות במקביל (פלט אמיתי):</p>
+```term
+.. fulfilled: 1 rejected: 19
+.. duplicate key value violates unique constraint "idempotency_keys_pkey"
+.. payments rows: 20
+```
+  <p>בקשה אחת הצליחה, 19 קיבלו שגיאה — ו־<strong>20 תשלומים</strong> נוצרו. ה־PRIMARY KEY על המפתח תפס את הכפילות רק בטבלת המפתחות, אחרי שהתשלום כבר נכתב.</p>
+  <p>הפתרון: <strong>קודם</strong> לתפוס את המפתח, באופן אטומי, ורק מי שתפס — מבצע. במסד זה INSERT למפתח עם אילוץ UNIQUE:</p>
+```sql
+BEGIN;
+INSERT INTO idempotency_keys (user_id, key, fingerprint) VALUES ($1, $2, $3)
+  ON CONFLICT (user_id, key) DO NOTHING RETURNING key;
+-- חזרה שורה? אתה "זכית": INSERT INTO payments ... ; UPDATE idempotency_keys SET payment_id = ...
+-- לא חזרה? מישהו אחר כבר תפס — SELECT את מה שהוא שמר
+COMMIT;
+```
+  <p>הקסם: כשטרנזקציה א׳ הכניסה מפתח ועוד לא עשתה COMMIT, טרנזקציה ב׳ שמנסה את אותו מפתח <strong>מחכה</strong> על האינדקס. COMMIT של א׳ ← ב׳ מקבלת DO NOTHING ורואה את התוצאה. ROLLBACK של א׳ ← ב׳ "זוכה". המסד מתאם, לא הקוד (E16). בפרויקט, עם Prisma: <code>create</code> על <code>idempotencyKey</code>; שגיאת <code>P2002</code> (unique) ← מישהו כבר תפס, וקוראים את השורה שלו. בלי טרנזקציה אחת ארוכה, ולכן יש מצב "בטיפול" (409) — מה שמונע ביצוע כפול הוא שוב ה־UNIQUE.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ בזיכרון — רק לשרת אחד</span>
+    <p>Map בזיכרון (E14) מספיק לתרגול ולשרת יחיד. עם שני שרתים מאחורי load balancer, הניסיון החוזר יכול להגיע לשרת השני — שלא יודע כלום. לכן בפרויקט המפתחות במסד, ובמערכות גדולות — ב־Redis (פרק 26).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P24-E04">E04</a> · <a href="exercises.html#P24-E14">E14</a> · <a href="exercises.html#P24-E15">E15</a> · <a href="exercises.html#P24-E16">E16</a> · <a href="exercises.html#P24-E22">E22</a></p>
+  </div>

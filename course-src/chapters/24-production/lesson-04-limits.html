@@ -1,0 +1,139 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה מגבילים קצב, ואת מי.</li>
+      <li>שלושה אלגוריתמים: fixed window, sliding window, token bucket.</li>
+      <li>429 נכון: <code>Retry-After</code> ו־<code>RateLimit-*</code>.</li>
+      <li>"מי הלקוח": <code>req.ip</code>, proxies ו־<code>trust proxy</code>.</li>
+      <li>כיבוי מסודר: SIGTERM, לסיים בקשות, ורק אז לסגור את המסד.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה להגביל</h2>
+  <p><code>POST /auth/login</code> בלי הגבלה: סקריפט מנסה רשימה של מיליון סיסמאות נפוצות, בכמה מאות בקשות בשנייה. bcrypt מאט כל ניסיון (פרק 21) — אבל גם תופס את המעבד, ושרת שעסוק ב־bcrypt בשביל תוקף לא עונה למשתמשים אמיתיים. ובלי תוקף בכלל: באג ב־frontend שקורא ל־API בלולאה. הגבלת קצב (rate limiting) — "לקוח X: עד N בקשות בפרק זמן; מעבר לזה ← <strong>429 Too Many Requests</strong>".</p>
+
+  <h2>2. שלוש דרכים לספור</h2>
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="השוואה בין fixed window, sliding window ו־token bucket">
+      <g style="stroke-width:2">
+        <rect x="490" y="20" width="210" height="210" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="255" y="20" width="210" height="210" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="210" height="210" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="595" y="46">fixed window</text><text x="360" y="46">sliding window</text><text x="125" y="46">token bucket</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:1.5">
+        <path d="M510 120 H 680"/><path d="M595 105 V 135"/>
+        <path d="M275 120 H 445"/>
+      </g>
+      <g style="fill:var(--red)">
+        <circle cx="575" cy="120" r="4"/><circle cx="582" cy="120" r="4"/><circle cx="589" cy="120" r="4"/>
+        <circle cx="601" cy="120" r="4"/><circle cx="608" cy="120" r="4"/><circle cx="615" cy="120" r="4"/>
+      </g>
+      <rect x="320" y="104" width="100" height="32" rx="4" style="fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:4 3"/>
+      <g style="fill:var(--accent)"><circle cx="340" cy="120" r="4"/><circle cx="360" cy="120" r="4"/><circle cx="395" cy="120" r="4"/></g>
+      <path d="M85 80 V 150 H 165 V 80" style="fill:none;stroke:var(--green);stroke-width:2.5"/>
+      <rect x="88" y="110" width="74" height="38" style="fill:var(--green);opacity:0.35"/>
+      <path d="M125 64 V 80" style="stroke:var(--svg-stroke);stroke-width:2" marker-end="url(#rl)"/>
+      <defs><marker id="rl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:11px">
+        <text x="550" y="150">12:00</text><text x="640" y="150">12:01</text>
+        <text x="370" y="150">last 60s</text>
+        <text x="125" y="60">+1 / 6s</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="595" y="180">מונה לכל דקה עגולה</text><text x="595" y="198">פשוט וזול — אבל פרץ בגבול</text><text x="595" y="214">מעביר פי 2</text>
+        <text x="360" y="180">סופרים בקשות בחלון שזז</text><text x="360" y="198">מדויק; זוכרים זמן לכל בקשה</text>
+        <text x="125" y="180">דלי של אסימונים שמתמלא</text><text x="125" y="198">מאפשר פרץ, שומר על ממוצע</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: אותה מגבלה — 10 בדקה — בשלוש דרכים. E05 עובר על מספרים.</figcaption>
+  </figure>
+  <p>בפרויקט — <strong>sliding window</strong> על register ו־login: 10 ניסיונות בדקה לכל IP (<code>AUTH_RATE_LIMIT_PER_MINUTE</code>). קל להסביר, קשיח, ומספר הבקשות קטן — אז לזכור זמן לכל אחת זה זול. ב־API ציבורי, שבו אפליקציה טוענת מסך ושולחת 8 בקשות בבת אחת — <strong>token bucket</strong> (E17).</p>
+
+  <h2>3. 429 שלקוח יכול לעבוד איתו</h2>
+  <p>מהפרויקט — הרשמה, ואחריה 9 ניסיונות כניסה עם סיסמה שגויה; העשירי (עם הסיסמה הנכונה!) נחסם (פלט אמיתי, מקוצר):</p>
+```term
+% curl -si -X POST localhost:3000/auth/login -H 'content-type: application/json' \
+..   -d '{"email":"dana@example.com","password":"long-password-1"}'
+.. HTTP/1.1 429 Too Many Requests
+.. X-Request-Id: bc6e7d69-7b69-464f-a4ec-1ee60f321598
+.. Retry-After: 57
+.. RateLimit-Limit: 10
+.. RateLimit-Remaining: 0
+.. RateLimit-Reset: 57
+.. {"error":{"code":"TOO_MANY_REQUESTS","message":"יותר מדי ניסיונות. נסה שוב בעוד 57 שניות"}}
+```
+  <ul>
+    <li><strong><code>Retry-After</code></strong> — בשניות (תקן HTTP). לקוח טוב מחכה בדיוק את זה. מילישניות כאן = "חכה 16 שעות" (E23).</li>
+    <li><strong><code>RateLimit-Limit</code> / <code>-Remaining</code> / <code>-Reset</code></strong> — גם בתשובות <em>מוצלחות</em>: הלקוח רואה שהוא מתקרב, ומאט לפני שהוא נחסם. (טיוטת תקן של IETF; GitHub שולח <code>X-RateLimit-*</code>.)</li>
+    <li><strong>בקשה שנדחתה לא נספרת</strong> — אחרת לקוח שמנסה שוב כל שנייה לא ייצא מהחסימה לעולם.</li>
+  </ul>
+
+  <h2>4. מי הלקוח?</h2>
+  <p>בלי משתמש מחובר (login!) — כתובת ה־IP: <code>req.ip</code>. אבל כשהשרת מאחורי proxy (nginx, load balancer של הענן), כל הבקשות מגיעות <em>מה־proxy</em> — וכל העולם הוא "לקוח אחד", שנחסם אחרי 10 בקשות. ה־proxy מוסיף header: <code>X-Forwarded-For: &lt;הכתובת האמיתית&gt;</code>.</p>
+  <p>הפיתוי: <code>req.get("x-forwarded-for")</code>. הבעיה: זה header — <strong>הלקוח</strong> יכול לשלוח אותו בעצמו, עם כתובת אחרת בכל בקשה, ולעקוף את ההגבלה לגמרי (E23). הדרך הנכונה: <code>app.set("trust proxy", 1)</code> — "יש בדיוק proxy אחד שאני סומך עליו". Express לוקח מה־header רק את מה ש<em>ה־proxy</em> הוסיף, ומעדכן את <code>req.ip</code>. בפרויקט: <code>TRUST_PROXY</code> ב־env — כבוי כברירת מחדל, ונדליק אותו בפריסה (פרק 25).</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ בזיכרון — רק לשרת אחד</span>
+    <p>המונים ב־Map. שלושה שרתים = כל אחד סופר לבד, והמגבלה האמיתית פי 3. ושרת שעושה restart — מתאפס. בשביל מגבלה משותפת — Redis (פרק 26). ולקוחות שנעלמו צריך לנקות, אחרת ה־Map רק גדל.</p>
+  </div>
+
+  <h2>5. כיבוי מסודר</h2>
+  <p>deploy חדש, הגדלה או הקטנה של מספר השרתים, <code>docker compose down</code> — כולם שולחים לתהליך <strong>SIGTERM</strong>: "סיים יפה". אחרי זמן קצוב (10 שניות ב־Docker) — SIGKILL, בלי לשאול. בזמן הזה צריך:</p>
+  <ol>
+    <li>להפסיק לקבל חיבורים חדשים (ולהגיד ל־load balancer — <code>/ready</code> מחזיר 503).</li>
+    <li>לסגור חיבורי keep-alive שלא באמצע בקשה.</li>
+    <li>לחכות שהבקשות שבאמצע יסתיימו — עם גבול זמן.</li>
+    <li>רק אז — לסגור את המסד, ולצאת.</li>
+  </ol>
+```ts run
+import http from "node:http";
+
+const server = http.createServer((req, res) => {
+  console.log("server: start", req.url);
+  setTimeout(() => res.end("ok"), 300); // "עבודה" של 300ms
+});
+await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+
+const slow = fetch(url + "/slow").then(async (r) => console.log("client: got", r.status, await r.text()));
+await new Promise((r) => setTimeout(r, 50));
+
+console.log("SIGTERM → stop accepting");
+const closed = new Promise((r) => server.close(r)); // מחכה שכל החיבורים ייסגרו
+server.closeIdleConnections();
+await fetch(url + "/new").catch((e) => console.log("client: new request →", e.cause?.code));
+await slow;
+await closed;
+console.log("server closed → now close the DB, exit 0");
+```
+```out
+server: start /slow
+SIGTERM → stop accepting
+client: new request → ECONNREFUSED
+client: got 200 ok
+server closed → now close the DB, exit 0
+```
+  <p>הבקשה שבאמצע קיבלה את התשובה שלה; חדשה — נדחתה; והשרת נסגר רק אחרי. (מ־Node 19, <code>server.close()</code> סוגר בעצמו גם חיבורי keep-alive פנויים; <code>closeIdleConnections()</code> כאן — כדי שיהיה מפורש.) מה שחסר: בקשה שלא נגמרת לעולם תשאיר את השרת פתוח עד ה־SIGKILL. E19 משלים: גבול זמן, סגירה בכוח, ו־<code>onClose</code>.</p>
+  <p>ב־Nest: <code>app.enableShutdownHooks()</code> (בפרויקט מ־main.ts) מאזין ל־SIGTERM וקורא ל־<code>app.close()</code>. אבל <strong>הסדר</strong> מפתיע — בדקנו בניסוי: אפליקציה עם בקשה של 300ms באמצע, SIGTERM, ומסד שנסגר ב־hook (פלט אמיתי):</p>
+  <div class="table-wrap"><table>
+    <tr><th>המסד נסגר ב־<code>onModuleDestroy</code></th><th>המסד נסגר ב־<code>onApplicationShutdown</code></th></tr>
+    <tr><td><pre class="terminal">onModuleDestroy
+client: 500 {"statusCode":500,…}
+onApplicationShutdown SIGTERM</pre></td><td><pre class="terminal">onModuleDestroy
+client: 200 {"result":"rows"}
+onApplicationShutdown SIGTERM</pre></td></tr>
+  </table></div>
+  <p>Nest מפעיל את <code>onModuleDestroy</code> <em>לפני</em> שהוא סוגר את שרת ה־HTTP, ואת <code>onApplicationShutdown</code> — אחרי. אז מי שסוגר את המסד ב־<code>onModuleDestroy</code> (כמו ה־<code>PrismaService</code> שלנו עד עכשיו, וכמו הרבה מדריכים) — חותך בקשות באמצע. בפרויקט עברנו ל־<code>onApplicationShutdown</code>. ובגלל CMD בצורת מערך ב־Dockerfile (פרק 23), ה־SIGTERM באמת מגיע ל־Node.</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th><code>/health</code> (liveness)</th><th><code>/ready</code> (readiness)</th></tr>
+    <tr><td>שואל</td><td>"התהליך חי?"</td><td>"לשלוח לך תנועה?"</td></tr>
+    <tr><td>כשנכשל</td><td>מפעילים מחדש את הקונטיינר</td><td>מפסיקים לשלוח בקשות (בלי להרוג)</td></tr>
+    <tr><td>בזמן כיבוי</td><td>200</td><td>503</td></tr>
+  </table></div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P24-E05">E05</a> · <a href="exercises.html#P24-E17">E17</a> · <a href="exercises.html#P24-E18">E18</a> · <a href="exercises.html#P24-E19">E19</a> · <a href="exercises.html#P24-E23">E23</a></p>
+  </div>

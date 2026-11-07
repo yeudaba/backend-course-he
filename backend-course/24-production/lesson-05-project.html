@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פרויקט 2, שלב ז׳: מוכן לפרודקשן — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ שיעור 5</div>
+  <h1>שיעור 5 — פרויקט 2, שלב ז׳: מוכן לפרודקשן</h1>
+  <p class="subtitle">⏱ ~75 דקות · 🤖 PR2-PROD</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>פרויקט 2, שלב ז׳: לוגים מובנים עם requestId ו־userId.</li>
+      <li>"היום" לפי אזור הזמן של המשתמש.</li>
+      <li><code>Idempotency-Key</code> ב־<code>POST /tasks</code>, עם טבלה במסד.</li>
+      <li>הגבלת קצב על הרשמה וכניסה, וכיבוי שלא חותך בקשות.</li>
+    </ul>
+  </div>
+
+  <h2>1. מה משתנה</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>מה</th></tr>
+    <tr><td><code>src/config.ts</code></td><td><code>LOG_LEVEL</code>, <code>AUTH_RATE_LIMIT_PER_MINUTE</code>, <code>IDEMPOTENCY_TTL_HOURS</code> — עם zod וברירות מחדל</td></tr>
+    <tr><td><code>src/common/request-context.ts</code></td><td><code>AsyncLocalStorage</code> של <code>{ requestId, userId? }</code></td></tr>
+    <tr><td><code>src/common/logger.ts</code></td><td><code>AppLogger</code>: JSON, רמות, redact; מממש <code>LoggerService</code> של Nest</td></tr>
+    <tr><td><code>src/common/request-id.middleware.ts</code></td><td>X-Request-Id, הקשר, שורת לוג בסוף כל בקשה</td></tr>
+    <tr><td><code>src/common/observability.module.ts</code></td><td>מודול גלובלי: <code>AppLogger</code> ו־<code>LOG_SINK</code> (stdout)</td></tr>
+    <tr><td><code>src/common/time.ts</code></td><td><code>isValidTimeZone</code>, <code>localDate</code></td></tr>
+    <tr><td><code>src/idempotency/*</code></td><td>repository (בזיכרון ו־Prisma), <code>IdempotencyService</code></td></tr>
+    <tr><td><code>src/auth/auth-rate-limit.guard.ts</code></td><td>חלון נע לכל IP על register/login</td></tr>
+    <tr><td><code>prisma/schema.prisma</code> + migration</td><td><code>users.time_zone</code>, טבלת <code>idempotency_keys</code></td></tr>
+    <tr><td><code>src/prisma/prisma.service.ts</code></td><td><code>onApplicationShutdown</code> במקום <code>onModuleDestroy</code> (שיעור 4)</td></tr>
+    <tr><td><code>web/app.js</code></td><td>שולח <code>timeZone</code> בהרשמה ו־<code>Idempotency-Key</code> ביצירה; מציג "קוד לתמיכה" ב־5xx</td></tr>
+  </table></div>
+  <p>הפתרון המלא: <code>24-production/solutions/tasks-api</code>. כדאי לכתוב בעצמך ולהשוות — הקבצים קצרים, וכל אחד מהם הוא תרגיל שכבר פתרת בגרסה קטנה.</p>
+
+  <h2>2. לוגים</h2>
+<span class="file-label">src/common/request-id.middleware.ts</span>
+<pre><code class="lang-ts">export function requestIdMiddleware(logger: AppLogger) {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const incoming = req.get("x-request-id");
+    const requestId = incoming &amp;&amp; VALID_ID.test(incoming) ? incoming : randomUUID();
+    res.setHeader("X-Request-Id", requestId);
+    const started = performance.now();
+    const context = { requestId } as { requestId: string; userId?: number };
+
+    res.on("finish", () =&gt; {
+      const status = res.statusCode;
+      const path = req.originalUrl.split("?")[0];
+      // healthcheck של Docker מגיע כל 5 שניות — בהצלחה הוא רק רעש, אז debug
+      const level = status &gt;= 500 ? "error" : status &gt;= 400 ? "warn" : path === "/health" ? "debug" : "info";
+      const userId = (req as Request &amp; { user?: { id: number } }).user?.id;
+      requestContext.run({ ...context, ...(userId ? { userId } : {}) }, () =&gt;
+        logger.write(level, "request", { method: req.method, path, status, durationMs: Math.round(performance.now() - started) }),
+      );
+    });
+
+    requestContext.run(context, next);
+  };
+}</code></pre>
+  <ul>
+    <li><code>configureApp</code> רושם אותו <strong>ראשון</strong> (<code>app.use</code>) — לפני ה־body parser, כדי שגם JSON שבור יקבל requestId.</li>
+    <li><code>JwtAuthGuard</code>, אחרי שאימת את הטוקן: <code>currentRequest().userId = req.user.id</code> — ומאותו רגע כל שורת לוג בבקשה כוללת אותו.</li>
+    <li><code>main.ts</code>: <code>NestFactory.create(AppModule, { bufferLogs: true })</code> ו־<code>app.useLogger(app.get(AppLogger))</code> — גם ההודעות של Nest עצמו יוצאות כ־JSON.</li>
+    <li>בבדיקות — <code>LOG_SINK</code> מוחלף במערך, וה־JSON נבדק ישירות.</li>
+  </ul>
+
+  <h2>3. אזור זמן</h2>
+  <p>ב־schema: <code>timeZone String @default("UTC") @map("time_zone")</code>. ב־zod של הרשמה: <code>timeZone: z.string().refine(isValidTimeZone).default("UTC")</code>, ו־<code>PATCH /auth/me</code> עם <code>z.strictObject({ timeZone })</code> — רק השדה הזה. ב־<code>TasksService</code>, במקום "היום של השרת":</p>
+<pre><code class="lang-ts">private async todayFor(ownerId: number) {
+  const user = await this.users.findById(ownerId);
+  return localDate(this.now(), user?.timeZone ?? "UTC");
+}</code></pre>
+  <p>לכן <code>TasksModule</code> מייבא את <code>AuthModule</code> (שמייצא את <code>USERS_REPOSITORY</code>), והבנאי של <code>TasksService</code> מקבל עוד פרמטר. הבדיקות משלב ה׳ צריכות עדכון קטן — וזה בדיוק מה שהן אמורות לעשות: לשבור כשמשהו משתנה.</p>
+
+  <h2>4. Idempotency-Key</h2>
+<span class="file-label">prisma/migrations/…_production_features/migration.sql</span>
+<pre><code class="lang-sql">ALTER TABLE "users" ADD COLUMN     "time_zone" TEXT NOT NULL DEFAULT 'UTC';
+
+CREATE TABLE "idempotency_keys" (
+    "id" SERIAL NOT NULL,
+    "user_id" INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "fingerprint" TEXT NOT NULL,
+    "status" INTEGER,
+    "body" JSONB,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "idempotency_keys_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "idempotency_keys_user_id_key_key" ON "idempotency_keys"("user_id", "key");</code></pre>
+  <p>(נוצר עם <code>npx prisma migrate dev --name production_features</code>, מקוצר.) <code>status</code> ריק = "בטיפול". ה־UNIQUE על <code>(user_id, key)</code> הוא מה שמבטיח שרק בקשה אחת "זוכה" — <code>PrismaIdempotencyRepository.reserve</code> מנסה <code>create</code>, ועל <code>P2002</code> קורא את השורה הקיימת: טביעה אחרת ← mismatch; <code>status</code> ריק ← in_progress; אחרת ← replay. מפתח שפג תוקפו — נמחק ומנסים שוב.</p>
+<span class="file-label">src/tasks/tasks.controller.ts</span>
+<pre><code class="lang-ts">@Post()
+@ApiHeader({ name: "Idempotency-Key", required: false, description: "אותו מפתח שוב ← אותה תשובה, בלי משימה כפולה" })
+async create(
+  @CurrentUser() user: AuthUser,
+  @Body(new ZodValidationPipe(createTaskSchema)) body: CreateTaskInput,
+  @Res({ passthrough: true }) res: Response,
+  @Headers("idempotency-key") key?: string,
+) {
+  const create = () =&gt; this.tasks.create(user.id, body);
+  const { replayed, body: task } = key === undefined ? { replayed: false, body: await create() } : await this.idempotency.run(user.id, key, body, create);
+  if (replayed) res.setHeader("Idempotent-Replayed", "true");
+  res.location(`/tasks/${task.id}`);
+  return task;
+}</code></pre>
+  <p>הטביעה מחושבת מה־body <strong>אחרי</strong> ה־ZodValidationPipe — כלומר אחרי <code>trim</code> וברירות מחדל. <code>{"title":" חלב "}</code> ו־<code>{"title":"חלב"}</code> הן אותה בקשה. ו־<code>IdempotencyService.run</code>: הצלחה ← <code>complete(201, task)</code>; שגיאה (למשל <code>DUE_DATE_IN_PAST</code>) ← <code>release</code>, והלקוח יכול לתקן ולשלוח עם אותו מפתח.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ CORS</span>
+    <p>הדף ב־5500 שולח header חדש (<code>Idempotency-Key</code>) — הדפדפן שואל קודם ב־preflight, ו־<code>enableCors</code> מאשר (פלט אמיתי: <code>Access-Control-Allow-Headers: authorization,content-type,idempotency-key</code>). והכיוון ההפוך: כדי ש־JavaScript יוכל <em>לקרוא</em> <code>X-Request-Id</code> ו־<code>Retry-After</code> מהתשובה, צריך <code>exposedHeaders</code> — בלעדיו <code>res.headers.get("x-request-id")</code> מחזיר <code>null</code>.</p>
+  </div>
+
+  <h2>5. הגבלת קצב וכיבוי</h2>
+  <p><code>AuthRateLimitGuard</code> — חלון נע של 60 שניות לכל <code>req.ip</code>, <code>@UseGuards</code> על register ו־login (ולא על refresh: שם כבר צריך טוקן תקף). <code>TRUST_PROXY</code> ב־env — מספר ה־proxies שלפני השרת; בלי — <code>X-Forwarded-For</code> לא נחשב. ו־<code>PrismaService</code> סוגר את המסד ב־<code>onApplicationShutdown</code>. בפועל (פלט אמיתי): <code>docker compose stop api</code> הסתיים ב־0.24 שניות — Node קיבל SIGTERM וסגר יפה, ולא חיכה 10 שניות ל־SIGKILL.</p>
+
+  <h2>6. להריץ ולבדוק</h2>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev/tasks-api
+<span class="prompt">% </span>npx prisma migrate dev --name production_features
+<span class="prompt">% </span>npm test
+<span class="dim">Tests:       37 passed, 37 total</span>
+<span class="prompt">% </span>docker compose up -d --build --wait
+<span class="prompt">% </span>docker compose logs api --no-log-prefix | tail -2
+<span class="dim">{"time":"2026-11-07T15:51:10.397Z","level":"info","msg":"server started","port":3000,"docs":"/docs"}</span>
+<span class="dim">{"time":"2026-11-07T15:51:14.663Z","level":"info","msg":"request","requestId":"6082ce0a-7931-471b-b149-9bbe8be0c1ac","method":"OPTIONS","path":"/tasks","status":204,"durationMs":1}</span></pre>
+  <p>(פלטים אמיתיים, מקוצרים.) ב־compose — שינוי אחד: <code>LOG_LEVEL: ${LOG_LEVEL:-info}</code> בשירות <code>api</code>. ו־<code>migrate</code> מריץ את ה־migration החדש לבד בעלייה. נסה מהדף ב־5500: הירשם, צור משימה, ובטרמינל — <code>docker compose logs -f api</code>. כל לחיצה — שורה, עם ה־userId שלך.</p>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev/backend-course
+<span class="prompt">% </span>npm run build --prefix ~/dev/tasks-api
+<span class="prompt">% </span>npm run check PR2-PROD -- --dir ~/dev/tasks-api
+<span class="prompt">% </span>npm run check PR2-PROD-DB -- --dir ~/dev/tasks-api</pre>
+  <p><strong>PR2-PROD</strong> (על <code>dist/</code>, עם repositories בזיכרון ושעון קבוע): X-Request-Id חדש / של הלקוח / מוחלף כשלא תקין, גם ב־404 וב־JSON שבור; שורת JSON אחת לכל בקשה עם requestId, userId, path בלי query, ורמה לפי status; <code>/health</code> מוצלח לא נכתב ב־info; redact ו־LOG_LEVEL; Idempotency-Key — replay, 422, לכל משתמש, 400 על מפתח לא תקין, שחרור אחרי כישלון, ותוקף של 24 שעות; 429 בבקשה ה־11 עם <code>Retry-After</code> מדויק, וחלון נע; ו"היום" לפי אזור הזמן ב־POST וב־stats. <strong>PR2-PROD-DB</strong> (מול PostgreSQL): העמודה והטבלה, ה־UNIQUE — ו־10 בקשות במקביל עם אותו מפתח ← משימה אחת במסד.</p>
+  <p>הקבצים נטענים לפי השמות שבטבלה למעלה (<code>dist/common/logger.js</code>, <code>dist/idempotency/idempotency.repository.js</code>…) — אם קראת להם אחרת, הבודק יגיד איזה חסר. commit, push, ועדכן את ה־README: סעיף "Production readiness" עם ארבע השורות — לוגים, אזורי זמן, idempotency, rate limit.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"איך היית מונע חיוב כפול?", "משתמש אומר שקיבל שגיאה — איך תמצא מה קרה?", "איך מגינים על login מניחוש סיסמאות?", "מה קורה לבקשות כשעושים deploy?" — אלה שאלות ראיון אמיתיות למשרות Backend, גם לג׳וניורים, והן בדיוק מה שהוספת עכשיו. תשובה טובה מראה שהבנת את <em>הבעיה</em>: Idempotency-Key עם UNIQUE במסד ולא SELECT-ואז-INSERT; requestId שעובר מהלקוח ללוג; sliding window עם <code>Retry-After</code> ו־<code>trust proxy</code>; SIGTERM, לסיים בקשות, ורק אז לסגור את המסד. ובפרויקט בתיק העבודות — סעיף כזה ב־README מבדיל אותך ממאות פרויקטי CRUD.</p>
+  </div>
+
+<div class="pager"><a href="lesson-04-limits.html"><small>הקודם</small>שיעור 4 — הגבלת קצב וכיבוי מסודר</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>
