@@ -2,7 +2,7 @@
 
 קורס **Backend** שלם בעברית ללמידה עצמית: מ"מה זה משתנה" ועד שרת **NestJS** עם **PostgreSQL**, אבטחה, בדיקות, Docker ופריסה, ובסופו פרויקט לתיק העבודות. הקורס נבנה עבור לומד שעובד על **Mac** עם **VS Code**.
 
-> **בקצרה:** 24 פרקים, יחידות ופרויקטים מוכנים (עד פרק 20, NestJS) · 512 תרגילים עם רמזים ודף פתרונות נפרד · בודק אוטומטי (`npm run check P16-E06`) · כל דוגמת קוד, פלט והודעת שגיאה בשיעורים נבדקו בהרצה אמיתית.
+> **בקצרה:** 25 פרקים, יחידות ופרויקטים מוכנים (עד פרק 21, כניסה והרשאות) · 537 תרגילים עם רמזים ודף פתרונות נפרד · בודק אוטומטי (`npm run check P16-E06`) · כל דוגמת קוד, פלט והודעת שגיאה בשיעורים נבדקו בהרצה אמיתית.
 
 ---
 
@@ -54,9 +54,9 @@ JavaScript ← TypeScript ← Node.js/npm ← HTTP ← Express 5 + Zod 4 ← HTM
 | פרק 18 | `18-consistency` | transactions, race conditions, indexes/EXPLAIN, N+1, keyset pagination | ✔ |
 | פרק 19 | `19-prisma` | Prisma 7 ו־migrations, **פרויקט 2 שלב ב׳** (PostgreSQL) | ✔ |
 | פרק 20 | `20-nestjs` | modules, DI, DTOs, pipes, guards, interceptors, filters, Swagger, **פרויקט 2 שלב ג׳** | ✔ |
+| פרק 21 | `21-auth` | bcrypt, JWT, refresh tokens עם rotation, תפקידים, בעלות על מידע, OWASP, **פרויקט 2 שלב ד׳** | ✔ |
 
 **מה עוד יבוא** (לפי האפיון, `אפיון_קורס_Backend_v2.md`):
-- 21 — כניסה והרשאות (bcrypt, JWT, תפקידים, OWASP)
 - 22 — בדיקות
 - 23 — Linux ו־Docker
 - 24 — API של מוצר אמיתי
@@ -74,7 +74,8 @@ JavaScript ← TypeScript ← Node.js/npm ← HTTP ← Express 5 + Zod 4 ← HTM
 1. **שלב א׳ (פרק 15):** Express ו־Zod, repository בזיכרון, מבנה שגיאות אחיד, דף הדגמה ב־HTML.
 2. **שלב ב׳ (פרק 19):** PostgreSQL דרך Prisma. הסינון, המיון וה־pagination נעשים במסד.
 3. **שלב ג׳ (פרק 20):** NestJS, עם אותן סכמות Zod, filter לשגיאות ו־Swagger ב־`/docs`.
-4. **בהמשך:** משתמשים ו־JWT (21), בדיקות (22), Docker (23) ופריסה עם קישור חי (25).
+4. **שלב ד׳ (פרק 21):** משתמשים, bcrypt, JWT ו־refresh tokens, תפקידים — וכל משתמש רואה רק את המשימות שלו. דף ההדגמה עם כניסה.
+5. **בהמשך:** בדיקות (22), Docker (23) ופריסה עם קישור חי (25).
 
 ---
 
@@ -89,7 +90,7 @@ JavaScript ← TypeScript ← Node.js/npm ← HTTP ← Express 5 + Zod 4 ← HTM
 ├── אפיון_קורס_CSharp_DotNet_המשך.md ← קורס נפרד, לא חלק מהעבודה כאן
 ├── backend-course/               ← ★ מה שהלומד מקבל. נבנה אוטומטית (חוץ מ־00-setup)
 │   ├── README.html, glossary.html, assets/style.css
-│   ├── 00-setup/ … 20-nestjs/    ← שיעורים, exercises.html, solutions.html, starter/, solutions/, tests/
+│   ├── 00-setup/ … 21-auth/    ← שיעורים, exercises.html, solutions.html, starter/, solutions/, tests/
 │   ├── package.json, tsconfig.json, eslint.config.mjs
 │   └── tools/                    ← הבודק: check.mjs, load.mjs, sql.mjs, nest.mjs, reporter.mjs
 └── course-src/                   ← ★ המקור. כאן עורכים
@@ -145,7 +146,7 @@ node course-src/build.mjs --fill 21       # כמו --verify, וממלא פלט �
 
 ## טכנולוגיות וגרסאות
 
-Node.js 24 (Node 22 נתמך באימות) · TypeScript · Express 5 · Zod 4 · PostgreSQL 18 · Prisma 7.10 (`@prisma/adapter-pg`) · NestJS 12 · class-validator · @nestjs/swagger · `node:test`.
+Node.js 24 (Node 22 נתמך באימות) · TypeScript · Express 5 · Zod 4 · PostgreSQL 18 · Prisma 7.10 (`@prisma/adapter-pg`) · NestJS 12 · class-validator · @nestjs/swagger · @nestjs/jwt · bcryptjs · `node:test`.
 
 ## רישיון ושימוש
 

@@ -137,6 +137,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרקים 16–19 אומתו גם אחר כך, כל אחד בנפרד. **כולם ירוקים.**
 - אימות מלא רץ גם **בענן** (לינוקס, PostgreSQL 18 ב־Docker) — זהה למק, כולל פלטי EXPLAIN של פרק 18.
 - פרק 20 הושלם: 25 תרגילים, 20 בדיקות + PR2-NEST — **ירוק**.
+- פרק 21 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-AUTH + PR2-AUTH-DB — **ירוק**.
 
 ---
 
@@ -180,6 +181,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 18 | `18-consistency` | transactions, race conditions (אומתו עם שני חיבורים אמיתיים), indexes/EXPLAIN, N+1, keyset pagination, `pg` מ־Node. `files/bank.sql` (200,000 שורות, 2,000 לקוחות × 100 הזמנות) | ✔ כולל בדיקות מקביליות |
 | 19 | `19-prisma` | Prisma 7.10.1. פרויקט Prisma ב־`files/` (schema, migrations, seed). שיעור 4 + `solutions/tasks-api` = **פרויקט 2 שלב ב׳** (PostgreSQL). בדיקה PR2-DB | ✔ |
 | 20 | `20-nestjs` | modules, DI, DTOs, pipes, guards, interceptors, filters, Swagger. 25 תרגילים (כל תרגיל = קובץ `.ts` עצמאי שנטען עם `loadNest`). `starter/tsconfig.json` ל־VS Code. שיעור 4 = **פרויקט 2 שלב ג׳** (PR2-NEST) | ✔ |
+| 21 | `21-auth` | bcrypt (bcryptjs), JWT (@nestjs/jwt), refresh tokens אטומים (SHA-256 במסד) עם rotation וזיהוי שימוש חוזר, roles, בעלות (404), OWASP API Top 10. שיעור 5 = **פרויקט 2 שלב ד׳**. בדיקות PR2-AUTH (בזיכרון) ו־PR2-AUTH-DB (PostgreSQL אמיתי) | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -217,8 +219,15 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - `ZodValidationPipe` (אותן סכמות). `HttpErrorFilter` (`@Catch()`) לאותו מבנה שגיאות.
   - `configureApp(app)` — filter, CORS, Swagger ב־`/docs` (`z.toJSONSchema`).
   - Prisma בגנרטור: `moduleFormat="cjs"`, `importFileExtension=""`. ה־seed משתמש ב־pg ישירות.
+- **שלב ד׳** (`21-auth/solutions/tasks-api`): משתמשים.
+  - Prisma: `User` (email unique, passwordHash, role enum user/admin), `RefreshToken` (tokenHash unique, expiresAt, revokedAt), `Task.ownerId` (FK, ON DELETE CASCADE). ה־migration `add_users` נערך ביד: `DELETE FROM "tasks"` (בשיעור: expand ← backfill ← contract לפרודקשן).
+  - `src/config.ts`: `ConfigModule` גלובלי עם `CONFIG` (JWT_SECRET ≥ 32 תווים, ACCESS_TOKEN_TTL_SECONDS=900, REFRESH_TOKEN_TTL_DAYS=7, BCRYPT_ROUNDS=12) ו־`CLOCK` (שעבר מ־tasks.tokens, שממשיך לייצא אותו).
+  - `src/auth/*`: AuthService (register/login/refresh/logout/me/verifyAccessToken), JwtAuthGuard + RolesGuard כ־`APP_GUARD` (בסדר הזה), `@Public()`, `@Roles()`, `@CurrentUser()`. repositories בזיכרון + Prisma לכל דבר (USERS_REPOSITORY, REFRESH_TOKENS_REPOSITORY).
+  - tasks: כל פונקציה ב־repository מקבלת `ownerId`; Prisma עם `findFirst`/`updateMany`/`deleteMany` ו־ownerId ב־WHERE. משימה של אחר ← 404.
+  - קודי שגיאה חדשים: UNAUTHORIZED, INVALID_TOKEN, FORBIDDEN, EMAIL_TAKEN (409), INVALID_CREDENTIALS, INVALID_REFRESH_TOKEN.
+  - `GET /users` ל־admin. Swagger עם `addBearerAuth()`. `web/` עם כניסה (access בזיכרון, refresh ב־sessionStorage, refresh אוטומטי על 401). seed עם 3 משתמשים (`dana@example.com` / `dana-password-1` וכו׳). `.env.example`.
+  - נבדק גם ידנית: שרת אמיתי + הדף ב־Chromium דרך CORS (כניסה, הוספה, רענון, יציאה).
 - **השלבים שנשארו** (לפי האפיון):
-  - פרק 21 — משתמשים, JWT והרשאות ("משתמש רואה רק את שלו").
   - פרק 22 — בדיקות.
   - פרק 23 — Docker.
   - פרק 25 — פריסה.
@@ -257,20 +266,22 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרק 21 (כניסה והרשאות) + פרויקט 2 שלב ד׳
-פרק 20 **הושלם** (ראה סעיף 6). נקודות שנלמדו בדרך ושכדאי לזכור לפרקים הבאים:
-- בלי `@Injectable()` על class עם תלויות — **אין שגיאה בעלייה**; Nest יוצר אותו בלי ארגומנטים (`design:paramtypes` חסר) והוא קורס בבקשה הראשונה (P20-E20).
-- הודעת DI אמיתית ב־Nest 12: `... is available in the OrdersModule module.` + "Potential solutions" (לא "context").
-- `ValidationPipe` על `stock` חסר מחזיר **שתי** הודעות (`must not be less than 0` + `must be an integer number`).
-- `res.setHeader` לפני `throw` ב־guard — ה־header נשמר בתשובת השגיאה (429 + Retry-After).
-- Zod 4: `.transform(...).default(false)` — ה־default הוא ערך פלט. `z.coerce.boolean("false")` ← `true`.
-- `APP_FILTER` / `APP_PIPE` / `APP_INTERCEPTOR` בתוך module — כך תרגילים לא צריכים `setup` בבדיקה.
+### 7.1 הצעד הבא המיידי — פרק 22 (בדיקות) + פרויקט 2: כיסוי בדיקות
+פרקים 20 ו־21 **הושלמו** (ראה סעיף 6). נקודות שנלמדו בפרק 21:
+- `JwtModule.registerAsync({ inject: [CONFIG] })` — ה־factory רץ בתוך JwtModule. בלי `imports: [ModuleWithConfig]` (או module גלובלי) מתקבל: `Nest can't resolve dependencies of the JWT_MODULE_OPTIONS (?). ... "CONFIG" at index [0] is available in the JwtModule module.`
+- `overrideProvider(CONFIG)` בבדיקה משפיע גם על הסוד של JwtModule (כי הוא נקרא מ־CONFIG).
+- jsonwebtoken: `iat` ב־payload קובע ממנו נספר `expiresIn`; `verifyAsync(token, { clockTimestamp })` — בדיוק ב־`exp` כבר `TokenExpiredError`.
+- bcryptjs 3: `$2b$`, 60 תווים; `compare` מול hash לא תקין מחזיר false (לא זורק); חותך אחרי 72 בתים.
+- `@IsEmail()` נכשל על רווחים מסביב — נרמול עם `@Transform` (רץ לפני הבדיקה עם `transform: true`).
+- guard שמחזיר `false` ← 403 `{"message":"Forbidden resource",...}`.
+- Nest: גוף JSON מעל 100kb ← 413.
+- הבודק (`tools/nest.mjs`) — `loadNest` עובד גם לקבצים בלי Nest (פונקציות טהורות), ו־`new Service(fake)` ישירות בבדיקה.
+- **פרק 22 צריך לשים לב:** PR2-NEST (פרק 20) לא עובר על שלב ד׳ (אין טוקן) — צפוי וכתוב בשיעור 5 של פרק 21.
 
 ### 7.2 שאר הקורס (לפי האפיון, סעיף 8)
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 21 | כניסה והרשאות | bcrypt, JWT, refresh tokens, roles, בעלות על מידע, OWASP בסיסי. פרויקט 2 שלב ד׳: משתמשים, כל משתמש רואה רק את שלו |
 | 22 | בדיקות | unit, integration, e2e, mocks, מסד בדיקות. כיסוי בדיקות לפרויקט 2 (Jest של Nest או node:test) |
 | 23 | Linux ו־Docker | **Docker לא מותקן במחשב** — לסמן דוגמאות כ"לא אומת" או לבקש התקנה. פקודות Linux, Dockerfile, Compose, volumes. פרויקט 2 עולה בפקודה אחת |
 | 24 | API של מוצר אמיתי | logs, request ID, תאריכים ואזורי זמן, idempotency, rate limit |
@@ -329,6 +340,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~להשלים את פרק 20~~ ✔ הושלם. **עכשיו: פרק 21** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh`.
-4. **להמשיך לפרק 21 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
+3. ~~פרקים 20–21~~ ✔ הושלמו. **עכשיו: פרק 22** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש).
+4. **להמשיך לפרק 22 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).
