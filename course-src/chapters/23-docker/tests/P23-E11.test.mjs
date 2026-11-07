@@ -8,6 +8,16 @@ import { runScript } from "../../tools/shell.mjs";
 
 const inspect = () => JSON.parse(docker(["inspect", "p23-e11-db"]).stdout || "[]")[0];
 
+// מוכן = מקבל חיבורי TCP. בזמן initdb (בהרצה הראשונה) רץ שרת זמני שמאזין רק ל־socket מקומי —
+// pg_isready בלי -h היה עונה "מוכן" כבר אז, ומחיקה של הקונטיינר באמצע initdb משאירה volume חצי־מאותחל
+async function waitReady() {
+  for (let i = 0; i < 60; i++) {
+    if (docker(["exec", "p23-e11-db", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "shop"]).ok) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
 test("מסד לפיתוח בפקודה אחת", { timeout: 180000 }, async (t) => {
   requireDocker();
   t.after(() => {
@@ -17,6 +27,7 @@ test("מסד לפיתוח בפקודה אחת", { timeout: 180000 }, async (t) =
   for (const round of [1, 2]) {
     const r = runScript(import.meta.url, "P23-E11.sh", [], { timeout: 120000 });
     assert.equal(r.status, 0, `הרצה ${round} נכשלה (הסקריפט צריך לעבוד גם כשהקונטיינר כבר קיים):\n${r.stderr}`);
+    assert.ok(await waitReady(), `המסד לא עלה (הרצה ${round})`);
   }
   const c = inspect();
   assert.ok(c, "לא נמצא קונטיינר בשם p23-e11-db");
@@ -27,10 +38,5 @@ test("מסד לפיתוח בפקודה אחת", { timeout: 180000 }, async (t) =
   assert.equal(c.HostConfig.RestartPolicy.Name, "unless-stopped");
   const mount = c.Mounts.find((m) => m.Destination === "/var/lib/postgresql");
   assert.ok(mount && mount.Type === "volume" && mount.Name === "p23-e11-data", "volume בשם p23-e11-data ב־/var/lib/postgresql");
-  let ready = false;
-  for (let i = 0; i < 40 && !ready; i++) {
-    ready = docker(["exec", "p23-e11-db", "pg_isready", "-U", "postgres", "-d", "shop"]).ok;
-    if (!ready) await new Promise((r) => setTimeout(r, 500));
-  }
-  assert.ok(ready, "המסד לא עלה");
+  assert.ok(await waitReady(), "המסד לא עלה");
 });
