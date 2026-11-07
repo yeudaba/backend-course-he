@@ -17,4 +17,5 @@ if [ ! -x /opt/pg18/bin/psql ]; then
   done
 fi
 [ -d node_modules ] || npm ci --no-audit --no-fund
+for i in $(seq 30); do /opt/pg18/bin/pg_isready -q -h localhost -p 5433 && break; sleep 1; done
 /opt/pg18/bin/pg_isready -h localhost -p 5433
