@@ -1,0 +1,96 @@
+# CI/CD של tasks-api (פרק 25): כל push ו־pull request — בדיקות ו־build.
+# push ל־main שעבר הכול — migrations למסד של הפרודקשן, deploy ל־Render, ובדיקת עשן על הכתובת החיה.
+name: CI
+
+on:
+  push:
+    branches: [ci-demo-25]
+
+# ההרשאות המינימליות ל־GITHUB_TOKEN: רק לקרוא את הקוד
+permissions:
+  contents: read
+
+# push חדש לאותו branch מבטל ריצה ישנה שעוד רצה
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: tasks
+          POSTGRES_PASSWORD: tasks
+          POSTGRES_DB: tasks_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tasks -d tasks_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://tasks:tasks@localhost:5432/tasks_test
+      DATABASE_URL_TEST: postgresql://tasks:tasks@localhost:5432/tasks_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx prisma migrate deploy
+      - run: npm run test:int
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t tasks-api:${{ github.sha }} .
+      - name: smoke test of the image
+        run: |
+          docker run -d --name api -p 3000:3000 \
+            -e JWT_SECRET=ci-only-secret-0123456789-0123456789 \
+            -e DATABASE_URL=postgresql://nobody@localhost:5432/none \
+            -e CORS_ORIGINS=https://example.com \
+            tasks-api:${{ github.sha }}
+          for i in $(seq 1 30); do curl -fsS localhost:3000/health && exit 0; sleep 1; done
+          docker logs api
+          exit 1
+
+  deploy:
+    # רק push ל־main (לא pull request), ורק אם שני ה־jobs הקודמים עברו
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: migrations on the production database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: trigger deploy on Render
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      - name: smoke test of the live URL
+        run: node scripts/smoke.mjs
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL }}
+          EXPECT_COMMIT: ${{ github.sha }}
