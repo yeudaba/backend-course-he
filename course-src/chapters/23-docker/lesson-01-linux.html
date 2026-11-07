@@ -1,0 +1,156 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה מפתח Backend צריך לדעת על Linux — ולמה גם על Mac.</li>
+      <li>הרשאות, תהליכים, ports ומשתני סביבה.</li>
+      <li>pipelines: grep, cut, sort, uniq, awk.</li>
+      <li>סקריפט bash בטוח: <code>set -euo pipefail</code>, מרכאות ו־exit codes.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה Linux?</h2>
+  <p>השרתים שלך — בענן, בחברה, בתוך קונטיינרים — רצים כמעט תמיד על Linux. כשמשהו לא עובד בפרודקשן, אתה מתחבר לשם (או לקונטיינר) ויש לך רק טרמינל: לקרוא לוגים, לבדוק מה רץ, לראות מה תופס את הדיסק. ה־Mac שלך הוא "בן דוד" של Linux (Unix): רוב הפקודות זהות. ההבדלים הקטנים — בהמשך.</p>
+  <div class="table-wrap"><table>
+    <tr><th>מקום</th><th>מה יש שם</th></tr>
+    <tr><td><code>/</code></td><td>השורש של הכול</td></tr>
+    <tr><td><code>~</code> (<code>/home/dana</code>; ב־Mac <code>/Users/dana</code>)</td><td>תיקיית הבית שלך</td></tr>
+    <tr><td><code>/etc</code></td><td>הגדרות (למשל <code>/etc/nginx/</code>)</td></tr>
+    <tr><td><code>/var/log</code></td><td>לוגים של המערכת ושל שירותים</td></tr>
+    <tr><td><code>/tmp</code></td><td>קבצים זמניים — נמחקים</td></tr>
+    <tr><td><code>/usr/bin</code>, <code>/usr/local/bin</code></td><td>תוכנות (<code>which node</code> — איפה בדיוק)</td></tr>
+  </table></div>
+
+  <h2>2. הרשאות</h2>
+  <p><code>ls -l</code> מראה לכל קובץ עשרה תווים: <code>-rw-r--r--</code>. התו הראשון — סוג (<code>-</code> קובץ, <code>d</code> תיקייה), ואז שלוש שלשות: <strong>בעלים</strong>, <strong>קבוצה</strong>, <strong>כל השאר</strong>; בכל אחת r (קריאה), w (כתיבה), x (הרצה). במספרים: r=4, w=2, x=1, ומחברים:</p>
+```bash run
+touch script.sh secrets.env
+chmod 755 script.sh
+chmod 600 secrets.env
+ls -l script.sh secrets.env | cut -c1-10
+```
+```out
+-rwxr-xr-x
+-rw-------
+```
+  <p>755 — סקריפטים ותיקיות (כולם קוראים ומריצים, רק אתה כותב). 644 — קבצים רגילים. <strong>600 — סודות</strong>: <code>.env</code>, מפתח SSH. ו־<code>chmod +x deploy.sh</code> — "מותר להריץ" (אחרת <code>./deploy.sh</code> נותן <code>permission denied</code>).</p>
+
+  <h2>3. תהליכים, ports ואותות</h2>
+```term
+% lsof -nP -iTCP:3000 -sTCP:LISTEN
+.. COMMAND  PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+.. node    5310 root   21u  IPv4  14504      0t0  TCP *:3000 (LISTEN)
+% kill 5310
+```
+  <p>(פלט אמיתי, משרת Linux.) "port 3000 already in use" — <code>lsof</code> מראה מי (<code>-nP</code> — מספרים במקום שמות, <code>-sTCP:LISTEN</code> — רק מי שמאזין), ו־<code>kill &lt;PID&gt;</code> שולח לו <strong>SIGTERM</strong>: "סגור בבקשה". אפליקציה טובה מסיימת בקשות, סוגרת חיבורים למסד ויוצאת. <code>kill -9</code> שולח <strong>SIGKILL</strong> — התהליך נעצר מיד, באמצע מה שעשה. זה מוצא אחרון. (וזה בדיוק מה ש־<code>docker stop</code> עושה: SIGTERM, ואחרי 10 שניות — SIGKILL. בשיעור 3 נראה למה זה חשוב.)</p>
+
+  <h2>4. משתני סביבה ו־exit codes</h2>
+```bash run
+export GREETING="שלום"
+echo "$GREETING, $USER_NAME_THAT_DOES_NOT_EXIST!"
+GREETING="hi" bash -c 'echo "in a child: $GREETING"'
+false
+echo "exit code of false: $?"
+true
+echo "exit code of true: $?"
+```
+```out
+שלום, !
+in a child: hi
+exit code of false: 1
+exit code of true: 0
+```
+  <p>משתנה שלא הוגדר הוא פשוט ריק — בלי שגיאה (בהמשך — <code>set -u</code> משנה את זה). <code>VAR=x command</code> מגדיר משתנה רק לפקודה אחת. ו־<code>$?</code> — ה־exit code של הפקודה הקודמת: <strong>0 = הצלחה</strong>, כל דבר אחר = כישלון. כל כלי שמריץ פקודות — CI, Docker, <code>&amp;&amp;</code> — מחליט לפי המספר הזה.</p>
+
+  <h2>5. pipelines — ארגז הכלים לטקסט</h2>
+  <p>לוגים, CSV, פלט של פקודות — הכול טקסט. כל פקודה עושה דבר אחד, ו־<code>|</code> מחבר אותן:</p>
+  <figure>
+    <svg viewBox="0 0 720 150" role="img" aria-label="pipeline: לוג ← awk ← sort ← uniq -c ← sort -rn ← head">
+      <defs><marker id="pp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="10" y="40" width="100" height="44" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="130" y="40" width="110" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="260" y="40" width="80" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="360" y="40" width="100" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="480" y="40" width="100" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="600" y="40" width="110" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M112 62 H 126" marker-end="url(#pp)"/><path d="M242 62 H 256" marker-end="url(#pp)"/><path d="M342 62 H 356" marker-end="url(#pp)"/><path d="M462 62 H 476" marker-end="url(#pp)"/><path d="M582 62 H 596" marker-end="url(#pp)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="60" y="67">access.log</text><text x="185" y="67">awk '{print $1}'</text><text x="300" y="67">sort</text><text x="410" y="67">uniq -c</text><text x="530" y="67">sort -rn</text><text x="655" y="67">head -n 3</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="60" y="108">שורה לכל בקשה</text><text x="185" y="108">רק ה־IP</text><text x="300" y="108">זהים — צמודים</text><text x="410" y="108">ספירה לכל IP</text><text x="530" y="108">הכי הרבה קודם</text><text x="655" y="108">שלוש ראשונות</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: "מי שולח לי הכי הרבה בקשות?" — שורה אחת, שש פקודות קטנות.</figcaption>
+  </figure>
+```bash run
+printf 'dana /tasks\nyossi /tasks\ndana /docs\nrona /tasks\ndana /tasks\nyossi /health\n' > visits.txt
+echo "--- who, how many:"
+cut -d' ' -f1 visits.txt | sort | uniq -c | sort -rn | awk '{print $1, $2}'
+echo "--- only /tasks:"
+grep -c ' /tasks$' visits.txt
+echo "--- sum with awk:"
+printf 'a,10\nb,5\na,2.5\n' | awk -F, '{ s[$1] += $2 } END { for (k in s) print k, s[k] }' | sort
+```
+```out
+--- who, how many:
+3 dana
+2 yossi
+1 rona
+--- only /tasks:
+4
+--- sum with awk:
+a 12.5
+b 5
+```
+  <div class="table-wrap"><table>
+    <tr><th>פקודה</th><th>מה</th></tr>
+    <tr><td><code>grep</code> (<code>-c</code>, <code>-v</code>, <code>-i</code>, <code>-r</code>, <code>-n</code>)</td><td>שורות שמתאימות (ספירה, הפוך, בלי אותיות, רקורסיבי, מספרי שורות)</td></tr>
+    <tr><td><code>cut -d, -f2</code></td><td>עמודה לפי מפריד</td></tr>
+    <tr><td><code>awk '{print $1}'</code></td><td>עמודות לפי רווח — וגם חישובים, תנאים ומערכים</td></tr>
+    <tr><td><code>sort</code> (<code>-n</code>, <code>-r</code>, <code>-k2,2</code>)</td><td>מיון (מספרי, הפוך, לפי עמודה)</td></tr>
+    <tr><td><code>uniq -c</code></td><td>ספירת כפילויות <strong>צמודות</strong> — לכן תמיד אחרי sort</td></tr>
+    <tr><td><code>head</code>, <code>tail</code> (<code>-n</code>, <code>-f</code>)</td><td>התחלה, סוף, ומעקב אחרי קובץ שגדל</td></tr>
+    <tr><td><code>wc -l</code></td><td>כמה שורות</td></tr>
+    <tr><td><code>&gt;</code> · <code>&gt;&gt;</code> · <code>2&gt;</code> · <code>2&gt;&amp;1</code></td><td>פלט לקובץ · הוספה · שגיאות לקובץ · שגיאות לאותו מקום כמו הפלט</td></tr>
+  </table></div>
+
+  <h2>6. סקריפט בטוח</h2>
+```bash file=backup.sh
+#!/usr/bin/env bash
+set -euo pipefail                       # עוצר על שגיאה, משתנה לא מוגדר, וכישלון באמצע pipeline
+
+if [ $# -ne 2 ]; then                   # $# — כמה ארגומנטים
+  echo "שימוש: backup.sh <מקור> <יעד>" >&2   # שגיאות — ל־stderr
+  exit 2
+fi
+
+src="$1"                                # תמיד במרכאות: "my data" הוא ארגומנט אחד
+mkdir -p "$2"
+cp "$src"/*.json "$2"/
+```
+  <p>מה המרכאות עושות? בלעדיהן, bash מפרק ערכים לפי רווחים:</p>
+```bash run
+name="my data"
+mkdir -p "$name"
+ls -d $name 2>&1 | sed 's/^ls: //'
+ls -d "$name"
+```
+```out
+cannot access 'my': No such file or directory
+cannot access 'data': No such file or directory
+my data
+```
+  <p>בלי מרכאות, <code>$name</code> הפך לשני ארגומנטים — <code>my</code> ו־<code>data</code> — ואף אחד מהם לא קיים. בתוך סקריפט שעושה <code>rm</code>, זה ההבדל בין "מחקתי את התיקייה" ל"מחקתי משהו אחר".</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ Mac מול Linux</span>
+    <p>ב־Mac הטרמינל הוא zsh, ו־<code>bash</code> שמגיע עם macOS ישן (3.2). כמה כלים שונים מעט: <code>sed -i ''</code> ב־Mac מול <code>sed -i</code> ב־Linux; <code>wc -l</code> ב־Mac מוסיף רווחים לפני המספר; <code>date -d</code> לא קיים ב־Mac. בסקריפטים שצריכים לרוץ בשני המקומות — כלים פשוטים (awk, sort, cut), ו־<code>tr -d ' '</code> כשצריך מספר נקי. והבודק מריץ את הסקריפטים שלך עם <code>bash</code>.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P23-E01">E01</a> · <a href="exercises.html#P23-E02">E02</a> · <a href="exercises.html#P23-E03">E03</a> · <a href="exercises.html#P23-E06">E06</a> · <a href="exercises.html#P23-E07">E07</a> · <a href="exercises.html#P23-E08">E08</a> · <a href="exercises.html#P23-E09">E09</a> · <a href="exercises.html#P23-E10">E10</a> · <a href="exercises.html#P23-E22">E22</a> · <a href="exercises.html#P23-E25">E25</a></p>
+  </div>

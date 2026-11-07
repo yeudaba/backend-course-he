@@ -1,0 +1,52 @@
+# כל המערכת בפקודה אחת:  docker compose up --build
+# ואז:  http://localhost:3000/docs  ·  דף ההדגמה: http://localhost:5500
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: tasks
+      POSTGRES_PASSWORD: tasks
+      POSTGRES_DB: tasks
+    volumes:
+      - db-data:/var/lib/postgresql # ב־PostgreSQL 18 — לא /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasks -d tasks"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # רץ פעם אחת ונגמר: migrations, ורק אז ה־api עולה
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://tasks:tasks@db:5432/tasks
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://tasks:tasks@db:5432/tasks
+      JWT_SECRET: ${JWT_SECRET:?הגדר JWT_SECRET בקובץ .env}
+      CORS_ORIGINS: http://localhost:5500
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "${WEB_PORT:-5500}:80"
+    depends_on:
+      - api
+
+volumes:
+  db-data:

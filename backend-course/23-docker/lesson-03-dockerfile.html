@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dockerfile טוב — פרק 23</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 23</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — Dockerfile טוב</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>Dockerfile — הוראה אחר הוראה.</li>
+      <li>שכבות ו־cache: למה הסדר קובע אם build לוקח 5 שניות או 2 דקות.</li>
+      <li><code>.dockerignore</code>, multi-stage, לא root, healthcheck.</li>
+      <li>מ־2.54GB ל־435MB — במספרים אמיתיים.</li>
+    </ul>
+  </div>
+
+  <h2>1. Dockerfile ראשון</h2>
+<span class="file-label">Dockerfile</span>
+<pre><code class="lang-dockerfile"># בסיס: Linux קטן + Node 24
+FROM node:24-alpine
+# תיקיית העבודה (נוצרת אם לא קיימת)
+WORKDIR /app
+COPY package.json server.mjs ./
+# תיעוד: האפליקציה מאזינה ב־3000
+EXPOSE 3000
+# מה רץ כשהקונטיינר עולה
+CMD ["node", "server.mjs"]</code></pre>
+<pre class="terminal"><span class="prompt">% </span>docker build -t hello-api .
+<span class="prompt">% </span>docker run --rm -p 3000:3000 hello-api
+<span class="prompt">% </span>curl localhost:3000/health</pre>
+  <p>(הערות ב־Dockerfile — רק בשורה משלהן, שמתחילה ב־<code>#</code>. <code>WORKDIR /app # הערה</code> לא עובד.) <code>RUN</code> — פקודה שרצה <em>בזמן הבנייה</em> (התקנות). <code>CMD</code> — פקודה שרצה <em>כשהקונטיינר עולה</em>. <code>ENV</code> — משתנה סביבה קבוע. <code>COPY</code> — מהתיקייה שלך (ה־build context) לתוך ה־image.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ 127.0.0.1 בתוך קונטיינר</span>
+    <p>שרת שמאזין ל־<code>127.0.0.1</code> מקבל חיבורים רק מתוך הקונטיינר עצמו — <code>curl</code> מה־Mac יקבל <code>Connection reset by peer</code>. בתוך Docker מאזינים ל־<code>0.0.0.0</code> (Express ו־Nest עושים את זה כברירת מחדל). E23.</p>
+  </div>
+
+  <h2>2. שכבות ו־cache</h2>
+  <p>כל הוראה היא <strong>שכבה</strong>. Docker שומר כל שכבה ב־cache, ומשתמש בה שוב אם ההוראה וכל מה שלפניה — וכל הקבצים שהיא מעתיקה — לא השתנו. ברגע ששכבה אחת משתנה, כל מה שאחריה נבנה מחדש. לכן הסדר:</p>
+<span class="file-label">Dockerfile</span>
+<pre><code class="lang-dockerfile">FROM node:24-alpine
+WORKDIR /app
+# משתנה לעיתים רחוקות
+COPY package.json package-lock.json ./
+# האיטי — רץ רק כשהתלויות השתנו
+RUN npm ci --omit=dev
+# משתנה כל הזמן — אחרון
+COPY server.mjs ./
+USER node
+CMD ["node", "server.mjs"]</code></pre>
+<pre class="terminal"><span class="prompt">% </span>echo "// change" &gt;&gt; server.mjs
+<span class="prompt">% </span>docker build --progress=plain -t zod-api .
+<span class="dim">#7 [3/5] COPY package.json package-lock.json ./</span>
+<span class="dim">#7 CACHED</span>
+<span class="dim">#8 [4/5] RUN npm ci --omit=dev</span>
+<span class="dim">#8 CACHED</span>
+<span class="dim">#9 [5/5] COPY server.mjs ./</span></pre>
+  <p>(פלט אמיתי, מקוצר.) שינית קוד — <code>npm ci</code> לא רץ שוב. עם <code>COPY . .</code> לפני <code>npm ci</code>, כל שינוי בקוד היה "מלכלך" את השכבה, וכל ההתקנה הייתה רצה מחדש — בכל build.</p>
+  <p>ו־<code>npm ci</code> ולא <code>npm install</code>: מתקין בדיוק מה שב־<code>package-lock.json</code>, ונכשל אם הוא לא תואם ל־<code>package.json</code>. ב־build רוצים בדיוק את מה שנבדק.</p>
+
+  <h2>3. .dockerignore</h2>
+<span class="file-label">.dockerignore</span>
+<pre><code class="lang-text">node_modules
+dist
+coverage
+.env
+.env.*
+.git
+*.log</code></pre>
+  <p>מה שלא נשלח ל־Docker בכלל. שתי סיבות קריטיות: <strong>סודות</strong> (<code>.env</code> שנכנס ל־image נשאר בו לתמיד — כל מי שיש לו את ה־image יכול לקרוא אותו), ו־<strong>node_modules מה־Mac</strong> (חבילות עם קוד native מקומפלות ל־macOS ולא ירוצו בלינוקס של הקונטיינר). Docker <em>לא</em> קורא את <code>.gitignore</code>.</p>
+
+  <h2>4. multi-stage — לבנות בשלב אחד, לשלוח את השני</h2>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="שלב build עם כל הכלים, ושלב runtime שמקבל רק את dist ותלויות production">
+      <defs><marker id="ms" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="400" y="20" width="300" height="180" rx="12" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="20" y="20" width="300" height="180" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M396 110 H 324" marker-end="url(#ms)"/></g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="550" y="48" class="mono" direction="ltr">FROM … AS build</text>
+        <text x="170" y="48" class="mono" direction="ltr">FROM … (runtime)</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="550" y="80">node_modules (all, incl. dev)</text>
+        <text x="550" y="102">typescript · jest · prisma CLI</text>
+        <text x="550" y="124">src/  →  dist/</text>
+        <text x="170" y="80">node_modules (prod only)</text>
+        <text x="170" y="102">dist/</text>
+        <text x="170" y="124">USER node</text>
+        <text x="360" y="100">dist</text>
+      </g>
+      <g text-anchor="middle" style="font-size:12px" direction="rtl">
+        <text x="550" y="170">נזרק אחרי הבנייה</text>
+        <text x="170" y="170">זה מה שנשלח ורץ</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: <code>COPY --from=build</code> מעתיק רק מה שמבקשים. כל השאר — לא נכנס ל־image.</figcaption>
+  </figure>
+  <p>המספרים, מהפרויקט שלך (פלט אמיתי של <code>docker image ls</code>):</p>
+  <div class="table-wrap"><table>
+    <tr><th>גרסה</th><th>גודל</th></tr>
+    <tr><td><code>FROM node:24</code>, <code>COPY . .</code>, <code>npm install</code>, build — הכול בשלב אחד</td><td><strong>2.54GB</strong></td></tr>
+    <tr><td>multi-stage על <code>node:24-alpine</code>, <code>npm ci --omit=dev</code></td><td>827MB</td></tr>
+    <tr><td>…ועוד <code>--omit=optional</code></td><td><strong>435MB</strong></td></tr>
+  </table></div>
+  <p>השורה האחרונה היא גילוי מעניין: <code>@prisma/client</code> מגדיר את <code>prisma</code> (ה־CLI, עם כל הכלים שלו) ואת <code>typescript</code> כ־<em>optional peer dependencies</em>. npm מסמן אותם <code>devOptional</code> — ו־<code>--omit=dev</code> לבד <strong>לא</strong> מסיר אותם. כמעט 400MB שהשרת לא צריך. ככה מוצאים דברים כאלה: <code>docker compose exec api du -sh node_modules/* | sort -rh | head</code>.</p>
+
+  <h2>5. לא root, signals, healthcheck</h2>
+<pre><code class="lang-dockerfile"># המשתמש node כבר קיים ב־image של Node
+USER node
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:3000/health || exit 1
+# מערך — לא "node dist/main.js"
+CMD ["node", "dist/main.js"]</code></pre>
+  <ul>
+    <li><strong>USER</strong> — בלי זה הכול רץ כ־root. אם מישהו מוצא חולשה באפליקציה, הוא root בתוך הקונטיינר.</li>
+    <li><strong>CMD כמערך</strong> (exec form) — Node הוא התהליך הראשי, ומקבל את ה־SIGTERM של <code>docker stop</code>. בצורת מחרוזת (<code>CMD npm start</code>) יש shell ו־npm באמצע, והאות לא תמיד מגיע — Docker מחכה 10 שניות והורג.</li>
+    <li><strong>HEALTHCHECK</strong> — <code>docker ps</code> מראה <code>(healthy)</code>, ו־compose (השיעור הבא) יכול לחכות לו.</li>
+    <li><strong>סודות — רק בזמן ריצה</strong>: לא <code>ENV JWT_SECRET=...</code> ולא <code>ARG</code>. <code>docker image inspect</code> ו־<code>docker history</code> מראים אותם לכל אחד (E20).</li>
+  </ul>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P23-E05">E05</a> · <a href="exercises.html#P23-E12">E12</a> · <a href="exercises.html#P23-E13">E13</a> · <a href="exercises.html#P23-E14">E14</a> · <a href="exercises.html#P23-E15">E15</a> · <a href="exercises.html#P23-E16">E16</a> · <a href="exercises.html#P23-E20">E20</a> · <a href="exercises.html#P23-E23">E23</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-docker.html"><small>הקודם</small>שיעור 2 — Docker: images, containers ו־volumes</a><a href="lesson-04-compose.html"><small>הבא</small>שיעור 4 — Docker Compose</a></div>
+</main>
+</body>
+</html>

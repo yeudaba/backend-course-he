@@ -1,0 +1,19 @@
+# שלב 1: קומפילציה — צריך typescript ו־@types (devDependencies)
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# שלב 2: ריצה — רק JavaScript מקומפל ותלויות של production
+FROM node:24-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+USER node
+EXPOSE 3000
+CMD ["node", "dist/server.js"]

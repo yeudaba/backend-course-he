@@ -1,0 +1,179 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>פרויקט 2, שלב ו׳: Dockerfile, <code>.dockerignore</code> ו־<code>compose.yaml</code>.</li>
+      <li>migrations כשירות שרץ פעם אחת, לפני ה־API.</li>
+      <li>בסוף: <code>docker compose up --build</code> — ומפתח חדש מריץ את הפרויקט בלי להתקין כלום חוץ מ־Docker.</li>
+    </ul>
+  </div>
+
+  <h2>1. היעד</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="ארבעה שירותים: db, migrate שרץ פעם אחת, api ו־web">
+      <defs><marker id="pj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="80" width="140" height="56" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="380" y="20" width="140" height="56" rx="10" style="fill:var(--purple-soft);stroke:var(--purple);stroke-dasharray:5 4"/>
+        <rect x="380" y="140" width="140" height="56" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="200" y="140" width="140" height="56" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="80" width="130" height="56" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 100 L 524 60" marker-end="url(#pj)"/>
+        <path d="M556 118 L 524 160" marker-end="url(#pj)"/>
+        <path d="M450 80 V 136" marker-end="url(#pj)" style="stroke-dasharray:4 4"/>
+        <path d="M154 100 L 380 160" marker-end="url(#pj)"/>
+        <path d="M154 112 L 200 160" marker-end="url(#pj)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:14px;font-weight:700">
+        <text x="630" y="106">db</text><text x="450" y="46">migrate</text><text x="450" y="166">api</text><text x="270" y="166">web</text><text x="85" y="106">Mac</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="630" y="124">postgres:18-alpine · volume</text>
+        <text x="450" y="64">רץ פעם אחת ונגמר</text>
+        <text x="450" y="184">עולה אחרי migrate</text>
+        <text x="270" y="184">nginx — דף ההדגמה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: <code>db</code> healthy ← <code>migrate</code> רץ ומסתיים בהצלחה ← <code>api</code> עולה. <code>web</code> מגיש את דף ההדגמה.</figcaption>
+  </figure>
+
+  <h2>2. Dockerfile</h2>
+```dockerfile file=Dockerfile
+# ---------- שלב 1: build ----------
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npx prisma generate && npm run build
+
+# ---------- שלב 2: runtime ----------
+FROM node:24-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --omit=optional && npm cache clean --force
+COPY --from=build /app/dist ./dist
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:3000/health || exit 1
+CMD ["node", "dist/main.js"]
+```
+  <ul>
+    <li>ה־Prisma Client שנוצר (<code>src/generated</code>) מתקמפל לתוך <code>dist</code> — לכן מספיק להעתיק את <code>dist</code>.</li>
+    <li><code>--omit=optional</code> — שיעור 3: בלעדיו ה־image 827MB, איתו 435MB.</li>
+    <li><strong>שינוי אחד ב־<code>package.json</code>:</strong> <code>dotenv</code> עובר מ־devDependencies ל־dependencies. <code>main.ts</code> מתחיל ב־<code>import "dotenv/config"</code> — ובלי זה, השרת נופל בעלייה עם <code>Cannot find module 'dotenv/config'</code>.</li>
+    <li>ה־<code>package-lock.json</code> חייב להיות ב־Git: <code>npm ci</code> בלעדיו נכשל.</li>
+  </ul>
+  <div class="box warn">
+    <span class="box-title">⚠️ TypeScript 6</span>
+    <p>בבנייה הזו <code>npm ci</code> מתקין בדיוק מה שב־lock. תבנית Nest 12 משתמשת ב־TypeScript 6 (<code>@nestjs/schematics</code> דורש אותו). אם ב־<code>package.json</code> שלך כתוב <code>"typescript": "^5…"</code> — <code>npm install</code> נכשל עם <code>ERESOLVE</code> ו־<code>peer typescript@"&gt;=6.0.0"</code>. עדכן ל־<code>"^6.0.2"</code>.</p>
+  </div>
+
+  <h2>3. .dockerignore</h2>
+```text file=.dockerignore
+node_modules
+dist
+coverage
+src/generated
+.git
+.env
+.env.*
+!.env.example
+*.log
+```
+  <p><code>src/generated</code> — כי הוא נוצר מחדש בתוך ה־build (<code>prisma generate</code>), ולא רוצים גרסה ישנה מהמחשב.</p>
+
+  <h2>4. compose.yaml</h2>
+```yaml file=compose.yaml
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: tasks
+      POSTGRES_PASSWORD: tasks
+      POSTGRES_DB: tasks
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasks -d tasks"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://tasks:tasks@db:5432/tasks
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://tasks:tasks@db:5432/tasks
+      JWT_SECRET: ${JWT_SECRET:?הגדר JWT_SECRET בקובץ .env}
+      CORS_ORIGINS: http://localhost:5500
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "${WEB_PORT:-5500}:80"
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+```
+  <ul>
+    <li><strong><code>migrate</code></strong> — משתמש בשלב ה־build (<code>target: build</code>), שבו יש את ה־Prisma CLI. הוא רץ, מריץ migrations, ונגמר. ה־image של ה־api נשאר נקי מה־CLI.</li>
+    <li><strong>הסיסמאות של המסד</strong> כתובות בקובץ — זה מסד מקומי לפיתוח, לא נגיש מבחוץ (אין לו ports). בפרודקשן (פרק 25) הן יבואו מההגדרות של הפלטפורמה.</li>
+    <li><strong><code>JWT_SECRET</code></strong> — מקובץ <code>.env</code> שליד ה־compose (שכבר יש לך).</li>
+    <li><strong><code>web</code></strong> — nginx מגיש את <code>web/</code> כמו שהוא. אותו דף מיחידה 15.5 ופרק 21 — עובד בלי שינוי.</li>
+  </ul>
+  <p>ו־scripts נוחים ב־<code>package.json</code>: <code>"docker:up": "docker compose up --build"</code> ו־<code>"docker:down": "docker compose down"</code>.</p>
+
+  <h2>5. להריץ ולבדוק</h2>
+```term
+% cd ~/dev/tasks-api
+% docker compose up -d --build --wait
+..  Container tasks-api-db-1 Healthy
+..  Container tasks-api-migrate-1 Exited
+..  Container tasks-api-api-1 Healthy
+..  Container tasks-api-web-1 Healthy
+% docker compose logs migrate
+.. migrate-1  | All migrations have been successfully applied.
+% docker compose exec api whoami
+.. node
+```
+  <p>(פלטים אמיתיים, מקוצרים.) ועכשיו: <code>http://localhost:3000/docs</code>, הדף ב־<code>http://localhost:5500</code> (המסד ריק — נרשמים מהדף), ו־<code>docker compose down</code> ו־<code>up</code> שוב — המשתמשים והמשימות נשארים. נתוני דוגמה — דרך השירות <code>migrate</code>, שיש בו את כל התלויות ואת <code>DATABASE_URL</code>:</p>
+```term
+% docker compose run --rm migrate npm run db:seed
+.. ✔ 3 משתמשים, 3 משימות
+.. 🌱  The seed command has been executed.
+```
+  <p>ואז נכנסים עם <code>dana@example.com</code> / <code>dana-password-1</code>.</p>
+```term
+% cd ~/dev/backend-course
+% npm run check PR2-DOCKER -- --dir ~/dev/tasks-api
+```
+  <p>PR2-DOCKER: (1) ה־Dockerfile — multi-stage, סדר שמנצל cache, לא root, בלי <code>COPY . .</code> בשלב האחרון; (2) <code>.dockerignore</code> עם <code>node_modules</code> ו־<code>.env</code>; (3) ב־compose: PostgreSQL עם healthcheck ו־volume בנתיב של גרסה 18, api עם <code>"${API_PORT:-3000}:3000"</code> ותלות עם condition; (4) <strong>בפועל</strong>: <code>docker compose up --build --wait</code> בפרויקט נפרד (שם אחר, port אחר — לא נוגע בשלך), הרשמה, כניסה, משימה; ה־api לא root; <code>down</code> ו־<code>up</code> — והמשימה עדיין שם. ובסוף <code>down -v</code>. בפעם הראשונה זה לוקח דקה־שתיים (הורדות ו־build); אחר כך — שניות.</p>
+  <p>commit, push — ועדכן את ה־README: "הרצה: <code>cp .env.example .env</code>, הגדר <code>JWT_SECRET</code>, <code>docker compose up --build</code>". הפתרון: <code>23-docker/solutions/tasks-api</code>.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"יש לך ניסיון עם Docker?" — שאלה כמעט בכל ראיון Backend. תשובה טובה מראה הבנה, לא רק פקודות: למה multi-stage, למה הסדר ב־Dockerfile, למה לא root, מה ההבדל בין volume ל־bind mount, ולמה <code>localhost</code> לא עובד בין קונטיינרים. ובמשימות בית — <code>docker compose up</code> שמעלה הכול, עם README של שלוש שורות, עושה רושם מיידי: המראיין לא צריך להתקין PostgreSQL כדי לבדוק אותך. בעבודה עצמה: סביבת פיתוח ב־compose, images שנבנים ב־CI (פרק 25), ולוגים של קונטיינרים כשמשהו נופל.</p>
+  </div>

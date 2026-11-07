@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: visits
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d visits"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/visits
+    depends_on:
+      db:
+        condition: service_healthy
+    # בלי ports: נגיש רק מתוך הרשת של compose (דרך nginx)
+
+  web:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - app
+
+volumes:
+  db-data:
