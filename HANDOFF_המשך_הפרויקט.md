@@ -1,6 +1,8 @@
 # מסמך העברה — קורס Backend בעברית (להמשך בחשבון Claude אחר)
 
-> **ל־Claude שקורא את זה:** זה המצב המלא של הפרויקט נכון ל־7 בנובמבר 2026. קרא את כל המסמך לפני שנוגעים בקוד. אחריו קרא את `אפיון_קורס_Backend_v2.md` (סעיפים 7–14), ואז המשך מהנקודה שבסעיף 7 ("הצעד הבא המיידי"). כל הקבצים נמצאים ב־`/Users/yeuda/Desktop/Backend`.
+> **ל־Claude שקורא את זה:** זה המצב המלא של הפרויקט נכון ל־7 בנובמבר 2026 (עודכן אחרי המעבר לענן והשלמת פרק 20).
+> **מאגר Git:** https://github.com/yeudaba/backend-course-he (ענף `main`). העבודה עברה מהמק לענן (Claude Code on the web). ב־Mac התיקייה היא `/Users/yeuda/Desktop/Backend`; בענן — שורש המאגר.
+> קרא את כל המסמך לפני שנוגעים בקוד. אחריו קרא את `אפיון_קורס_Backend_v2.md` (סעיפים 7–14), ואז המשך מהנקודה שבסעיף 7 ("הצעד הבא המיידי"). כל הקבצים נמצאים ב־`/Users/yeuda/Desktop/Backend`.
 
 ---
 
@@ -133,7 +135,8 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 **מצב אחרון:**
 - אימות מלא של כל הפרקים עבר: 23 פרקים/יחידות, 487 תרגילים, 553 דוגמאות קוד.
 - פרקים 16–19 אומתו גם אחר כך, כל אחד בנפרד. **כולם ירוקים.**
-- בפרק 20 עוברת רק PR2-NEST (שאר הפרק לא כתוב — ראה סעיף 7).
+- אימות מלא רץ גם **בענן** (לינוקס, PostgreSQL 18 ב־Docker) — זהה למק, כולל פלטי EXPLAIN של פרק 18.
+- פרק 20 הושלם: 25 תרגילים, 20 בדיקות + PR2-NEST — **ירוק**.
 
 ---
 
@@ -147,6 +150,9 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - `build.mjs` מפעיל אותו לבד (`ensurePg()`).
   - הפעלה ידנית: `/Library/PostgreSQL/18/bin/pg_ctl -D course-src/.pgdata -o "-p 5433 -k /tmp -c listen_addresses=localhost" -l course-src/.pgdata/server.log start`
 - **PostgreSQL 14 מ־Homebrew שבור** (חסרה ספרייה). לא להשתמש בו.
+- **בענן / לינוקס:** `bash course-src/scripts/cloud-setup.sh` — מפעיל `dockerd`, מריץ קונטיינר `course-pg` (`postgres:18`, פורט 5433, trust, `Asia/Jerusalem`), ומעתיק ממנו `psql`/`pg_isready` 18 ל־`/opt/pg18/bin` (עם libpq שלו). `build.mjs` מוצא לבד את `/Library/PostgreSQL/18/bin` או `/opt/pg18/bin` (או `PG_BIN=`), ואם השרת לא עונה — מפעיל את `.pgdata` (מק) או את הקונטיינר (ענן).
+  - apt.postgresql.org חסום ברשת של הענן, ולכן משתמשים ב־Docker Hub. Docker **מותקן ועובד בענן** — רלוונטי לפרק 23.
+  - Node בענן: 22.x (כמו במק — הבודק מוסיף strip-types לבד).
 - **התקנות npm:** בוצעו ב־`course-src` (לאימות). גם `course-src/root/package.json` עודכן (מה שהלומד מתקין).
 
 ---
@@ -173,7 +179,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 17 | `17-relations` | FK, JOIN, GROUP BY, תת־שאילתות, CTE, פונקציות חלון. `files/store.sql` | ✔ |
 | 18 | `18-consistency` | transactions, race conditions (אומתו עם שני חיבורים אמיתיים), indexes/EXPLAIN, N+1, keyset pagination, `pg` מ־Node. `files/bank.sql` (200,000 שורות, 2,000 לקוחות × 100 הזמנות) | ✔ כולל בדיקות מקביליות |
 | 19 | `19-prisma` | Prisma 7.10.1. פרויקט Prisma ב־`files/` (schema, migrations, seed). שיעור 4 + `solutions/tasks-api` = **פרויקט 2 שלב ב׳** (PostgreSQL). בדיקה PR2-DB | ✔ |
-| 20 | `20-nestjs` | **בעבודה** — ראה סעיף 7 | חלקי |
+| 20 | `20-nestjs` | modules, DI, DTOs, pipes, guards, interceptors, filters, Swagger. 25 תרגילים (כל תרגיל = קובץ `.ts` עצמאי שנטען עם `loadNest`). `starter/tsconfig.json` ל־VS Code. שיעור 4 = **פרויקט 2 שלב ג׳** (PR2-NEST) | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -251,42 +257,14 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — להשלים את פרק 20 (NestJS)
-**קיים:**
-- `chapter.mjs`, `lesson-01..04` (נכתבו, עוד לא נבנו ב־--fill. אין בהם דוגמאות `run`).
-- `solutions/tasks-api` (שלב ג׳ של פרויקט 2).
-- `tests/PR2-NEST.test.mjs`.
-
-**חסר:**
-- `exercises.txt` — **ריק**. צריך 25 תרגילים.
-- `starter/` — **ריק**. צריך גם `starter/tsconfig.json` עם `experimentalDecorators` ו־`emitDecoratorMetadata`, כדי ש־VS Code לא יסמן שגיאות.
-- קובצי בדיקה לתרגילים. משתמשים ב־`loadNest` ו־`nestApp` מ־`tools/nest.mjs`.
-
-**התוכנית שתוכננה לתרגילים** (כל תרגיל = קובץ `.ts` אחד עצמאי שמייצא Module ומחלקות. importים בלי `.ts`):
-
-| תרגיל | רמה | תוכן |
-|---|---|---|
-| E01–E05 | 1 | מיפוי Express↔Nest; לקרוא controller (route+status); באג DI (export/import חסר) והודעת השגיאה; סדר מחזור החיים; למה decorators דורשים build |
-| E06 | 2 | HelloModule: `GET /hello?name` |
-| E07 | 2 | ProductsModule קריאה: list, `:id` עם ParseIntPipe, NotFoundException |
-| E08 | 2 | CreateProductDto עם class-validator + POST 201 (בבדיקה `validation: true`). **לאמת** את פלט הדוגמה בשיעור 2 (הודעות class-validator) |
-| E09 | 2 | PATCH עם `PartialType` מ־@nestjs/swagger + DELETE עם `@HttpCode(204)` |
-| E10 | 2 | Query DTO עם `@Type(() => Number)`, pagination ← `{data, meta}` |
-| E11 | 2 | token בשם CLOCK + ברכה לפי שעה ב־UTC. הבדיקה עושה override |
-| E12 | 2 | filter (`@Catch(HttpException)`) למבנה `{error:{code,message,details}}` + ValidationPipe עם `exceptionFactory` ל־VALIDATION_ERROR |
-| E13 | 3 | Users/Orders: exports/imports בין modules |
-| E14 | 3 | ApiKeyGuard עם token API_KEYS: 401/403 |
-| E15 | 3 | TimingInterceptor (header `X-Response-Time`), רשום עם `APP_INTERCEPTOR`, עם token של LOGGER |
-| E16 | 3 | ParsePositiveIntPipe |
-| E17 | 3 | CONFIG עם `useFactory` + `inject:[ENV]` + Zod. env לא תקין ← `compile()` נכשל |
-| E18 | 3 | NOTES_REPOSITORY token + InMemory; הבדיקה מחליפה ב־fake |
-| E19 | 3 | Swagger: `setupDocs(app)`, `@ApiProperty`, בדיקת `/docs-json` |
-| E20 | 4 (באג) | חסר `@Injectable` עם תלות, controller לא רשום ב־module, חסר ParseIntPipe |
-| E21 | 4 (באג) | חסר `@Type`, שדה בלי decorators שנמחק ב־whitelist, `throw "string"` ← 500 |
-| E22 | 4 (באג) | service זורק `Error` רגיל (500 במקום 404), filter שמחזיר 200 |
-| E23 | 4 (באג) | state ברמת המודול שדולף בין מופעים של האפליקציה |
-| E24 | 5 | LibraryModule מלא (כמו P15-E24) ב־Nest |
-| E25 | 5 | RateLimitGuard עם CLOCK ואופציות. 429 + Retry-After (ה־guard קובע header ב־response לפני ה־throw) |
+### 7.1 הצעד הבא המיידי — פרק 21 (כניסה והרשאות) + פרויקט 2 שלב ד׳
+פרק 20 **הושלם** (ראה סעיף 6). נקודות שנלמדו בדרך ושכדאי לזכור לפרקים הבאים:
+- בלי `@Injectable()` על class עם תלויות — **אין שגיאה בעלייה**; Nest יוצר אותו בלי ארגומנטים (`design:paramtypes` חסר) והוא קורס בבקשה הראשונה (P20-E20).
+- הודעת DI אמיתית ב־Nest 12: `... is available in the OrdersModule module.` + "Potential solutions" (לא "context").
+- `ValidationPipe` על `stock` חסר מחזיר **שתי** הודעות (`must not be less than 0` + `must be an integer number`).
+- `res.setHeader` לפני `throw` ב־guard — ה־header נשמר בתשובת השגיאה (429 + Retry-After).
+- Zod 4: `.transform(...).default(false)` — ה־default הוא ערך פלט. `z.coerce.boolean("false")` ← `true`.
+- `APP_FILTER` / `APP_PIPE` / `APP_INTERCEPTOR` בתוך module — כך תרגילים לא צריכים `setup` בבדיקה.
 
 ### 7.2 שאר הקורס (לפי האפיון, סעיף 8)
 
@@ -351,6 +329,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. **להשלים את פרק 20** (סעיף 7.1). אחר כך `--fill 20`, לקרוא את הפלטים, ו־`--verify 20`.
+3. ~~להשלים את פרק 20~~ ✔ הושלם. **עכשיו: פרק 21** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh`.
 4. **להמשיך לפרק 21 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).
