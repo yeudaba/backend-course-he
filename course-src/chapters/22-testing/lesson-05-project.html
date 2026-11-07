@@ -1,0 +1,104 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>פרויקט 2, שלב ה׳: חבילת בדיקות — unit, e2e ו־integration.</li>
+      <li>helpers שחוסכים חזרות: אפליקציית בדיקה, שעון, מסד בדיקות.</li>
+      <li>PR2-TESTS: הבדיקות שלך צריכות לתפוס שבעה באגים מכוונים.</li>
+    </ul>
+  </div>
+
+  <h2>1. היעד</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>סוג</th><th>מה בודקים</th></tr>
+    <tr><td><code>src/tasks/tasks.service.spec.ts</code></td><td>unit</td><td>יצירה, תאריך יעד (גבול: היום), עדכון, בעלות, list ו־stats — עם repository בזיכרון ושעון קבוע</td></tr>
+    <tr><td><code>src/auth/auth.service.spec.ts</code></td><td>unit</td><td>הרשמה (hash, 409), כניסה (אותה שגיאה), תוקף access token, rotation, שימוש חוזר, 7 ימים, logout</td></tr>
+    <tr><td><code>src/auth/auth.schema.spec.ts</code></td><td>unit</td><td>נרמול אימייל, 8 תווים / 72 בתים (עם <code>it.each</code>), role נדחה</td></tr>
+    <tr><td><code>test/app.e2e-spec.ts</code></td><td>e2e</td><td>הזרימות דרך HTTP: הרשמה ← כניסה ← <code>/auth/me</code>, 401, refresh, בעלות (404 בכל פעולה), <code>/users</code> ל־admin, מבנה שגיאות, JSON שבור</td></tr>
+    <tr><td><code>test/tasks.int-spec.ts</code></td><td>integration</td><td><code>PrismaTasksRepository</code> ו־<code>PrismaUsersRepository</code> מול PostgreSQL: תאריכים, בעלות ב־WHERE, חיפוש, מיון עם NULLs, stats, unique</td></tr>
+  </table></div>
+  <p>ה־API לא משתנה בשלב הזה בכלל. כל העבודה היא בדיקות.</p>
+
+  <h2>2. הכנה</h2>
+```term
+% cd ~/dev/tasks-api
+% git switch -c tests
+% npm install -D jest ts-jest @types/jest supertest @types/supertest
+```
+  <p>ב־<code>package.json</code> — ה־scripts (כמו בתבנית של Nest 12) והגדרות Jest:</p>
+```json file=package.json
+"scripts": {
+  "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+  "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+  "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+  "test:int": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.int.json --runInBand"
+},
+"jest": {
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testRegex": "(src/.*\\.spec|test/.*\\.e2e-spec)\\.ts$",
+  "transform": { "^.+\\.ts$": "ts-jest" },
+  "testEnvironment": "node",
+  "collectCoverageFrom": ["src/**/*.ts", "!src/generated/**", "!src/main.ts"],
+  "coverageDirectory": "coverage"
+}
+```
+  <p>ו־<code>jest.int.json</code> — אותו דבר, עם <code>"testRegex": "test/.*\\.int-spec\\.ts$"</code>. למה בנפרד? בדיקות integration צריכות מסד, ואיטיות יותר; <code>npm test</code> צריך לרוץ בשנייה־שתיים, בכל שמירה. <code>--runInBand</code> — קובץ אחרי קובץ, כי כולם מדברים עם אותו שרת מסד.</p>
+  <p>עוד שלושה דברים קטנים: ב־<code>tsconfig.build.json</code> הוסף ל־<code>exclude</code> את <code>"test"</code> ו־<code>"**/*.spec.ts"</code> (שלא ייכנסו ל־<code>dist</code>); ב־<code>.gitignore</code> — <code>coverage/</code>; וב־<code>.env</code> — <code>DATABASE_URL_TEST</code> שמצביע על <strong>מסד אחר</strong> מ־<code>DATABASE_URL</code> (למשל <code>tasks_api_test</code> — <code>CREATE DATABASE tasks_api_test;</code> ב־psql).</p>
+
+  <h2>3. helpers</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>מה</th></tr>
+    <tr><td><code>test/clock.ts</code></td><td><code>TestClock</code>: <code>now()</code>, ו־<code>set(iso)</code> שהבדיקה קוראת לו</td></tr>
+    <tr><td><code>test/helpers.ts</code></td><td><code>createTestApp()</code> — <code>Test.createTestingModule({ imports: [AppModule] })</code> עם <code>overrideProvider</code> ל־3 ה־repositories (בזיכרון), <code>CLOCK</code>, <code>CONFIG</code> (סוד של בדיקות, <code>bcryptRounds: 4</code>) ו־<code>PrismaService</code>; ואז <code>configureApp</code> ו־<code>app.init()</code>. מחזיר <code>{ app, clock, users, http }</code>. ו־<code>signUp(app, email)</code> — נרשם, נכנס, מחזיר טוקנים</td></tr>
+    <tr><td><code>test/db.ts</code></td><td><code>createTestDatabase()</code> משיעור 3: schema חדש, migrations, <code>reset()</code>, <code>close()</code></td></tr>
+  </table></div>
+  <details><summary>💡 רמז: bcrypt בבדיקות</summary>
+    <p>עם cost 12, כל הרשמה וכניסה לוקחות זמן מורגש — ובחבילה של עשרות בדיקות זה מצטבר. <code>bcryptRounds: 4</code> ב־CONFIG של הבדיקות. האבטחה לא נפגעת: זה רק בבדיקות.</p>
+  </details>
+  <details><summary>💡 רמז: PrismaService ב־e2e</summary>
+    <p>ה־repositories הוחלפו, אבל <code>PrismaService</code> עדיין נוצר — ומנסה להתחבר. <code>.overrideProvider(PrismaService).useValue({ $disconnect: async () =&gt; {} })</code> — ו־<code>app.close()</code> בסוף עדיין עובד.</p>
+  </details>
+  <details><summary>💡 רמז: איך יודעים מה לבדוק?</summary>
+    <p>עבור על הטבלה של שלב ד׳ (פרק 21, שיעור 5) ועל קודי השגיאה. לכל שורה — "מה היה קורה אם זה היה שבור? איזו בדיקה הייתה נכשלת?". ובמיוחד: גבולות (היום, 15 דקות, 7 ימים), ומה שאסור (משתמש אחר, תפקיד, hash בתשובה).</p>
+  </details>
+
+  <h2>4. להריץ ולבדוק</h2>
+```term
+% npm test
+.. Test Suites: 4 passed, 4 total
+.. Tests:       31 passed, 31 total
+% npm run test:int
+.. Tests:       6 passed, 6 total
+% npm run test:cov
+```
+  <p>(הפלטים של הפתרון.) ואז הבודק:</p>
+```term
+% npx prisma generate
+% cd ~/dev/backend-course
+% npm run check PR2-TESTS -- --dir ~/dev/tasks-api
+```
+  <p>PR2-TESTS (דורש Node 24):</p>
+  <ol>
+    <li>יש לפחות 2 קובצי unit, קובץ e2e אחד וקובץ integration אחד.</li>
+    <li><code>npm test</code> עובר על הקוד שלך, עם לפחות 20 בדיקות.</li>
+    <li>בדיקות ה־integration עוברות — הבודק נותן להן <code>DATABASE_URL_TEST</code> מה־<code>COURSE_DATABASE_URL</code> שלך.</li>
+    <li>הבדיקות שלך עוברות גם על <strong>הפתרון של הקורס</strong> (הבודק מעתיק אותן לשם) — כלומר הן בודקות את ה־API, לא פרט שקיים רק אצלך.</li>
+    <li>ועל עותקים של הפתרון עם באג אחד — הן <strong>נכשלות</strong>. שבעת הבאגים:</li>
+  </ol>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>הבאג</th></tr>
+    <tr><td>1</td><td><code>GET /tasks/:id</code> מחזיר משימה של משתמש אחר</td></tr>
+    <tr><td>2</td><td>dueDate של <em>היום</em> נדחה (צריך להיות מותר)</td></tr>
+    <tr><td>3</td><td>refresh token ישן ממשיך לעבוד (אין rotation)</td></tr>
+    <tr><td>4</td><td>access token תקף שעה במקום 15 דקות</td></tr>
+    <tr><td>5</td><td>ההרשמה מחזירה גם <code>passwordHash</code></td></tr>
+    <tr><td>6</td><td><code>/users</code> פתוח לכל משתמש מחובר</td></tr>
+    <tr><td>7</td><td>אימייל לא רשום מקבל הודעה אחרת מסיסמה שגויה</td></tr>
+  </table></div>
+  <p>הבאגים מוכנסים לקוד שה־e2e וה־unit רצים עליו (בזיכרון) — כך שהבדיקות שתופסות אותם הן מ־<code>npm test</code>. ואם אחד שורד? ההודעה אומרת איזה, ואתה מוסיף בדיקה. זה בדיוק מה שקורה בעבודה אחרי באג בפרודקשן: קודם בדיקה שנכשלת, אחר כך תיקון.</p>
+  <p>commit, מיזוג, push — ועדכן את ה־README: <code>npm test</code>, <code>npm run test:int</code> ומה צריך ב־<code>.env</code>. הפתרון: <code>22-testing/solutions/tasks-api</code>.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>בראיונות: "איך היית בודק את ה־endpoint הזה?", "מה ההבדל בין unit ל־integration?", "מתי mock ומתי לא?", "מה עושים עם בדיקה שנכשלת לפעמים?". ובמשימות בית — בדיקות הן לעתים קרובות מה שמבדיל בין מועמדים: פרויקט עם <code>npm test</code> ירוק, ו־README שמסביר איך להריץ, אומר "אפשר לסמוך על הקוד הזה". ובעבודה עצמה — כמעט כל pull request צריך בדיקה, ותיקון באג מתחיל בבדיקה שמשחזרת אותו. בפרק 25 החבילה הזו תרוץ אוטומטית ב־GitHub Actions על כל push.</p>
+  </div>

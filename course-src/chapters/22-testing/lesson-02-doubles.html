@@ -1,0 +1,132 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>קוד בדיק: תלויות שמגיעות מבחוץ.</li>
+      <li>כפילים — stub, fake, spy — עם <code>mock.fn</code>.</li>
+      <li>זמן: שעון מוזרק, אזורי זמן, וטיימרים מזויפים.</li>
+      <li>fake או mock? ולמה בדיקה שבודקת "איך" היא בדיקה רעה.</li>
+    </ul>
+  </div>
+
+  <h2>1. מה הופך קוד ל"בלתי בדיק"</h2>
+  <p>נסה לכתוב בדיקה לזה:</p>
+```ts
+let counter = 0;
+export function createInvoiceNumber() {
+  counter++;
+  const d = new Date();
+  const rand = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+  return `INV-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}-${String(counter).padStart(4, "0")}-${rand}`;
+}
+```
+  <p>מה התוצאה הצפויה? תלוי בשעה, במזל, ובכמה פעמים קראו לפונקציה קודם — גם בבדיקות אחרות. הפתרון הוא אותו רעיון כמו <code>CLOCK</code> בפרויקט: <strong>כל מה שלא צפוי — מגיע מבחוץ</strong>.</p>
+```ts
+export function createInvoiceNumberer({ now = () => new Date(), random = Math.random } = {}) {
+  let counter = 0;                                   // של המופע, לא של הקובץ
+  return () => { /* אותו חישוב, עם now() ו־random() */ };
+}
+// בבדיקה:
+const next = createInvoiceNumberer({ now: () => new Date("2026-11-07T10:00:00Z"), random: () => 0.0421 });
+```
+  <p>שעה, אקראיות, רשת, מסד, מייל, קבצים — כל אחד מאלה הוא <strong>תלות</strong>. כשהיא מוזרקת, הבדיקה קובעת אותה. זה גם כל הסוד של DI ב־Nest (פרק 20): לא "ארכיטקטורה יפה" — <em>בדיקות</em>.</p>
+
+  <h2>2. כפילים</h2>
+  <div class="table-wrap"><table>
+    <tr><th>כפיל</th><th>מה הוא</th><th>דוגמה</th><th>מתי</th></tr>
+    <tr><td><strong>stub</strong></td><td>מחזיר תשובה קבועה</td><td><code>{ now: () =&gt; new Date("…") }</code></td><td>שעון, הגדרות, API שמחזיר 503</td></tr>
+    <tr><td><strong>fake</strong></td><td>מימוש אמיתי ופשוט</td><td><code>InMemoryTasksRepository</code></td><td>repository — בודקים התנהגות דרכו</td></tr>
+    <tr><td><strong>spy</strong></td><td>מקליט קריאות</td><td><code>mock.fn()</code></td><td>כשהקריאה עצמה היא התוצאה: מייל, לוג, webhook</td></tr>
+    <tr><td><strong>mock</strong></td><td>spy עם ציפיות על הקריאות</td><td>"נקרא פעם אחת עם [2026, 11]"</td><td>לעיתים רחוקות (ראה סעיף 5)</td></tr>
+  </table></div>
+```ts run
+import { mock } from "node:test";
+
+const send = mock.fn(async (to: string, subject: string) => {});
+await send("dana@example.com", "יש לך 2 משימות באיחור");
+await send("rona@example.com", "יש לך משימה אחת באיחור");
+
+console.log(send.mock.callCount());
+console.log(send.mock.calls[0].arguments);
+console.log(send.mock.calls.map((c) => c.arguments[0]));
+```
+```out
+2
+[ 'dana@example.com', 'יש לך 2 משימות באיחור' ]
+[ 'dana@example.com', 'rona@example.com' ]
+```
+  <p>"מה לא להחליף": את הקוד <em>שלך</em> שהוא מהיר וצפוי (פונקציה טהורה מהקובץ השכן — הרץ אותה באמת), ואת מה שאתה בודק (mock של Prisma בבדיקה של SQL בודק… את ה־mock).</p>
+
+  <h2>3. זמן ואזורי זמן</h2>
+  <p>שתי טעויות קבועות. הראשונה: <code>new Date()</code> בבדיקה — עוברת היום, נכשלת ב־31 בחודש. השנייה: שעון מקומי. אותו רגע הוא יום אחר בישראל וב־UTC:</p>
+```ts run
+const moment = new Date("2026-11-04T23:30:00Z");
+console.log(moment.toISOString().slice(0, 10));
+console.log(moment.toLocaleDateString("sv-SE", { timeZone: "Asia/Jerusalem" }));
+console.log(moment.toLocaleDateString("sv-SE", { timeZone: "America/New_York" }));
+```
+```out
+2026-11-04
+2026-11-05
+2026-11-04
+```
+  <p>(<code>sv-SE</code> — פורמט <code>YYYY-MM-DD</code>.) קוד שמשתמש ב־<code>getDate()</code> או <code>toLocaleDateString()</code> בלי <code>timeZone</code> נותן תוצאה שונה לפי המחשב שמריץ אותו. השרת בפרודקשן רץ בדרך כלל ב־UTC, ה־Mac שלך — בשעון ישראל. בדיקה טובה בוחרת בכוונה רגע כזה, שבו שני השעונים ביום שונה (E10, E22).</p>
+
+  <h2>4. טיימרים מזויפים</h2>
+  <p>debounce, retry עם המתנה, תפוגה — לא מחכים באמת. <code>node:test</code> יודע להחליף את <code>setTimeout</code>:</p>
+```ts run
+import { mock } from "node:test";
+
+mock.timers.enable({ apis: ["setTimeout"] });
+let fired = 0;
+setTimeout(() => fired++, 1000);
+
+mock.timers.tick(999);
+console.log("אחרי 999ms:", fired);
+mock.timers.tick(1);
+console.log("אחרי 1000ms:", fired);
+mock.timers.reset();
+```
+```out
+אחרי 999ms: 0
+אחרי 1000ms: 1
+```
+  <p>בתוך בדיקה — <code>t.mock.timers.enable(...)</code> (ה־<code>t</code> של הבדיקה), והטיימרים חוזרים לאמיתיים לבד כשהיא נגמרת. אותו רעיון ב־Jest: <code>jest.useFakeTimers()</code> ו־<code>jest.advanceTimersByTime(1000)</code>.</p>
+
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="בדיקה עם mock בודקת קריאות ונשברת בשיפור; בדיקה עם fake בודקת תוצאה">
+      <g style="stroke-width:2">
+        <rect x="380" y="20" width="320" height="160" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="20" y="20" width="320" height="160" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:15px;font-weight:700">
+        <text x="540" y="46">mock</text>
+        <text x="180" y="46">fake</text>
+      </g>
+      <g text-anchor="middle" style="font-size:12px;fill:var(--muted)" direction="rtl">
+        <text x="540" y="64">בודק איך</text>
+        <text x="180" y="64">בודק מה יצא</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="540" y="82">findByMonth called 1×</text>
+        <text x="540" y="102">with (2026, 11)</text>
+        <text x="180" y="82">report(...) deepEqual</text>
+        <text x="180" y="102">{ count: 4, total: 70, ... }</text>
+      </g>
+      <g text-anchor="middle" style="font-size:12px" direction="rtl">
+        <text x="540" y="138">נשבר: מישהו הוסיף cache או שאילתה שנייה</text>
+        <text x="540" y="158">עובר: הסכום מחושב לא נכון</text>
+        <text x="180" y="138">עובר: כל שיפור פנימי</text>
+        <text x="180" y="158">נשבר: כל טעות בתוצאה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: בדיקה טובה נכשלת כשההתנהגות שגויה — ורק אז.</figcaption>
+  </figure>
+
+  <h2>5. fake או mock?</h2>
+  <p>בדיקה שבודקת "הפונקציה קראה ל־<code>findByMonth</code> פעם אחת עם <code>[2026, 11]</code>" נכשלת כשמישהו משפר את הקוד (מוסיף cache, מפצל לשתי שאילתות) — ועוברת כשהחישוב שגוי. היא שומרת על <em>המימוש</em> במקום על <em>ההתנהגות</em>. עם fake שמחזיר נתונים לפי חודש, הבדיקה פשוט בודקת את הדוח שיצא — וגם "חודש לא נכון" מתגלה, דרך התוצאה (E23).</p>
+  <p>כלל אצבע: <strong>spy רק כשהקריאה היא התוצאה</strong> (נשלח מייל? נרשם לוג?). לכל השאר — fake או stub, ובדיקה של מה שחזר.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P22-E04">E04</a> · <a href="exercises.html#P22-E09">E09</a> · <a href="exercises.html#P22-E10">E10</a> · <a href="exercises.html#P22-E11">E11</a> · <a href="exercises.html#P22-E12">E12</a> · <a href="exercises.html#P22-E13">E13</a> · <a href="exercises.html#P22-E19">E19</a> · <a href="exercises.html#P22-E22">E22</a> · <a href="exercises.html#P22-E23">E23</a> · <a href="exercises.html#P22-E25">E25</a></p>
+  </div>

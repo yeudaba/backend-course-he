@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>למה, מה, ו־node:test — פרק 22</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 22</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — למה, מה, ו־node:test</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה בודקים, ובאיזו רמה — הפירמידה.</li>
+      <li><code>node:test</code> ו־<code>assert</code>: לכתוב, להריץ, ולקרוא כישלון.</li>
+      <li>בדיקה טובה: גבולות, שגיאות — ובדיקה שבאמת <em>יכולה</em> להיכשל.</li>
+    </ul>
+  </div>
+
+  <h2>1. שלוש רמות</h2>
+  <figure>
+    <svg viewBox="0 0 720 260" role="img" aria-label="פירמידת הבדיקות: הרבה unit בבסיס, פחות integration, מעט e2e">
+      <g style="stroke-width:2">
+        <path d="M230 20 L 320 90 L 140 90 Z" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <path d="M140 95 L 320 95 L 410 165 L 50 165 Z" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <path d="M50 170 L 410 170 L 450 240 L 10 240 Z" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="230" y="75">e2e</text>
+        <text x="230" y="137">integration</text>
+        <text x="230" y="212">unit</text>
+      </g>
+      <g style="font-size:13px" direction="rtl" text-anchor="start">
+        <text x="705" y="60">מעט · איטיות · הכי קרובות למשתמש</text>
+        <text x="705" y="135">הקוד שלך + מסד או HTTP אמיתי</text>
+        <text x="705" y="210">הרבה · מילישניות · פונקציה לבד</text>
+      </g>
+      <g style="stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 4">
+        <path d="M330 55 H 465"/><path d="M420 130 H 465"/><path d="M455 205 H 465"/>
+      </g>
+    </svg>
+    <figcaption>איור 1: הפירמידה. ככל שעולים — כל בדיקה מוכיחה יותר, אבל איטית ושבירה יותר.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>רמה</th><th>מה אמיתי</th><th>דוגמה מפרויקט 2</th></tr>
+    <tr><td><strong>unit</strong></td><td>פונקציה או מחלקה אחת. כל השאר — כפילים</td><td><code>TasksService</code> עם repository בזיכרון ושעון קבוע</td></tr>
+    <tr><td><strong>integration</strong></td><td>הקוד שלך + מערכת אחת אמיתית</td><td><code>PrismaTasksRepository</code> מול PostgreSQL</td></tr>
+    <tr><td><strong>e2e</strong></td><td>כל השרשרת, דרך הממשק החיצוני</td><td><code>POST /auth/login</code> ← <code>GET /tasks</code> דרך HTTP</td></tr>
+  </table></div>
+  <p>אין כאן "נכון" אחד — המטרה היא <strong>הכי הרבה ביטחון לכל שעת עבודה</strong>. לוגיקה עם הרבה מקרים (חישובים, כללים) — unit. SQL — integration (mock של המסד לא יגלה שאילתה שגויה). "המערכת מחוברת" — כמה e2e.</p>
+
+  <h2>2. node:test</h2>
+  <p>Node כולל מריץ בדיקות מובנה — בלי התקנה. קובץ בדיקות הוא קובץ רגיל:</p>
+<span class="file-label">slugify.spec.ts</span>
+<pre><code class="lang-ts">import { test } from "node:test";
+import assert from "node:assert/strict";
+import { slugify } from "./slugify.ts";
+
+test("אותיות קטנות, ורווח ← מקף", () =&gt; {
+  assert.equal(slugify("Hello World"), "hello-world");
+});
+
+test("עברית נשארת", () =&gt; {
+  assert.equal(slugify("פרק 22: בדיקות"), "פרק-22-בדיקות");
+});</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node --test slugify.spec.ts
+<span class="dim">✔ אותיות קטנות, ורווח ← מקף (0.80097ms)</span>
+<span class="dim">✔ עברית נשארת (0.227425ms)</span>
+<span class="dim">ℹ tests 2</span>
+<span class="dim">ℹ pass 2</span>
+<span class="dim">ℹ fail 0</span></pre>
+  <p>(פלט אמיתי, מקוצר.) ואם מישהו "מתקן" את <code>slugify</code> ומוחק בטעות את האותיות העבריות מהביטוי הרגולרי:</p>
+<pre class="terminal"><span class="prompt">% </span>node --test slugify.spec.ts
+<span class="dim">✔ אותיות קטנות, ורווח ← מקף (0.739684ms)</span>
+<span class="err">✖ עברית נשארת (0.969321ms)</span>
+<span class="dim">AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:</span>
+<span class="dim">+ actual - expected</span>
+..
+<span class="dim">+ '22'</span>
+<span class="dim">- 'פרק-22-בדיקות'</span></pre>
+  <p>איך קוראים: <code>+</code> — מה שקיבלנו, <code>-</code> — מה שציפינו. לכן הסדר ב־<code>assert.equal(actual, expected)</code> חשוב: קודם מה שהקוד החזיר, אחר כך מה שאתה מצפה.</p>
+  <div class="box tip">
+    <span class="box-title">💡 שלושה חלקים בכל בדיקה (AAA)</span>
+    <p><strong>Arrange</strong> — הכנה (נתונים, כפילים). <strong>Act</strong> — פעולה אחת. <strong>Assert</strong> — בדיקת התוצאה. בדיקה שעושה שלוש פעולות ובודקת אחרי כל אחת — היא בעצם שלוש בדיקות. ושם הבדיקה אומר <em>מה</em> נבדק ("עברית נשארת"), כך שכישלון מסביר את עצמו.</p>
+  </div>
+
+  <h2>3. assert — הכלים</h2>
+<pre><code class="lang-ts">import assert from "node:assert/strict";
+
+const checks: [string, () =&gt; void][] = [
+  ["equal", () =&gt; assert.equal(0.1 + 0.2, 0.3)],
+  ["deepEqual", () =&gt; assert.deepEqual({ page: 1, offset: 20 }, { page: 1, offset: 20 })],
+  ["throws + סוג", () =&gt; assert.throws(() =&gt; JSON.parse("{oops"), SyntaxError)],
+  ["throws על קוד שלא זורק", () =&gt; assert.throws(() =&gt; JSON.parse("{}"))],
+  ["match", () =&gt; assert.match("INV-202611-0001", /^INV-\d{6}-\d{4}$/)],
+];
+for (const [name, check] of checks) {
+  try {
+    check();
+    console.log(`✔ ${name}`);
+  } catch (err) {
+    console.log(`✖ ${name}: ${(err as Error).message.split("\n")[0]}`);
+  }
+}</code></pre>
+<pre class="terminal">✖ equal: Expected values to be strictly equal:
+✔ deepEqual
+✔ throws + סוג
+✖ throws על קוד שלא זורק: Missing expected exception.
+✔ match</pre>
+  <p>השורה הראשונה היא תזכורת שימושית: <code>0.1 + 0.2</code> הוא לא <code>0.3</code> ב־JavaScript (שבר בינארי) — לכן בכסף מעגלים, ובבדיקות של כסף בודקים את העיגול (E07). והרביעית: <code>assert.throws</code> על קוד שלא זורק — נכשל, וזה בדיוק מה שאנחנו רוצים.</p>
+  <p><code>equal</code> לערכים פשוטים, <code>deepEqual</code> לאובייקטים ומערכים (משווה תוכן), <code>throws</code> (ובקוד async — <code>await assert.rejects</code>), ו־<code>match</code> לביטוי רגולרי. ו־<code>node:assert/strict</code> — כדי ש־<code>equal</code> יהיה <code>===</code>, לא <code>==</code>.</p>
+
+  <h2>4. מה לבדוק: גבולות</h2>
+  <p>באגים גרים בקצוות. לכל <code>&gt;</code> או <code>&gt;=</code> בקוד — בדיקה <strong>על</strong> הגבול ולידו. לכל רשימה — ריקה, אחת, הרבה. לכל מספר — 0, שלילי, שבר. וכשיש הרבה מקרים דומים — <strong>טבלה</strong>:</p>
+<pre><code class="lang-ts">const cases: [string, number, string][] = [
+  ["?page=1", 0, "עמוד ראשון"],
+  ["?page=3&amp;limit=10", 20, "עמוד שלישי"],
+];
+for (const [query, offset, why] of cases) {
+  test(`${query} ← offset ${offset} (${why})`, () =&gt; { /* ... */ });
+}</code></pre>
+
+  <h2>5. בדיקה שלא יכולה להיכשל</h2>
+  <p>הבדיקה הכי מסוכנת היא ירוקה שלא בודקת כלום. שלושה דפוסים נפוצים:</p>
+<pre><code class="lang-ts">// 1. משווה אובייקט לעצמו — תמיד שווה
+const before = accounts;
+await transfer(accounts, "a", "b", 30);
+assert.deepEqual(accounts, before);
+
+// 2. try/catch — אם לא נזרקה שגיאה, הבדיקה פשוט עוברת
+try { await transfer(accounts, "a", "b", 9999); } catch (err) { assert.ok(err instanceof InsufficientFundsError); }
+
+// 3. לולאה על התוצאה — על רשימה ריקה היא לא בודקת כלום
+for (const name of lowBalance(accounts, 10)) assert.ok(accounts.get(name)! &lt; 10);</code></pre>
+  <p>והחלשות — <code>assert.ok(result)</code> במקום הערך המדויק. הדרך לתפוס את כולן: <strong>שבור את הקוד בכוונה</strong>, וודא שהבדיקה נהיית אדומה. זה מה שהבודק של הפרק עושה אוטומטית, ולכן בתרגילים שלו המסר הוא "הבדיקות שלך עוברות גם על קוד עם הבאגים האלה".</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P22-E01">E01</a> · <a href="exercises.html#P22-E02">E02</a> · <a href="exercises.html#P22-E03">E03</a> · <a href="exercises.html#P22-E06">E06</a> · <a href="exercises.html#P22-E07">E07</a> · <a href="exercises.html#P22-E08">E08</a> · <a href="exercises.html#P22-E17">E17</a> · <a href="exercises.html#P22-E20">E20</a> · <a href="exercises.html#P22-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 22</a><a href="lesson-02-doubles.html"><small>הבא</small>שיעור 2 — כפילים, זמן וקוד בדיק</a></div>
+</main>
+</body>
+</html>

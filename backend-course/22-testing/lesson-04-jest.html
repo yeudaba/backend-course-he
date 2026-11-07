@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jest, Nest, כיסוי ו־mutation testing — פרק 22</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 22</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — Jest, Nest, כיסוי ו־mutation testing</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>Jest — מה שונה מ־node:test (כמעט רק שמות).</li>
+      <li>בדיקות ב־Nest: <code>Test.createTestingModule</code> ו־supertest.</li>
+      <li>coverage — מה הוא מודד, ומה לא.</li>
+      <li>mutation testing — איך בודקים את הבדיקות.</li>
+    </ul>
+  </div>
+
+  <h2>1. Jest</h2>
+  <p>הרעיונות זהים — רק התחביר שונה. Jest הוא ברירת המחדל בתבנית של Nest, ונפוץ מאוד במשרות; Vitest הוא החלופה החדשה עם אותו תחביר כמעט.</p>
+  <div class="table-wrap"><table>
+    <tr><th>node:test</th><th>Jest</th></tr>
+    <tr><td><code>test("...", fn)</code> · <code>describe</code></td><td><code>it("...", fn)</code> (או <code>test</code>) · <code>describe</code> — גלובליים, בלי import</td></tr>
+    <tr><td><code>assert.equal(a, b)</code></td><td><code>expect(a).toBe(b)</code></td></tr>
+    <tr><td><code>assert.deepEqual(a, b)</code></td><td><code>expect(a).toEqual(b)</code> · חלקי: <code>toMatchObject</code></td></tr>
+    <tr><td><code>assert.throws(fn, RangeError)</code></td><td><code>expect(fn).toThrow(RangeError)</code></td></tr>
+    <tr><td><code>await assert.rejects(p, {...})</code></td><td><code>await expect(p).rejects.toMatchObject({...})</code></td></tr>
+    <tr><td><code>mock.fn()</code> · <code>.mock.callCount()</code></td><td><code>jest.fn()</code> · <code>expect(fn).toHaveBeenCalledTimes(1)</code></td></tr>
+    <tr><td><code>t.mock.timers.tick(1000)</code></td><td><code>jest.useFakeTimers()</code> · <code>jest.advanceTimersByTime(1000)</code></td></tr>
+    <tr><td><code>beforeEach</code> · <code>after</code></td><td><code>beforeEach</code> · <code>afterAll</code></td></tr>
+    <tr><td>טבלה + לולאה</td><td><code>it.each([...])("%s", (...) =&gt; ...)</code></td></tr>
+  </table></div>
+  <p>ב־TypeScript, Jest צריך מתרגם: <code>ts-jest</code>. וב־Nest 12 יש עוד פרט: החבילות של Nest הן ESM, ו־Jest טוען אותן רק ב־<strong>Node 24</strong> עם <code>--experimental-vm-modules</code>. לכן התבנית מריצה <code>node --experimental-vm-modules node_modules/jest/bin/jest.js</code> ולא סתם <code>jest</code>. בלי הדגל (או ב־Node 22) תקבל:</p>
+<pre class="terminal"><span class="err">Must use import to load ES Module: .../node_modules/@nestjs/common/index.js</span>
+<span class="dim">- Use Node v24.9+ where Jest supports require(esm) natively</span></pre>
+
+  <h2>2. unit ב־Nest — בלי Nest</h2>
+  <p>service הוא מחלקה רגילה. לבדיקת unit לא צריך את Nest בכלל — יוצרים אותו עם כפילים:</p>
+<span class="file-label">src/tasks/tasks.service.spec.ts</span>
+<pre><code class="lang-ts">describe("TasksService", () =&gt; {
+  let clock: TestClock;
+  let service: TasksService;
+
+  beforeEach(() =&gt; {
+    clock = new TestClock();                                   // 2026-11-04T10:00Z
+    service = new TasksService(new InMemoryTasksRepository(), clock);
+  });
+
+  it("dueDate: היום מותר, אתמול — 422", async () =&gt; {
+    await expect(service.create(1, input({ dueDate: "2026-11-04" }))).resolves.toMatchObject({ dueDate: "2026-11-04" });
+    await expect(service.create(1, input({ dueDate: "2026-11-03" }))).rejects.toMatchObject({ status: 422, code: "DUE_DATE_IN_PAST" });
+  });
+});</code></pre>
+
+  <h2>3. e2e ב־Nest — supertest</h2>
+  <p>לבדיקת השרשרת המלאה — אותו <code>AppModule</code>, אותו <code>configureApp</code> כמו ב־<code>main.ts</code>, ו־<code>overrideProvider</code> לתלויות (בדיוק מה שהבודק של PR2 עשה מפרק 20). supertest שולח בקשות ישר ל־<code>app.getHttpServer()</code>, בלי פורט:</p>
+<span class="file-label">test/app.e2e-spec.ts</span>
+<pre><code class="lang-ts">it("משימה של משתמש אחר — 404 בכל פעולה", async () =&gt; {
+  const dana = (await signUp(app, "dana@example.com")).accessToken;
+  const yossi = (await signUp(app, "yossi@example.com")).accessToken;
+  const created = await http().post("/tasks").set(auth(dana)).send({ title: "של דנה" }).expect(201);
+  const path = `/tasks/${created.body.id}`;
+
+  await http().get(path).set(auth(yossi)).expect(404);
+  await http().delete(path).set(auth(yossi)).expect(404);
+  await http().get(path).set(auth(dana)).expect(200);
+});</code></pre>
+
+  <h2>4. coverage</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run test:cov
+<span class="dim">File                          | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s</span>
+<span class="dim">All files                     |   84.84 |    59.15 |   72.26 |   84.33 |</span>
+<span class="dim">  auth.service.ts             |   94.11 |    78.12 |     100 |     100 | 32,66,74-87</span>
+<span class="dim">  jwt-auth.guard.ts           |     100 |    85.71 |     100 |     100 | 12</span>
+<span class="dim">  tasks.prisma-repository.ts  |   17.24 |     12.5 |       0 |      12 | 9-23,34-87</span>
+<span class="dim">  tasks.service.ts            |     100 |       90 |     100 |     100 | 47</span></pre>
+  <p>(פלט אמיתי מהפתרון של שלב ה׳, מקוצר.) coverage עונה על שאלה אחת: <strong>איזה קוד לא רץ בכלל</strong> בזמן הבדיקות. <code>tasks.prisma-repository.ts</code> ב־12% — כי הוא נבדק רק ב־<code>npm run test:int</code> (מול מסד), לא ב־<code>npm test</code>. זה מידע שימושי. מה שהוא <em>לא</em> אומר: שהקוד שרץ — נבדק. שורה יכולה לרוץ בלי שאף assert יסתכל על התוצאה שלה (E05).</p>
+
+  <h2>5. mutation testing — לבדוק את הבדיקות</h2>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="הבדיקות רצות על הקוד התקין ועל מוטנטים; מוטנט ששרד מראה חור בבדיקות">
+      <defs><marker id="mu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="80" width="140" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="300" y="15" width="200" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="83" width="200" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="151" width="200" height="44" rx="8" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="20" y="15" width="200" height="44" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="20" y="83" width="200" height="44" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="20" y="151" width="200" height="44" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 100 L 504 40" marker-end="url(#mu)"/><path d="M556 105 H 504" marker-end="url(#mu)"/><path d="M556 112 L 504 170" marker-end="url(#mu)"/>
+        <path d="M296 37 H 224" marker-end="url(#mu)"/><path d="M296 105 H 224" marker-end="url(#mu)"/><path d="M296 173 H 224" marker-end="url(#mu)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700"><text x="630" y="110" direction="rtl">הבדיקות שלך</text></g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="400" y="42">original code</text>
+        <text x="400" y="110">mutant: &gt; → &gt;=</text>
+        <text x="400" y="178">mutant: no ownerId</text>
+      </g>
+      <g text-anchor="middle" style="font-size:12px" direction="rtl">
+        <text x="120" y="42">✔ עוברות — טוב</text>
+        <text x="120" y="110">✖ נכשלות — המוטנט "נהרג"</text>
+        <text x="120" y="178">✔ עוברות — שרד! חור בבדיקות</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: מוטנט = הקוד התקין עם באג אחד קטן. בדיקות טובות "הורגות" את כולם.</figcaption>
+  </figure>
+  <p>זה מה שהבודק של הפרק עושה: בכל תרגיל "כתוב בדיקות" יש רשימת מוטנטים (למשל <code>&gt;=</code> ← <code>&gt;</code>, שורה שנמחקה, UTC ← שעון מקומי). הבדיקות שלך רצות על כל אחד, וכל מוטנט ששרד מוצג לך כבאג שהבדיקות לא תופסות. בפרויקטים אמיתיים עושים את זה עם <a href="https://stryker-mutator.io/" target="_blank">Stryker</a> — איטי (מריץ את כל הבדיקות מאות פעמים), ולכן בדרך כלל רק על הקוד החשוב, או פעם בלילה.</p>
+  <div class="box tip">
+    <span class="box-title">💡 כמה coverage צריך?</span>
+    <p>אין מספר קסם. 70–80% על הקוד העסקי זה טוב; 100% עולה הרבה ולא מבטיח כלום. שאלה טובה יותר ב־code review: "איזה באג הבדיקה הזו הייתה תופסת?". אם אין תשובה — הבדיקה כנראה לא שווה הרבה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P22-E05">E05</a> · <a href="exercises.html#P22-E24">E24</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-03-integration.html"><small>הקודם</small>שיעור 3 — בדיקות HTTP ומסד בדיקות</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 2, שלב ה׳: בדיקות</a></div>
+</main>
+</body>
+</html>

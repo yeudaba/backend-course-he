@@ -1,0 +1,7 @@
+// P22-E10: כתוב בדיקות ל־P22-E10.ts (את הקוד עצמו לא משנים).
+// הרצה: node --test 22-testing/starter/P22-E10.spec.ts   ·   בדיקה: npm run check P22-E10
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { dueStatus } from "./P22-E10.ts";
+
+test.todo("כתוב כאן בדיקות ל־dueStatus");
