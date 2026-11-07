@@ -388,7 +388,7 @@ function verifyTests(ch) {
       spawnSync("node", ["--experimental-strip-types", "--no-warnings", "--test", "--test-reporter=dot", path.join(testsDir, t)], {
         encoding: "utf8",
         env: { ...process.env, CHECK_TARGET: target, TSC_PATH: path.join(SRC, "node_modules", "typescript", "bin", "tsc"), COURSE_DATABASE_URL: "postgresql://postgres@localhost:5433/postgres" },
-        timeout: 30000,
+        timeout: ch.testTimeout ?? 30000, // פרק 22: הבדיקות מריצות Jest כמה פעמים
       });
     const sol = run("solutions");
     if (sol.status !== 0) problems.push(`${ch.slug}/${t}: נכשל על הפתרון\n${sol.stdout}\n${sol.stderr}`);

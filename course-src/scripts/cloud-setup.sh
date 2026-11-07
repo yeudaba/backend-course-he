@@ -2,7 +2,9 @@
 # הכנת סביבת אימות בענן/לינוקס (Claude Code on the web וכדומה).
 # במק אין צורך — build.mjs משתמש ב־/Library/PostgreSQL/18 ו־course-src/.pgdata.
 # מה זה עושה: מפעיל Docker, מריץ PostgreSQL 18 בקונטיינר course-pg על פורט 5433
-# (trust, אזור זמן Asia/Jerusalem), מעתיק ממנו psql 18 ל־/opt/pg18, ומתקין את התלויות.
+# (trust, אזור זמן Asia/Jerusalem), מעתיק ממנו psql 18 ל־/opt/pg18, מתקין Node 24 ל־/opt/node24, ומתקין את התלויות.
+# אחר כך מריצים את הבנייה עם Node 24 (כמו אצל הלומד; פרק 22 דורש אותו):
+#   PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if ! docker info >/dev/null 2>&1; then (nohup dockerd >/tmp/dockerd.log 2>&1 &); for i in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; fi
@@ -16,6 +18,11 @@ if [ ! -x /opt/pg18/bin/psql ]; then
     printf '#!/bin/sh\nLD_LIBRARY_PATH=/opt/pg18img/lib exec /opt/pg18img/18/bin/%s "$@"\n' "$b" > /opt/pg18/bin/$b; chmod +x /opt/pg18/bin/$b
   done
 fi
+if [ ! -x /opt/node24/bin/node ]; then
+  file=$(curl -fsSL https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt | grep -o 'node-v24[^ ]*-linux-x64.tar.xz' | head -1)
+  curl -fsSL "https://nodejs.org/dist/latest-v24.x/$file" | tar xJ -C /opt && mv "/opt/${file%.tar.xz}" /opt/node24
+fi
+/opt/node24/bin/node -v
 [ -d node_modules ] || npm ci --no-audit --no-fund
 for i in $(seq 30); do /opt/pg18/bin/pg_isready -q -h localhost -p 5433 && break; sleep 1; done
 /opt/pg18/bin/pg_isready -h localhost -p 5433
