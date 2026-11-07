@@ -21,17 +21,25 @@ let currentOutDir = null;
 const lbl = (ch) => ch.label ?? `פרק ${ch.num}`;
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// ---------- PostgreSQL לאימות (שרת פרטי ב־course-src/.pgdata, פורט 5433) ----------
+// ---------- PostgreSQL לאימות (פורט 5433, משתמש postgres, בלי סיסמה, אזור זמן Asia/Jerusalem) ----------
+// במק: שרת פרטי בבינאריים של EDB עם נתונים ב־course-src/.pgdata.
+// בענן/לינוקס: קונטיינר Docker בשם course-pg (postgres:18), ו־psql 18 ב־/opt/pg18/bin (ראה scripts/cloud-setup.sh).
+// אפשר לדרוס עם PG_BIN=<תיקייה שיש בה psql ו־pg_isready>.
 const PG_ENV = { PGHOST: "localhost", PGPORT: "5433", PGUSER: "postgres", PGDATABASE: "postgres" };
-const PG_BIN = "/Library/PostgreSQL/18/bin";
+const PG_BIN = process.env.PG_BIN ?? ["/Library/PostgreSQL/18/bin", "/opt/pg18/bin"].find((d) => fs.existsSync(path.join(d, "psql"))) ?? "/Library/PostgreSQL/18/bin";
 let pgReady = false;
 function ensurePg() {
   if (pgReady) return;
   const ping = () => spawnSync(path.join(PG_BIN, "pg_isready"), ["-h", "localhost", "-p", "5433"]).status === 0;
+  const waitPing = () => { for (let i = 0; i < 60 && !ping(); i++) spawnSync("sleep", ["0.5"]); return ping(); };
   if (!ping()) {
-    spawnSync(path.join(PG_BIN, "pg_ctl"), ["-D", path.join(SRC, ".pgdata"), "-o", "-p 5433 -k /tmp -c listen_addresses=localhost", "-l", path.join(SRC, ".pgdata", "server.log"), "-w", "start"], { stdio: "ignore" });
+    if (fs.existsSync(path.join(PG_BIN, "pg_ctl")) && fs.existsSync(path.join(SRC, ".pgdata"))) {
+      spawnSync(path.join(PG_BIN, "pg_ctl"), ["-D", path.join(SRC, ".pgdata"), "-o", "-p 5433 -k /tmp -c listen_addresses=localhost", "-l", path.join(SRC, ".pgdata", "server.log"), "-w", "start"], { stdio: "ignore" });
+    } else if (spawnSync("docker", ["start", "course-pg"], { stdio: "ignore" }).status !== 0) {
+      spawnSync("docker", ["run", "-d", "--name", "course-pg", "-p", "5433:5432", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "-e", "TZ=Asia/Jerusalem", "postgres:18", "-c", "timezone=Asia/Jerusalem"], { stdio: "ignore" });
+    }
   }
-  if (!ping()) throw new Error("שרת PostgreSQL לאימות לא עלה (course-src/.pgdata)");
+  if (!waitPing()) throw new Error("שרת PostgreSQL לאימות לא עלה על פורט 5433 (course-src/.pgdata או קונטיינר course-pg)");
   pgReady = true;
 }
 function psql(args, { file, schema, input, keepGoing = false, merge = false } = {}) {
