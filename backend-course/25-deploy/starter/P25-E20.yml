@@ -1,0 +1,36 @@
+# P25-E20: ה־workflow הזה "עובד" — ובשבוע הראשון מחק את כל המשתמשים בפרודקשן,
+# ופעם אחרת העלה לאוויר גרסה שהבדיקות שלה נכשלו. שלוש תקלות. מצא ותקן.
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate reset --force
+      - run: npm test
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

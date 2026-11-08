@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTTPS, proxy ובריאות בפרודקשן — פרק 25</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 25</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — HTTPS, proxy ובריאות בפרודקשן</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>HTTPS בקצרה: מה TLS נותן, ואיפה הוא "נגמר".</li>
+      <li>reverse proxy — עם ניסוי אמיתי: Caddy לפני הפרויקט שלך.</li>
+      <li><code>trust proxy</code>: מי הלקוח באמת.</li>
+      <li>security headers, ו־health מול readiness בפרודקשן.</li>
+    </ul>
+  </div>
+
+  <h2>1. HTTPS ו־TLS termination</h2>
+  <p>HTTPS = HTTP בתוך חיבור TLS. TLS נותן שלושה דברים: <strong>הצפנה</strong> (מי שבאמצע — ה־Wi-Fi בבית קפה — לא רואה את הסיסמה), <strong>שלמות</strong> (אי אפשר לשנות את התוכן בדרך), ו<strong>זהות</strong> — תעודה שחתומה על ידי רשות מוכרת אומרת "זה באמת <code>tasks-api.onrender.com</code>". בלי HTTPS, <code>Authorization: Bearer …</code> עובר ברשת כטקסט פתוח.</p>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="הדפדפן מתחבר ב־HTTPS ל־proxy, וה־proxy מעביר HTTP לשרת עם X-Forwarded-For ו־X-Forwarded-Proto">
+      <defs><marker id="tl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="580" y="50" width="120" height="60" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="320" y="50" width="150" height="60" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="50" width="150" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g style="stroke-width:2;fill:none">
+        <path d="M576 80 H 474" marker-end="url(#tl)" style="stroke:var(--green);stroke-width:3"/>
+        <path d="M316 80 H 174" marker-end="url(#tl)" style="stroke:var(--svg-stroke)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:14px;font-weight:700">
+        <text x="640" y="85">browser</text><text x="395" y="78">proxy</text><text x="95" y="78">api :3000</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="525" y="72">HTTPS (TLS)</text><text x="245" y="72">HTTP</text>
+        <text x="395" y="96">Caddy / Render LB</text><text x="95" y="96">NestJS</text>
+        <text x="245" y="132">X-Forwarded-For: 203.0.113.7</text>
+        <text x="245" y="150">X-Forwarded-Proto: https</text>
+      </g>
+      <text x="395" y="135" text-anchor="middle" style="font-size:11px" direction="rtl">כאן התעודה</text>
+    </svg>
+    <figcaption>איור 1: TLS "נגמר" ב־proxy. האפליקציה רואה HTTP רגיל — ומה שה־proxy מספר לה ב־headers.</figcaption>
+  </figure>
+  <p>האפליקציה עצמה לא מחזיקה תעודה. מי שמחזיק — ה־proxy שלפניה: ה־load balancer של Render, או nginx/Caddy בשרת משלך. זה <strong>TLS termination</strong>, וזה המודל הרגיל: תעודות מתחדשות לבד (Let's Encrypt, כל 90 יום), ומקום אחד מטפל בזה.</p>
+
+  <h2>2. הניסוי: Caddy לפני הפרויקט</h2>
+  <p>כדי לראות את זה בעיניים, הרצנו את ה־image של שלב ח׳ מאחורי <a href="https://caddyserver.com" target="_blank">Caddy</a> — reverse proxy שמנפיק תעודות לבד. ל־<code>localhost</code> הוא יוצר רשות תעודות מקומית משלו (<code>tls internal</code>):</p>
+<span class="file-label">Caddyfile</span>
+<pre><code class="lang-text">localhost {
+	tls internal
+	reverse_proxy api:3000
+}</code></pre>
+  <p>ב־compose — שירות <code>caddy</code> (ports 80 ו־443), ול־api: <code>NODE_ENV: production</code>, <code>CORS_ORIGINS: https://localhost</code>, <code>TRUST_PROXY: "1"</code>, ובלי ports — מבחוץ מגיעים רק דרך Caddy. התוצאות (פלטים אמיתיים, מקוצרים):</p>
+<pre class="terminal"><span class="prompt">% </span>curl -sI http://localhost/health
+<span class="dim">HTTP/1.1 308 Permanent Redirect</span>
+<span class="dim">Location: https://localhost/health</span>
+<span class="prompt">% </span>curl -skv https://localhost/health
+<span class="dim">* SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256 / X25519 / id-ecPublicKey</span>
+<span class="dim">*  issuer: CN=Caddy Local Authority - ECC Intermediate</span>
+<span class="dim">&lt; HTTP/2 200</span>
+<span class="dim">&lt; via: 1.1 Caddy</span>
+<span class="dim">&lt; x-request-id: 8d89c205-05a8-4eb5-898f-114da3ef9624</span>
+<span class="prompt">% </span>curl -sk https://localhost/ready
+<span class="dim">{"ok":true,"db":"up"}</span>
+<span class="prompt">% </span>curl -sS https://localhost/health
+<span class="err">curl: (60) SSL certificate problem: unable to get local issuer certificate</span></pre>
+  <ul>
+    <li><strong>HTTP ← HTTPS</strong>: Caddy מפנה לבד (308).</li>
+    <li><strong>TLS 1.3</strong>, ו־HTTP/2 בין הדפדפן ל־proxy — בלי שינוי אחד בקוד ה־Nest.</li>
+    <li>בלי <code>-k</code>, <code>curl</code> מסרב: התעודה חתומה על ידי רשות מקומית שהמחשב לא מכיר. זה בדיוק מה ש־TLS אמור לעשות. ב־Render התעודה מ־Let's Encrypt, וכל דפדפן מכיר אותה.</li>
+  </ul>
+
+  <h2>3. trust proxy — מי הלקוח</h2>
+  <p>מאחורי proxy, כל הבקשות מגיעות <em>מה־proxy</em>. בלי <code>trust proxy</code>, <code>req.ip</code> זהה לכולם — והגבלת הקצב מפרק 24 תחסום את <strong>כל</strong> המשתמשים יחד אחרי 10 ניסיונות כניסה בדקה. ה־proxy מוסיף את הכתובת האמיתית בסוף <code>X-Forwarded-For</code>, ו־<code>TRUST_PROXY=1</code> אומר ל־Express לקחת אותה משם — רק את מה שה־proxy <em>שלנו</em> הוסיף.</p>
+  <p>בדקנו את זה באותו ניסוי: 11 ניסיונות כניסה, כל אחד עם <code>X-Forwarded-For</code> מזויף אחר (פלט אמיתי):</p>
+<pre class="terminal"><span class="prompt">% </span>for i in $(seq 1 11); do curl -sk -o /dev/null -w "%{http_code} " -X POST https://localhost/auth/login \
+<span class="dim">  -H "X-Forwarded-For: 10.0.0.$i" -H 'content-type: application/json' -d '{"email":"x@example.com","password":"wrong-password"}'; done</span>
+<span class="dim">401 401 401 401 401 401 401 401 401 401 429</span></pre>
+  <p>הזיוף לא עזר: Caddy הוסיף אחרי הכתובת המזויפת את הכתובת האמיתית, ו־Express לקח את האחרונה. עם <code>trust proxy: true</code> ("סמוך על הכול") Express היה לוקח את <em>הראשונה</em> — את מה שהלקוח כתב — וכל ניסיון היה "לקוח חדש" (E18, E23). המספר הנכון = כמה proxies <strong>שלך</strong> יש לפני השרת. ב־Render: 1.</p>
+  <p>ועוד שני דברים ש־<code>trust proxy</code> מתקן: <code>req.protocol</code> ו־<code>req.secure</code> (מ־<code>X-Forwarded-Proto</code>) — חשוב ל־HSTS, לקישורים שהשרת בונה, ול־cookies עם <code>Secure</code>.</p>
+
+  <h2>4. security headers</h2>
+  <div class="table-wrap"><table>
+    <tr><th>header</th><th>מה</th></tr>
+    <tr><td><code>Strict-Transport-Security</code></td><td>"לאתר הזה — רק HTTPS, לתקופה X". רק על HTTPS אמיתי (לא localhost)</td></tr>
+    <tr><td><code>X-Content-Type-Options: nosniff</code></td><td>הדפדפן לא "מנחש" סוג קובץ</td></tr>
+    <tr><td><code>X-Frame-Options: DENY</code></td><td>אי אפשר להטמיע ב־iframe (clickjacking)</td></tr>
+    <tr><td>בלי <code>X-Powered-By</code></td><td>לא מפרסמים "Express" — פחות מידע לתוקף</td></tr>
+  </table></div>
+  <p>בעבודה — <strong>helmet</strong> (<code>app.use(helmet())</code>), שעושה את זה ועוד. ב־E07 תכתוב את הגרסה הבסיסית בעצמך, כדי לדעת מה כל אחד עושה.</p>
+
+  <h2>5. health מול readiness, בפרודקשן</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th><code>/health</code></th><th><code>/ready</code></th></tr>
+    <tr><td>שאלה</td><td>"התהליך חי?"</td><td>"אפשר לשלוח אליי בקשות?"</td></tr>
+    <tr><td>בודק</td><td>כלום — עונה ופחות</td><td>את המסד (<code>SELECT 1</code>, עד 2 שניות)</td></tr>
+    <tr><td>כשנכשל</td><td>מפעילים מחדש את הקונטיינר</td><td>לא שולחים תנועה (deploy לא מחליף את הקודם)</td></tr>
+    <tr><td>בפרויקט</td><td>HEALTHCHECK ב־Dockerfile</td><td>Health Check Path ב־Render, ובדיקת העשן</td></tr>
+  </table></div>
+  <p>למה לא לבדוק את המסד ב־<code>/health</code>? כי תקלה רגעית במסד הייתה גורמת לפלטפורמה <em>להפעיל מחדש</em> שרתים תקינים — ולהחמיר את התקלה. ושתי הבקשות האלה נכתבות ללוג ב־<code>debug</code>: הפלטפורמה שואלת אותן כל כמה שניות.</p>
+  <p>ולבסוף — מישהו צריך לשים לב כשהאתר נופל בשלוש בלילה. שירותי <strong>uptime monitoring</strong> (UptimeRobot, Better Stack, ועוד — רובם עם תוכנית חינמית) שולחים בקשה ל־<code>/health</code> כל כמה דקות, ומודיעים במייל כשהוא לא עונה. בונוס לא מתוכנן: ב־Render החינמי זה גם מונע מהשרת "להירדם" — שימו לב שזה על חשבון 750 השעות החודשיות שלכם.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25-E05">E05</a> · <a href="exercises.html#P25-E07">E07</a> · <a href="exercises.html#P25-E12">E12</a> · <a href="exercises.html#P25-E18">E18</a> · <a href="exercises.html#P25-E23">E23</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-03-deploy.html"><small>הקודם</small>שיעור 3 — פריסה: migrations, deploy, ובדיקת עשן</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 2, שלב ח׳: קישור חי</a></div>
+</main>
+</body>
+</html>

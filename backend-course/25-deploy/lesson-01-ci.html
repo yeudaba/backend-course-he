@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI ו־GitHub Actions — פרק 25</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 25</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — CI ו־GitHub Actions</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>CI: למה "אצלי זה עובר" לא מספיק — עם דוגמה אמיתית מהפרויקט שלך.</li>
+      <li>GitHub Actions: workflow, job, step, runner ו־action.</li>
+      <li>שירות PostgreSQL בתוך ה־CI, cache, ו־<code>needs</code>.</li>
+      <li>לקרוא ריצה שנכשלה — ולתקן.</li>
+    </ul>
+  </div>
+
+  <h2>1. "אצלי זה עובר"</h2>
+  <p>בזמן כתיבת הפרק, העלינו את פרויקט 2 (שלב ח׳) ל־GitHub, עם ה־workflow של השיעור הזה. כל הבדיקות עברו אצלנו. הריצה הראשונה ב־GitHub נכשלה — בצעד <code>npm run typecheck</code> (פלט אמיתי, מקוצר):</p>
+<pre class="terminal"><span class="err">##[error]src/auth/auth.schema.spec.ts(3,1): error TS2593: Cannot find name 'describe'. Do you need to install</span>
+<span class="err">  type definitions for a test runner? Try `npm i --save-dev @types/jest` …</span>
+<span class="err">##[error]prisma/seed.ts(16,1): error TS1309: The current file is a CommonJS module and cannot use 'await' at the top level.</span>
+<span class="err">##[error]Process completed with exit code 2.</span></pre>
+  <p>190 שגיאות. איך זה עבר "אצלנו"? כי בדקנו טיפוסים רק עם <code>tsconfig.build.json</code> (שלא כולל בדיקות ו־seed), ואף אחד לא הריץ את <code>npm run typecheck</code> המלא — עוד מפרק 22. ה־<code>tsconfig.json</code> הגביל את הטיפוסים ל־<code>"types": ["node"]</code>, בלי Jest; ו־<code>seed.ts</code> משתמש ב־<code>await</code> ברמה העליונה בפרויקט CommonJS. התיקון: <code>"types": ["node", "jest"]</code>, ו־<code>seed.ts</code> ← <code>seed.mts</code> (קובץ ESM). והפתרונות של שלבים ד׳–ז׳ תוקנו בהתאם.</p>
+  <p>זה בדיוק התפקיד של <strong>CI</strong> (Continuous Integration): שרת שמריץ את כל הבדיקות על כל push ו־pull request, <strong>בסביבה נקייה</strong> — בלי הקבצים שלא עשית להם commit, בלי <code>node_modules</code> ישן, ובלי "את זה אני אף פעם לא מריץ".</p>
+
+  <h2>2. האנטומיה של workflow</h2>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="workflow עם שלושה jobs: test ו־docker במקביל, ו־deploy שתלוי בשניהם">
+      <defs><marker id="ci1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="80" width="140" height="70" rx="10" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="300" y="20" width="200" height="90" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="130" width="200" height="80" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="80" width="200" height="70" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 105 L 504 70" marker-end="url(#ci1)"/>
+        <path d="M556 125 L 504 165" marker-end="url(#ci1)"/>
+        <path d="M296 70 L 224 105" marker-end="url(#ci1)"/>
+        <path d="M296 165 L 224 125" marker-end="url(#ci1)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:14px;font-weight:700">
+        <text x="630" y="110">git push</text><text x="400" y="42">test</text><text x="400" y="152">docker</text><text x="120" y="108">deploy</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="400" y="62">services: postgres</text>
+        <text x="400" y="80">npm ci · typecheck · test</text>
+        <text x="400" y="96">migrate · test:int · build</text>
+        <text x="400" y="172">docker build</text>
+        <text x="400" y="190">run · curl /health</text>
+        <text x="120" y="128">needs: [test, docker]</text>
+        <text x="120" y="142">if: push to main</text>
+      </g>
+      <text x="630" y="132" text-anchor="middle" style="font-size:11px" direction="rtl">כל push ו־PR</text>
+    </svg>
+    <figcaption>איור 1: test ו־docker רצים במקביל, כל אחד על מכונה משלו. deploy — רק אחרי ששניהם עברו, ורק ב־push ל־main.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>מושג</th><th>מה</th></tr>
+    <tr><td><strong>workflow</strong></td><td>קובץ YAML ב־<code>.github/workflows/</code>. <code>on:</code> — מתי הוא רץ</td></tr>
+    <tr><td><strong>job</strong></td><td>רצף צעדים על מכונה אחת. jobs רצים <strong>במקביל</strong>, אלא אם יש <code>needs</code></td></tr>
+    <tr><td><strong>runner</strong></td><td>המכונה: <code>ubuntu-latest</code> — VM חדש ונקי לכל job, שנמחק בסוף</td></tr>
+    <tr><td><strong>step</strong></td><td><code>run:</code> — פקודת shell; <code>uses:</code> — action מוכן</td></tr>
+    <tr><td><strong>action</strong></td><td>צעד לשימוש חוזר: <code>actions/checkout@v5</code> מוריד את הקוד, <code>actions/setup-node@v5</code> מתקין Node</td></tr>
+  </table></div>
+  <p>ה־job של הבדיקות בפרויקט:</p>
+<span class="file-label">.github/workflows/ci.yml</span>
+<pre><code class="lang-yaml">on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: tasks
+          POSTGRES_PASSWORD: tasks
+          POSTGRES_DB: tasks_test
+        ports:
+          - 5432:5432
+        options: &gt;-
+          --health-cmd "pg_isready -U tasks -d tasks_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://tasks:tasks@localhost:5432/tasks_test
+      DATABASE_URL_TEST: postgresql://tasks:tasks@localhost:5432/tasks_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx prisma migrate deploy
+      - run: npm run test:int
+      - run: npm run build</code></pre>
+  <ul>
+    <li><strong><code>services</code></strong> — PostgreSQL אמיתי, בקונטיינר ליד ה־job. הצעדים רצים על ה־runner עצמו, ולכן מגיעים אליו ב־<code>localhost:5432</code>. ה־<code>--health-cmd</code> גורם ל־GitHub לחכות שהמסד מוכן לפני הצעד הראשון. בלוג: <code>postgres service is healthy.</code></li>
+    <li><strong><code>cache: npm</code></strong> — שומר את ה־cache של npm בין ריצות. <code>npm ci</code> — בדיוק מה שב־lock (פרק 23).</li>
+    <li><strong><code>permissions: contents: read</code></strong> — ל־<code>GITHUB_TOKEN</code> שה־workflow מקבל: רק לקרוא את הקוד. ברירת המחדל רחבה יותר; עדיף מינימום (שיעור 2).</li>
+    <li><strong><code>timeout-minutes</code></strong> — ברירת המחדל היא 6 שעות. בדיקה תקועה תבזבז את כולן.</li>
+  </ul>
+  <p>ואחרי התיקון, הריצה ירוקה. זמני הצעדים בריצה האמיתית:</p>
+  <div class="table-wrap"><table>
+    <tr><th>צעד</th><th>זמן</th></tr>
+    <tr><td>הקמת שירות PostgreSQL</td><td>7 שניות</td></tr>
+    <tr><td><code>npm ci</code> (653 חבילות)</td><td>7 שניות</td></tr>
+    <tr><td><code>typecheck</code> · <code>npm test</code> (51 בדיקות)</td><td>2 + 2 שניות</td></tr>
+    <tr><td><code>migrate deploy</code> · <code>test:int</code> (9 בדיקות)</td><td>1 + 2 שניות</td></tr>
+    <tr><td><code>build</code></td><td>2 שניות</td></tr>
+    <tr><td>job של docker (build + בדיקה של ה־image), במקביל</td><td>35 שניות</td></tr>
+  </table></div>
+  <p>כל ה־workflow — 35 שניות. על כל push, על כל pull request, בלי שמישהו צריך לזכור.</p>
+
+  <h2>3. YAML: שלוש מלכודות</h2>
+  <p>YAML נראה פשוט, אבל הוא מנחש טיפוסים. מה <code>js-yaml</code> (YAML 1.2) עושה עם כמה ערכים תמימים:</p>
+<pre><code class="lang-js">import { load } from "js-yaml";
+console.log(JSON.stringify(load("version: 1.10\nport: 08\nnorway: NO\non: [push]")));</code></pre>
+<pre class="terminal">?</pre>
+  <p><code>1.10</code> הפך ל־<code>1.1</code> — ו־<code>python-version: 3.10</code> מתקין Python 3.1. כשהערך הוא "מחרוזת שנראית כמו מספר" — מרכאות: <code>"3.10"</code>. (ב־YAML 1.1, שחלק מהכלים עוד משתמשים בו, גם <code>NO</code> הופך ל־<code>false</code>, ו־<code>on</code> ל־<code>true</code>.) ושלישית — הזחה: רווחים בלבד, ושינוי הזחה משנה את המבנה. התוסף של GitHub Actions ל־VS Code מסמן את רוב הטעויות בזמן הכתיבה.</p>
+
+  <h2>4. כשה־CI אדום</h2>
+  <ol>
+    <li>בלשונית <strong>Actions</strong> ב־GitHub (או ליד ה־commit: ✗ אדום ← Details) — הצעד שנכשל, פתוח, עם הלוג.</li>
+    <li>שגיאות מסומנות <code>##[error]</code>. הראשונה היא כמעט תמיד הסיבה; השאר — תוצאה שלה.</li>
+    <li>משחזרים אצלך <strong>בדיוק אותה פקודה</strong> (<code>npm run typecheck</code>, לא "משהו דומה"). אם אצלך עובר — מה שונה? קובץ שלא ב־Git (<code>git status</code>), גרסה של Node, משתנה סביבה, אזור זמן.</li>
+    <li>מתקנים, push — וה־CI רץ שוב לבד.</li>
+  </ol>
+  <div class="box tip">
+    <span class="box-title">💡 branch protection</span>
+    <p>ב־Settings ← Branches של ה־repo אפשר לדרוש שה־CI ירוק לפני merge ל־main. בצוות — זה הסטנדרט. בפרויקט אישי — הרגל טוב, והמראיין רואה אותו.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25-E01">E01</a> · <a href="exercises.html#P25-E02">E02</a> · <a href="exercises.html#P25-E09">E09</a> · <a href="exercises.html#P25-E13">E13</a> · <a href="exercises.html#P25-E14">E14</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 25</a><a href="lesson-02-secrets.html"><small>הבא</small>שיעור 2 — הגדרות וסודות</a></div>
+</main>
+</body>
+</html>

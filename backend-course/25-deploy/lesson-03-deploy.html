@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פריסה: migrations, deploy, ובדיקת עשן — פרק 25</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 25</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — פריסה: migrations, deploy, ובדיקת עשן</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>איפה מריצים: VPS, פלטפורמה (PaaS), או Kubernetes — ומה בחרנו לפרויקט.</li>
+      <li>ה־pipeline: בדיקות ← migrations ← deploy ← בדיקת עשן.</li>
+      <li>migrations בלי downtime: expand/contract.</li>
+      <li>rollback, ו־<code>/version</code> כדי לדעת מה באמת רץ.</li>
+    </ul>
+  </div>
+
+  <h2>1. איפה מריצים</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>VPS (שרת משלך)</th><th>פלטפורמה (PaaS)</th><th>Kubernetes</th></tr>
+    <tr><td>דוגמאות</td><td>DigitalOcean, Hetzner, EC2</td><td>Render, Railway, Fly.io, Heroku</td><td>EKS, GKE</td></tr>
+    <tr><td>אתה מנהל</td><td>הכול: עדכוני Linux, HTTPS, firewall, ניטור</td><td>את האפליקציה וההגדרות</td><td>cluster שלם (בדרך כלל — צוות)</td></tr>
+    <tr><td>מתאים ל</td><td>שליטה מלאה, עלות נמוכה בהיקף</td><td>צוות קטן, פרויקט אישי, ראשית הדרך</td><td>הרבה שירותים, הרבה צוותים</td></tr>
+  </table></div>
+  <p>לפרויקט: <strong>Render</strong> מריץ את ה־Docker image שלך (אותו Dockerfile מפרק 23), עם HTTPS ודומיין <code>….onrender.com</code> מוכנים; ו־<strong>Neon</strong> — PostgreSQL מנוהל. בשניהם יש תוכנית חינמית שמספיקה לתיק עבודות. המגבלות, נכון לנובמבר 2026: ב־Render השרת החינמי "נרדם" אחרי 15 דקות בלי בקשות ומתעורר תוך כדקה, והמסד החינמי <em>שלהם</em> נמחק אחרי 30 יום — ולכן המסד ב־Neon, שבתוכנית החינמית שלו המסד לא פג. ו־Render מריצה "פקודה לפני deploy" (למשל migrations) רק בתוכניות בתשלום — לכן אצלנו ה־CI מריץ אותן. תנאים של תוכניות חינמיות משתנים: לפני שבונים עליהם — דף התמחור.</p>
+  <p>והעיקר: הכלים מתחלפים, העקרונות לא. image אחד שעובר בדיקות, הגדרות מה־env, migrations לפני הקוד, health check, ודרך חזרה — אותו דבר ב־Render, ב־VPS וב־Kubernetes.</p>
+
+  <h2>2. ה־pipeline</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="pipeline: בדיקות, migrations, deploy hook, בדיקת עשן — וכשל מוביל ל־rollback">
+      <defs><marker id="dp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="580" y="40" width="120" height="60" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="420" y="40" width="130" height="60" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="250" y="40" width="140" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="80" y="40" width="140" height="60" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="80" y="135" width="140" height="44" rx="10" style="fill:var(--svg-fill);stroke:var(--red);stroke-dasharray:5 4"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M576 70 H 554" marker-end="url(#dp)"/>
+        <path d="M416 70 H 394" marker-end="url(#dp)"/>
+        <path d="M246 70 H 224" marker-end="url(#dp)"/>
+        <path d="M150 104 V 131" marker-end="url(#dp)" style="stroke:var(--red);stroke-dasharray:4 3"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:13px;font-weight:700">
+        <text x="640" y="66">test · docker</text><text x="485" y="66">migrate</text><text x="320" y="66">deploy hook</text><text x="150" y="66">smoke</text><text x="150" y="162">rollback</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="640" y="86">CI, על כל PR</text>
+        <text x="485" y="86">מסד הפרודקשן</text>
+        <text x="320" y="86">Render בונה ומריץ</text>
+        <text x="150" y="86">ה־commit הנכון + /ready</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: ה־job של ה־deploy — רק אחרי ש־test ו־docker עברו, ורק ב־push ל־main. בדיקת עשן שנכשלת ← CI אדום, ובודקים מה קרה.</figcaption>
+  </figure>
+<span class="file-label">.github/workflows/ci.yml</span>
+<pre><code class="lang-yaml">  deploy:
+    if: github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: migrations on the production database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: trigger deploy on Render
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" &gt; /dev/null
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      - name: smoke test of the live URL
+        run: node scripts/smoke.mjs
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL }}
+          EXPECT_COMMIT: ${{ github.sha }}</code></pre>
+  <ul>
+    <li><strong>migrations לפני הקוד.</strong> הקוד החדש מניח שהעמודה החדשה קיימת. ולכן — כל migration חייב לעבוד גם עם הקוד <em>הישן</em> (סעיף 3).</li>
+    <li><strong>deploy hook</strong> — כתובת סודית שקריאה אליה אומרת ל־Render "בנה והרץ את ה־commit האחרון". ב־Render מכבים את ה־auto-deploy: אחרת Render היה מתחיל לבנות מיד ב־push, לפני שהבדיקות וה־migrations עברו.</li>
+    <li><strong>בדיקת עשן</strong> — ה־deploy hook רק <em>מתחיל</em> deploy. האם הוא הצליח? <code>scripts/smoke.mjs</code> שואל את <code>/version</code> עד שה־commit הוא ה־<code>github.sha</code> הנוכחי, ואז את <code>/ready</code>.</li>
+  </ul>
+
+  <h2>3. /version ובדיקת העשן</h2>
+  <p>Render מגדירה לשרת <code>RENDER_GIT_COMMIT</code>, ו־<code>/version</code> מחזיר אותו. כך הרצנו את <code>smoke.mjs</code> מול השרת מקומית — פעם כש"ה־deploy לא הגיע" (commit אחר רץ), ופעם כשכן (פלטים אמיתיים):</p>
+<pre class="terminal"><span class="prompt">% </span>BASE_URL=http://localhost:3925 EXPECT_COMMIT=9f0e1d2c… TIMEOUT_SECONDS=3 INTERVAL_SECONDS=1 node scripts/smoke.mjs
+<span class="dim">#1: /version ← 200, commit 2cb197c (מחכים ל־9f0e1d2)</span>
+<span class="dim">#2: /version ← 200, commit 2cb197c (מחכים ל־9f0e1d2)</span>
+<span class="dim">#3: /version ← 200, commit 2cb197c (מחכים ל־9f0e1d2)</span>
+<span class="err">✖ הגרסה 9f0e1d2 לא עלתה תוך 3 שניות</span>
+<span class="prompt">% </span>BASE_URL=http://localhost:3925 EXPECT_COMMIT=2cb197caebad857cf5eed6c8d1ddd582085d5dca node scripts/smoke.mjs
+<span class="dim">✔ http://localhost:3925 — commit 2cb197c, ready (0s)</span></pre>
+  <p>שים לב לריצה הראשונה: <code>/version</code> ענה <strong>200</strong> כל הזמן. בדיקת עשן שבודקת רק "השרת עונה" הייתה מכריזה על הצלחה — כשבפועל רצה הגרסה הקודמת (E22). ב־Render החינמי: build של כמה דקות, ושרת שישן מתעורר תוך כדקה — לכן ברירת המחדל של הסקריפט היא 15 דקות.</p>
+
+  <h2>4. migrations בלי downtime: expand/contract</h2>
+  <p>deploy הוא לא רגע — הוא חלון. ה־migration רץ, ובמשך דקה או שתיים <strong>הקוד הישן עדיין מקבל בקשות מול המסד החדש</strong>. ואם יהיה rollback — הקוד הישן יחזור לרוץ מול המסד החדש לזמן ארוך. לכן migration בטוח הוא כזה ששתי הגרסאות עובדות איתו:</p>
+  <div class="table-wrap"><table>
+    <tr><th>שינוי</th><th>בטוח?</th><th>איך כן</th></tr>
+    <tr><td>עמודה חדשה, NULL או עם DEFAULT</td><td>✔</td><td>כמו <code>time_zone … DEFAULT 'UTC'</code> בפרק 24</td></tr>
+    <tr><td>עמודה חדשה NOT NULL בלי DEFAULT</td><td>✖</td><td>ה־INSERT של הקוד הישן נכשל. להוסיף DEFAULT</td></tr>
+    <tr><td>שינוי שם / מחיקה של עמודה</td><td>✖</td><td><strong>expand/contract</strong>: (1) מוסיפים חדשה, הקוד כותב לשתיהן; (2) מעבירים נתונים, הקוד קורא מהחדשה; (3) deploy נפרד — מוחקים את הישנה</td></tr>
+    <tr><td>אינדקס על טבלה גדולה</td><td>✖ (נעילה)</td><td><code>CREATE INDEX CONCURRENTLY</code></td></tr>
+  </table></div>
+  <p>ב־E16 תכתוב בודק שמזהה את המקרים האלה בקובץ migration — סוג הבדיקה שרצה ב־CI בצוותים גדולים.</p>
+
+  <h2>5. rollback</h2>
+  <p>הגרסה החדשה עלתה ומשהו לא בסדר. קודם — <strong>חוזרים</strong> לגרסה שעבדה, ורק אחר כך מתקנים בשקט. ב־Render: בדף ה־service, ברשימת ה־deploys, ליד deploy קודם — "Rollback". או ב־Git: <code>git revert</code> ו־push, וה־pipeline מעלה את הגרסה המתוקנת. ה־migration <strong>לא</strong> חוזר — עוד סיבה ל־expand/contract.</p>
+  <p>ופלטפורמות עושות לבד חצי מהעבודה: גרסה חדשה מקבלת תנועה רק אחרי שה־health check שלה עובר (ב־Render: Health Check Path ← <code>/ready</code>). גרסה שלא עולה בכלל — לא מחליפה את הקודמת. זה blue/green (E25): החדשה עולה <em>ליד</em> הישנה, נבדקת, ורק אז מקבלת תנועה.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25-E04">E04</a> · <a href="exercises.html#P25-E08">E08</a> · <a href="exercises.html#P25-E10">E10</a> · <a href="exercises.html#P25-E15">E15</a> · <a href="exercises.html#P25-E16">E16</a> · <a href="exercises.html#P25-E17">E17</a> · <a href="exercises.html#P25-E19">E19</a> · <a href="exercises.html#P25-E22">E22</a> · <a href="exercises.html#P25-E25">E25</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-secrets.html"><small>הקודם</small>שיעור 2 — הגדרות וסודות</a><a href="lesson-04-https.html"><small>הבא</small>שיעור 4 — HTTPS, proxy ובריאות בפרודקשן</a></div>
+</main>
+</body>
+</html>

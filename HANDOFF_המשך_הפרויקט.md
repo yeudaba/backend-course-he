@@ -142,6 +142,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרק 22 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-TESTS — **ירוק**.
 - פרק 23 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-DOCKER — **ירוק** (בדיקות Docker אמיתיות: build, run, compose).
 - פרק 24 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-PROD + PR2-PROD-DB — **ירוק**.
+- פרק 25 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-CI + PR2-CI-DB — **ירוק**. ה־workflow של שלב ח׳ רץ באמת ב־GitHub Actions (branch זמני `ci-demo-25`) — הריצה הראשונה נכשלה ב־typecheck (גילוי 13), השנייה ירוקה ב־35 שניות.
 - **מפרק 22 האימות רץ על Node 24** (כמו אצל הלומד): `PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify`. כל הקורס (0–21) עבר גם על Node 24 בלי שינוי.
 
 ---
@@ -191,6 +192,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 22 | `22-testing` | node:test, assert, גבולות, כפילים (mock.fn, mock.timers), זמן ו־TZ, HTTP ו־מסד בדיקות, builders, Jest/supertest ב־Nest, coverage, mutation testing. **רוב התרגילים: הלומד כותב בדיקות, והבודק מריץ אותן על הקוד התקין ועל מוטנטים** (`tools/mutation.mjs`, `files/<id>/mutants.json`). שיעור 5 = **פרויקט 2 שלב ה׳** (PR2-TESTS) | ✔ |
 | 23 | `23-docker` | Linux ו־bash (הרשאות, תהליכים, pipelines, סקריפט בטוח), Docker (image/container/volume/port), Dockerfile (cache, .dockerignore, multi-stage, USER, HEALTHCHECK), Compose (רשת, healthcheck+condition, משתנים, override). תרגילי shell נבדקים על fixtures (`tools/shell.mjs`); תרגילי Docker — build/run/compose אמיתיים (`tools/docker.mjs`). שיעור 5 = **פרויקט 2 שלב ו׳** (PR2-DOCKER) | ✔ |
 | 24 | `24-production` | לוגים מובנים (JSON, רמות, redact), X-Request-Id ו־AsyncLocalStorage, זמן (רגע מול תאריך מקומי, Intl, שעון קיץ — 27.3.2026/25.10.2026 בישראל, 8.3.2026 בקובה: חצות לא קיים), Idempotency-Key (כולל מרוץ ב־PostgreSQL עם ON CONFLICT — E16 מול המסד), rate limiting (fixed/sliding/token bucket, Retry-After, trust proxy), graceful shutdown. כל התרגילים TS/Express רגילים (`load`), בלי Nest. שיעור 5 = **פרויקט 2 שלב ז׳** (PR2-PROD, PR2-PROD-DB) | ✔ |
+| 25 | `25-deploy` | CI ב־GitHub Actions (workflow, services, cache, matrix, needs/if), הגדרות וסודות (Secrets/Variables, להיכשל מהר, TLS למסד בענן), פריסה (Render + Neon, deploy hook, migrations ב־CI, expand/contract, smoke, rollback, blue/green), HTTPS ו־reverse proxy (ניסוי Caddy אמיתי, trust proxy, security headers, health/ready). תרגילי workflow = קובצי `.yml` שנבדקים עם js-yaml (`tests/_workflow.mjs`). שיעור 5 = **פרויקט 2 שלב ח׳** (PR2-CI, PR2-CI-DB) | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -257,8 +259,15 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - `PrismaService` עבר ל־`onApplicationShutdown` (ראה גילוי 10). CORS עם `exposedHeaders`. דף ה־web שולח timeZone ו־Idempotency-Key.
   - Jest: 37 בדיקות (+ `test/production.e2e-spec.ts`), 9 integration (+ `test/idempotency.int-spec.ts`). `createTestApp(config)` מחזיר גם `logs`.
   - **PR2-PROD** (dist, בזיכרון, LOG_SINK למערך) ו־**PR2-PROD-DB** (migrations, UNIQUE, 10 בקשות במקביל ← משימה אחת).
-- **השלבים שנשארו** (לפי האפיון):
-  - פרק 25 — פריסה (ה־image של שלב ז׳; `TRUST_PROXY=1` מאחורי ה־load balancer).
+- **שלב ח׳** (`25-deploy/solutions/tasks-api`): CI/CD וקישור חי.
+  - `.github/workflows/ci.yml`: `test` (services postgres:18-alpine, npm ci, prisma generate, typecheck, test, migrate deploy, test:int, build), `docker` (build + הרצה + curl /health), `deploy` (needs שניהם, רק push ל־main, environment production: migrate deploy עם `secrets.DATABASE_URL`, curl ל־`secrets.RENDER_DEPLOY_HOOK_URL`, `scripts/smoke.mjs` עם `vars.PRODUCTION_URL` ו־`github.sha`).
+  - `health.controller.ts`: `/health`, `/ready` (SELECT 1 עם timeout 2s ← 503 NOT_READY), `/version` (`BUILD_INFO`, `readBuildInfo`: GIT_COMMIT ?? RENDER_GIT_COMMIT ?? "dev").
+  - `server-config.ts` (`loadServerConfig`: PORT, CORS_ORIGINS, TRUST_PROXY; בפרודקשן חובה DATABASE_URL ו־CORS https). main: `listen(port, "0.0.0.0")`.
+  - `prisma/pg-options.ts`: sslmode בכתובת ← `ssl: { rejectUnauthorized: true }` ל־pg (גילוי 14).
+  - Dockerfile HEALTHCHECK על `${PORT:-3000}`; compose: `NODE_ENV: development` ל־api (ה־image הוא production).
+  - web: `<meta name="api-url">` לכתובת ה־API בפריסה.
+  - 51 בדיקות Jest, 9 integration.
+- **השלבים שנשארו**: אין — פרויקט 2 גמור. הבא: פרויקט 3.
 
 ### "גילויים" מהדרך שחייבים לזכור
 1. **Prisma 7 + אזור זמן:** כשה־session של המסד לא ב־UTC, Prisma קורא וכותב `timestamptz` בהזזה.
@@ -292,13 +301,20 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 10. **Nest — סדר הכיבוי:** `onModuleDestroy` רץ *לפני* שה־HTTP server נסגר, ו־`onApplicationShutdown` אחרי. סגירת Prisma ב־`onModuleDestroy` ← בקשה שבאמצע מקבלת 500 (נבדק בניסוי, מצוטט בפרק 24 שיעור 4).
 11. **Node 19+:** `server.close()` סוגר לבד חיבורי keep-alive פנויים.
 12. **jsonb** מסדר מחדש מפתחות — תשובת replay מ־idempotency_keys מגיעה בסדר שדות אחר (אותו JSON).
+13. **`npm run typecheck` היה שבור משלב ד׳** (נתגלה ב־CI אמיתי): `tsconfig.json` עם `"types": ["node"]` בלי jest, ו־`prisma/seed.ts` עם top-level await בפרויקט CommonJS. תוקן בשלבים 20–25: `seed.mts` + `seed: "node prisma/seed.mts"`, ו־`"types": ["node", "jest"]` מ־22. **לאמת גם עם `tsc -p tsconfig.json`, לא רק tsconfig.build.json.**
+14. **TLS למסד:** `pg` מדפיס SECURITY WARNING על `sslmode=require` (מתייחס אליו כ־verify-full). Prisma CLI עם `sslmode=verify-full` **מתחבר בלי TLS** (מתעלם מהערך) — לכן בכתובת נשאר `require`, ובזמן ריצה `pgConnectionOptions`.
+15. **js-yaml 5 = YAML 1.2**: `on` נשאר "on", אבל `1.10` ← 1.1 ו־`08` ← 8. ייבוא: `import { load } from "js-yaml"` (אין default export). נוסף כתלות מפורשת ב־root ו־course-src.
+16. **Render (נבדק נובמבר 2026):** free web service נרדם אחרי 15 דק׳, Postgres חינמי נמחק אחרי 30 יום (לכן Neon), pre-deploy command רק בתשלום (לכן migrations ב־CI + deploy hook).
 
 ---
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרק 25 (CI ופריסה)
-לפי האפיון: GitHub Actions, secrets, פריסה חינמית, healthcheck, HTTPS, קישור חי. ה־image של שלב ז׳ (`24-production/solutions/tasks-api`) הוא מה שנפרס; PR2 שלב ח׳. אחריו פרויקט 3.
+### 7.1 הצעד הבא המיידי — פרויקט 3 (הדגל)
+חנות ציוד קפה, נבנית מאפס (אפיון סעיף 10.3). כל הכלים כבר נלמדו: Nest, Prisma, auth, בדיקות, Docker, idempotency, CI/CD.
+נקודות מפרק 25:
+- ה־branch הזמני `ci-demo-25` ב־GitHub לא נמחק (מחיקת branch מרוחק נחסמה ע"י מנגנון הבטיחות) — יהודה יכול למחוק ב־GitHub ← Branches.
+- `cloud-setup.sh`: ההמתנה ל־dockerd הוגדלה ל־90 שניות (אחרי הפסקה ארוכה העלייה הראשונה לקחה מעל 30).
 נקודות מפרק 24:
 - תרגילי זמן נשענים על חוקי IANA של Node 24 (ישראל 2026: קיץ 27.3 02:00, חורף 25.10 02:00). דוגמאות שתלויות ב־TZ של המחשב — לא בבלוק run (הוצאו לטקסט).
 - E16 ו־PR2-PROD-DB רצים מול PostgreSQL (`database: true`).
@@ -314,7 +330,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 25 | CI ופריסה | GitHub Actions, secrets, פריסה חינמית, healthcheck, HTTPS. קישור חי לפרויקט |
 | 🏗️ | **פרויקט 3 — הדגל** | מערכת הזמנות: חנות ציוד קפה. דרישות מלאות באפיון, סעיף 10.3: JWT ותפקידים, CRUD למנהל, חיפוש ו־pagination, עגלה←הזמנה עם שמירת מחיר, transaction נגד מלאי שלילי, idempotency key, תשלום מדומה, בדיקות unit+e2e כולל מרוץ, Swagger, `docker compose up`, CI, קישור חי, דף HTML. **נבנה מאפס בלי העתקה מפרויקט 2.** README לפי הדרישות באפיון |
 | 26 | Cache ותורים | Redis דרך Docker |
 | 27 | אלגוריתמים וראיונות | מרכז את מה שהתחיל מפרק 6 |
@@ -369,6 +384,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~פרקים 20–24~~ ✔ הושלמו. **עכשיו: פרק 25** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
-4. **להמשיך לפרק 25 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
+3. ~~פרקים 20–25~~ ✔ הושלמו. **עכשיו: פרויקט 3** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
+4. **להמשיך לפרויקט 3 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).

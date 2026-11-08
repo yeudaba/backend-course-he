@@ -1,0 +1,89 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs" // פרויקט Nest מתקמפל ל־CommonJS (פרק 20)
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+// הסדר כאן קובע את סדר המיון במסד: low < medium < high
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum Role {
+  user
+  admin
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  role          Role           @default(user)
+  // אזור הזמן של המשתמש (IANA, למשל Asia/Jerusalem) — קובע מה זה "היום" בשבילו
+  timeZone      String         @default("UTC") @map("time_zone")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  tasks         Task[]
+  refreshTokens RefreshToken[]
+  idempotency   IdempotencyKey[]
+
+  @@map("users")
+}
+
+// refresh token "אטום" (מחרוזת אקראית). במסד נשמר רק ה־hash שלו (SHA-256), כמו סיסמה
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Task {
+  id          Int          @id @default(autoincrement())
+  ownerId     Int          @map("owner_id")
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  dueDate     DateTime?    @map("due_date") @db.Date
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, status, createdAt])
+  @@map("tasks")
+}
+
+// Idempotency-Key: אותה בקשה פעמיים ← אותה תשובה, ופעולה אחת בלבד.
+// status ו־body ריקים = הבקשה הראשונה עדיין בטיפול
+model IdempotencyKey {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String
+  fingerprint String
+  status      Int?
+  body        Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([userId, key])
+  @@map("idempotency_keys")
+}
