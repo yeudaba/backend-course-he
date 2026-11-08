@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה מודל שפה עושה טוב, ומה לא — מבחינת מי שכותב שרת.</li>
+      <li>הקריאה הראשונה עם <code>@anthropic-ai/sdk</code>, ומה בדיוק נשלח ברשת.</li>
+      <li>אנטומיה של תשובה: בלוקים, <code>stop_reason</code>, <code>usage</code>.</li>
+      <li>טוקנים, מחירים, ובחירת מודל.</li>
+      <li>איפה גר המפתח.</li>
+    </ul>
+  </div>
+
+  <h2>1. קופסה חדשה בתרשים</h2>
+  <p>מבחינת השרת שלך, מודל שפה הוא שירות HTTP חיצוני — כמו ספק תשלומים — עם ארבע תכונות שכדאי לזכור מהרגע הראשון:</p>
+  <div class="table-wrap"><table>
+    <tr><th>תכונה</th><th>המשמעות בקוד</th></tr>
+    <tr><td><strong>לא דטרמיניסטי</strong></td><td>אותה שאלה, תשובות שונות. אי אפשר לבדוק "שווה ל־"; מאמתים מבנה (שיעור 2) ומודדים איכות (שיעור 5)</td></tr>
+    <tr><td><strong>איטי</strong></td><td>שניות, לא מילישניות. streaming ללקוח, תור לעבודות ארוכות (שיעור 4)</td></tr>
+    <tr><td><strong>עולה לפי שימוש</strong></td><td>כל בקשה — כסף, לפי טוקנים. מגבלות, cache, תקציב (שיעור 4)</td></tr>
+    <tr><td><strong>הפלט לא אמין</strong></td><td>יכול לטעות בביטחון מלא, ויכול להיות מושפע מטקסט זדוני בקלט. ולידציה והרשאות בקוד (שיעורים 2–3)</td></tr>
+  </table></div>
+  <p>מה הוא עושה מצוין: להבין טקסט חופשי (לסווג, לחלץ, לסכם, לתרגם), לכתוב טקסט, ולתרגם בקשה בשפה טבעית לפעולה מובנית. מה הוא לא צריך לעשות: חשבון, החלטות על כסף והרשאות, ודברים שיש להם תשובה מדויקת שאפשר לחשב (E01).</p>
+
+  <h2>2. הקריאה הראשונה</h2>
+```ts
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic(); // קורא את ANTHROPIC_API_KEY מהסביבה
+
+const response = await client.messages.create({
+  model: "claude-opus-5-5",
+  max_tokens: 4096,
+  system: "You are the support assistant of an online coffee-equipment shop. Answer briefly, in Hebrew.",
+  messages: [{ role: "user", content: "מה ההבדל בין V60 לפרנץ' פרס?" }],
+});
+```
+  <ul>
+    <li><strong><code>model</code></strong> — איזה מודל. <strong><code>max_tokens</code></strong> — תקרה לאורך התשובה (לא "כמה לכתוב"): נמוך מדי ← תשובה חתוכה.</li>
+    <li><strong><code>system</code></strong> — ההוראות הקבועות של האפליקציה. <strong><code>messages</code></strong> — השיחה: <code>user</code> ו־<code>assistant</code> לסירוגין, מתחיל ב־user. ה־API לא זוכר כלום בין בקשות — כל בקשה שולחת את כל השיחה (E07).</li>
+    <li>אין <code>temperature</code>: בגרסת ה־API הנוכחית הוא מחזיר שגיאה, וב־Opus 5.5 החשיבה תמיד פועלת — שולטים בעומק שלה עם <code>output_config: { effort: "low" | "medium" | "high" | … }</code> (ברירת המחדל במודל הזה: medium).</li>
+  </ul>
+  <p>ומה עובר ברשת? הרצתי את ה־SDK עם <code>fetch</code> מדומה — הוא מדפיס את הבקשה ולא שולח אותה לשום מקום (זו הטכניקה של כל הבודקים בפרק, ושל שיעור 5):</p>
+```ts run
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  apiKey: "sk-demo",
+  fetch: async (url, init) => {
+    const h = new Headers(init?.headers);
+    console.log(init?.method, String(url));
+    console.log("authorization:", h.get("authorization")?.replace("sk-demo", "<key>"), "· anthropic-version:", h.get("anthropic-version"));
+    console.log("body:", String(init?.body));
+    return Response.json({
+      id: "msg_demo", type: "message", role: "assistant", model: "claude-opus-5-5",
+      content: [{ type: "thinking", thinking: "", signature: "x" }, { type: "text", text: "ב־V60 המים עוברים דרך פילטר נייר…" }],
+      stop_reason: "end_turn", stop_sequence: null,
+      usage: { input_tokens: 41, output_tokens: 87, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    });
+  },
+});
+
+const r = await client.messages.create({ model: "claude-opus-5-5", max_tokens: 4096, messages: [{ role: "user", content: "V60 או פרנץ' פרס?" }] });
+console.log("blocks:", r.content.map((b) => b.type).join(", "), "· stop_reason:", r.stop_reason, "· usage:", r.usage.input_tokens, "/", r.usage.output_tokens);
+```
+```out
+POST https://api.anthropic.com/v1/messages
+authorization: Bearer <key> · anthropic-version: 2026-10-21
+body: {"model":"claude-opus-5-5","max_tokens":4096,"messages":[{"role":"user","content":"V60 או פרנץ' פרס?"}]}
+blocks: thinking, text · stop_reason: end_turn · usage: 41 / 87
+```
+  <p>(התשובה כאן מדומה — אני כתבתי אותה. מה שאמיתי: הבקשה שה־SDK בנה, וה־headers שלו.) שלושה דברים מתוך זה: המפתח עובר בכל בקשה (ולכן היא חייבת לצאת מהשרת שלך, לא מהדפדפן); ה־SDK שולח גרסת API קבועה; וה־body הוא בדיוק מה שכתבת.</p>
+
+  <h2>3. מה חוזר</h2>
+  <p><code>content</code> הוא <strong>מערך של בלוקים</strong>, לא מחרוזת. ב־Opus 5.5 יכול להופיע קודם בלוק <code>thinking</code> (ריק כברירת מחדל — החשיבה קורית ומחויבת, אבל לא מוצגת), אחר כך <code>text</code>, ובשיעור 3 גם <code>tool_use</code>. ולפני שקוראים את התוכן — <strong><code>stop_reason</code></strong>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>stop_reason</th><th>מה עושים</th></tr>
+    <tr><td><code>end_turn</code></td><td>תשובה שלמה</td></tr>
+    <tr><td><code>max_tokens</code></td><td>נחתכה באמצע — לא מציגים כאילו שלמה; מעלים <code>max_tokens</code> או מקצרים את הבקשה</td></tr>
+    <tr><td><code>tool_use</code></td><td>המודל מבקש להריץ כלי (שיעור 3)</td></tr>
+    <tr><td><code>refusal</code></td><td>המודל סירב (מסנני בטיחות). מטפלים כמו בשגיאה צפויה — הודעה למשתמש, לא קריסה</td></tr>
+  </table></div>
+  <p>ו־<strong><code>usage</code></strong> — כמה טוקנים נקראו ונכתבו: הבסיס לחישוב העלות (E08), ולוג חובה לכל קריאה.</p>
+
+  <h2>4. טוקנים, מחירים, ובחירת מודל</h2>
+  <p>טוקן הוא חתיכת טקסט — בערך חלק ממילה. מחיר ומגבלות נמדדים בטוקנים, בנפרד לקלט ולפלט. המחירים בטבלה — מהתיעוד של Anthropic כפי שנשמר באוקטובר 2026; <strong>לפני שמסתמכים — לבדוק בדף התמחור</strong>, הם משתנים:</p>
+  <div class="table-wrap"><table>
+    <tr><th>מודל</th><th>מזהה</th><th>קלט / מיליון</th><th>פלט / מיליון</th></tr>
+    <tr><td>Claude Opus 5.5</td><td><code>claude-opus-5-5</code></td><td>$4</td><td>$20</td></tr>
+    <tr><td>Claude Sonnet 5.5</td><td><code>claude-sonnet-5-5</code></td><td>$2</td><td>$10</td></tr>
+    <tr><td>Claude Haiku 5.5</td><td><code>claude-haiku-5-5</code></td><td>$0.10</td><td>$0.50</td></tr>
+  </table></div>
+  <p>קריאה מ־cache (שיעור 4) זולה בהרבה — ב־Opus 5.5 ו־Sonnet 5.5, $0.20 למיליון; כתיבה ל־cache — כ־1.25 ממחיר הקלט. ואיך בוחרים מודל? בפרק הזה כל הדוגמאות משתמשות ב־<code>claude-opus-5-5</code> — המודל המומלץ כברירת מחדל. מעבר למודל זול יותר בנתיב מסוים (סיווג בכמויות גדולות, למשל) הוא החלטה עסקית שמקבלים <em>אחרי</em> מדידה: eval (שיעור 5) שמראה שהאיכות נשמרת בנתיב הזה. וגם בתוך אותו מודל, <code>effort</code> נמוך יותר זול ומהיר יותר — לפעמים זה מספיק.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ המפתח</span>
+    <p><code>ANTHROPIC_API_KEY</code> — משתנה סביבה בשרת, כמו כל סוד (פרק 25). לא בקוד, לא ב־Git, ו<strong>אף פעם לא בדפדפן</strong>: מפתח בצד הלקוח = כל מבקר באתר יכול להשתמש בו על חשבונך. הדפדפן מדבר עם השרת שלך; השרת — עם ה־API, עם הרשאות, הגבלת קצב ותקציב באמצע. ובקונסולה של הספק: מגבלת הוצאה חודשית, עוד לפני הקריאה הראשונה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P29-E01">E01</a> · <a href="exercises.html#P29-E02">E02</a> · <a href="exercises.html#P29-E05">E05</a> · <a href="exercises.html#P29-E06">E06</a> · <a href="exercises.html#P29-E07">E07</a> · <a href="exercises.html#P29-E08">E08</a> · <a href="exercises.html#P29-E20">E20</a></p>
+  </div>

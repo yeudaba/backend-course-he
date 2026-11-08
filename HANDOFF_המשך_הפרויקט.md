@@ -147,6 +147,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרק 26 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR3-REDIS (פרויקט 3 שלב 5) — **ירוק**. בודקי PR3 של שלבים 1–4 עוברים גם על פתרון שלב 5 (בלי Redis).
 - פרק 27 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות (17 TS עם בדיקות ביצועים + 3 SQL) — **ירוק**.
 - פרק 28 הושלם (רשות): 5 שיעורים, 25 תרגילים, 20 בדיקות — **ירוק**. כל התרגילים בזיכרון עם שעון/random מוזרקים (בלי מסד או Redis).
+- פרק 29 הושלם (רשות): 5 שיעורים, 25 תרגילים, 20 בדיקות — **ירוק**. בלי מפתח API ובלי רשת: SDK אמיתי עם fetch מדומה.
 - **מפרק 22 האימות רץ על Node 24** (כמו אצל הלומד): `PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify`. כל הקורס (0–21) עבר גם על Node 24 בלי שינוי.
 
 ---
@@ -201,6 +202,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 26 | `26-redis` | Redis (מבני נתונים, TTL, MULTI, keyPrefix), cache-aside (מדידה אמיתית: MISS 68–93ms מול HIT ~2.5ms על 20,000 מוצרים), ביטול בגרסה (INCR), stampede/single-flight, הגבלת קצב משותפת (INCR+EXPIRE NX, sorted set, Lua token bucket), מנעול (SET NX PX + token + Lua release), pub/sub, BullMQ (attempts/backoff/delay/jobId, at-least-once, צרכן idempotent, outbox). תרגילים מול Redis אמיתי (`tools/redis.mjs`). שיעור 5 = **פרויקט 3 שלב 5** (PR3-REDIS) | ✔ |
 | 27 | `27-algorithms` | סיבוכיות (מדידה אמיתית: includes מול Set — 10K: 1,021ms מול 1.7ms, 80K: 61 שניות מול 16ms), Map/Set (4 דפוסים), שני מצביעים, LRU, מחסנית/תור, רקורסיה, חיפוש בינארי, BFS/DFS, מיון טופולוגי, DP, Trie; שיטת ראיון (6 צעדים + משפטים באנגלית), SQL (second highest, top-N לכל קבוצה עם RANK/ROW_NUMBER, NOT EXISTS מול LEFT JOIN), בנק 20 שאלות Backend ו"באג שפתרתי". טבלת "אחרי איזה פרק" לתרגול 2–3 בשבוע (לפי האפיון). `tests/_perf.mjs`: `fastEnough`, `countingArray` (Proxy שסופר קריאות — בדיקה שחיפוש בינארי לוגריתמי), `seeded`. נתוני SQL: `files/interview.sql` | ✔ |
 | 28 | `28-system-design` | שיטה (7 שלבים, אומדנים), אבני בניין (stateless, LB, replicas + read-after-write, cache/תור/CDN), כשלים (timeout, retry+jitter, circuit breaker), קיצור קישורים מקצה לקצה, נתונים בקנה מידה (OFFSET מול cursor — מדידה: 83ms מול 0.057ms על מיליון שורות; consistent hashing — מדידה: 4←5 modulo 80.3% מול טבעת 19.2%; Snowflake/UUIDv7; batching; Bloom filter — 1.2MB, 1.002% FP), פיד היברידי, ומסמך תכנון לחנות הקפה ×100 | ✔ |
+| 29 | `29-ai-backend` | `@anthropic-ai/sdk` 1.6 (תלות ב־root וב־course-src). קריאה ראשונה, בלוקים/stop_reason/usage, מחירים (מהתיעוד, נשמר 2026-10-06: Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50; cache read $0.20 ב־Opus/Sonnet 5.5), structured outputs (`messages.parse` + `zodOutputFormat`), tool use (לולאה ידנית + toolRunner), הרשאות בכלים, prompt injection (3 שכבות), streaming ל־SSE, שגיאות/fallback, prompt caching, cache לתשובות, תקציב, פרטיות, לקוח מדומה, evals, workflow (triage), RAG קטן. מודל בכל הדוגמאות: `claude-opus-5-5` | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -328,13 +330,19 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 21. **`Array.prototype.shift` ב־V8:** מהיר על מערכים קטנים (מקצר בלי להעתיק), ריבועי על גדולים — ריקון 10K: 0.5ms; 100K מספרים: 768ms; 100K מערכים קטנים: 8.2 שניות. מצוטט בפרק 27 (שיעורים 1, 3; E01). עומק רקורסיה ב־Node 24: 12,525 בפונקציה ריקה.
 22. **TypeScript parameter properties** (`constructor(private x: number)`) לא נתמכים ב־`--experimental-strip-types` — בפתרונות שנטענים ב־`load` כותבים שדה רגיל.
 23. **`x | 1` ב־JavaScript מחזיר int32 עם סימן** — בפתרון הראשון של Bloom filter (פרק 28, E25) זה יצר מיקומים שליליים, ו־`Uint8Array[-5] |= …` לא זורק ולא כותב ← false negatives. תוקן עם `>>> 0`, ומצוטט בתרגיל כ״טעות נפוצה״.
+24. **SDK של Anthropic (1.6, נבדק עם fetch מדומה):** המפתח נשלח ב־`authorization: Bearer` (לא `x-api-key`); `anthropic-version: 2026-10-21` (בגרסה הזו `temperature` מחזיר 400); 429 ← 3 בקשות (2 retries, כ־1.5 שניות) ואז `RateLimitError`; 400 ← בלי retry; `messages.parse` **זורק** `AnthropicError` (לא `APIError`) על JSON לא תקין/לא לפי הסכמה/חתוך — לא מחזיר null. מצוטט בשיעורים 1–2 וב־E05.
+25. **בודקי פרק 29:** `tests/_claude.mjs` — `fakeClaude(respond)` בונה לקוח SDK אמיתי עם `fetch` מדומה ו־`maxRetries: 0`; `message()`, `toolUse()`, `thinking()`. לולאה בלי תקרה: הספק המדומה מחזיר 400 אחרי 20 קריאות (`_loop.mjs`) — כדי שהבדיקה תיכשל מהר ולא תיתקע. template literal (`${x}`) של undefined הוא "undefined", אבל `[undefined].join("")` הוא "" — לכן ה־starter של E20 משתמש ב־template literal.
 
 ---
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרק 29 (AI ב־Backend)
-לפי האפיון: רשות. לבדוק בתיעוד העדכני של Anthropic לפני כתיבה (מודלים: `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`; SDK `@anthropic-ai/sdk`). רעיונות: קריאה ל־API משרת Nest (מפתח בסביבה, לא בקוד), streaming, tool use, פלט JSON עם ולידציה ב־Zod, עלויות ו־rate limits, cache לתשובות, הגנה מ־prompt injection, ובדיקות עם client מדומה. בבודקים — אין רשת: fake client. בסביבת הענן אין מפתח API — דוגמאות run לא קוראות ל־API אמיתי (או לבקש מפתח דרך request_credential אם רוצים פלט אמיתי).
+### 7.1 הצעד הבא המיידי — פרק 30 (תיק עבודות וחיפוש עבודה)
+לפי האפיון, סעיף 11: פרופיל GitHub (README אישי, 2 פרויקטים מוצמדים), קורות חיים חד־עמודיים באנגלית, LinkedIn, הסבר הפרויקט ב־2 דקות (עברית ואנגלית), 3 סימולציות ראיון (שאלות על הפרויקט, שאלת קוד, שאלת SQL), ומתי מתחילים להגיש (כשפרויקט הדגל באוויר). הפרק האחרון — אחריו אימות מלא של כל הקורס (סעיף 7.3).
+נקודות מפרק 29:
+- גילויים 24–25.
+- לא נעשתה שום קריאה אמיתית ל־API (אין מפתח בסביבה, ואין לבזבז כסף של יהודה). כל פלט בשיעורים — מהרצה אמיתית של ה־SDK עם fetch מדומה; תשובות "של המודל" בדוגמאות מסומנות במפורש כמדומות.
+- הקוד של הפתרונות נבדק גם עם `tsc --strict` מול הטיפוסים של ה־SDK (20 קבצים).
 נקודות מפרק 28:
 - גילוי 23 (Bloom filter ו־`| 1`).
 - E16 לא מייבא את E13 של הלומד (אחרת תלות בין תרגילים) — מקבל `makeRing`, והבודק נותן טבעת משלו (`tests/_ring.mjs`).
@@ -363,7 +371,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 29 | AI ב־Backend | רשות. מודלים עדכניים של Claude: `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`. לבדוק בתיעוד לפני כתיבה |
 | 30 | תיק עבודות וחיפוש עבודה | אפיון סעיף 11: GitHub, קורות חיים באנגלית, LinkedIn, סימולציות ראיון |
 
 ### 7.3 בסוף
@@ -413,6 +420,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~פרקים 20–28 ופרויקט 3 (כולל שלב 5)~~ ✔ הושלמו. **עכשיו: פרק 29** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
+3. ~~פרקים 20–29 ופרויקט 3 (כולל שלב 5)~~ ✔ הושלמו. **עכשיו: פרק 30** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
 4. **להמשיך לפרק 26 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).
