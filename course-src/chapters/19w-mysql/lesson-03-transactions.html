@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>REPEATABLE READ: למה SELECT בתוך טרנזקציה יכול להחזיר ערך ישן — הרצה אמיתית.</li>
+      <li>קריאות נועלות: <code>FOR UPDATE</code>, <code>FOR SHARE</code>, <code>SKIP LOCKED</code>.</li>
+      <li>deadlock: איך הוא נוצר, מה InnoDB עושה, ומה עושים אנחנו.</li>
+    </ul>
+  </div>
+
+  <h2>1. REPEATABLE READ</h2>
+  <p>בפרק 18 למדנו רמות בידוד. ב־PostgreSQL ברירת המחדל היא <code>READ COMMITTED</code>: כל פקודה רואה את מה שמחויב <em>באותו רגע</em>. ב־InnoDB ברירת המחדל היא <strong><code>REPEATABLE READ</code></strong>: SELECT רגיל רואה "תמונה" שנלקחה בקריאה הראשונה של הטרנזקציה — גם אם בינתיים מישהו אחר שינה ושמר. הרצתי את זה עם שני חיבורים:</p>
+```ts run
+import mysql from "mysql2/promise";
+
+const url = process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306";
+const admin = await mysql.createConnection(url);
+await admin.query("CREATE DATABASE IF NOT EXISTS rr_demo");
+const a = await mysql.createConnection({ uri: url, database: "rr_demo" });
+const b = await mysql.createConnection({ uri: url, database: "rr_demo" });
+await a.query("CREATE TABLE IF NOT EXISTS products (id INT PRIMARY KEY, stock INT NOT NULL)");
+await a.query("REPLACE INTO products VALUES (1, 10)");
+
+const stock = async (c: mysql.Connection, sql = "SELECT stock FROM products WHERE id = 1") => ((await c.query<any[]>(sql))[0][0].stock);
+
+await a.query("START TRANSACTION");
+console.log("A reads:", await stock(a));
+await b.query("UPDATE products SET stock = 7 WHERE id = 1"); // B: autocommit
+console.log("B committed 7");
+console.log("A reads again:", await stock(a));
+console.log("A FOR UPDATE:", await stock(a, "SELECT stock FROM products WHERE id = 1 FOR UPDATE"));
+await a.query("UPDATE products SET stock = stock - 1 WHERE id = 1");
+console.log("A after its UPDATE:", await stock(a));
+await a.query("COMMIT");
+
+await a.end(); await b.end();
+await admin.query("DROP DATABASE rr_demo"); await admin.end();
+```
+```out
+A reads: 10
+B committed 7
+A reads again: 10
+A FOR UPDATE: 7
+A after its UPDATE: 6
+```
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="ציר זמן: A קורא 10, B כותב 7, A קורא שוב 10, FOR UPDATE מחזיר 7">
+      <defs><marker id="rr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M690 60 H 40" marker-end="url(#rr)"/><path d="M690 150 H 40" marker-end="url(#rr)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700"><text x="705" y="64">A</text><text x="705" y="154">B</text></g>
+      <g style="stroke-width:2">
+        <rect x="560" y="40" width="100" height="40" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="430" y="130" width="110" height="40" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="300" y="40" width="110" height="40" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="160" y="40" width="120" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="610" y="65">SELECT → 10</text><text x="485" y="155">UPDATE 7 ✓</text><text x="355" y="65">SELECT → 10</text><text x="220" y="65">FOR UPDATE → 7</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="610" y="100">התמונה נלקחת כאן</text><text x="355" y="100">אותה תמונה</text><text x="220" y="100">הגרסה האחרונה + נעילה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: REPEATABLE READ. ה־SELECT השני של A לא רואה את השינוי של B; קריאה נועלת (FOR UPDATE, וגם UPDATE עצמו) רואה את הגרסה המחויבת האחרונה.</figcaption>
+  </figure>
+  <p>המסקנה המעשית — חזקה עוד יותר מבפרק 18: <strong>אל תחליט לפי SELECT רגיל בתוך טרנזקציה.</strong> או שההחלטה בתוך ה־UPDATE (<code>WHERE stock &gt;= ?</code>, ובודקים <code>affectedRows</code> — E13), או שקוראים עם <code>FOR UPDATE</code> ומחליטים אחרי הנעילה (E09).</p>
+
+  <h2>2. קריאות נועלות</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קריאה</th><th>רואה</th><th>נועלת</th><th>מתי</th></tr>
+    <tr><td><code>SELECT</code></td><td>התמונה של הטרנזקציה</td><td>לא</td><td>תצוגה, דוחות</td></tr>
+    <tr><td><code>SELECT … FOR SHARE</code></td><td>האחרון שמחויב</td><td>נעילה משותפת — אחרים יכולים לקרוא, לא לשנות</td><td>"תוודא שזה קיים ולא משתנה עד שאסיים"</td></tr>
+    <tr><td><code>SELECT … FOR UPDATE</code></td><td>האחרון שמחויב</td><td>נעילה בלעדית</td><td>"אני הולך לשנות את זה"</td></tr>
+    <tr><td><code>… FOR UPDATE SKIP LOCKED</code></td><td>רק שורות שלא נעולות</td><td>בלעדית, ומדלג על נעולות</td><td>תור עבודות: כל worker לוקח אחרות (E14)</td></tr>
+    <tr><td><code>… FOR UPDATE NOWAIT</code></td><td>—</td><td>נכשל מיד אם נעול</td><td>"אם מישהו כבר מטפל — וותר"</td></tr>
+  </table></div>
+  <p>ועוד הבדל מ־PostgreSQL: InnoDB נועל גם <strong>"פערים"</strong> (gap locks) — טווחים בין ערכים באינדקס — כדי למנוע שורות "רפאים" ב־REPEATABLE READ. לכן <code>FOR UPDATE</code> על <code>WHERE status = 'queued'</code> בלי אינדקס מתאים יכול לנעול הרבה יותר שורות ממה שחשבת. אינדקס על העמודות ב־WHERE מצמצם את הנעילה.</p>
+
+  <h2>3. deadlock</h2>
+  <p>טרנזקציה A נועלת את מוצר 1 ומחכה למוצר 3; B נועלת את 3 ומחכה ל־1. אף אחת לא תתקדם. InnoDB מזהה את המעגל מיד ו<strong>מבטל אחת מהן</strong> (rollback מלא) עם שגיאה 1213:</p>
+```term
+!! Error: Deadlock found when trying to get lock; try restarting transaction
+.. errno: 1213, code: 'ER_LOCK_DEADLOCK', sqlState: '40001'
+```
+  <p>(הפלט מהרצה אמיתית של התרחיש מול MySQL 8.4 — וזה גם מה שהבודק של E15 מייצר.) שלושה דברים עושים:</p>
+  <ol>
+    <li><strong>לנעול באותו סדר.</strong> <code>SELECT … WHERE id IN (…) ORDER BY id FOR UPDATE</code> — אם כולם נועלים מהקטן לגדול, אין מעגל (E09, E24).</li>
+    <li><strong>טרנזקציות קצרות</strong>, בלי קריאות רשת באמצע, ועם אינדקסים שמצמצמים מה ננעל.</li>
+    <li><strong>retry</strong> של <em>כל</em> הטרנזקציה, על 1213 (וגם 1205 — <code>Lock wait timeout exceeded</code>, אחרי 50 שניות כברירת מחדל). הטרנזקציה בוטלה כולה, אז בטוח לנסות שוב (E15).</li>
+  </ol>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ autocommit</span>
+    <p>בלי <code>START TRANSACTION</code>, כל פקודה היא טרנזקציה משלה — ונעילה של <code>SELECT … FOR UPDATE</code> משתחררת מיד בסוף אותה פקודה. "שמתי FOR UPDATE ועדיין יש כפילויות" — כמעט תמיד זה (E22).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19.5-E03">E03</a> · <a href="exercises.html#P19.5-E13">E13</a> · <a href="exercises.html#P19.5-E14">E14</a> · <a href="exercises.html#P19.5-E15">E15</a> · <a href="exercises.html#P19.5-E17">E17</a> · <a href="exercises.html#P19.5-E22">E22</a></p>
+  </div>

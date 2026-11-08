@@ -1,0 +1,2 @@
+-- P19.5-E16
+-- הוסף אינדקס FULLTEXT על products.name, ומצא מוצרים שיש בשם מילה שמתחילה ב־grinder ואין בהם electric — לפי name

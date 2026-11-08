@@ -1,0 +1,100 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>InnoDB: הטבלה היא האינדקס של המפתח הראשי — ומה זה אומר על בחירת מפתח.</li>
+      <li>EXPLAIN לפני ואחרי אינדקס — על 30,000 הזמנות.</li>
+      <li>migrations ב־MySQL: DDL בלי rollback, ו־GET_LOCK.</li>
+      <li>להעביר נתונים מ־PostgreSQL ל־MySQL.</li>
+    </ul>
+  </div>
+
+  <h2>1. clustered index</h2>
+  <p>ב־InnoDB, הטבלה עצמה שמורה כ־B-tree <strong>לפי המפתח הראשי</strong> (clustered index), וכל אינדקס משני מחזיק, ליד כל ערך, את המפתח הראשי של השורה:</p>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="אינדקס משני מצביע למפתח הראשי, שמוביל לשורה בעץ הראשי">
+      <defs><marker id="ci" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="440" y="30" width="260" height="150" rx="12" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="20" y="30" width="300" height="150" rx="12" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M436 105 H 324" marker-end="url(#ci)"/></g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700" direction="rtl">
+        <text x="570" y="56">אינדקס משני (customer_id, status, created_at)</text>
+        <text x="170" y="56">clustered index — לפי id</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="570" y="92">(3, paid, 2026-03-04) → id 4</text>
+        <text x="570" y="112">(3, paid, 2026-03-09) → id 8</text>
+        <text x="570" y="132">(5, cancelled, …) → id 2</text>
+        <text x="170" y="92">id 2 → {customer 5, …}</text>
+        <text x="170" y="112">id 4 → {customer 3, total, …}</text>
+        <text x="170" y="132">id 8 → {customer 3, total, …}</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl"><text x="380" y="98">מפתח ראשי</text></g>
+    </svg>
+    <figcaption>איור 1: חיפוש באינדקס משני מוצא את המפתח הראשי, ואז קורא את השורה מהעץ הראשי. אם כל העמודות שהשאילתה צריכה כבר באינדקס — אין צורך בקפיצה (covering index).</figcaption>
+  </figure>
+  <p>שלוש השלכות: <strong>מפתח ראשי קצר</strong> — הוא מוכפל בכל אינדקס; <strong>ממוין</strong> — AUTO_INCREMENT מוסיף תמיד בסוף העץ, בעוד UUID אקראי מכניס באמצע ומפצל דפים (UUIDv7 או BINARY(16) ממוין — אם חייבים UUID); ו<strong>covering index</strong> — אם האינדקס כולל את מה שה־SELECT מבקש, MySQL לא קורא את השורה בכלל.</p>
+
+  <h2>2. EXPLAIN</h2>
+  <p>"ההזמנות ששולמו של לקוח 3, מהחדשה". הוספתי ללקוח 3 עשרות אלפי הזמנות, רובן מבוטלות, והרצתי EXPLAIN עם האינדקס הקיים <code>(customer_id, created_at)</code>, ואז עם אינדקס שכולל גם את <code>status</code>:</p>
+```sql
+-- 30,000 הזמנות ללקוח 3, מתוכן 20 ששולמו
+EXPLAIN FORMAT=TREE SELECT id, total FROM orders WHERE customer_id = 3 AND status = 'paid' ORDER BY created_at DESC LIMIT 10;
+CREATE INDEX idx_orders_customer_status_created ON orders (customer_id, status, created_at);
+EXPLAIN FORMAT=TREE SELECT id, total FROM orders WHERE customer_id = 3 AND status = 'paid' ORDER BY created_at DESC LIMIT 10;
+```
+```term
+.. -> Limit: 10 row(s)  (cost=376 rows=10)
+..     -> Filter: (orders.`status` = 'paid')  (cost=376 rows=3751)
+..         -> Index lookup on orders using idx_orders_customer_created (customer_id=3) (reverse)  (cost=376 rows=15003)
+..
+.. -> Limit: 10 row(s)  (cost=2.75 rows=10)
+..     -> Filter: (orders.`status` = 'paid')  (cost=2.75 rows=20)
+..         -> Index lookup on orders using idx_orders_customer_status_created (customer_id=3, status='paid') (reverse)  (cost=2.75 rows=20)
+```
+<p>(הפלט מהרצה אמיתית על MySQL 8.4 — מקוצר רק במסגרת הטבלה. מספרי <code>cost</code> ו־<code>rows</code> הם הערכות מסטטיסטיקה, ויכולים להשתנות מעט בין הרצות.)</p>
+  <p>קוראים את העץ מלמטה למעלה. לפני: <code>Index lookup … using idx_orders_customer_created (customer_id=3) (reverse)</code> — הולך על <strong>כל</strong> ההזמנות של לקוח 3 מהסוף (ההערכה: כ־15,000 שורות), ומעליו <code>Filter: status = 'paid'</code> זורק את המבוטלות עד שמצטברות 10. אחרי: האינדקס החדש כולל את <code>status</code>, אז ה־lookup הוא <code>(customer_id=3, status='paid')</code> — ההערכה יורדת ל־20 שורות, והעלות (<code>cost</code>) מ־376 ל־2.75. <code>(reverse)</code> — קורא את האינדקס מהסוף, אז <code>ORDER BY created_at DESC</code> בחינם, בלי מיון (בטבלה רגילה תראה <code>Using filesort</code> כשאין אינדקס מתאים). ולזמנים אמיתיים: <code>EXPLAIN ANALYZE</code> (מ־8.0.18), כמו בפרק 18.</p>
+
+  <h2>3. migrations</h2>
+  <p>ההבדל הכי חשוב מ־PostgreSQL בעבודה יומיומית: ב־MySQL כל <code>CREATE</code>/<code>ALTER</code>/<code>DROP</code> עושה <strong>COMMIT מרומז</strong>. אין "migration בתוך טרנזקציה":</p>
+```sql run mysql db=19w-mysql/files/shop.sql
+START TRANSACTION;
+INSERT INTO customers (name, email, city) VALUES ('Before DDL', 'before@x.com', 'Haifa');
+ALTER TABLE customers ADD COLUMN phone VARCHAR(20) NULL;
+ROLLBACK;
+SELECT name FROM customers WHERE email = 'before@x.com';
+SELECT COUNT(*) AS has_phone FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'phone';
+```
+```out
++------------+
+| name       |
++------------+
+| Before DDL |
++------------+
++-----------+
+| has_phone |
++-----------+
+|         1 |
++-----------+
+```
+  <p>ה־ROLLBACK לא ביטל כלום — לא את ה־INSERT (שה־ALTER "מחייב") ולא את ה־ALTER. לכן: migration קטן (פקודת DDL אחת אם אפשר), expand/contract (פרק 25), ו־<code>GET_LOCK</code> כדי ששני שרתים שעולים יחד לא ירוצו את אותו migration פעמיים (E19). ועוד דבר טוב: הרבה <code>ALTER</code> ב־MySQL 8 רצים <code>ALGORITHM=INSTANT</code> (הוספת עמודה בסוף, למשל) — בלי לנעול את הטבלה.</p>
+
+  <h2>4. מ־PostgreSQL ל־MySQL</h2>
+  <p>משימה שקורית בעבודה: לאחד מערכות, או להעביר שירות למסד של החברה. העקרונות (E25):</p>
+  <ul>
+    <li><strong>בקבוצות, לפי מפתח</strong> (<code>WHERE id &gt; $last ORDER BY id LIMIT n</code>) — לא OFFSET, ולא "הכול לזיכרון".</li>
+    <li><strong>המרת טיפוסים מפורשת:</strong> boolean ← 0/1; numeric כמחרוזת ← DECIMAL (בלי לעבור דרך float); timestamptz ← DATETIME ב־UTC; ובדיקה ש־utf8mb4 מקבל את כל הטקסט.</li>
+    <li><strong>idempotent:</strong> <code>ON DUPLICATE KEY UPDATE</code> — הרצה שנייה לא מכפילה, ומעדכנת שינויים.</li>
+    <li><strong>אימות:</strong> ספירה וסכומים בשני הצדדים (<code>SUM(balance)</code> זהה עד האגורה).</li>
+  </ul>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>מודעה שמבקשת "2+ years with MySQL" שואלת בראיון שאלות כמו: "מה ההבדל בין utf8 ל־utf8mb4?", "מה רמת הבידוד ב־InnoDB, ומה היא אומרת?", "איך תמנע ששני workers ייקחו את אותה עבודה?", "איך תבחר מפתח ראשי ולמה לא UUID אקראי?", "השאילתה איטית — מה תעשה?". אחרי היחידה הזו יש לך תשובות עם דוגמאות מהרצות אמיתיות — ותוכל להגיד בכנות: "עבדתי עם PostgreSQL ו־MySQL, ואני מכיר את ההבדלים".</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19.5-E16">E16</a> · <a href="exercises.html#P19.5-E18">E18</a> · <a href="exercises.html#P19.5-E19">E19</a> · <a href="exercises.html#P19.5-E24">E24</a> · <a href="exercises.html#P19.5-E25">E25</a></p>
+  </div>

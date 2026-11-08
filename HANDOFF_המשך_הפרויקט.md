@@ -341,18 +341,19 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.0 חטיבה ו׳ — "מה שמבקשים במודעות" (פרקים 31–37), בבנייה
-נוספה לבקשת יהודה (8.11.2026) אחרי שהראה מודעת Backend Developer (Node.js, MySQL, AWS+K8s, Jenkins/Argo CD, SQS/Kafka/RabbitMQ, agentic AI, Redis/ElastiCache, BigQuery/Snowflake/Databricks, נפחי נתונים ותעבורה גבוהה). פער מול הקורס ← שבעה פרקים, באותו פורמט (5 שיעורים, 25 תרגילים, בודקים אמיתיים):
-| פרק | slug מתוכנן | בודקים מול |
-|---|---|---|
-| 31 MySQL | `31-mysql` | MySQL 8.4 בקונטיינר `course-mysql` (פורט 3307) |
-| 32 תורים ואירועים | `32-messaging` | RabbitMQ, Kafka (KRaft), SQS דרך ElasticMQ/LocalStack |
-| 33 AWS | `33-aws` | LocalStack (S3, SQS, DynamoDB?) + ולידציה של IaC/IAM |
-| 34 Kubernetes ו־GitOps | `34-kubernetes` | ולידציה של manifests/Helm/Jenkinsfile/Argo CD (כמו פרק 25) |
-| 35 נתונים בקנה מידה | `35-data` | DuckDB (`@duckdb/node-api`) — מנוע עמודתי מקומי |
-| 36 ביצועים ועומס | `36-performance` | מדידות אמיתיות, autocannon, perf_hooks |
-| 37 סוכני AI בפרודקשן | `37-agents` | SDK של Anthropic עם fetch מדומה (כמו 29) |
-כל ה־images נבדקו ונמשכים בענן: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4, softwaremill/elasticmq-native.
+### 7.0 הרחבה לפי מודעת דרושים — חצאי־פרקים ופרויקט 4 (בבנייה)
+יהודה הראה מודעת Backend Developer (Node.js, MySQL, AWS+K8s, Jenkins/Argo CD, SQS/Kafka/RabbitMQ, agentic AI, Redis/ElastiCache, BigQuery/Snowflake/Databricks, נפחי נתונים ותעבורה גבוהה). **החלטות שלו (8.11.2026):** לא חטיבה חדשה — לשלב בסדר הלימוד, כ**חצאי־פרקים** (כמו 15.5, כדי שמזהי תרגילים קיימים לא ישתנו), ו**פרויקט 4 חדש** שמחבר את הנושאים.
+| יחידה | slug (מיון לפי שם התיקייה) | אחרי | בודקים מול |
+|---|---|---|---|
+| 19.5 MySQL | `19w-mysql` (מזהים `P19.5-E06`) | Prisma | MySQL 8.4 בקונטיינר `course-mysql` (3307) — `root/tools/mysql.mjs` |
+| 25.5 ענן ו־Kubernetes | `25w-cloud` | פרויקט 3 | LocalStack (S3, SQS…) + ולידציה של manifests/Helm/Jenkinsfile/Argo CD |
+| 26.5 תורים ואירועים | `26w-messaging` | Redis | RabbitMQ, Kafka (KRaft), SQS (ElasticMQ/LocalStack) |
+| 28.5 ביצועים ונתונים בקנה מידה | `28w-scale` | תכנון מערכת | מדידות, autocannon; DuckDB כמנוע עמודתי |
+| 29.5 סוכני AI | `29w-agents` | פרק 29 | SDK של Anthropic עם fetch מדומה |
+| פרויקט 4 | `29x-project-events` | 29.5 | מערכת אירועים ואנליטיקה: Kafka ← MySQL + עמודתי, על Kubernetes |
+- `build.mjs`: fence חדש ```` ```sql run mysql db=19w-mysql/files/shop.sql ```` — רץ ב־`docker exec course-mysql mysql --table`; בלוקי ts מקבלים `MYSQL_URL`, ובדיקות `COURSE_MYSQL_URL`.
+- כל ה־images נבדקו ונמשכים: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4, softwaremill/elasticmq-native.
+- **מצב 19.5:** 25 תרגילים, 20 בודקים ופתרונות מוכנים ונבדקו (כולל deadlock אמיתי וסימולציה של 6 workers); חסרים chapter.mjs ו־5 שיעורים.
 
 ### 7.1 מצב: הקורס הושלם
 כל 30 הפרקים (0–30, כולל 15.5 ו־15w), ושלושת הפרויקטים (כולל שלב 5 של פרויקט 3) — בנויים ומאומתים. מה אפשר להמשיך, אם יהודה יבקש:

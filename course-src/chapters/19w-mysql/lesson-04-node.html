@@ -1,0 +1,91 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>mysql2: חיבור, pool, ו־<code>execute</code> עם <code>?</code>.</li>
+      <li>מה חוזר: insertId, affectedRows — וטיפוסים שמגיעים כמחרוזות.</li>
+      <li>טרנזקציה: חיבור אחד מה־pool, מההתחלה ועד release.</li>
+      <li>ו־Prisma מול MySQL: מה משתנה.</li>
+    </ul>
+  </div>
+
+  <h2>1. mysql2</h2>
+  <p>ה־driver הנפוץ ל־MySQL ב־Node.js, עם API של Promises. כמו <code>pg</code> מפרק 16 — עם שני הבדלים בולטים: פרמטרים הם <code>?</code> (לא <code>$1</code>), ותוצאה היא זוג <code>[rows, fields]</code>:</p>
+```ts
+import mysql from "mysql2/promise";
+
+const pool = mysql.createPool({
+  uri: process.env.DATABASE_URL,      // mysql://user:pass@host:3306/shop
+  connectionLimit: 10,                // כמה חיבורים לכל היותר (כמו max ב־pg.Pool)
+  timezone: "Z",                      // DATETIME ← Date ב־UTC, לא באזור הזמן של התהליך
+});
+
+const [rows] = await pool.execute("SELECT id, name, price FROM products WHERE category = ? AND stock > ?", ["beans", 0]);
+const [res] = await pool.execute("INSERT INTO customers (name, email, city) VALUES (?, ?, ?)", ["Dana", "dana@x.com", "Haifa"]);
+res.insertId;        // ה־id החדש — במקום RETURNING
+```
+  <p><code>execute</code> — <strong>prepared statement</strong>: השאילתה והערכים נשלחים בנפרד, והשרת לא מפרש ערך כ־SQL. <code>query</code> — מחליף את ה־<code>?</code> בצד הלקוח (עם escaping נכון), וגמיש יותר: <code>WHERE id IN (?)</code> עם מערך, ו־<code>VALUES ?</code> עם מערך של מערכים להכנסה מרובה. שניהם בטוחים מ־SQL injection; מה שלא בטוח — לשרשר מחרוזות.</p>
+
+  <h2>2. מה חוזר</h2>
+  <p>E05 מריץ את זה ומראה בדיוק — הנקודות החשובות:</p>
+  <div class="table-wrap"><table>
+    <tr><th>ב־MySQL</th><th>ב־JavaScript (ברירת מחדל)</th><th>למה</th></tr>
+    <tr><td><code>DECIMAL(10,2)</code></td><td><strong>מחרוזת</strong> <code>"89.90"</code></td><td>כדי לא לאבד דיוק. <code>a.price + b.price</code> הוא שרשור (E21)</td></tr>
+    <tr><td><code>BOOLEAN</code></td><td><code>1</code> / <code>0</code></td><td>זה TINYINT</td></tr>
+    <tr><td><code>JSON</code></td><td>אובייקט</td><td>mysql2 מפענח</td></tr>
+    <tr><td><code>DATETIME</code></td><td><code>Date</code> לפי אזור הזמן של התהליך</td><td>לכן <code>timezone: "Z"</code>, או <code>dateStrings: true</code></td></tr>
+    <tr><td><code>BIGINT</code></td><td>number (או מחרוזת, עם <code>supportBigNumbers</code>)</td><td>מעל 2⁵³ number מאבד דיוק</td></tr>
+  </table></div>
+  <p>הדרך הנקייה: להמיר <strong>במקום אחד</strong> — פונקציה שהופכת שורה לטיפוס של האפליקציה (<code>priceCents</code>, <code>isActive</code>) — ולא לפזר <code>Number(…)</code> בכל הקוד (E10).</p>
+  <p>ומה עם UPDATE? שני מספרים: <code>affectedRows</code> — כמה שורות <em>התאימו</em> ל־WHERE; <code>changedRows</code> — כמה <em>באמת השתנו</em>. "סמן כנשלח" על הזמנה שכבר נשלחה: affected 1, changed 0. לבדיקת "הצלחתי?" — כמעט תמיד affectedRows (E13, E21).</p>
+
+  <h2>3. טרנזקציה עם pool</h2>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="pool עם כמה חיבורים; טרנזקציה לוקחת חיבור אחד מההתחלה ועד release">
+      <defs><marker id="pl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="30" width="140" height="140" rx="12" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="290" y="60" width="210" height="80" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="60" width="200" height="80" rx="12" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 90 H 504" marker-end="url(#pl)"/><path d="M504 115 H 556" marker-end="url(#pl)" style="stroke-dasharray:5 4"/>
+        <path d="M286 100 H 224" marker-end="url(#pl)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700"><text x="630" y="58">pool</text><text x="395" y="86">conn #3</text><text x="120" y="86">MySQL</text></g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="630" y="90">conn #1 · #2</text><text x="630" y="108">#3 · #4 · …</text>
+        <text x="395" y="108">BEGIN … COMMIT</text><text x="530" y="84">getConnection</text><text x="530" y="132">release</text>
+        <text x="120" y="110">same session</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: טרנזקציה שייכת לחיבור אחד. <code>pool.query</code> יכול לקבל חיבור אחר בכל קריאה — לכן <code>getConnection</code>, כל הפקודות עליו, ו־<code>release</code> ב־finally.</figcaption>
+  </figure>
+```ts file=P19.5-E09.ts
+const conn = await pool.getConnection();
+try {
+  await conn.beginTransaction();
+  const [rows] = await conn.query("SELECT id, price, stock FROM products WHERE id IN (?) ORDER BY id FOR UPDATE", [ids]);
+  // … בדיקות, INSERT להזמנה ולפריטים, UPDATE למלאי …
+  await conn.commit();
+} catch (err) {
+  await conn.rollback();
+  throw err;
+} finally {
+  conn.release(); // בלי זה, אחרי connectionLimit טרנזקציות — כל השרת מחכה לחיבור שלא יחזור
+}
+```
+
+  <h2>4. Prisma מול MySQL</h2>
+  <p>Prisma (פרק 19) תומך ב־MySQL: <code>provider = "mysql"</code> ב־<code>datasource</code>, adapter של MySQL, ו־migrations שנוצרות ב־SQL של MySQL. רוב הקוד — <code>findMany</code>, <code>create</code>, <code>$transaction</code> — לא משתנה. מה כן:</p>
+  <ul>
+    <li><strong>טיפוסים:</strong> <code>String</code> הוא <code>VARCHAR(191)</code> כברירת מחדל — לטקסט ארוך <code>@db.Text</code>, לאורך אחר <code>@db.VarChar(255)</code>.</li>
+    <li><strong>חיפוש לא רגיש לרישיות:</strong> <code>mode: "insensitive"</code> לא נתמך — וגם לא צריך: הקולציה כבר כזו.</li>
+    <li><strong>migrations:</strong> DDL ב־MySQL לא בטרנזקציה (שיעור 5) — migration שנכשל באמצע משאיר חצי. migrations קטנים.</li>
+    <li><strong>Raw SQL</strong> (<code>$queryRaw</code>) — בתחביר של MySQL: בלי <code>||</code>, בלי RETURNING.</li>
+  </ul>
+  <p>וההבדלים של שיעורים 1–3 — קולציה, REPEATABLE READ, deadlocks — חלים גם דרך Prisma: ה־ORM לא מסתיר את המסד.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P19.5-E05">E05</a> · <a href="exercises.html#P19.5-E09">E09</a> · <a href="exercises.html#P19.5-E10">E10</a> · <a href="exercises.html#P19.5-E21">E21</a></p>
+  </div>

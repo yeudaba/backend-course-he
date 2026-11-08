@@ -20,6 +20,8 @@ fi
 docker pull -q postgres:18-alpine >/dev/null 2>&1 || true
 # פרק 26: Redis 8 בקונטיינר course-redis על פורט 6380 (לא 6379 — כדי לא להתנגש ב־Redis של הלומד)
 docker start course-redis >/dev/null 2>&1 || docker run -d --name course-redis -p 6380:6379 redis:8-alpine >/dev/null
+# יחידה 19.5: MySQL 8.4 בקונטיינר course-mysql על פורט 3307 (root בלי סיסמה — רק בסביבת האימות)
+docker start course-mysql >/dev/null 2>&1 || docker run -d --name course-mysql -p 3307:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:8.4 >/dev/null
 if [ ! -x /opt/pg18/bin/psql ]; then
   mkdir -p /opt/pg18img/lib /opt/pg18/bin
   docker cp course-pg:/usr/lib/postgresql/18 /opt/pg18img/
@@ -36,3 +38,4 @@ fi
 [ -d node_modules ] || npm ci --no-audit --no-fund
 for i in $(seq 30); do /opt/pg18/bin/pg_isready -q -h localhost -p 5433 && break; sleep 1; done
 /opt/pg18/bin/pg_isready -h localhost -p 5433
+for i in $(seq 90); do docker exec course-mysql mysqladmin ping -s >/dev/null 2>&1 && break; sleep 1; done

@@ -16,18 +16,17 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕", "26-redis": "⚡", "27-algorithms": "🧠", "28-system-design": "🏗️", "29-ai-backend": "🤖", "30-career": "💼",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕", "19w-mysql": "🐬", "26-redis": "⚡", "27-algorithms": "🧠", "28-system-design": "🏗️", "29-ai-backend": "🤖", "30-career": "💼",
 };
 
-// מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
+// מה שעוד לא נבנה — לפי הסדר בקורס (slug קובע את המקום בטבלה)
 const PLANNED = [
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 31", icon: "🐬", title: "MySQL", topics: "מ־PostgreSQL ל־MySQL: הבדלים, נעילות, Prisma" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 32", icon: "📨", title: "תורים ואירועים", topics: "RabbitMQ, Kafka, SQS" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 33", icon: "☁️", title: "AWS", topics: "IAM, S3, SQS, RDS, ElastiCache, ECS ו־Lambda" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 34", icon: "☸️", title: "Kubernetes ו־GitOps", topics: "Deployments, Helm, Argo CD, Jenkins" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 35", icon: "🧮", title: "נתונים בקנה מידה", topics: "OLAP, מסדים עמודתיים: BigQuery, Snowflake, Databricks, DuckDB" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 36", icon: "🚦", title: "ביצועים ועומס", topics: "בדיקות עומס, profiling, event loop, תעבורה גבוהה" },
-  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 37", icon: "🤖", title: "סוכני AI בפרודקשן", topics: "agentic AI: לולאות, כלים, MCP, guardrails, evals" },
+  { slug: "19w-mysql", part: "חטיבה ג׳ — שרת, מסד נתונים ו־HTML בסיסי", label: "יחידה 19.5", icon: "🐬", title: "MySQL", topics: "מ־PostgreSQL ל־MySQL: הבדלים, נעילות, mysql2" },
+  { slug: "25w-cloud", part: "חטיבה ד׳ — רמת תעשייה", label: "יחידה 25.5", icon: "☁️", title: "ענן ו־Kubernetes", topics: "AWS (IAM, S3, SQS, RDS, ElastiCache, ECS), Kubernetes, Helm, Jenkins, Argo CD" },
+  { slug: "26w-messaging", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 26.5", icon: "📨", title: "תורים ואירועים", topics: "RabbitMQ, Kafka, SQS" },
+  { slug: "28w-scale", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 28.5", icon: "🚦", title: "ביצועים ונתונים בקנה מידה", topics: "בדיקות עומס, profiling, OLAP ומסדים עמודתיים: BigQuery, Snowflake, Databricks" },
+  { slug: "29w-agents", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 29.5", icon: "🤖", title: "סוכני AI בפרודקשן", topics: "agentic AI: לולאות, כלים, MCP, guardrails, evals" },
+  { slug: "29x-project-events", part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרויקט 4", icon: "📊", title: "מערכת אירועים ואנליטיקה", topics: "Kafka, MySQL, מסד עמודתי, Kubernetes" },
 ];
 
 // פרק 0 נכתב ביד ישירות ב־backend-course — את השיעורים קוראים משם
@@ -73,10 +72,13 @@ const bar = (done, total, width = 10) => {
 const chapterLink = (c) => `[${c.label}](backend-course/${c.slug}/index.html)`;
 
 function partTable(part) {
-  const rows = chapters.filter((c) => c.part === part).map((c) =>
-    `| ${chapterLink(c)} | ${c.title}${c.fast ? " <sub>(רענון)</sub>" : ""} | ${c.lessons.length} | ${c.exercises || "—"} | ${c.tests || "—"} | ✔ |`);
-  const planned = PLANNED.filter((p) => p.part === part).map((p) => `| ${p.label} | ${p.title} <br><sub>${p.topics}</sub> | | | | בתוכנית |`);
-  return ["| פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |", "|---|---|:-:|:-:|:-:|:-:|", ...rows, ...planned].join("\n");
+  const built = new Set(chapters.map((c) => c.slug));
+  const rows = [
+    ...chapters.filter((c) => c.part === part).map((c) => ({ slug: c.slug, row:
+      `| ${chapterLink(c)} | ${c.title}${c.fast ? " <sub>(רענון)</sub>" : ""} | ${c.lessons.length} | ${c.exercises || "—"} | ${c.tests || "—"} | ✔ |` })),
+    ...PLANNED.filter((p) => p.part === part && !built.has(p.slug)).map((p) => ({ slug: p.slug, row: `| ${p.label} | ${p.title} <br><sub>${p.topics}</sub> | | | | בתוכנית |` })),
+  ].sort((x, y) => (x.slug < y.slug ? -1 : 1)).map((x) => x.row);
+  return ["| פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |", "|---|---|:-:|:-:|:-:|:-:|", ...rows].join("\n");
 }
 
 function lessonsList(part) {
@@ -89,7 +91,7 @@ function lessonsList(part) {
 function progressTable() {
   const rows = parts.map((part) => {
     const done = chapters.filter((c) => c.part === part).length;
-    const total = done + PLANNED.filter((p) => p.part === part).length;
+    const total = done + PLANNED.filter((p) => p.part === part && !chapters.some((c) => c.slug === p.slug)).length;
     const [name, sub] = part.split(" — ");
     return `| **${name}** | ${sub} | <code>${bar(done, total)}</code> | ${done}/${total} |`;
   });
