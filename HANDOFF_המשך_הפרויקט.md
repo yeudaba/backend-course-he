@@ -142,6 +142,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרק 22 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-TESTS — **ירוק**.
 - פרק 23 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-DOCKER — **ירוק** (בדיקות Docker אמיתיות: build, run, compose).
 - פרק 24 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-PROD + PR2-PROD-DB — **ירוק**.
+- **פרויקט 3 (הדגל) הושלם**: `25p-project-shop` — 6 שלבים, 6 בודקי "קופסה שחורה" (PR3-AUTH, PR3-PRODUCTS, PR3-ORDERS, PR3-RACE, PR3-PAY, PR3-SHIP) — **ירוק**. נבדק שהבודק של המרוץ נכשל על גרסה נאיבית (12 הזמנות על 3 יחידות).
 - פרק 25 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-CI + PR2-CI-DB — **ירוק**. ה־workflow של שלב ח׳ רץ באמת ב־GitHub Actions (branch זמני `ci-demo-25`) — הריצה הראשונה נכשלה ב־typecheck (גילוי 13), השנייה ירוקה ב־35 שניות.
 - **מפרק 22 האימות רץ על Node 24** (כמו אצל הלומד): `PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify`. כל הקורס (0–21) עבר גם על Node 24 בלי שינוי.
 
@@ -267,7 +268,13 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - Dockerfile HEALTHCHECK על `${PORT:-3000}`; compose: `NODE_ENV: development` ל־api (ה־image הוא production).
   - web: `<meta name="api-url">` לכתובת ה־API בפריסה.
   - 51 בדיקות Jest, 9 integration.
-- **השלבים שנשארו**: אין — פרויקט 2 גמור. הבא: פרויקט 3.
+- **השלבים שנשארו**: אין — פרויקט 2 גמור.
+
+### פרויקט 3 (coffee-shop) — `25p-project-shop`
+- הלומד בונה **מאפס** (repo `~/dev/coffee-shop`), לפי חוזה API מדויק ב־stage-0-plan.html (נתיבים, status codes, error codes, משתני סביבה). השיעורים = דרישות והכוונה; הפתרון ב־reference.html (🔒).
+- **בודק קופסה שחורה** — `root/tools/app.mjs` (`startApp`): `CREATE DATABASE chk_shop_…` ← `prisma migrate deploy` של הפרויקט (CLI מ־`createRequire(project).resolve("prisma/build/index.js")`) ← `node dist/main.js` עם PORT/DATABASE_URL/JWT_SECRET/ADMIN_EMAIL/ADMIN_PASSWORD/BCRYPT_ROUNDS=4/NODE_ENV=test ← מחכה ל־/health ← בדיקות HTTP ← SIGTERM ו־`DROP DATABASE … WITH (FORCE)`. ~2 שניות לבדיקה. עוזרים ב־`tests/_shop.mjs` (`shop(t)`: admin, customer, product, orderOf).
+- הפתרון (`solutions/coffee-shop`): Nest + Prisma 7. מלאי: `updateMany({ where: { stock: { gte } }, data: { decrement } })` בטרנזקציה, לפי productId; `CHECK (stock >= 0)` ביד ב־migration; snapshot של שם ומחיר ב־order_items; Idempotency (גם 4xx נשמר) על POST /orders ו־/pay; `FakePaymentGateway` (4242… מצליח, 4000…0002 נדחה, 4000…9995 אין כיסוי, Luhn); `order-status.ts` (מכונת מצבים) + מעברים מותנים; תפקיד מהמסד בכל בקשה; מנהל ראשון ב־onApplicationBootstrap; מחיקה רכה (active). `npm test` = unit בלבד; `npm run test:e2e` = מול DB (schema לכל ריצה, `DATABASE_URL_TEST`). web/ עם `<meta name="api-url">`. נבדק ב־docker compose up (seed של 8 מוצרים) ובדפדפן — הצילום ב־`files/shop-web.png`.
+- גילוי: Prisma generator בלי `importFileExtension = ""` ← ts-jest לא מוצא `./internal/class.js`.
 
 ### "גילויים" מהדרך שחייבים לזכור
 1. **Prisma 7 + אזור זמן:** כשה־session של המסד לא ב־UTC, Prisma קורא וכותב `timestamptz` בהזזה.
@@ -310,8 +317,8 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרויקט 3 (הדגל)
-חנות ציוד קפה, נבנית מאפס (אפיון סעיף 10.3). כל הכלים כבר נלמדו: Nest, Prisma, auth, בדיקות, Docker, idempotency, CI/CD.
+### 7.1 הצעד הבא המיידי — פרק 26 (Cache ותורים)
+Redis דרך Docker. לפי האפיון — הרחבה שמשדרגת את פרויקט הדגל: cache לרשימת המוצרים, ותור ל"אישור הזמנה" (ובמקום טבעי: ביטול אוטומטי של הזמנות שלא שולמו).
 נקודות מפרק 25:
 - ה־branch הזמני `ci-demo-25` ב־GitHub לא נמחק (מחיקת branch מרוחק נחסמה ע"י מנגנון הבטיחות) — יהודה יכול למחוק ב־GitHub ← Branches.
 - `cloud-setup.sh`: ההמתנה ל־dockerd הוגדלה ל־90 שניות (אחרי הפסקה ארוכה העלייה הראשונה לקחה מעל 30).
@@ -330,7 +337,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 🏗️ | **פרויקט 3 — הדגל** | מערכת הזמנות: חנות ציוד קפה. דרישות מלאות באפיון, סעיף 10.3: JWT ותפקידים, CRUD למנהל, חיפוש ו־pagination, עגלה←הזמנה עם שמירת מחיר, transaction נגד מלאי שלילי, idempotency key, תשלום מדומה, בדיקות unit+e2e כולל מרוץ, Swagger, `docker compose up`, CI, קישור חי, דף HTML. **נבנה מאפס בלי העתקה מפרויקט 2.** README לפי הדרישות באפיון |
 | 26 | Cache ותורים | Redis דרך Docker |
 | 27 | אלגוריתמים וראיונות | מרכז את מה שהתחיל מפרק 6 |
 | 28 | תכנון מערכת | רשות |
@@ -384,6 +390,6 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~פרקים 20–25~~ ✔ הושלמו. **עכשיו: פרויקט 3** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
-4. **להמשיך לפרויקט 3 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
+3. ~~פרקים 20–25 ופרויקט 3~~ ✔ הושלמו. **עכשיו: פרק 26** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
+4. **להמשיך לפרק 26 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).
