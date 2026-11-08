@@ -22,6 +22,8 @@ docker pull -q postgres:18-alpine >/dev/null 2>&1 || true
 docker start course-redis >/dev/null 2>&1 || docker run -d --name course-redis -p 6380:6379 redis:8-alpine >/dev/null
 # יחידה 19.5: MySQL 8.4 בקונטיינר course-mysql על פורט 3307 (root בלי סיסמה — רק בסביבת האימות)
 docker start course-mysql >/dev/null 2>&1 || docker run -d --name course-mysql -p 3307:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:8.4 >/dev/null
+# יחידה 25.5: LocalStack (אמולטור של AWS — S3, SQS, IAM) על 4566
+docker start course-localstack >/dev/null 2>&1 || docker run -d --name course-localstack -p 4566:4566 -e SERVICES=s3,sqs,iam,sts localstack/localstack:4.14.0 >/dev/null
 if [ ! -x /opt/pg18/bin/psql ]; then
   mkdir -p /opt/pg18img/lib /opt/pg18/bin
   docker cp course-pg:/usr/lib/postgresql/18 /opt/pg18img/

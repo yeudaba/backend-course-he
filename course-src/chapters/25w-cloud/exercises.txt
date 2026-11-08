@@ -1,0 +1,1242 @@
+@@ P25.5-E01 | 1 | איזה שירות של AWS? | 15 | שיעור 1
+@task
+<p>לכל צורך של חנות הקפה — איזה שירות של AWS, ולמה (שירות אחד או שניים לכל שורה):</p>
+<ol><li>להריץ את ה־API (Docker image) — 3 עותקים, עם rolling update.</li><li>PostgreSQL מנוהל, עם גיבוי יומי ו־failover.</li><li>Redis ל־cache ול־BullMQ.</li><li>לשמור תמונות של מוצרים וקבלות PDF שמשתמשים מעלים.</li><li>להגיש את התמונות מהר לגולשים בכל העולם.</li><li>תור הודעות בין ה־API ל־worker שמקטין תמונות.</li><li>לשמור את סיסמת המסד ואת JWT_SECRET.</li><li>לראות לוגים ומדדים, ולקבל התראה כש־5xx קופץ.</li><li>פונקציה שרצה פעם ביום ב־03:00 ומייצרת דוח — 20 שניות בסך הכול.</li><li>להחליט מי (אדם או שירות) רשאי לעשות מה.</li></ol>
+@hint1
+<p>חלק מהשירותים הם "גרסה מנוהלת" של משהו שכבר הכרת בקורס: PostgreSQL, Redis, תור, Docker.</p>
+@hint2
+<p>לשורה 1 יש שתי תשובות טובות: ECS (פשוט יותר) או EKS (Kubernetes — שיעור 3).</p>
+@solution
+<ol><li><strong>EKS</strong> (Kubernetes מנוהל — מה שהמודעה ביקשה) או <strong>ECS</strong> (מנגנון של AWS עצמה, פשוט יותר). בשניהם: עם <strong>Fargate</strong> לא מנהלים שרתים; או על <strong>EC2</strong> — מכונות שלך. ה־image יושב ב־<strong>ECR</strong> (registry של AWS) או ב־GHCR.</li><li><strong>RDS for PostgreSQL</strong> או <strong>Aurora</strong> (PostgreSQL או MySQL — יחידה 19.5). Multi-AZ = עותק ממתין באזור אחר.</li><li><strong>ElastiCache</strong> (Redis/Valkey) — אותו פרוטוקול, אותו <code>ioredis</code> מפרק 26.</li><li><strong>S3</strong> — object storage: מפתח ← קובץ, בלי שרת קבצים ובלי דיסק שמתמלא (שיעור 2).</li><li><strong>CloudFront</strong> — CDN מול ה־bucket.</li><li><strong>SQS</strong> (יחידה 26.5). ל־BullMQ שכבר יש — אפשר להישאר עם Redis.</li><li><strong>Secrets Manager</strong> (או SSM Parameter Store) — ומשם ל־Kubernetes Secret (שיעור 3).</li><li><strong>CloudWatch</strong> — לוגים, מדדים, alarms. (הרבה חברות שולחות לכלי אחר — Datadog, Grafana — אבל CloudWatch קיים תמיד.)</li><li><strong>Lambda</strong> + <strong>EventBridge Scheduler</strong> — משלמים על 20 שניות ביום, לא על שרת שמחכה. (או CronJob ב־Kubernetes, אם כבר יש cluster.)</li><li><strong>IAM</strong> — users, roles, policies (שיעור 2).</li></ol>
+@mistakes
+<ul><li>"S3 כדיסק של השרת" — אין שם תיקיות אמיתיות ואין "לפתוח קובץ ולכתוב באמצע". קוראים ושומרים אובייקט שלם.</li><li>EC2 לכל דבר — אפשר, אבל אז אתה מנהל עדכוני מערכת הפעלה, גיבויים ו־failover בעצמך.</li></ul>
+
+@@ P25.5-E02 | 1 | מי רשאי? IAM | 15 | שיעור 2
+@task
+<p>נכון או לא, ולמה:</p>
+<ol><li>"שמנו את ה־Access Key של המשתמש שלי ב־.env של השרת — זה פרטי."</li><li>"ה־policy מרשה <code>s3:GetObject</code> על <code>arn:aws:s3:::coffee-uploads</code>, אז השרת יכול לקרוא קבצים מה־bucket."</li><li>"אם אין שום policy שמרשה פעולה — היא חסומה."</li><li>"אם policy אחת מרשה, ופוליסי אחרת אוסרת במפורש — מרשה, כי יש Allow."</li><li>"ב־EKS, ה־pod מקבל הרשאות דרך role, בלי מפתח קבוע בשום מקום."</li><li>"<code>"Action": "s3:*"</code> על ה־bucket שלנו בלבד — זה מספיק מצומצם."</li></ol>
+@hint1
+<p>סדר ההחלטה של AWS: Deny מפורש? ← אסור. Allow? ← מותר. אחרת ← אסור.</p>
+@hint2
+<p>ARN של bucket וה־ARN של האובייקטים בתוכו — שני דברים שונים.</p>
+@solution
+<ol><li><strong>לא.</strong> מפתח קבוע של אדם, עם כל ההרשאות שלו, שלא פג. דולף מלוג, מגיבוי, ממחשב של מפתח. לשרת — <strong>role</strong>: הרשאות רק למה שהוא צריך, ו־credentials זמניים שמתחלפים לבד (STS).</li><li><strong>לא.</strong> <code>arn:aws:s3:::coffee-uploads</code> הוא ה־bucket עצמו (לפעולות כמו <code>ListBucket</code>). אובייקטים הם <code>arn:aws:s3:::coffee-uploads/*</code>. זה בדיוק הבאג של E21: "AccessDenied, אבל נתתי הרשאה!".</li><li><strong>נכון</strong> — implicit deny. ברירת המחדל היא "לא".</li><li><strong>לא.</strong> Deny מפורש מנצח תמיד, לא משנה כמה Allow יש. כך חוסמים פעולה מסוכנת לכולם (למשל מחיקה של גיבויים) בלי לבדוק כל policy (E13).</li><li><strong>נכון.</strong> <strong>IRSA</strong> או <strong>EKS Pod Identity</strong>: ה־ServiceAccount של ה־pod מקושר ל־IAM role, וה־SDK מקבל credentials זמניים אוטומטית. אין סוד לנהל.</li><li><strong>לא.</strong> <code>s3:*</code> כולל <code>DeleteObject</code>, <code>PutBucketPolicy</code> (להפוך את ה־bucket לציבורי!) ו־<code>DeleteBucket</code>. least privilege = רשימת פעולות מפורשת (E08).</li></ol>
+
+@@ P25.5-E03 | 1 | מה S3 מחזיר? | 15 | שיעור 2
+@task
+<p>נחש לפני שמריצים. (הקוד רץ מול LocalStack — אותו API כמו S3 האמיתי.)</p>
+```ts
+await put("img2.png", "v1");
+await put("img10.png", "v1");
+await put("img2.png", "v2");
+await put("receipts/2026/a.pdf", "pdf");
+// 1. מה יש ב־img2.png?   2. באיזה סדר ListObjects מחזיר?   3. כמה "תיקיות" עם Delimiter "/"?
+```
+@hint1
+<p>ב־S3 אין "עדכון" — יש כתיבה של אובייקט שלם במקום הקודם.</p>
+@hint2
+<p>המפתחות ממוינים כמחרוזות (lexicographic), לא כמספרים.</p>
+@solution
+```ts run
+import { S3Client, CreateBucketCommand, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+
+const s3 = new S3Client({
+  region: "us-east-1",
+  endpoint: process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566", // LocalStack
+  credentials: { accessKeyId: "test", secretAccessKey: "test" },
+  forcePathStyle: true,
+});
+const Bucket = `e03-${Date.now()}`;
+await s3.send(new CreateBucketCommand({ Bucket }));
+const put = (Key: string, Body: string) => s3.send(new PutObjectCommand({ Bucket, Key, Body }));
+
+await put("img2.png", "v1");
+await put("img10.png", "v1");
+await put("img2.png", "v2");
+await put("receipts/2026/a.pdf", "pdf");
+
+const obj = await s3.send(new GetObjectCommand({ Bucket, Key: "img2.png" }));
+console.log("1.", await obj.Body!.transformToString());
+const all = await s3.send(new ListObjectsV2Command({ Bucket }));
+console.log("2.", all.Contents!.map((o) => o.Key).join(", "));
+const top = await s3.send(new ListObjectsV2Command({ Bucket, Delimiter: "/" }));
+console.log("3.", top.Contents!.map((o) => o.Key), top.CommonPrefixes!.map((p) => p.Prefix));
+```
+```out
+1. v2
+2. img10.png, img2.png, receipts/2026/a.pdf
+3. [ 'img10.png', 'img2.png' ] [ 'receipts/' ]
+```
+<ol><li><strong>v2</strong> — הכתיבה השנייה החליפה את האובייקט כולו. (מאז 2020 S3 עקבי מיידית: קריאה אחרי כתיבה מחזירה את הגרסה החדשה. אם צריך היסטוריה — Versioning על ה־bucket.)</li><li><strong>img10 לפני img2</strong> — מיון של מחרוזות: "1" &lt; "2". מי שרוצה סדר מספרי — מרפד באפסים (<code>img002</code>) או מפתח עם תאריך ISO (E19).</li><li>אין תיקיות ב־S3: <code>receipts/2026/a.pdf</code> הוא מפתח אחד עם לוכסנים. <code>Delimiter: "/"</code> רק <em>מקבץ</em> מפתחות לפי ה־prefix עד הלוכסן הראשון — ומחזיר את <code>receipts/</code> ב־<code>CommonPrefixes</code>, כאילו הייתה תיקייה.</li></ol>
+
+@@ P25.5-E04 | 1 | מה Kubernetes יעשה? | 15 | שיעור 3
+@task
+<p>Deployment של coffee-api עם 3 replicas, readiness על <code>/ready</code> ו־liveness על <code>/health</code>. מה קורה בכל מקרה?</p>
+<ol><li>מוחקים pod אחד ידנית (<code>kubectl delete pod …</code>).</li><li>המסד נופל. <code>/ready</code> מחזיר 503, <code>/health</code> מחזיר 200.</li><li>באג: האפליקציה תקועה בלולאה, ו־<code>/health</code> לא עונה.</li><li>pod מנסה להשתמש ב־700Mi כשה־limit הוא 512Mi.</li><li>עדכון ל־image חדש שקורס מיד בעלייה.</li><li>ה־node שעליו רצים שניים מה־pods נכבה.</li></ol>
+@hint1
+<p>readiness ← "לשלוח אליי תנועה?"; liveness ← "להרוג ולהפעיל מחדש?".</p>
+@hint2
+<p>ה־Deployment כל הזמן משווה בין מה שכתוב (desired) למה שקיים (actual).</p>
+@solution
+<ol><li>ה־ReplicaSet רואה 2 במקום 3, ויוצר pod חדש תוך שניות. זה הרעיון של <strong>desired state</strong>: לא אומרים "תפעיל", אומרים "צריכים להיות 3".</li><li><strong>שום pod לא מופעל מחדש</strong> (liveness תקין). כולם יוצאים מה־endpoints של ה־Service (readiness נכשל) — הבקשות נכשלות מהר ב־Ingress במקום להיתקע, וכשהמסד חוזר, הם חוזרים לבד. אם liveness היה בודק את המסד — Kubernetes היה מפעיל מחדש את כל ה־pods בלולאה, בלי שזה עוזר בכלום (פרק 25).</li><li>אחרי <code>failureThreshold</code> כישלונות של liveness — הקונטיינר מופעל מחדש (<code>RESTARTS</code> עולה ב־<code>kubectl get pods</code>).</li><li><strong>OOMKilled</strong> — הקונטיינר נהרג ומופעל מחדש. (חריגה מ־limit של CPU לא הורגת — היא מאטה: throttling.)</li><li>ה־pods החדשים ב־<code>CrashLoopBackOff</code>, אף אחד לא Ready — וה־rolling update <strong>נעצר</strong>: הישנים לא מוסרים מעבר ל־<code>maxUnavailable</code>. האתר ממשיך לעבוד על הגרסה הישנה. <code>kubectl rollout undo</code> (או revert ב־Git, עם Argo CD — שיעור 4).</li><li>ה־scheduler יוצר שני pods חדשים על nodes אחרים (אם יש מקום — אחרת הם <code>Pending</code>, E18). ו־PodDisruptionBudget מגן מכיבוי <em>מתוכנן</em> של nodes, לא מתקלה (E11).</li></ol>
+
+@@ P25.5-E05 | 1 | Helm ו־GitOps: מה יוצא, ומי עושה מה | 20 | שיעור 4
+@task
+<p><strong>א.</strong> מה <code>helm template</code> ידפיס לשורות האלה, עם <code>values-prod.yaml</code>?</p>
+```yaml
+# templates/deployment.yaml (קטע)
+replicas: {{ .Values.replicas }}
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+{{- if .Values.resources }}
+resources: {{- toYaml .Values.resources | nindent 2 }}
+{{- end }}
+
+# values.yaml                          # values-prod.yaml
+replicas: 1                            replicas: 3
+image:                                 image:
+  repository: ghcr.io/noa-cohen/coffee-shop    tag: "1.5.0"
+  tag: ""
+resources: {}
+# Chart.yaml: appVersion: "1.4.2"
+```
+<p><strong>ב.</strong> סדר את השלבים של שינוי קוד עד שהוא בפרודקשן, וכתוב ליד כל אחד מי עושה אותו — מפתח, Jenkins או Argo CD: (1) Argo CD רואה שינוי ב־repo התצורה; (2) push ל־main; (3) build ו־push של image עם tag של ה־commit; (4) בדיקות; (5) commit ל־repo התצורה שמשנה את ה־tag; (6) rolling update ב־cluster; (7) pull request ו־review.</p>
+@hint1
+<p><code>default</code> מחזיר את ברירת המחדל כשהערך ריק. ו־values-prod <em>ממזג</em> לתוך values.yaml — לא מחליף אותו.</p>
+@hint2
+<p>ב־GitOps, Jenkins לא מדבר עם ה־cluster בכלל.</p>
+@solution
+<p><strong>א.</strong></p>
+```yaml
+replicas: 3
+image: "ghcr.io/noa-cohen/coffee-shop:1.5.0"
+```
+<p><code>replicas</code> ו־<code>image.tag</code> מ־values-prod; <code>image.repository</code> נשאר מ־values.yaml (מיזוג עמוק). <code>resources</code> הוא <code>{}</code> — ריק נחשב false ב־<code>if</code>, אז השורה לא מופיעה בכלל. בלי values-prod: <code>tag</code> ריק ← <code>default</code> ← <code>1.4.2</code> מה־Chart.</p>
+<p><strong>ב.</strong> 7 ← 2 (מפתח) · 4 ← 3 ← 5 (Jenkins) · 1 ← 6 (Argo CD). Jenkins (CI) בונה ובודק, ומסתיים ב־commit ל־repo התצורה (E25). Argo CD (CD) <strong>מושך</strong> מ־Git ומסנכרן — ל־Jenkins אין credentials ל־cluster בכלל, ו־Git הוא התיעוד של מה רץ ומתי. rollback = revert של ה־commit.</p>
+@mistakes
+<ul><li>"Jenkins מריץ <code>kubectl apply</code> בסוף" — זה push-based deploy. עובד, אבל ה־CI מחזיק מפתח ל־production, ושינוי ידני ב־cluster נשאר שם בלי שאף אחד יודע.</li></ul>
+
+@@ P25.5-E06 | 2 | JSON ב־S3 🤖 | 15 | שיעור 2
+@task
+<p>ב־<code>25w-cloud/starter/P25.5-E06.ts</code>: <code>putJson(s3, bucket, key, value)</code> שומרת ערך כ־JSON (עם Content-Type של JSON), ו־<code>getJson(s3, bucket, key)</code> מחזירה אותו — או <code>null</code> אם המפתח לא קיים. כל שגיאה <em>אחרת</em> (bucket שלא קיים, הרשאות) — נזרקת.</p>
+<p>(בכל תרגילי ה־AWS ביחידה — הבודק יוצר bucket זמני ב־LocalStack דרך <code>COURSE_AWS_ENDPOINT</code>, ומוחק אותו בסוף.)</p>
+@hint1
+<p><code>res.Body</code> הוא stream. ל־SDK יש <code>transformToString()</code>.</p>
+@hint2
+<p>ה־SDK זורק <code>NoSuchKey</code> — מחלקה שאפשר לבדוק עם <code>instanceof</code>.</p>
+@solution
+```ts save=solutions/P25.5-E06.ts
+// P25.5-E06: לשמור ולקרוא JSON ב־S3
+import { S3Client, PutObjectCommand, GetObjectCommand, NoSuchKey } from "@aws-sdk/client-s3";
+
+export async function putJson(s3: S3Client, bucket: string, key: string, value: unknown): Promise<void> {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: JSON.stringify(value),
+      ContentType: "application/json; charset=utf-8",
+    }),
+  );
+}
+
+export async function getJson<T = unknown>(s3: S3Client, bucket: string, key: string): Promise<T | null> {
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const text = await res.Body!.transformToString("utf-8");
+    return JSON.parse(text) as T;
+  } catch (err) {
+    if (err instanceof NoSuchKey) return null; // רק "אין כזה" הוא null; כל שגיאה אחרת — למעלה
+    throw err;
+  }
+}
+```
+@mistakes
+<ul><li><code>catch { return null }</code> על הכול — bucket עם שם שגוי בפרודקשן נראה כמו "אין נתונים", ואף אחד לא יודע שמשהו שבור (E22).</li></ul>
+
+@@ P25.5-E07 | 2 | העלאה ישירה ל־S3 🤖 | 25 | שיעור 2
+@task
+<p>במקום שהקובץ יעבור דרך השרת שלנו, השרת נותן ללקוח <strong>כתובת חתומה</strong> שתקפה 5 דקות, והלקוח מעלה ישירות ל־S3. ב־<code>P25.5-E07.ts</code>:</p>
+<ul><li><code>safeName(filename)</code> — רק השם (בלי נתיב), ורק <code>A-Z a-z 0-9 . _ -</code> (כל תו אחר ← <code>_</code>).</li><li><code>createUploadUrl(s3, bucket, {userId, filename, contentType, size})</code> — סוג מותר (PNG, JPEG, PDF), גודל 1 עד 5MB; מפתח <code>uploads/&lt;userId&gt;/&lt;uuid&gt;-&lt;safeName&gt;</code>; מחזירה <code>{ url, key, expiresIn: 300 }</code>.</li></ul>
+<p>הבודק מעלה קובץ עם <code>fetch</code> לכתובת שהחזרת — וקורא אותו מה־bucket.</p>
+@hint1
+<p><code>getSignedUrl(s3, new PutObjectCommand({…}), { expiresIn })</code> מ־<code>@aws-sdk/s3-request-presigner</code>. החתימה לא שולחת כלום ל־AWS — היא חישוב מקומי עם ה־credentials.</p>
+@hint2
+<p><code>ContentType</code> ו־<code>ContentLength</code> בתוך ה־command נכנסים לחתימה: הלקוח חייב לשלוח בדיוק אותם.</p>
+@solution
+```ts save=solutions/P25.5-E07.ts
+// P25.5-E07: כתובת חתומה (presigned URL) להעלאת קובץ ישירות ל־S3
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { randomUUID } from "node:crypto";
+
+export const ALLOWED_TYPES = ["image/png", "image/jpeg", "application/pdf"];
+export const MAX_BYTES = 5 * 1024 * 1024;
+export const EXPIRES_IN = 300;
+
+export interface UploadRequest {
+  userId: number;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+export function safeName(filename: string): string {
+  const base = filename.split(/[\\/]/).pop() ?? "";
+  const clean = base.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "").slice(-100);
+  return clean || "file";
+}
+
+export async function createUploadUrl(s3: S3Client, bucket: string, req: UploadRequest) {
+  if (!ALLOWED_TYPES.includes(req.contentType)) throw new Error(`סוג קובץ לא מותר: ${req.contentType}`);
+  if (!Number.isInteger(req.size) || req.size <= 0 || req.size > MAX_BYTES) throw new Error("גודל קובץ לא תקין (עד 5MB)");
+  if (!Number.isInteger(req.userId) || req.userId <= 0) throw new Error("userId לא תקין");
+  const key = `uploads/${req.userId}/${randomUUID()}-${safeName(req.filename)}`;
+  const url = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: req.contentType, ContentLength: req.size }),
+    { expiresIn: EXPIRES_IN },
+  );
+  return { url, key, expiresIn: EXPIRES_IN, headers: { "content-type": req.contentType } };
+}
+```
+<p>למה זה טוב: קובץ של 5MB לא תופס זיכרון וחיבור בשרת שלנו, ו־S3 מתמודד עם אלף העלאות במקביל. השרת עדיין מחליט <em>מי</em> מעלה, <em>מה</em> ו<em>לאן</em>. בפרודקשן מוסיפים: רשומה במסד עם ה־key (סטטוס "ממתין"), ואירוע מ־S3 כשההעלאה הסתיימה.</p>
+@mistakes
+<ul><li>להשתמש בשם הקובץ כמפתח — שני משתמשים מעלים <code>receipt.pdf</code>, והשני דורס את הראשון.</li><li>לבדוק סוג לפי סיומת השם — הלקוח שולט בה. כאן הסוג חתום בכתובת; בדיקה אמיתית של התוכן — אחרי ההעלאה.</li></ul>
+
+@@ P25.5-E08 | 2 | least privilege 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P25.5-E08.json</code>: policy ל־role של coffee-api. השירות צריך: לקרוא ולכתוב אובייקטים תחת <code>uploads/</code> ב־bucket <code>coffee-uploads</code>; לרשום (List) רק תחת <code>uploads/</code>; ולשלוח הודעות לתור <code>arn:aws:sqs:eu-central-1:123456789012:order-events</code>. ולא שום דבר אחר.</p>
+<p>הבודק (<code>tests/_iam.mjs</code>) מעריך את ה־policy כמו AWS, ומנסה פעולות מותרות ואסורות.</p>
+@hint1
+<p><code>ListBucket</code> היא פעולה על ה־bucket (בלי <code>/*</code>); הגבלה ל־prefix — ב־<code>Condition</code> עם <code>s3:prefix</code>.</p>
+@hint2
+<p><code>"Version": "2012-10-17"</code> — זה לא תאריך שלך, זו גרסת השפה.</p>
+@solution
+```json save=solutions/P25.5-E08.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadWriteUploads",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::coffee-uploads/uploads/*"
+    },
+    {
+      "Sid": "ListUploadsOnly",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::coffee-uploads",
+      "Condition": { "StringLike": { "s3:prefix": "uploads/*" } }
+    },
+    {
+      "Sid": "SendOrderEvents",
+      "Effect": "Allow",
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:eu-central-1:123456789012:order-events"
+    }
+  ]
+}
+```
+<p>ובפועל: לא כותבים את זה לבד מאפס — מתחילים מ־policy מוכנה, ובודקים עם <strong>IAM Access Analyzer</strong>, שמציע לצמצם לפי הפעולות שהשירות באמת השתמש בהן.</p>
+@mistakes
+<ul><li><code>"Resource": "arn:aws:s3:::coffee-uploads/*"</code> ל־ListBucket — לא יתאים אף פעם; ListBucket עובד על ה־bucket עצמו.</li></ul>
+
+@@ P25.5-E09 | 2 | Deployment 🤖 | 25 | שיעור 3
+@task
+<p>ב־<code>P25.5-E09.yaml</code>: Deployment בשם <code>coffee-api</code> — 3 replicas; label <code>app: coffee-api</code>; image <code>ghcr.io/noa-cohen/coffee-shop:1.4.2</code>; פורט 3000 בשם <code>http</code>; <code>DATABASE_URL</code> מ־Secret בשם <code>coffee-secrets</code> (מפתח <code>database-url</code>); requests (cpu, memory) ו־limit ל־memory; readiness על <code>/ready</code>, liveness על <code>/health</code>; ולא root.</p>
+<p>(אין צורך ב־cluster: הבודק קורא את ה־YAML ובודק אותו כמו ש־API server היה בודק את החלקים האלה.)</p>
+@hint1
+<p><code>spec.selector.matchLabels</code> חייב להתאים ל־<code>spec.template.metadata.labels</code>.</p>
+@hint2
+<p><code>valueFrom: secretKeyRef: { name, key }</code>. ו־<code>port: http</code> ב־probe — שם הפורט, אז אין מספר כפול לעדכן.</p>
+@solution
+```yaml save=solutions/P25.5-E09.yaml
+# P25.5-E09: ה־Deployment של coffee-api
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # המשתמש node מה־Dockerfile
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+```
+<p>למה limit רק ל־memory? limit של CPU גורם ל־throttling גם כשה־node פנוי; הרבה צוותים שמים רק request ל־CPU. ל־memory — limit חובה: דליפת זיכרון ב־pod אחד לא תפיל את כל ה־node.</p>
+@mistakes
+<ul><li><code>image: …:latest</code> — אי אפשר לדעת איזו גרסה רצה, ו־"rollback" מחזיר את אותו latest.</li><li>readiness ו־liveness על אותה בדיקה של המסד — ראה E04.</li></ul>
+
+@@ P25.5-E10 | 2 | Service ו־ConfigMap 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P25.5-E10.yaml</code>, שלושה מסמכים מופרדים ב־<code>---</code>: ConfigMap <code>coffee-config</code> עם <code>LOG_LEVEL=info</code>, <code>PORT=3000</code>, <code>CORS_ORIGINS=https://shop.coffee.example</code>, <code>TRUST_PROXY=1</code>; ה־Deployment <code>coffee-api</code> שטוען את כולם כ־env; ו־Service <code>coffee-api</code> (פנימי) שמקבל על פורט 80 ומעביר לפורט של הקונטיינר.</p>
+@hint1
+<p>ב־<code>data</code> של ConfigMap — רק מחרוזות. <code>3000</code> בלי מרכאות הוא מספר ב־YAML.</p>
+@hint2
+<p><code>envFrom: - configMapRef: { name: … }</code> טוען את כל המפתחות.</p>
+@solution
+```yaml save=solutions/P25.5-E10.yaml
+# P25.5-E10: Service ו־ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coffee-config
+data:
+  LOG_LEVEL: info
+  PORT: "3000"
+  CORS_ORIGINS: https://shop.coffee.example
+  TRUST_PROXY: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee-api
+spec:
+  type: ClusterIP
+  selector:
+    app: coffee-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: coffee-config
+```
+<p>ה־Service נותן שם DNS יציב — <code>coffee-api</code> (או המלא, <code>coffee-api.&lt;namespace&gt;.svc.cluster.local</code>) — ומחלק בקשות בין ה־pods שה־selector שלו תופס <em>ושהם Ready</em>. pods נוצרים ומתים, ה־IP שלהם משתנה; השם נשאר.</p>
+@mistakes
+<ul><li>שינוי ב־ConfigMap לא מגיע ל־pods שכבר רצים (env נקרא בעלייה). צריך rollout — <code>kubectl rollout restart</code>, או ב־Helm: checksum של ה־ConfigMap כ־annotation (שיעור 4).</li></ul>
+
+@@ P25.5-E11 | 2 | autoscaling ו־PDB 🤖 | 15 | שיעור 3
+@task
+<p>ב־<code>P25.5-E11.yaml</code>: HorizontalPodAutoscaler (<code>autoscaling/v2</code>) ל־Deployment <code>coffee-api</code> — 3 עד 10 עותקים, יעד 70% CPU, וירידה רק אחרי 5 דקות יציבות; ו־PodDisruptionBudget שמבטיח לפחות 2 pods זמינים בזמן תחזוקה של nodes.</p>
+@hint1
+<p>אחוז ה־CPU הוא מתוך ה־<em>request</em> — בלי requests ל־CPU ה־HPA לא יודע לחשב (E09).</p>
+@hint2
+<p><code>behavior.scaleDown.stabilizationWindowSeconds</code>.</p>
+@solution
+```yaml save=solutions/P25.5-E11.yaml
+# P25.5-E11: HorizontalPodAutoscaler ו־PodDisruptionBudget
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coffee-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coffee-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coffee-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coffee-api
+```
+<p>ה־HPA קורא מדדים מ־metrics-server כל 15 שניות בערך, ומחשב <code>ceil(עותקים × נוכחי / יעד)</code>: 3 עותקים ב־140% ← 6. עלייה מהר, ירידה לאט — כדי לא "לנשום" למעלה ולמטה כל דקה.</p>
+
+@@ P25.5-E12 | 2 | סודות כקבצים: *_FILE 🤖 | 20 | שיעור 3
+@task
+<p>Kubernetes יכול לתת Secret כ־env, או כ<strong>קובץ</strong> (volume) — עדיף, כי env דולף ל־<code>/proc</code>, לדוחות קריסה ולילדים של התהליך. המוסכמה (של Docker ושל הרבה images רשמיים): אם <code>X_FILE</code> מוגדר — קוראים את <code>X</code> מהקובץ. ב־<code>P25.5-E12.ts</code>: <code>loadConfig(env, readFile)</code> ל־<code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>REDIS_URL</code> (חובה) ו־<code>PORT</code> (ברירת מחדל 3000):</p>
+<ul><li><code>X_FILE</code> ← תוכן הקובץ, בלי ה־newline שבסוף. קובץ שלא נקרא או ריק ← שגיאה עם <code>X_FILE</code>.</li><li><code>X</code> ו־<code>X_FILE</code> שניהם ← שגיאה. מחרוזת ריקה = חסר.</li><li>חסרות כמה ← שגיאה <em>אחת</em> שמונה את כולן.</li></ul>
+@hint1
+<p><code>readFile</code> מוזרק — בבדיקה הוא אובייקט בזיכרון, באפליקציה <code>(p) =&gt; fs.readFileSync(p, "utf8")</code>.</p>
+@hint2
+<p>"בלי ה־newline שבסוף" — רק שורה אחת אחרונה. <code>trim()</code> היה מוחק גם רווח שהוא חלק מהסיסמה.</p>
+@solution
+```ts save=solutions/P25.5-E12.ts
+// P25.5-E12: הגדרות מ־env, עם המוסכמה *_FILE לסודות (Kubernetes Secret שמורכב כקובץ)
+export interface AppConfig {
+  databaseUrl: string;
+  jwtSecret: string;
+  redisUrl: string;
+  port: number;
+}
+
+type ReadFile = (path: string) => string;
+
+const REQUIRED = { databaseUrl: "DATABASE_URL", jwtSecret: "JWT_SECRET", redisUrl: "REDIS_URL" } as const;
+
+export function readSetting(env: Record<string, string | undefined>, name: string, readFile: ReadFile): string | undefined {
+  const direct = env[name];
+  const file = env[`${name}_FILE`];
+  if (direct !== undefined && file !== undefined) throw new Error(`${name} ו־${name}_FILE מוגדרים שניהם — בחר אחד`);
+  if (file !== undefined) {
+    let text: string;
+    try {
+      text = readFile(file);
+    } catch {
+      throw new Error(`${name}_FILE: אי אפשר לקרוא את ${file}`);
+    }
+    const value = text.replace(/\r?\n$/, "");
+    if (!value) throw new Error(`${name}_FILE: הקובץ ${file} ריק`);
+    return value;
+  }
+  return direct === "" ? undefined : direct;
+}
+
+export function loadConfig(env: Record<string, string | undefined>, readFile: ReadFile): AppConfig {
+  const missing: string[] = [];
+  const out: Record<string, string> = {};
+  for (const [key, name] of Object.entries(REQUIRED)) {
+    const v = readSetting(env, name, readFile);
+    if (v === undefined) missing.push(name);
+    else out[key] = v;
+  }
+  if (missing.length) throw new Error(`חסרות הגדרות: ${missing.join(", ")}`);
+  const port = Number(env.PORT ?? "3000");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`PORT לא תקין: ${env.PORT}`);
+  return { databaseUrl: out.databaseUrl, jwtSecret: out.jwtSecret, redisUrl: out.redisUrl, port };
+}
+```
+@mistakes
+<ul><li><code>value.trim()</code> — סיסמה שמסתיימת ברווח (נדיר, אבל קורה) נשברת בשקט.</li></ul>
+
+@@ P25.5-E13 | 3 | מעריך policies 🤖 | 25 | שיעור 2
+@task
+<p>ב־<code>P25.5-E13.ts</code>, הלוגיקה ש־AWS מריץ על כל קריאה (בגרסה מצומצמת):</p>
+<ul><li><code>wildcardMatch(pattern, value, ignoreCase?)</code> — <code>*</code> = כל רצף (גם ריק), <code>?</code> = תו אחד. כל תו אחר — כפשוטו.</li><li><code>evaluate(policies, action, resource)</code> — <code>"explicit-deny"</code> אם statement כלשהו עם <code>Deny</code> מתאים; אחרת <code>"allow"</code> אם יש <code>Allow</code> מתאים; אחרת <code>"implicit-deny"</code>. Action ו־Resource — מחרוזת או מערך; שם הפעולה לא רגיש לרישיות, ה־ARN כן.</li></ul>
+@hint1
+<p>הדרך הקצרה ל־wildcard: לבנות RegExp — אבל קודם לברוח (escape) מכל תו מיוחד, אחרת <code>.</code> ב־ARN מתאים לכל תו.</p>
+@hint2
+<p>Deny אפשר להחזיר מיד. Allow — רק לזכור, כי Deny מאוחר יותר עדיין מנצח.</p>
+@solution
+```ts save=solutions/P25.5-E13.ts
+// P25.5-E13: להעריך IAM policy — כמו ש־AWS מחליט
+export interface Statement {
+  Effect: "Allow" | "Deny";
+  Action: string | string[];
+  Resource: string | string[];
+}
+export interface Policy {
+  Version: string;
+  Statement: Statement[];
+}
+export type Decision = "allow" | "explicit-deny" | "implicit-deny";
+
+const list = (x: string | string[]) => (Array.isArray(x) ? x : [x]);
+
+export function wildcardMatch(pattern: string, value: string, ignoreCase = false): boolean {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  return new RegExp(`^${escaped}$`, ignoreCase ? "i" : "").test(value);
+}
+
+export function evaluate(policies: Policy[], action: string, resource: string): Decision {
+  let allowed = false;
+  for (const p of policies) {
+    for (const s of p.Statement) {
+      const hit =
+        list(s.Action).some((a) => wildcardMatch(a, action, true)) && // שמות פעולות לא רגישים לרישיות
+        list(s.Resource).some((r) => wildcardMatch(r, resource)); // ARN רגיש
+      if (!hit) continue;
+      if (s.Effect === "Deny") return "explicit-deny"; // Deny מפורש מנצח תמיד
+      allowed = true;
+    }
+  }
+  return allowed ? "allow" : "implicit-deny";
+}
+```
+<p>באמת יש עוד שכבות: policies של ה־bucket עצמו (resource-based), Permission Boundaries, Service Control Policies של הארגון, ו־Conditions. העיקרון לא משתנה: Deny מפורש בכל שכבה מנצח.</p>
+
+@@ P25.5-E14 | 3 | כמויות של Kubernetes 🤖 | 15 | שיעור 3
+@task
+<p>ב־<code>P25.5-E14.ts</code>: <code>parseCpu(q)</code> ← millicores (<code>"250m"</code> ← 250, <code>"0.5"</code> ← 500, <code>2</code> ← 2000; פחות ממילי־ליבה או פורמט לא מוכר ← שגיאה); <code>parseMemory(q)</code> ← בתים, כש־<code>Ki/Mi/Gi/Ti</code> הם חזקות של 1024 ו־<code>k/M/G/T</code> של 1000; ו־<code>formatMemory(bytes)</code> ← היחידה הבינארית הגדולה ביותר שמחלקת בדיוק.</p>
+@hint1
+<p><code>"512M"</code> הוא 512,000,000 — כמעט 25MB פחות מ־<code>"512Mi"</code>. טעות נפוצה ב־limits.</p>
+@hint2
+<p>regex אחד: <code>/^(\d+(?:\.\d+)?)(Ki|Mi|…)?$/</code>.</p>
+@solution
+```ts save=solutions/P25.5-E14.ts
+// P25.5-E14: כמויות של Kubernetes — CPU ו־memory
+const BINARY: Record<string, number> = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40 };
+const DECIMAL: Record<string, number> = { k: 1e3, M: 1e6, G: 1e9, T: 1e12 };
+
+// מחזיר millicores: "250m" ← 250, "1" ← 1000, "0.5" ← 500
+export function parseCpu(q: string | number): number {
+  const s = String(q).trim();
+  const m = /^(\d+(?:\.\d+)?)(m?)$/.exec(s);
+  if (!m) throw new Error(`CPU לא תקין: ${q}`);
+  const n = Number(m[1]);
+  const milli = m[2] ? n : n * 1000;
+  if (!Number.isInteger(milli)) throw new Error(`CPU לא תקין (פחות ממילי־ליבה): ${q}`);
+  return milli;
+}
+
+// מחזיר בתים: "512Mi" ← 536870912, "1G" ← 1e9
+export function parseMemory(q: string | number): number {
+  const s = String(q).trim();
+  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/.exec(s);
+  if (!m) throw new Error(`memory לא תקין: ${q}`);
+  const unit = m[2] ? (BINARY[m[2]] ?? DECIMAL[m[2]]) : 1;
+  return Math.round(Number(m[1]) * unit);
+}
+
+export function formatMemory(bytes: number): string {
+  for (const u of ["Gi", "Mi", "Ki"]) if (bytes >= BINARY[u] && bytes % BINARY[u] === 0) return `${bytes / BINARY[u]}${u}`;
+  return String(bytes);
+}
+```
+@mistakes
+<ul><li><code>"250M"</code> כ־CPU — זה לא "250 מילי", זה 250 מיליון ליבות (ו־Kubernetes דוחה). <code>m</code> קטנה.</li></ul>
+
+@@ P25.5-E15 | 3 | Application של Argo CD 🤖 | 15 | שיעור 4
+@task
+<p>ב־<code>P25.5-E15.yaml</code>: Application בשם <code>coffee-api-prod</code> (ב־namespace <code>argocd</code>) שמסנכרן את ה־Helm chart ב־<code>charts/coffee-api</code> מ־<code>https://github.com/noa-cohen/coffee-deploy.git</code> (ענף main), עם <code>values-prod.yaml</code>, אל namespace <code>coffee</code> ב־cluster שבו Argo CD רץ. סנכרון אוטומטי: למחוק משאבים שנמחקו מ־Git, ולהחזיר שינויים ידניים. ואם ה־namespace לא קיים — ליצור אותו.</p>
+@hint1
+<p>"ה־cluster שבו Argo CD רץ" — <code>https://kubernetes.default.svc</code>.</p>
+@hint2
+<p><code>syncPolicy.automated: { prune, selfHeal }</code>, ו־<code>syncOptions</code>.</p>
+@solution
+```yaml save=solutions/P25.5-E15.yaml
+# P25.5-E15: Argo CD Application — Argo CD מושך את ה־chart מ־repo התצורה ושומר את ה־cluster מסונכרן
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coffee-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/noa-cohen/coffee-deploy.git
+    targetRevision: main
+    path: charts/coffee-api
+    helm:
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: coffee
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+<p><strong>selfHeal</strong>: מישהו הריץ <code>kubectl scale --replicas=1</code> בלילה — Argo CD מחזיר ל־3 תוך דקות. מה שב־Git הוא האמת. ושינוי אמיתי? pull request ל־repo התצורה.</p>
+
+@@ P25.5-E16 | 3 | Jenkinsfile 🤖 | 25 | שיעור 5
+@task
+<p>ב־<code>P25.5-E16.Jenkinsfile</code>: declarative pipeline ל־coffee-api. agent ב־Docker עם <code>node:24-alpine</code>; timeout של 20 דקות; stages בסדר: <code>Install</code> (npm ci), <code>Lint &amp; Typecheck</code>, <code>Test</code>, <code>Build image</code>, <code>Push image</code> — האחרון רק ב־main, עם credentials שמורים ב־Jenkins (id: <code>ghcr</code>) ו־<code>--password-stdin</code>; ו־<code>post { always { … } }</code> שמפרסם דוח בדיקות.</p>
+<p>(הבודק — <code>tests/_jenkins.mjs</code> — קורא את מבנה הבלוקים, כמו ה־Pipeline Linter של Jenkins.)</p>
+@hint1
+<p><code>withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: '…', passwordVariable: '…')]) { … }</code>.</p>
+@hint2
+<p>בתוך <code>sh</code>, מרכאות <strong>בודדות</strong>: ה־shell מציב את המשתנה, לא Groovy — אז הסוד לא נכנס למחרוזת של ה־pipeline.</p>
+@solution
+```groovy save=solutions/P25.5-E16.Jenkinsfile
+// P25.5-E16: pipeline של coffee-api ב־Jenkins
+pipeline {
+  agent { docker { image 'node:24-alpine' } }
+
+  options {
+    timeout(time: 20, unit: 'MINUTES')
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    IMAGE = 'ghcr.io/noa-cohen/coffee-shop'
+    TAG = "${env.GIT_COMMIT.take(7)}"
+  }
+
+  stages {
+    stage('Install') {
+      steps {
+        sh 'npm ci'
+      }
+    }
+    stage('Lint & Typecheck') {
+      steps {
+        sh 'npm run lint'
+        sh 'npm run typecheck'
+      }
+    }
+    stage('Test') {
+      steps {
+        sh 'npm test'
+      }
+    }
+    stage('Build image') {
+      steps {
+        sh 'docker build -t $IMAGE:$TAG .'
+      }
+    }
+    stage('Push image') {
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: 'REG_USER', passwordVariable: 'REG_TOKEN')]) {
+          sh 'echo $REG_TOKEN | docker login ghcr.io -u $REG_USER --password-stdin'
+          sh 'docker push $IMAGE:$TAG'
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+    }
+    failure {
+      echo "Build failed: ${env.BUILD_URL}"
+    }
+  }
+}
+```
+<p>זה אותו CI מפרק 25, בשפה אחרת: stages ← jobs/steps, <code>when { branch 'main' }</code> ← <code>if: github.ref == 'refs/heads/main'</code>, Credentials ← Secrets. Jenkins נפוץ בחברות עם שרתים משלהן ו־pipelines בני עשר שנים — מי שמכיר אחד, לומד את השני ביום.</p>
+@mistakes
+<ul><li><code>sh "docker login -p ${REG_TOKEN}"</code> — Groovy מציב את הסוד לתוך הפקודה, Jenkins מזהיר "insecure interpolation", והסיסמה גלויה ב־<code>ps</code>.</li></ul>
+
+@@ P25.5-E17 | 3 | rolling update בצעדים 🤖 | 25 | שיעור 3
+@task
+<p>ב־<code>P25.5-E17.ts</code>:</p>
+<ul><li><code>rolloutBounds(replicas, maxSurge, maxUnavailable)</code> ← <code>{ maxPods, minAvailable }</code>. כל אחד — מספר או אחוז (<code>"25%"</code>); אחוז של surge מעוגל <strong>למעלה</strong>, של unavailable <strong>למטה</strong> (כמו Kubernetes). שניהם 0 (אחרי עיגול) ← שגיאה.</li><li><code>simulateRollout(…)</code> ← <code>{ maxPods, minAvailable, steps }</code>, כש־<code>steps</code> הוא רשימת <code>{ old, new }</code> מ־<code>{replicas, 0}</code> עד <code>{0, replicas}</code>. בכל צעד: קודם מורידים כמה שיותר ישנים בלי לרדת מתחת ל־minAvailable (סופרים ישנים + חדשים שכבר היו בתחילת הצעד), ואז מוסיפים כמה שיותר חדשים בלי לעבור את maxPods. החדשים מוכנים בסוף הצעד.</li></ul>
+@hint1
+<p>4 עותקים, surge 1, unavailable 0: <code>4/0 4/1 3/2 2/3 1/4 0/4</code>.</p>
+@hint2
+<p>להסיר: <code>min(old, old + new - minAvailable)</code>. להוסיף: <code>min(replicas - new, maxPods - old - new)</code>.</p>
+@solution
+```ts save=solutions/P25.5-E17.ts
+// P25.5-E17: rolling update — כמה pods מותר, ואיך ה־rollout מתקדם
+export type Amount = number | `${number}%`;
+
+function resolve(amount: Amount, replicas: number, round: (n: number) => number, name: string): number {
+  if (typeof amount === "number") {
+    if (!Number.isInteger(amount) || amount < 0) throw new Error(`${name} לא תקין: ${amount}`);
+    return amount;
+  }
+  const m = /^(\d+)%$/.exec(amount);
+  if (!m) throw new Error(`${name} לא תקין: ${amount}`);
+  return round((replicas * Number(m[1])) / 100);
+}
+
+export function rolloutBounds(replicas: number, maxSurge: Amount, maxUnavailable: Amount) {
+  if (!Number.isInteger(replicas) || replicas < 1) throw new Error("replicas חייב להיות לפחות 1");
+  const surge = resolve(maxSurge, replicas, Math.ceil, "maxSurge"); // Kubernetes: surge מעגל למעלה
+  const unavailable = resolve(maxUnavailable, replicas, Math.floor, "maxUnavailable"); // unavailable — למטה
+  if (surge === 0 && unavailable === 0) throw new Error("maxSurge ו־maxUnavailable לא יכולים להיות שניהם 0 — ה־rollout לא יתקדם");
+  return { maxPods: replicas + surge, minAvailable: replicas - unavailable };
+}
+
+export interface Snapshot {
+  old: number;
+  new: number;
+}
+
+// מודל פשוט: pods חדשים שנוצרו בצעד מוכנים (ready) בסוף הצעד
+export function simulateRollout(replicas: number, maxSurge: Amount, maxUnavailable: Amount) {
+  const { maxPods, minAvailable } = rolloutBounds(replicas, maxSurge, maxUnavailable);
+  let oldPods = replicas;
+  let newPods = 0;
+  const steps: Snapshot[] = [{ old: oldPods, new: newPods }];
+  while (oldPods > 0 || newPods < replicas) {
+    const remove = Math.max(0, Math.min(oldPods, oldPods + newPods - minAvailable));
+    oldPods -= remove;
+    const add = Math.max(0, Math.min(replicas - newPods, maxPods - oldPods - newPods));
+    newPods += add;
+    if (remove === 0 && add === 0) throw new Error("ה־rollout תקוע");
+    steps.push({ old: oldPods, new: newPods });
+  }
+  return { maxPods, minAvailable, steps };
+}
+```
+<p>הבחירה בפועל: <code>maxUnavailable: 0</code> + <code>maxSurge: 1</code> — אף פעם לא פחות קיבולת, אבל איטי ודורש מקום ל־pod נוסף. <code>25%/25%</code> (ברירת המחדל של Kubernetes) — מהר יותר. <code>maxSurge: 0</code> — כשאין מקום פנוי ב־cluster.</p>
+
+@@ P25.5-E18 | 3 | scheduler קטן 🤖 | 25 | שיעור 3
+@task
+<p>ב־<code>P25.5-E18.ts</code>: <code>schedule(nodes, pods)</code> — מסדרים את ה־pods מהגדול לקטן (CPU, אחר כך memory, אחר כך שם), וכל אחד הולך ל־node הראשון ברשימה שיש בו מספיק CPU <em>וגם</em> memory פנויים. מחזירה <code>{ placements, pending, free }</code>. (<code>parseCpu</code> ו־<code>parseMemory</code> מוכנות בקובץ.)</p>
+@hint1
+<p>מפה של משאבים פנויים לכל node, ולהוריד ממנה בכל השמה.</p>
+@hint2
+<p>הגדולים קודם (first-fit decreasing) — אחרת קטנים "מפוררים" את המקום, וה־pod הגדול נשאר Pending גם כשבסך הכול יש מספיק.</p>
+@solution
+```ts save=solutions/P25.5-E18.ts
+// P25.5-E18: scheduler קטן — לאיזה node כל pod הולך (לפי requests)
+export interface NodeSpec {
+  name: string;
+  cpu: string;
+  memory: string;
+}
+export interface PodSpec {
+  name: string;
+  cpu: string;
+  memory: string;
+}
+
+// מוכנות (מ־E14)
+export const parseCpu = (q: string) => (q.endsWith("m") ? Number(q.slice(0, -1)) : Number(q) * 1000);
+const UNITS: Record<string, number> = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, k: 1e3, M: 1e6, G: 1e9 };
+export const parseMemory = (q: string) => {
+  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|k|M|G)?$/.exec(q)!;
+  return Math.round(Number(m[1]) * (m[2] ? UNITS[m[2]] : 1));
+};
+
+export function schedule(nodes: NodeSpec[], pods: PodSpec[]) {
+  const free = new Map(nodes.map((n) => [n.name, { cpu: parseCpu(n.cpu), memory: parseMemory(n.memory) }]));
+  const order = pods
+    .map((p) => ({ name: p.name, cpu: parseCpu(p.cpu), memory: parseMemory(p.memory) }))
+    .sort((a, b) => b.cpu - a.cpu || b.memory - a.memory || a.name.localeCompare(b.name)); // הגדולים קודם
+  const placements: Record<string, string> = {};
+  const pending: string[] = [];
+  for (const pod of order) {
+    const node = nodes.find((n) => {
+      const f = free.get(n.name)!;
+      return f.cpu >= pod.cpu && f.memory >= pod.memory;
+    });
+    if (!node) {
+      pending.push(pod.name);
+      continue;
+    }
+    const f = free.get(node.name)!;
+    f.cpu -= pod.cpu;
+    f.memory -= pod.memory;
+    placements[pod.name] = node.name;
+  }
+  return { placements, pending, free: Object.fromEntries(free) };
+}
+```
+<p>ה־scheduler האמיתי מחליט לפי <strong>requests</strong> — לא לפי השימוש בפועל. pod עם request של 100m שמשתמש ב־2 ליבות "לא תופס מקום" מבחינת ה־scheduler, ומאט את השכנים. לכן requests קרובים למציאות, מתוך המדדים.</p>
+
+@@ P25.5-E19 | 3 | pagination ב־S3 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P25.5-E19.ts</code>: <code>listAllKeys(s3, bucket, prefix, pageSize?)</code> — <strong>כל</strong> המפתחות תחת prefix (ListObjectsV2 מחזיר עד 1000 בכל קריאה); ו־<code>deletePrefix(s3, bucket, prefix)</code> — מוחקת את כולם ב־DeleteObjects (עד 1000 בבקשה), זורקת אם חלק נכשל, ומחזירה כמה נמחקו. prefix ריק, או כזה שלא נגמר ב־<code>/</code> ← שגיאה, בלי למחוק כלום.</p>
+@hint1
+<p><code>IsTruncated</code> ו־<code>NextContinuationToken</code> — ובקריאה הבאה <code>ContinuationToken</code>.</p>
+@hint2
+<p>DeleteObjects לא זורק כשחלק נכשל — הוא מחזיר <code>Errors</code>.</p>
+@solution
+```ts save=solutions/P25.5-E19.ts
+// P25.5-E19: לרשום ולמחוק לפי prefix — עם pagination
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+
+export async function listAllKeys(s3: S3Client, bucket: string, prefix: string, pageSize = 1000): Promise<string[]> {
+  const keys: string[] = [];
+  let token: string | undefined;
+  do {
+    const page = await s3.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: pageSize, ContinuationToken: token }),
+    );
+    for (const o of page.Contents ?? []) keys.push(o.Key!);
+    token = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (token);
+  return keys;
+}
+
+export async function deletePrefix(s3: S3Client, bucket: string, prefix: string): Promise<number> {
+  if (!prefix || !prefix.endsWith("/")) throw new Error('prefix חייב להיות תיקייה שמסתיימת ב־"/" (ולא ריק — זה כל ה־bucket)');
+  const keys = await listAllKeys(s3, bucket, prefix);
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const res = await s3.send(
+      new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true } }),
+    );
+    if (res.Errors?.length) throw new Error(`מחיקה נכשלה: ${res.Errors[0].Key} — ${res.Errors[0].Message}`);
+  }
+  return keys.length;
+}
+```
+@mistakes
+<ul><li>קריאה אחת ל־ListObjectsV2 — עובד בפיתוח (30 קבצים), ומוחק "הכול" בפרודקשן חוץ מכל מה שאחרי האלף הראשון.</li><li><code>deletePrefix("uploads/42")</code> מוחק גם את <code>uploads/420/…</code> — prefix הוא מחרוזת, לא תיקייה.</li></ul>
+
+@@ P25.5-E20 | 4 | Deployment שלא עולה — ארבע תקלות 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P25.5-E20.yaml</code>: <code>kubectl apply</code> נכשל. אחרי תיקון אחד הוא עובר — אבל ה־pods לא נהיים Ready, וה־rollout תקוע. ובנוסף, אחרי rollback "לגרסה הקודמת" רץ אותו קוד. מצא ותקן ארבע תקלות — בלי לשנות את ה־requests.</p>
+@hint1
+<p>הודעת השגיאה של apply: <code>selector does not match template labels</code>. ומה עוד ה־API server דוחה? limit מול request.</p>
+@hint2
+<p>על איזה פורט האפליקציה מאזינה, ועל איזה ה־readiness בודק?</p>
+@solution
+```yaml save=solutions/P25.5-E20.yaml
+# P25.5-E20: ה־Deployment אחרי התיקון
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api # תיקון 1: זהה ל־labels של ה־template
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2 # תיקון 4: גרסה קבועה, לא latest
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http # תיקון 2: הפורט שהאפליקציה מאזינה לו
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              cpu: "1" # תיקון 3: limit לא קטן מה־request
+              memory: 512Mi
+```
+@mistakes
+<ul><li>לתקן את ה־selector על ידי שינוי ה־labels של ה־template ל־<code>app: coffee</code> — עובד כאן, אבל ה־Service (E10) בוחר <code>app: coffee-api</code>, ואז אין לו endpoints.</li><li>"לתקן" את ה־readiness על ידי מחיקה שלו — ה־pods "Ready" מיד, ומקבלים תנועה לפני שהאפליקציה עלתה.</li></ul>
+
+@@ P25.5-E21 | 4 | AccessDenied — ופתוח מדי 🤖 | 15 | שיעור 2
+@task
+<p>ה־worker שמקטין תמונות מקבל <code>AccessDenied</code> על כל <code>GetObject</code>, למרות ש"נתנו לו s3:*". והביקורת האבטחתית מצאה שה־policy שלו, ב־<code>P25.5-E21.json</code>, רחבה מדי. מה הוא צריך: לקרוא מ־<code>uploads/</code>, לכתוב ל־<code>thumbnails/</code> (שניהם ב־<code>coffee-uploads</code>), ולצרוך הודעות מהתור <code>arn:aws:sqs:eu-central-1:123456789012:image-jobs</code> (לקבל, למחוק, להאריך visibility). תקן.</p>
+@hint1
+<p>ה־ARN של bucket לא כולל את האובייקטים שבתוכו.</p>
+@hint2
+<p>לצרוך הודעה ב־SQS = <code>ReceiveMessage</code> + <code>DeleteMessage</code> (אחרי טיפול), ולפעמים <code>ChangeMessageVisibility</code>.</p>
+@solution
+```json save=solutions/P25.5-E21.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOriginals",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::coffee-uploads/uploads/*"
+    },
+    {
+      "Sid": "WriteThumbnails",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::coffee-uploads/thumbnails/*"
+    },
+    {
+      "Sid": "ConsumeImageJobs",
+      "Effect": "Allow",
+      "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility"],
+      "Resource": "arn:aws:sqs:eu-central-1:123456789012:image-jobs"
+    }
+  ]
+}
+```
+<p>שלוש תקלות: <code>Resource</code> של bucket לפעולות על אובייקטים (הסיבה ל־AccessDenied); <code>s3:*</code> — worker פרוץ יכול למחוק הכול או לשנות את ה־bucket policy; ו־<code>sqs:*</code> על <code>*</code> — כל תור בחשבון, כולל מחיקת תורים.</p>
+
+@@ P25.5-E22 | 4 | הדשבורד מראה "אין מכירות" — שלוש תקלות 🤖 | 15 | שיעור 2
+@task
+<p>ב־<code>P25.5-E22.ts</code>: הדוחות נשמרים ב־S3 (רואים אותם בקונסולה), אבל <code>loadReport</code> מחזיר <code>null</code> על כל יום. וכשמישהו פותח דוח בדפדפן — הוא יורד כקובץ במקום להיפתח. מצא ותקן שלוש תקלות.</p>
+@hint1
+<p>הוסף <code>console.log</code> ב־catch. מה הטיפוס של <code>res.Body</code>?</p>
+@hint2
+<p>למה הבאג הראשון היה בלתי נראה? בגלל השני.</p>
+@solution
+```ts save=solutions/P25.5-E22.ts
+// P25.5-E22: דוחות יומיים ב־S3 — אחרי התיקון
+import { S3Client, PutObjectCommand, GetObjectCommand, NoSuchKey } from "@aws-sdk/client-s3";
+
+export interface ReportRow {
+  productId: number;
+  sold: number;
+}
+
+const keyFor = (date: string) => `reports/daily/${date}.json`;
+
+export async function saveReport(s3: S3Client, bucket: string, date: string, rows: ReportRow[]) {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: keyFor(date),
+      Body: JSON.stringify(rows),
+      ContentType: "application/json", // תיקון 3: בלי זה — binary/octet-stream
+    }),
+  );
+}
+
+export async function loadReport(s3: S3Client, bucket: string, date: string): Promise<ReportRow[] | null> {
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: keyFor(date) }));
+    return JSON.parse(await res.Body!.transformToString()); // תיקון 1: Body הוא stream
+  } catch (err) {
+    if (err instanceof NoSuchKey) return null; // תיקון 2: רק "אין דוח" הוא null
+    throw err;
+  }
+}
+```
+<p>הלקח הוא בשניים יחד: <code>String(res.Body)</code> נותן <code>"[object IncomingMessage]"</code>, <code>JSON.parse</code> זורק — וה־catch הכללי הופך את זה ל"אין דוח". catch שבולע הכול לא רק מסתיר תקלות עתידיות; הוא הסתיר את הבאג שכבר היה.</p>
+
+@@ P25.5-E23 | 4 | pipeline "שעובד" — ארבע תקלות 🤖 | 15 | שיעור 5
+@task
+<p>ה־pipeline ב־<code>P25.5-E23.Jenkinsfile</code> ירוק כבר חודש. מצא ותקן ארבעה דברים שלא בסדר בו (רמז: אחד מהם צריך גם לבטל token ב־GitHub, מיד).</p>
+@hint1
+<p>מה קורה כשמישהו עושה push לענף <code>feature/try-something</code>?</p>
+@hint2
+<p><code>credentials('ghcr')</code> ב־<code>environment</code> של משתמש וסיסמה יוצר שני משתנים: <code>REG_USR</code> ו־<code>REG_PSW</code>.</p>
+@solution
+```groovy save=solutions/P25.5-E23.Jenkinsfile
+// P25.5-E23: אחרי התיקון
+pipeline {
+  agent { docker { image 'node:24-alpine' } }
+  options {
+    timeout(time: 20, unit: 'MINUTES') // תיקון 4: build תקוע לא תופס executor לנצח
+  }
+  environment {
+    REG = credentials('ghcr') // תיקון 1: מ־Jenkins Credentials — יוצר REG_USR ו־REG_PSW, ומסתיר בלוג
+  }
+  stages {
+    stage('Install') {
+      steps {
+        sh 'npm ci' // תיקון 2: בדיוק לפי package-lock
+      }
+    }
+    stage('Test') {
+      steps {
+        sh 'npm test'
+      }
+    }
+    stage('Push') {
+      when { branch 'main' } // תיקון 3: רק מ־main
+      steps {
+        sh 'echo $REG_PSW | docker login ghcr.io -u $REG_USR --password-stdin'
+        sh 'docker build -t ghcr.io/noa-cohen/coffee-shop:$GIT_COMMIT .'
+        sh 'docker push ghcr.io/noa-cohen/coffee-shop:$GIT_COMMIT'
+      }
+    }
+  }
+}
+```
+<p>וה־token שהיה בקובץ — <strong>מבטלים ב־GitHub עכשיו</strong>. הוא ב־history של ה־repo לתמיד, גם אחרי שמחקת את השורה.</p>
+@mistakes
+<ul><li>להעביר את ה־token ל־<code>environment</code> של ה־job בממשק של Jenkins כטקסט רגיל — הוא עדיין לא מוסתר בלוג. Credentials בלבד.</li></ul>
+
+@@ P25.5-E24 | 5 | אתגר: חנות הקפה ב־Kubernetes 🤖 | 60 | שיעור 5
+@task
+<p>ב־<code>P25.5-E24.yaml</code> — כל מה שצריך כדי להריץ את coffee-shop (פרויקט 3) ב־cluster, ב־namespace <code>coffee</code>:</p>
+<ul><li>Namespace, ו־ConfigMap עם ההגדרות הלא־סודיות.</li><li>Job שמריץ <code>npx prisma migrate deploy</code> באותו image — פעם אחת, עם מעט ניסיונות.</li><li>Deployment <code>coffee-api</code>: image עם גרסה, לפחות 2 עותקים, rolling update בלי ירידה בזמינות, probes, resources, לא root; ההגדרות מה־ConfigMap, ו־<code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>REDIS_URL</code> מ־Secret בשם <code>coffee-secrets</code> (מפתחות <code>database-url</code>, <code>jwt-secret</code>, <code>redis-url</code>) — שלא נמצא בקובץ.</li><li>Service, ו־Ingress ל־<code>api.coffee.example</code> עם TLS.</li><li>HPA ו־PodDisruptionBudget.</li></ul>
+<p>הבודק מצליב: שכל selector תופס את ה־pods, שה־Ingress מצביע על פורט שקיים ב־Service, שה־ConfigMap קיים, ושה־Job מריץ את אותה גרסה כמו ה־API.</p>
+@hint1
+<p>התחל מ־E09 ו־E10 ו־E11 — ואז הוסף namespace לכל אובייקט.</p>
+@hint2
+<p>ה־port ב־Ingress הוא של ה־<strong>Service</strong> (80 או השם שלו), לא של הקונטיינר.</p>
+@solution
+```yaml save=solutions/P25.5-E24.yaml
+# P25.5-E24: coffee-shop ב־Kubernetes — כל ה־manifests
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: coffee
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coffee-config
+  namespace: coffee
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  PORT: "3000"
+  TRUST_PROXY: "1"
+  CORS_ORIGINS: https://shop.coffee.example
+---
+# migrations רצות פעם אחת לפני ה־rollout (Argo CD: sync wave קודם; ידנית: kubectl apply ל־Job, ואז ל־Deployment)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coffee-migrate
+  namespace: coffee
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          command: ["npx", "prisma", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  namespace: coffee
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: coffee-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: redis-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  selector:
+    app: coffee-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.coffee.example
+      secretName: coffee-api-tls
+  rules:
+    - host: api.coffee.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: coffee-api
+                port:
+                  name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coffee-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coffee-api
+```
+<p>ה־Secret עצמו נוצר מחוץ ל־Git: <code>kubectl create secret generic coffee-secrets --from-literal=…</code>, או — בצורה המקובלת — <strong>External Secrets Operator</strong> שמושך מ־AWS Secrets Manager. ולהריץ את זה באמת על המחשב: <code>kind create cluster</code> (Kubernetes בתוך Docker), <code>kubectl apply -f P25.5-E24.yaml</code>, ו־<code>kubectl get pods -n coffee -w</code>.</p>
+@mistakes
+<ul><li>migrations בתוך ה־<code>CMD</code> של ה־API — עם 3 עותקים, שלושה תהליכים מריצים את אותו migration במקביל.</li><li>Secret עם <code>data:</code> ב־YAML שב־Git — base64 הוא קידוד, לא הצפנה.</li></ul>
+
+@@ P25.5-E25 | 5 | אתגר: עדכון tag ב־repo התצורה 🤖 | 45 | שיעור 4
+@task
+<p>הצעד האחרון של ה־CI ב־GitOps: לשנות את ה־tag של ה־image בקובץ YAML ב־repo התצורה, ולעשות commit — ו־Argo CD עושה את השאר. ב־<code>P25.5-E25.ts</code>: <code>bumpImageTag(text, repository, tag)</code> ← <code>{ text, changed }</code>:</p>
+<ul><li>מעדכנת כל <code>image</code> של אותו repository ב־<code>containers</code> וב־<code>initContainers</code> של Deployment, Job, CronJob (וכל מה שיש לו <code>spec.template.spec</code>) — גם אם היה עם tag אחר או digest (<code>@sha256:…</code>).</li><li>לא נוגעת ב־repository אחר — גם לא כזה שמתחיל באותו שם — ולא ב־ConfigMap.</li><li>שומרת על ההערות, הסדר והמרכאות: ה־diff הוא רק השורות של ה־image.</li><li>tag לא תקין (תווים מותרים: אותיות, ספרות, <code>. _ -</code>, עד 128) או repository שלא נמצא ← שגיאה. אותו tag פעמיים ← 0 שינויים, אותו טקסט.</li></ul>
+@hint1
+<p><code>JSON.parse</code>/<code>stringify</code> או <code>js-yaml</code> מאבדים את ההערות. החבילה <code>yaml</code>: <code>parseAllDocuments</code> ← עץ (Document), <code>doc.get</code>/<code>getIn</code>/<code>set</code>, ו־<code>doc.toString()</code> שומר על הכול.</p>
+@hint2
+<p>repository של image: הכול עד ה־<code>:</code> האחרון — אבל רק אם הוא <em>אחרי</em> ה־<code>/</code> האחרון (<code>localhost:5000/app</code>).</p>
+@solution
+```ts save=solutions/P25.5-E25.ts
+// P25.5-E25: GitOps — לעדכן את ה־tag של image ב־repo התצורה, בלי להרוס את הקובץ
+import { parseAllDocuments, isMap, isSeq, YAMLMap } from "yaml";
+
+const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+
+// "ghcr.io/x/app:1.2" ← "ghcr.io/x/app"; גם @sha256:…; ולא מתבלבל עם port של registry (localhost:5000/app)
+export function repositoryOf(image: string): string {
+  const at = image.indexOf("@");
+  const noDigest = at >= 0 ? image.slice(0, at) : image;
+  const slash = noDigest.lastIndexOf("/");
+  const colon = noDigest.lastIndexOf(":");
+  return colon > slash ? noDigest.slice(0, colon) : noDigest;
+}
+
+function podSpecs(doc: any): YAMLMap[] {
+  const out: YAMLMap[] = [];
+  const kind = doc.get("kind");
+  const spec = doc.get("spec");
+  if (!isMap(spec)) return out;
+  const tpl = kind === "CronJob" ? (spec.getIn(["jobTemplate", "spec", "template", "spec"]) as unknown) : spec.getIn(["template", "spec"]);
+  if (isMap(tpl)) out.push(tpl);
+  return out;
+}
+
+export function bumpImageTag(text: string, repository: string, tag: string): { text: string; changed: number } {
+  if (!TAG_RE.test(tag)) throw new Error(`tag לא תקין: ${tag}`);
+  const docs = parseAllDocuments(text);
+  let changed = 0;
+  for (const doc of docs) {
+    if ("errors" in doc && doc.errors.length) throw new Error(`YAML לא תקין: ${doc.errors[0].message}`);
+    for (const pod of podSpecs(doc)) {
+      for (const field of ["initContainers", "containers"]) {
+        const list = pod.get(field);
+        if (!isSeq(list)) continue;
+        for (const c of list.items) {
+          if (!isMap(c)) continue;
+          const image = c.get("image");
+          if (typeof image !== "string" || repositoryOf(image) !== repository) continue;
+          const next = `${repository}:${tag}`;
+          if (image !== next) {
+            c.set("image", next);
+            changed++;
+          }
+        }
+      }
+    }
+  }
+  if (changed === 0 && !text.includes(`${repository}:${tag}`)) throw new Error(`לא נמצא image של ${repository}`);
+  return { text: docs.map((d) => d.toString()).join(""), changed };
+}
+```
+<p>בפועל יש לזה כלים מוכנים — <code>kustomize edit set image</code>, <code>yq</code>, או Argo CD Image Updater — אבל כולם עושים בדיוק את זה. וה־commit עצמו (ב־Jenkins): <code>git commit -am "coffee-api 1.5.0" &amp;&amp; git push</code> ל־repo התצורה, עם token שיש לו הרשאה רק ל־repo הזה.</p>

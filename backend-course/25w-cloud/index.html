@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>יחידה 25.5 — ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ יחידה 25.5</div>
+  <h1>יחידה 25.5 — ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD</h1>
+  <p class="subtitle">⏱ 4 מפגשים</p>
+  <div class="box install"><span class="box-title">🧰 לפני שמתחילים — יחידה 25.5</span>
+<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop (פרק 23), ופרק 25 — ה־CI וה־deploy של פרויקט 2.</p>
+<p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
+<ul>
+<li><strong>LocalStack</strong> — אמולטור של AWS שרץ בקונטיינר: S3, SQS ו־IAM על המחשב שלך, בלי חשבון ובלי כרטיס אשראי (פעם אחת; אחר כך <code>docker start localstack</code>):
+<pre class="mono">docker run -d --name localstack -p 4566:4566 -e SERVICES=s3,sqs,iam,sts localstack/localstack:4.14.0</pre>
+הגרסה קבועה בכוונה: מגרסאות 2026 ואילך LocalStack דורש חשבון ו־auth token גם לשימוש החינמי. 4.14 עובדת בלי, ומספיקה לכל היחידה.</li>
+<li>בדיקה: <code>curl http://localhost:4566/_localstack/health</code> ← <code>"s3": "available"</code> (או <code>"running"</code>).</li>
+<li>ב־<code>~/dev/backend-course/.env</code>: <code>COURSE_AWS_ENDPOINT=http://localhost:4566</code>.</li>
+<li><code>npm install</code> בתיקיית הקורס — מוסיף את <code>@aws-sdk/client-s3</code>, <code>@aws-sdk/client-sqs</code>, <code>@aws-sdk/s3-request-presigner</code> ו־<code>yaml</code>.</li>
+<li>תוסף VS Code: <a href="https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools" target="_blank">Kubernetes</a> — השלמה ובדיקה של manifests בזמן הכתיבה (מגיע עם תוסף YAML של Red Hat).</li>
+<li><strong>לא חובה — cluster אמיתי על המחשב:</strong> <a href="https://kind.sigs.k8s.io/docs/user/quick-start/" target="_blank">kind</a> (Kubernetes בתוך Docker), <a href="https://kubernetes.io/docs/tasks/tools/" target="_blank">kubectl</a> ו־<a href="https://helm.sh/docs/intro/install/" target="_blank">helm</a>. ב־Mac: <code>brew install kind kubectl helm</code>; ב־Windows: <code>winget install Kubernetes.kind Kubernetes.kubectl Helm.Helm</code>. הבודקים של היחידה <em>לא</em> צריכים cluster — הם קוראים את ה־YAML ובודקים אותו — אבל לראות pod עולה ונופל זה שווה את רבע השעה.</li>
+</ul>
+<p><strong>📂 העתקת חומרי הפרק:</strong> ב־Finder, העתק את התיקייה <code>25w-cloud</code> מתוך <code>~/Desktop/Backend/backend-course</code> אל <code>~/dev/backend-course</code> (גרירה עם <kbd>⌥ Option</kbd>). אם התיקייה כבר שם מהעתקה קודמת ואתה רוצה לשמור את מה שכתבת — בחר <strong>Keep Both</strong> / <strong>Stop</strong> ולא <strong>Replace</strong>.</p>
+<p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm install && npm run check P25.5-E06</code> ← הבודק יוצר bucket ב־LocalStack ונכשל על הקובץ הריק. <code>ECONNREFUSED 127.0.0.1:4566</code> — הקונטיינר לא רץ.</p>
+  </div>
+
+  <div class="box goal"><span class="box-title">🎯 בסוף הפרק תדע</span>
+  <ul><li>להכיר את המפה של AWS: מה רץ איפה (EKS/ECS, RDS, ElastiCache, S3, SQS, CloudFront) — ומה מקביל למה שכבר בנית.</li><li>IAM: users, roles ו־policies, least privilege, וסדר ההחלטה Allow/Deny — ולכתוב policy שעוברת בדיקה.</li><li>S3 מ־Node.js עם AWS SDK v3: JSON, pagination, וכתובות חתומות להעלאה ישירה — מול LocalStack.</li><li>Kubernetes: Pod, Deployment, Service, ConfigMap, Secret, Ingress, Job, HPA — probes, resources ו־rolling update.</li><li>Helm ו־GitOps עם Argo CD, ו־CI ב־Jenkins: הדרך של image מ־commit ועד cluster.</li></ul></div>
+<h2>🤔 למה צריך את זה?</h2>
+<p>בפרק 25 העלית את פרויקט 2 ל־Render: לוחצים, והשרת רץ. ככה עובדים הרבה סטארטאפים בהתחלה. אבל כשמודעת דרושים כותבת "AWS, Kubernetes (EKS), Jenkins, Argo CD" — היא מתארת חברה עם עשרות שירותים, מאות pods ותנועה גבוהה, שבה הפלטפורמה לא "קסם" אלא קוד: YAML ב־Git, pipelines, והרשאות מדויקות. ג׳וניור Backend לא מקים את ה־cluster לבד — אבל הוא כותב את ה־Deployment של השירות שלו, מבין למה ה־pod לא Ready, מבקש הרשאת IAM מדויקת, ומעדכן גרסה דרך pull request ל־repo התצורה. את כל זה נעשה כאן — עם AWS אמיתי־למחצה (LocalStack) ובודקים שקוראים את ה־manifests כמו ש־Kubernetes קורא.</p>
+  <h2>השיעורים</h2>
+  <div class="cards">
+    <a class="card" href="lesson-01-aws.html"><span class="num">שיעור 1 · ~40 דק׳</span><br><strong>המפה של AWS: מה רץ איפה</strong></a>
+    <a class="card" href="lesson-02-iam-s3.html"><span class="num">שיעור 2 · ~50 דק׳</span><br><strong>IAM, ה־SDK ו־S3</strong></a>
+    <a class="card" href="lesson-03-kubernetes.html"><span class="num">שיעור 3 · ~55 דק׳</span><br><strong>Kubernetes: Pods, Deployments ו־Services</strong></a>
+    <a class="card" href="lesson-04-helm-gitops.html"><span class="num">שיעור 4 · ~45 דק׳</span><br><strong>Helm ו־GitOps עם Argo CD</strong></a>
+    <a class="card" href="lesson-05-jenkins.html"><span class="num">שיעור 5 · ~45 דק׳</span><br><strong>Jenkins, והדרך המלאה מ־commit ל־cluster</strong></a>
+  </div>
+  <h2>תרגול וסיכום</h2>
+  <div class="cards">
+    <a class="card" href="exercises.html"><span class="num">✍️</span><br><strong>דף התרגילים — 25 תרגילים</strong></a>
+    <a class="card" href="solutions.html"><span class="num">🔒 רק אחרי ניסיון</span><br><strong>דף הפתרונות</strong></a>
+  </div>
+  <h2>📘 מילון המושגים של הפרק</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מונח</th><th>הגייה</th><th>פירוש</th></tr>
+    <tr><td><code>AWS</code></td><td>אֵיי־דַבְּלְיוּ־אֶס</td><td>Amazon Web Services — ספק הענן הגדול בעולם</td></tr>
+    <tr><td><code>Region / AZ</code></td><td>רִיגְ׳ן / אֵיי־זִי</td><td>אזור גאוגרפי (eu-central-1) / מרכז נתונים נפרד בתוכו</td></tr>
+    <tr><td><code>IAM</code></td><td>אַיי־אֶם</td><td>ניהול זהויות והרשאות ב־AWS: users, roles, policies</td></tr>
+    <tr><td><code>Role</code></td><td>רוֹל</td><td>זהות בלי סיסמה קבועה, ששירות "לובש" ומקבל credentials זמניים</td></tr>
+    <tr><td><code>ARN</code></td><td>אַרְן</td><td>המזהה הייחודי של משאב ב־AWS: arn:aws:s3:::bucket/key</td></tr>
+    <tr><td><code>S3</code></td><td>אֶס־תְּרִי</td><td>אחסון אובייקטים: bucket + key ← קובץ</td></tr>
+    <tr><td><code>Presigned URL</code></td><td>פְּרִי־סַיינְד יוּ־אַר־אֶל</td><td>כתובת חתומה וזמנית שמרשה פעולה אחת על אובייקט</td></tr>
+    <tr><td><code>LocalStack</code></td><td>לוֹקַל־סְטַאק</td><td>אמולטור של AWS שרץ ב־Docker</td></tr>
+    <tr><td><code>Kubernetes (K8s)</code></td><td>קוּבֶּרְנֶטִיס</td><td>מערכת שמריצה קונטיינרים על הרבה מכונות ושומרת על מצב רצוי</td></tr>
+    <tr><td><code>Pod</code></td><td>פּוֹד</td><td>יחידת הריצה הקטנה: קונטיינר אחד (או כמה) עם IP משותף</td></tr>
+    <tr><td><code>Deployment</code></td><td>דִיפְּלוֹימֶנְט</td><td>"N עותקים של ה־pod הזה" — כולל rolling update ו־rollback</td></tr>
+    <tr><td><code>Service</code></td><td>סֶרְוִויס</td><td>שם ו־IP יציבים שמחלקים תנועה בין pods</td></tr>
+    <tr><td><code>Ingress</code></td><td>אִינְגְרֶס</td><td>הכניסה מבחוץ: host ← Service, עם TLS</td></tr>
+    <tr><td><code>Probe</code></td><td>פְּרוֹבּ</td><td>בדיקה שה־kubelet מריץ: readiness (לשלוח תנועה?) ו־liveness (להפעיל מחדש?)</td></tr>
+    <tr><td><code>HPA</code></td><td>אֵייץ׳־פִּי־אֵיי</td><td>Horizontal Pod Autoscaler — מוסיף ומוריד עותקים לפי מדד</td></tr>
+    <tr><td><code>Helm</code></td><td>הֶלְם</td><td>מנהל חבילות ל־Kubernetes: templates + values ← manifests</td></tr>
+    <tr><td><code>GitOps</code></td><td>גִיט־אוֹפְּס</td><td>Git הוא המקור של מה שרץ; כלי במחלקה מסנכרן את ה־cluster אליו</td></tr>
+    <tr><td><code>Argo CD</code></td><td>אַרְגוֹ סִי־דִי</td><td>כלי GitOps שרץ בתוך ה־cluster ומושך שינויים מ־Git</td></tr>
+    <tr><td><code>Jenkins</code></td><td>גֶ׳נְקִינְס</td><td>שרת CI ותיק ונפוץ; pipelines כ־Jenkinsfile</td></tr>
+  </table></div>
+  <p>המילון המלא: <a href="../glossary.html">glossary.html</a></p>
+<div class="pager"><a href="../25p-project-shop/index.html"><small>הפרק הקודם</small>פרויקט 3 — פרויקט הדגל: חנות ציוד קפה</a><a href="lesson-01-aws.html"><small>הבא</small>שיעור 1 — המפה של AWS: מה רץ איפה</a></div>
+</main>
+</body>
+</html>

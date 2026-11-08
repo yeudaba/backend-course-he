@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes: Pods, Deployments ו־Services — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — Kubernetes: Pods, Deployments ו־Services</h1>
+  <p class="subtitle">⏱ ~55 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>הרעיון של Kubernetes: מצב רצוי, ולולאה שמתקנת.</li>
+      <li>Pod, Deployment, Service, Ingress, ConfigMap, Secret — מה כל אחד עושה, ואיך הם מתחברים.</li>
+      <li>probes ו־resources: מה קורה כשמשהו משתבש.</li>
+      <li>rolling update, autoscaling, ו־kubectl לפקודות היום־יום.</li>
+    </ul>
+  </div>
+
+  <h2>1. מצב רצוי</h2>
+  <p>ב־Docker Compose (פרק 23) אמרת "תריץ את זה". ב־Kubernetes אתה אומר <strong>מה צריך להיות</strong> — "3 עותקים של coffee-api בגרסה 1.4.2" — ו־controllers בתוך ה־cluster משווים כל הזמן בין הרצוי למצוי ומתקנים: pod מת? נוצר חדש. node נכבה? ה־pods שלו עוברים. עדכנת גרסה? מחליפים בהדרגה. אתה לא כותב סקריפט של צעדים; אתה כותב YAML של מצב, ושולח אותו ל־API server (<code>kubectl apply -f</code>).</p>
+  <p>ה־cluster הוא כמה מכונות (<strong>nodes</strong>), ועליהן <strong>pods</strong> — היחידה הקטנה: קונטיינר (לפעמים כמה) עם IP משלו. pods הם <em>זמניים</em>: נוצרים ומתים, וה־IP שלהם משתנה. אף אחד לא יוצר pod ישירות — יוצרים משהו שמנהל אותם.</p>
+
+  <h2>2. האובייקטים, ואיך הם מתחברים</h2>
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="Ingress מפנה ל־Service, שבוחר pods לפי label; Deployment יוצר ReplicaSet שיוצר את ה־pods; ConfigMap ו־Secret נטענים ל־pods">
+      <defs><marker id="k8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="590" y="30" width="120" height="56" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="420" y="30" width="130" height="56" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="170" y="15" width="210" height="190" rx="12" style="fill:none;stroke:var(--green);stroke-dasharray:6 4"/>
+        <rect x="190" y="35" width="170" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="190" y="90" width="170" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="190" y="145" width="170" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="420" y="225" width="130" height="56" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="190" y="235" width="170" height="46" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="10" y="80" width="130" height="56" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="10" y="160" width="130" height="56" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M586 58 H 554" marker-end="url(#k8)"/>
+        <path d="M416 58 H 364" marker-end="url(#k8)"/>
+        <path d="M416 62 L 364 110" marker-end="url(#k8)"/>
+        <path d="M416 66 L 364 160" marker-end="url(#k8)"/>
+        <path d="M416 258 H 364" marker-end="url(#k8)" style="stroke-dasharray:5 4"/>
+        <path d="M275 231 V 209" marker-end="url(#k8)" style="stroke-dasharray:5 4"/>
+        <path d="M144 108 H 186" marker-end="url(#k8)"/>
+        <path d="M144 188 H 186" marker-end="url(#k8)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="650" y="56">Ingress</text>
+        <text x="485" y="56">Service</text>
+        <text x="275" y="60" class="mono" style="font-size:12px">pod  app=coffee-api</text>
+        <text x="275" y="115" class="mono" style="font-size:12px">pod  app=coffee-api</text>
+        <text x="275" y="170" class="mono" style="font-size:12px">pod  app=coffee-api</text>
+        <text x="485" y="250">Deployment</text>
+        <text x="275" y="256">ReplicaSet</text>
+        <text x="75" y="106">ConfigMap</text>
+        <text x="75" y="186">Secret</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="650" y="74">api.coffee.example</text>
+        <text x="275" y="273">גרסה אחת של ה־template</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="ltr">
+        <text x="485" y="74">selector: app=coffee-api</text>
+        <text x="485" y="268">image, replicas: 3, …</text>
+        <text x="75" y="124">LOG_LEVEL, PORT, …</text>
+        <text x="75" y="204">DATABASE_URL, …</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: שני כיוונים. <strong>תנועה</strong> (חצים מלאים מימין): Ingress ← Service ← ה־pods שה־selector שלו תופס ושהם Ready. <strong>ניהול</strong> (מלמטה): Deployment ← ReplicaSet ← pods. מה שמחבר הכול הוא <strong>labels</strong> — לא שמות.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>אובייקט</th><th>מה הוא אומר</th><th>תרגיל</th></tr>
+    <tr><td><strong>Deployment</strong></td><td>"N עותקים של ה־pod הזה". שינוי ב־template ← ReplicaSet חדש ו־rolling update</td><td>E09</td></tr>
+    <tr><td><strong>Service</strong></td><td>שם DNS ו־IP יציבים, שמחלקים בקשות בין ה־pods שה־selector תופס</td><td>E10</td></tr>
+    <tr><td><strong>Ingress</strong></td><td>כניסה מבחוץ: host ו־path ← Service, עם תעודת TLS</td><td>E24</td></tr>
+    <tr><td><strong>ConfigMap</strong> / <strong>Secret</strong></td><td>הגדרות / סודות, שנטענים ל־pod כ־env או כקבצים</td><td>E10, E12</td></tr>
+    <tr><td><strong>Job</strong> / <strong>CronJob</strong></td><td>משימה שרצה עד הסוף (migration) / לפי לוח זמנים (דוח לילי)</td><td>E24</td></tr>
+    <tr><td><strong>HPA</strong> / <strong>PDB</strong></td><td>כמה עותקים לפי עומס / כמה חייבים להישאר בזמן תחזוקה</td><td>E11</td></tr>
+  </table></div>
+  <p>הנה ה־Deployment של coffee-api, מקוצר. כל שדה כאן נבדק ב־E09:</p>
+<pre><code class="lang-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: coffee-api }    # אילו pods "שלי" — חייב להתאים ל־labels למטה
+  template:                             # התבנית של כל pod
+    metadata:
+      labels: { app: coffee-api }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2   # גרסה קבועה, לא latest
+          ports: [{ name: http, containerPort: 3000 }]
+          envFrom: [{ configMapRef: { name: coffee-config } }]
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }     # מה ה־scheduler שומר בשבילך
+            limits: { memory: 512Mi }                  # מעבר לזה — OOMKilled
+          readinessProbe: { httpGet: { path: /ready, port: http } }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }</code></pre>
+  <p>(<code>{ … }</code> ו־<code>[ … ]</code> הם YAML תקני — "flow style". ב־manifests אמיתיים רואים בעיקר את הצורה עם השורות וההזחות, כמו בתרגילים.)</p>
+
+  <h2>3. probes ו־resources: כשמשהו משתבש</h2>
+  <p>ה־<code>/health</code> וה־<code>/ready</code> שבנית בפרק 25 מקבלים כאן תפקיד מדויק:</p>
+  <ul>
+    <li><strong>readinessProbe</strong> נכשל ← ה־pod <em>יוצא מה־Service</em> (לא מקבל בקשות), ולא נוגעים בו. מתאים ל"המסד לא זמין" ול"עוד לא סיימתי לעלות".</li>
+    <li><strong>livenessProbe</strong> נכשל כמה פעמים ← הקונטיינר <em>מופעל מחדש</em>. מתאים רק ל"התהליך תקוע" — לא לתלות חיצונית (E04).</li>
+  </ul>
+  <p>ו־<strong>resources</strong>: <code>requests</code> הם הזמנה — לפיהם ה־scheduler בוחר node שיש בו מקום (E18), וה־HPA מחשב אחוזים (E11). <code>limits</code> הם תקרה: מעבר ל־memory ← <strong>OOMKilled</strong>; מעבר ל־CPU ← האטה (throttling). הכמויות: <code>250m</code> = רבע ליבה; <code>256Mi</code> = 256×1024² בתים, ו־<code>256M</code> = 256×1000² — הבדל של כמעט 5% (E14).</p>
+
+  <h2>4. rolling update ו־autoscaling</h2>
+  <p>שינית את ה־image ל־<code>1.5.0</code> ו־<code>apply</code>. ה־Deployment יוצר ReplicaSet חדש ומעביר pods בהדרגה, בתוך שני גבולות: <code>maxSurge</code> — כמה pods <em>מעל</em> replicas מותר; <code>maxUnavailable</code> — כמה <em>מתחת</em>. pod חדש נספר רק כשהוא Ready — אז גרסה שקורסת עוצרת את ה־rollout, והישנים ממשיכים לשרת:</p>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="rolling update של 4 עותקים עם maxSurge 1 ו־maxUnavailable 0: בכל צעד מוסיפים חדש אחד ומורידים ישן אחד">
+      <g text-anchor="middle" style="font-size:12px" direction="rtl">
+        <text x="660" y="24">צעד 0</text><text x="540" y="24">1</text><text x="420" y="24">2</text><text x="300" y="24">3</text><text x="180" y="24">4</text><text x="60" y="24">5</text>
+      </g>
+      <g style="stroke-width:2">
+        <g style="fill:var(--amber-soft);stroke:var(--amber)">
+          <rect x="640" y="36" width="40" height="22" rx="5"/><rect x="640" y="62" width="40" height="22" rx="5"/><rect x="640" y="88" width="40" height="22" rx="5"/><rect x="640" y="114" width="40" height="22" rx="5"/>
+          <rect x="520" y="36" width="40" height="22" rx="5"/><rect x="520" y="62" width="40" height="22" rx="5"/><rect x="520" y="88" width="40" height="22" rx="5"/><rect x="520" y="114" width="40" height="22" rx="5"/>
+          <rect x="400" y="36" width="40" height="22" rx="5"/><rect x="400" y="62" width="40" height="22" rx="5"/><rect x="400" y="88" width="40" height="22" rx="5"/>
+          <rect x="280" y="36" width="40" height="22" rx="5"/><rect x="280" y="62" width="40" height="22" rx="5"/>
+          <rect x="160" y="36" width="40" height="22" rx="5"/>
+        </g>
+        <g style="fill:var(--green-soft);stroke:var(--green)">
+          <rect x="520" y="140" width="40" height="22" rx="5"/>
+          <rect x="400" y="114" width="40" height="22" rx="5"/><rect x="400" y="140" width="40" height="22" rx="5"/>
+          <rect x="280" y="88" width="40" height="22" rx="5"/><rect x="280" y="114" width="40" height="22" rx="5"/><rect x="280" y="140" width="40" height="22" rx="5"/>
+          <rect x="160" y="62" width="40" height="22" rx="5"/><rect x="160" y="88" width="40" height="22" rx="5"/><rect x="160" y="114" width="40" height="22" rx="5"/><rect x="160" y="140" width="40" height="22" rx="5"/>
+          <rect x="40" y="36" width="40" height="22" rx="5"/><rect x="40" y="62" width="40" height="22" rx="5"/><rect x="40" y="88" width="40" height="22" rx="5"/><rect x="40" y="114" width="40" height="22" rx="5"/>
+        </g>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px">
+        <text x="660" y="186">4/0</text><text x="540" y="186">4/1</text><text x="420" y="186">3/2</text><text x="300" y="186">2/3</text><text x="180" y="186">1/4</text><text x="60" y="186">0/4</text>
+      </g>
+    </svg>
+    <figcaption>איור 2: 4 עותקים, <code>maxSurge: 1</code>, <code>maxUnavailable: 0</code> — כתום ישן, ירוק חדש; מתחת: ישנים/חדשים. אף פעם לא פחות מ־4 Ready, ולכל היותר 5 pods. זו בדיוק הסימולציה של E17.</figcaption>
+  </figure>
+  <p><strong>HPA</strong> משנה את <code>replicas</code> לפי מדד: יעד של 70% CPU, ו־3 עותקים ב־140% ← 6. ומי משלם על ה־nodes? <strong>Cluster Autoscaler</strong> (או Karpenter ב־EKS) מוסיף מכונות כשיש pods ב־Pending, ומוריד כשהן ריקות.</p>
+
+  <h2>5. kubectl: חמש פקודות ליום־יום</h2>
+<pre><code class="lang-bash">kubectl apply -f k8s/                         # לשלוח את המצב הרצוי (יוצר או מעדכן)
+kubectl get pods -n coffee                    # STATUS (Running / Pending / CrashLoopBackOff), READY, RESTARTS
+kubectl describe pod &lt;name&gt; -n coffee         # Events בסוף: למה Pending? למה probe נכשל? OOMKilled?
+kubectl logs &lt;name&gt; -n coffee --previous      # הלוג של הקונטיינר הקודם — זה שקרס
+kubectl rollout undo deployment/coffee-api -n coffee   # חזרה ל־ReplicaSet הקודם</code></pre>
+  <p>כמעט כל "למה זה לא עובד" נפתר ב־<code>describe</code> וב־<code>logs</code>. ובחברה עם GitOps (שיעור 4) — <code>apply</code> ו־<code>undo</code> כבר לא עושים ידנית: משנים את Git.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 לנסות על המחשב</span>
+    <p>הבודקים של היחידה קוראים את ה־YAML ולא צריכים cluster. אם התקנת את kind (קופסת 🧰): <code>kind create cluster</code>, ואז <code>kubectl apply -f</code> לקובץ של E09 עם image ציבורי כלשהו (למשל <code>nginx:1.27</code> ופורט 80), ו־<code>kubectl get pods -w</code>. מחק pod ותראה אותו חוזר — זה "מצב רצוי".</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.5-E04">E04</a> · <a href="exercises.html#P25.5-E09">E09</a> · <a href="exercises.html#P25.5-E10">E10</a> · <a href="exercises.html#P25.5-E11">E11</a> · <a href="exercises.html#P25.5-E12">E12</a> · <a href="exercises.html#P25.5-E14">E14</a> · <a href="exercises.html#P25.5-E17">E17</a> · <a href="exercises.html#P25.5-E18">E18</a> · <a href="exercises.html#P25.5-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-02-iam-s3.html"><small>הקודם</small>שיעור 2 — IAM, ה־SDK ו־S3</a><a href="lesson-04-helm-gitops.html"><small>הבא</small>שיעור 4 — Helm ו־GitOps עם Argo CD</a></div>
+</main>
+</body>
+</html>

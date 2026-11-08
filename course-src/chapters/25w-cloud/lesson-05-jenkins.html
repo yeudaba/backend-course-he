@@ -1,0 +1,121 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>Jenkins: controller, agents, ו־Jenkinsfile שנמצא ב־repo.</li>
+      <li>declarative pipeline: stages, when, environment, post — מול GitHub Actions שכבר כתבת.</li>
+      <li>סודות ב־Jenkins: Credentials, ולמה מרכאות בודדות.</li>
+      <li>הדרך המלאה: commit ← Jenkins ← registry ← repo התצורה ← Argo CD ← pods.</li>
+    </ul>
+  </div>
+
+  <h2>1. Jenkins</h2>
+  <p>Jenkins הוא שרת CI בקוד פתוח, ותיק (מ־2011) ונפוץ מאוד — במיוחד בחברות שמריצות את הכלים על שרתים משלהן. ה־<strong>controller</strong> מנהל את ה־jobs והממשק; ה־<strong>agents</strong> מריצים את העבודה עצמה (מכונות, או קונטיינרים ב־Kubernetes שנוצרים לכל build). ההגדרה של ה־pipeline היא קובץ <code>Jenkinsfile</code> בשורש ה־repo — "pipeline as code", כמו <code>.github/workflows/ci.yml</code> בפרק 25. בדרך כלל מגדירים ב־Jenkins "Multibranch Pipeline": כל ענף וכל pull request מקבלים build משלהם.</p>
+
+  <h2>2. declarative pipeline</h2>
+```groovy
+pipeline {
+  agent { docker { image 'node:24-alpine' } }          // איפה רץ: קונטיינר נקי לכל build
+  options { timeout(time: 20, unit: 'MINUTES') }       // build תקוע לא תופס agent לנצח
+  environment { IMAGE = 'ghcr.io/noa-cohen/coffee-shop' }
+
+  stages {
+    stage('Install') { steps { sh 'npm ci' } }
+    stage('Test')    { steps { sh 'npm test' } }
+    stage('Push image') {
+      when { branch 'main' }                           // רק מ־main
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: 'REG_USER', passwordVariable: 'REG_TOKEN')]) {
+          sh 'echo $REG_TOKEN | docker login ghcr.io -u $REG_USER --password-stdin'
+          sh 'docker build -t $IMAGE:$GIT_COMMIT . && docker push $IMAGE:$GIT_COMMIT'
+        }
+      }
+    }
+  }
+  post {
+    always  { junit allowEmptyResults: true, testResults: 'reports/junit.xml' }
+    failure { echo "Build failed: ${env.BUILD_URL}" }
+  }
+}
+```
+  <p>אם כתבת workflow של GitHub Actions — אתה כבר מכיר את כל הרעיונות. רק השמות שונים:</p>
+  <div class="table-wrap"><table>
+    <tr><th>GitHub Actions (פרק 25)</th><th>Jenkins</th></tr>
+    <tr><td><code>runs-on</code> / <code>container</code></td><td><code>agent</code></td></tr>
+    <tr><td>jobs ו־steps</td><td><code>stages</code> ו־<code>steps</code></td></tr>
+    <tr><td><code>if: github.ref == 'refs/heads/main'</code></td><td><code>when { branch 'main' }</code></td></tr>
+    <tr><td><code>secrets.X</code></td><td>Credentials: <code>withCredentials</code> או <code>credentials('id')</code></td></tr>
+    <tr><td><code>timeout-minutes</code></td><td><code>options { timeout(…) }</code></td></tr>
+    <tr><td><code>if: always()</code> / <code>failure()</code></td><td><code>post { always / failure }</code></td></tr>
+  </table></div>
+  <p>הקובץ נראה כמו JSON עם סוגריים מסולסלים, אבל הוא <strong>Groovy</strong> — שפה שרצה על ה־controller. זה מוביל לטעות הכי נפוצה ב־Jenkins:</p>
+
+  <h2>3. סודות: מרכאות בודדות</h2>
+  <p>ב־Groovy, מחרוזת במרכאות <strong>כפולות</strong> מציבה משתנים (<code>"${REG_TOKEN}"</code>) <em>לפני</em> שהפקודה מגיעה ל־shell. כלומר הסוד נכנס לטקסט של הפקודה — Jenkins מזהיר "insecure interpolation of sensitive variables", והסוד גלוי ב־<code>ps</code> של ה־agent ואולי בלוגים. במרכאות <strong>בודדות</strong> (<code>'echo $REG_TOKEN | …'</code>) Groovy לא נוגע, וה־shell קורא את משתנה הסביבה. וה־<code>--password-stdin</code> — כדי שהסיסמה לא תהיה ארגומנט בשורת הפקודה בכלל (E16, E23).</p>
+  <p>הסוד עצמו נשמר ב־<strong>Jenkins Credentials</strong> (מוצפן, עם id), ו־Jenkins מסתיר אותו בלוג (<code>****</code>) כשהוא מודפס. סוד בתוך ה־Jenkinsfile — ב־<code>environment { TOKEN = 'ghp_…' }</code> — הוא סוד ב־Git, לתמיד.</p>
+
+  <h2>4. הדרך המלאה</h2>
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="מפתח עושה push; Jenkins בודק, בונה ודוחף image ל־registry, ועושה commit ל־repo התצורה; Argo CD מושך ומעדכן את ה־Deployment; ה־cluster מושך את ה־image">
+      <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="590" y="20" width="120" height="60" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="410" y="20" width="140" height="60" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="200" y="20" width="170" height="60" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="10" y="20" width="150" height="60" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="200" y="130" width="170" height="60" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="410" y="210" width="140" height="60" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="10" y="210" width="190" height="70" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M586 50 H 554" marker-end="url(#fl)"/>
+        <path d="M406 50 H 374" marker-end="url(#fl)"/>
+        <path d="M196 50 H 164" marker-end="url(#fl)"/>
+        <path d="M285 84 V 126" marker-end="url(#fl)"/>
+        <path d="M374 160 H 480 V 206" marker-start="url(#fl)"/>
+        <path d="M406 240 H 204" marker-end="url(#fl)"/>
+        <path d="M85 206 V 84" marker-end="url(#fl)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="650" y="46" direction="rtl">מפתח</text>
+        <text x="480" y="46" direction="rtl">repo הקוד</text>
+        <text x="285" y="46">Jenkins</text>
+        <text x="85" y="46">ghcr.io</text>
+        <text x="285" y="156" direction="rtl">repo התצורה</text>
+        <text x="480" y="236">Argo CD</text>
+        <text x="105" y="236">cluster</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="650" y="66">PR ← merge</text>
+        <text x="480" y="66">main: a1b2c3d</text>
+        <text x="285" y="66">ci → test → build</text>
+        <text x="85" y="66">coffee-shop:a1b2c3d</text>
+        <text x="285" y="176">tag: a1b2c3d (E25)</text>
+        <text x="480" y="256">OutOfSync ← sync</text>
+        <text x="105" y="256">rolling update (E17)</text>
+        <text x="105" y="272">readiness ✓ ← תנועה</text>
+        <text x="320" y="110">commit</text>
+        <text x="300" y="232">apply</text>
+        <text x="45" y="150">pull image</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: מ־merge עד pods חדשים, בלי שאף אדם מריץ פקודה. Jenkins לא נוגע ב־cluster; Argo CD לא בונה כלום. החץ המקווקו — ה־nodes מושכים את ה־image מה־registry.</figcaption>
+  </figure>
+  <ol>
+    <li>pull request ← review ← merge ל־main ב־repo הקוד.</li>
+    <li>Jenkins: <code>npm ci</code>, lint, בדיקות; <code>docker build</code>; push ל־registry עם tag של ה־commit (<code>a1b2c3d</code> — לא latest: כל גרסה ניתנת לזיהוי).</li>
+    <li>Jenkins: clone של repo התצורה, עדכון ה־tag ב־<code>values-staging.yaml</code>, commit ו־push.</li>
+    <li>Argo CD: <code>OutOfSync</code> ← sync ← ה־Deployment מתעדכן ← rolling update, שמתקדם רק כשה־pods החדשים Ready.</li>
+    <li>production: אותו commit ל־<code>values-prod.yaml</code> — לרוב ב־pull request שמישהו מאשר. זה "Continuous Delivery" מפרק 25: מוכן תמיד, ולחיצה אחת.</li>
+    <li>משהו לא בסדר? <code>git revert</code> ב־repo התצורה, ו־Argo CD מחזיר. ה־image הקודם עדיין ב־registry.</li>
+  </ol>
+  <p>Argo CD אגב לא חייב Jenkins: אותו צעד 3 עובד מ־GitHub Actions, GitLab CI או כל CI אחר. וההפך — Jenkins יכול לעשות <code>helm upgrade</code> ישירות (push-based), וזה מה שתראה בהרבה מקומות. מי שמבין את שני המודלים יודע לעבוד בשניהם.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"ניסיון עם AWS, K8s, Jenkins, Argo CD" במודעה לג׳וניור לא אומר "הקמת cluster לבד". זה אומר: אתה כותב את ה־Deployment וה־values של השירות שלך, קורא Jenkinsfile ומתקן stage שנשבר, מבין למה ה־Application ב־Argo CD הוא <code>Degraded</code>, ומבקש הרשאת IAM מדויקת במקום <code>*</code>. בראיון: ספר על E24 — "כתבתי manifests לשירות Nest עם migrations ב־Job, probes, HPA ו־Ingress, ובדקתי אותם" — ועל ההבדל בין readiness ל־liveness. זו שאלה שחוזרת כמעט בכל ראיון.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.5-E16">E16</a> · <a href="exercises.html#P25.5-E23">E23</a> · <a href="exercises.html#P25.5-E24">E24</a></p>
+  </div>

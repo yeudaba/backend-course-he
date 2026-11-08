@@ -352,8 +352,9 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 29.5 סוכני AI | `29w-agents` | פרק 29 | SDK של Anthropic עם fetch מדומה |
 | פרויקט 4 | `29x-project-events` | 29.5 | מערכת אירועים ואנליטיקה: Kafka ← MySQL + עמודתי, על Kubernetes |
 - `build.mjs`: fence חדש ```` ```sql run mysql db=19w-mysql/files/shop.sql ```` — רץ ב־`docker exec course-mysql mysql --table`; בלוקי ts מקבלים `MYSQL_URL`, ובדיקות `COURSE_MYSQL_URL`.
-- כל ה־images נבדקו ונמשכים: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4, softwaremill/elasticmq-native.
-- **מצב 19.5:** 25 תרגילים, 20 בודקים ופתרונות מוכנים ונבדקו (כולל deadlock אמיתי וסימולציה של 6 workers); חסרים chapter.mjs ו־5 שיעורים.
+- כל ה־images נבדקו ונמשכים: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4.14.0, softwaremill/elasticmq-native.
+- **מצב 19.5:** בנוי ומאומת (5 שיעורים, 25 תרגילים, 20 בודקים — כולל deadlock אמיתי וסימולציה של 6 workers).
+- **מצב 25.5:** בנוי ומאומת (`--verify 25w`). LocalStack בקונטיינר `course-localstack` על **4566**, **מוצמד ל־`localstack/localstack:4.14.0`** — ה־tag `:4` נעצר ב־4.14 (פברואר 2026), והגרסאות שאחריו דורשות auth token. `root/tools/aws.mjs`: `bucketSandbox(t)`, `queueSandbox(t)` (bucket/queue ייחודי, ניקוי בסוף); `build.mjs` מעביר `COURSE_AWS_ENDPOINT` לבדיקות ו־`AWS_ENDPOINT_URL` לבלוקי run. בודקים בלי cluster: `tests/_k8s.mjs` (קריאת multi-doc YAML עם החבילה `yaml`, selector↔labels, כמויות, ports בשם), `tests/_iam.mjs` (מעריך policy: Deny מפורש ← Allow ← implicit deny, wildcards, Condition על s3:prefix), `tests/_jenkins.mjs` (parser של declarative pipeline לעץ בלוקים — מדלג על מחרוזות והערות). **kind/helm לא הורצו בסביבת הבנייה** (המסווג חסם הרצת binary שהורד; get.helm.sh חסום) — לכן אין דוגמאות עם פלט של kubectl/helm, רק פקודות בלי פלט. E25 (`bumpImageTag`) משתמש ב־`yaml.parseAllDocuments` ששומר הערות ומרכאות — נבדק שה־diff הוא רק שורות ה־image.
 
 ### 7.1 מצב: הקורס הושלם
 כל 30 הפרקים (0–30, כולל 15.5 ו־15w), ושלושת הפרויקטים (כולל שלב 5 של פרויקט 3) — בנויים ומאומתים. מה אפשר להמשיך, אם יהודה יבקש:

@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **36** | **161** | **795** | **551** | **620** |
+| **37** | **166** | **820** | **571** | **622** |
 
 ## מה שונה כאן
 
@@ -39,7 +39,7 @@
 | **חטיבה א׳** | יסודות JavaScript | <code>▰▰▰▰▰▰▰▰▰▰</code> | 12/12 |
 | **חטיבה ב׳** | TypeScript ו־Node.js | <code>▰▰▰▰▰▰▰▰▰▰</code> | 4/4 |
 | **חטיבה ג׳** | שרת, מסד נתונים ו־HTML בסיסי | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
-| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▱</code> | 7/8 |
+| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
 | **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▱▱▱▱</code> | 5/9 |
 
 </div>
@@ -286,7 +286,7 @@
 | [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 5 | 25 | 22 | ✔ |
 | [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 25 | 22 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
-| יחידה 25.5 | ענן ו־Kubernetes <br><sub>AWS (IAM, S3, SQS, RDS, ElastiCache, ECS), Kubernetes, Helm, Jenkins, Argo CD</sub> | | | | בתוכנית |
+| [יחידה 25.5](backend-course/25w-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 25 | 20 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -346,6 +346,14 @@
 4. שלב 3: Idempotency, תשלום, ביטול ומשלוח <sub>🤖 PR3-PAY</sub>
 5. שלב 4: בדיקות, Docker, CI, פריסה ו־README <sub>🤖 PR3-SHIP</sub>
 6. פתרון לדוגמה והחלטות עיצוב <sub>🔒 אחרי שסיימת</sub>
+
+**יחידה 25.5 — ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD**
+
+1. המפה של AWS: מה רץ איפה
+2. IAM, ה־SDK ו־S3
+3. Kubernetes: Pods, Deployments ו־Services
+4. Helm ו־GitOps עם Argo CD
+5. Jenkins, והדרך המלאה מ־commit ל־cluster
 
 </details>
 
