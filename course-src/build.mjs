@@ -136,7 +136,8 @@ function checkRun(run, expected, ctx) {
     const tsc = path.join(SRC, "node_modules", "typescript", "bin", "tsc");
     r = spawnSync("node", [tsc, "--noEmit", "--strict", "--target", "es2022", "--pretty", "false", "--skipLibCheck", "snippet.ts"], { encoding: "utf8", cwd: dir });
   } else {
-    r = spawnSync("node", nodeArgs, { encoding: "utf8", cwd: dir, timeout: 15000 });
+    // פרק 26: דוגמאות עם Redis מתחברות ל־REDIS_URL (אצל הלומד — ברירת המחדל, localhost:6379)
+    r = spawnSync("node", nodeArgs, { encoding: "utf8", cwd: dir, timeout: 15000, env: { ...process.env, REDIS_URL: "redis://localhost:6380" } });
   }
   const norm = (t) => t.split("\n").map((l) => l.replace(/\s+$/, "")).join("\n").replace(/\s+$/, "");
   const got = norm(r.stdout + (run.attrs.stderr ? r.stderr : ""));
@@ -390,7 +391,7 @@ function verifyTests(ch) {
     const run = (target) =>
       spawnSync("node", ["--experimental-strip-types", "--no-warnings", "--test", "--test-reporter=dot", path.join(testsDir, t)], {
         encoding: "utf8",
-        env: { ...process.env, CHECK_TARGET: target, TSC_PATH: path.join(SRC, "node_modules", "typescript", "bin", "tsc"), COURSE_DATABASE_URL: "postgresql://postgres@localhost:5433/postgres" },
+        env: { ...process.env, CHECK_TARGET: target, TSC_PATH: path.join(SRC, "node_modules", "typescript", "bin", "tsc"), COURSE_DATABASE_URL: "postgresql://postgres@localhost:5433/postgres", COURSE_REDIS_URL: "redis://localhost:6380" },
         timeout: ch.testTimeout ?? 30000, // פרק 22: הבדיקות מריצות Jest כמה פעמים
       });
     const sol = run("solutions");

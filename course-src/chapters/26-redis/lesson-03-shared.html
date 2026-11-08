@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה "קרא, שנה, כתוב" שבור כשיש כמה שרתים — וראייה בקוד.</li>
+      <li>הגבלת קצב משותפת: fixed window עם <code>INCR</code>, וחלון נע עם sorted set.</li>
+      <li>מנעול מבוזר: <code>SET NX PX</code>, token, ושחרור בטוח.</li>
+      <li>Lua: כמה פקודות כפקודה אחת. ו־pub/sub.</li>
+    </ul>
+  </div>
+
+  <h2>1. שלושה שרתים, מונה אחד</h2>
+  <p>בפרק 24 כתבנו הגבלת קצב עם <code>Map</code> בזיכרון. עם שלושה עותקים של השרת מאחורי load balancer — כל אחד סופר לבד, והמגבלה האמיתית פי 3. הפתרון: המונה ב־Redis, שכל השרתים רואים. אבל צריך לעדכן אותו נכון:</p>
+```ts run
+import { Redis } from "ioredis";
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "lesson26:" });
+await redis.del("a", "b");
+
+// "קרא, הוסף 1, כתוב" — 100 בקשות במקביל
+await Promise.all(Array.from({ length: 100 }, async () => {
+  const n = Number((await redis.get("a")) ?? 0);
+  await redis.set("a", n + 1);
+}));
+// INCR — הקריאה והכתיבה הן פקודה אחת בתוך Redis
+await Promise.all(Array.from({ length: 100 }, () => redis.incr("b")));
+
+console.log("GET+SET:", await redis.get("a"), "· INCR:", await redis.get("b"));
+await redis.del("a", "b");
+await redis.quit();
+```
+```out
+GET+SET: 1 · INCR: 100
+```
+  <p>כל 100 ה־<code>GET</code> יצאו לפני שה־<code>SET</code> הראשון הגיע — כולם קראו 0, כולם כתבו 1. זה אותו מרוץ ממכירת המלאי בפרויקט 3 (12 הזמנות על 3 יחידות), רק ב־Redis. והתיקון באותה רוח: לא "קרא ואז החלט", אלא פעולה אחת שהשרת עושה בבת אחת — <code>INCR</code>, <code>SET NX</code>, או סקריפט Lua.</p>
+
+  <h2>2. הגבלת קצב</h2>
+  <p><strong>Fixed window</strong> — מונה לכל (לקוח, חלון), שמת לבד בסוף החלון:</p>
+```ts file=P26-E09.ts
+const window = Math.floor(now / 1000 / windowSeconds);
+const key = `rl:${clientId}:${window}`;
+const [[, count]] = await redis.multi()
+  .incr(key)
+  .expire(key, windowSeconds, "NX")   // NX: תוקף רק בפעם הראשונה (Redis 7+)
+  .exec();
+return { allowed: count <= limit, remaining: Math.max(0, limit - count), … };
+```
+  <p>בלי <code>NX</code>, כל בקשה מאריכה את התוקף — ומי שממשיך לשלוח אף פעם לא משתחרר (E21). והחיסרון של fixed window, שראינו בפרק 24: בסוף חלון אחד ובתחילת הבא אפשר לשלוח כמעט פי 2. <strong>חלון נע</strong> — sorted set שבו ה־score הוא הזמן: <code>ZREMRANGEBYSCORE</code> מוחק מה שיצא מהחלון, <code>ZCARD</code> סופר, <code>ZADD</code> מוסיף (E15). ו־<strong>token bucket</strong> — דורש לקרוא את המצב, לחשב ולכתוב: שם צריך Lua (סעיף 4, E25).</p>
+  <p>בפועל, בפרויקט Nest לא כותבים את זה מאפס: ל־<code>@nestjs/throttler</code> יש storage של Redis, ו־nginx או ה־API gateway של ספק הענן עושים את זה לפני שהבקשה מגיעה אליך. אבל להבין <em>מה</em> הם עושים — זו שאלת ראיון קלאסית ("תכנן rate limiter").</p>
+
+  <h2>3. מנעול מבוזר</h2>
+  <p>"הדוח הלילי צריך לרוץ פעם אחת, לא שלוש" · "רק שרת אחד מרענן את ה־cache" (E13). מנעול ב־Redis:</p>
+```ts file=P26-E12.ts
+const RELEASE = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`;
+
+const token = randomUUID();
+const ok = await redis.set(`lock:${name}`, token, "PX", ttlMs, "NX"); // "OK" או null
+…
+await redis.eval(RELEASE, 1, `lock:${name}`, token);                  // מוחק רק אם עדיין שלי
+```
+  <p>כל פרט כאן תיקון של באג אמיתי (E22):</p>
+  <ul>
+    <li><strong><code>NX</code> ו־<code>PX</code> באותה פקודה.</strong> <code>SETNX</code> ואז <code>EXPIRE</code> — תהליך שקרס ביניהן משאיר מנעול לנצח.</li>
+    <li><strong>תוקף.</strong> שרת שמחזיק את המנעול ומת — המנעול משתחרר לבד.</li>
+    <li><strong>token ייחודי, ושחרור רק אם הוא שלך.</strong> A לקח מנעול ל־10 שניות, עבד 12. בשנייה 10 המנעול פג ו־B לקח אותו. בשנייה 12 A "משחרר" — ו<code>DEL</code> פשוט מוחק את המנעול של B. לכן בודקים את ה־token — ובפקודה אחת (Lua), אחרת אותו מרוץ בדיוק בין ה־GET ל־DEL.</li>
+  </ul>
+  <div class="box warn">
+    <span class="box-title">⚠️ מנעול עם תוקף — לא לנכונות</span>
+    <p>גם עם כל התיקונים, A שנתקע (GC ארוך, רשת איטית) ממשיך לעבוד אחרי שהמנעול שלו פג — ושניהם עובדים במקביל. לכן מנעול Redis טוב ל"לחסוך עבודה כפולה", לא ל"אסור שזה יקרה פעמיים". מלאי, כסף, ייחודיות — המסד אוכף: <code>UPDATE … WHERE stock &gt;= qty</code>, <code>UNIQUE</code>, טרנזקציות (פרקים 18–19, פרויקט 3). ואם באמת צריך מנעול נכון — <code>SELECT … FOR UPDATE</code> או advisory lock של PostgreSQL.</p>
+  </div>
+
+  <h2>4. Lua: סקריפט שרץ כפקודה אחת</h2>
+  <p><code>MULTI</code> שולח כמה פקודות יחד, אבל אי אפשר להחליט באמצע לפי ערך. סקריפט Lua רץ <em>בתוך</em> Redis, ועד שהוא מסתיים שום פקודה אחרת לא רצה:</p>
+```ts run
+import { Redis } from "ioredis";
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "lesson26:" });
+
+// "קח עד N יחידות, אם יש" — קריאה, החלטה וכתיבה, בלי מרוץ
+const TAKE = `
+local left = tonumber(redis.call("GET", KEYS[1]) or "0")
+local want = tonumber(ARGV[1])
+if left < want then return -1 end
+return redis.call("DECRBY", KEYS[1], want)
+`;
+await redis.set("seats", 3);
+const results = await Promise.all(Array.from({ length: 5 }, () => redis.eval(TAKE, 1, "seats", 1)));
+console.log(results, "נשאר:", await redis.get("seats"));
+await redis.del("seats");
+await redis.quit();
+```
+```out
+[ 2, 1, 0, -1, -1 ] נשאר: 0
+```
+  <p><code>KEYS[1]</code> עובר דרך ioredis ולכן מקבל את ה־<code>keyPrefix</code> — עוד סיבה להעביר מפתחות כ־KEYS ולא לכתוב אותם בתוך הסקריפט. שני כללים: סקריפט קצר (בזמן שהוא רץ, כל Redis מחכה), ורק מפתחות שקיבל ב־KEYS. כך עובד BullMQ מבפנים: רוב הלוגיקה שלו — "קח עבודה מהתור והעבר ל־active" — היא סקריפטי Lua.</p>
+
+  <h2>5. pub/sub</h2>
+  <p><code>PUBLISH channel message</code> — כל מי שמחובר ומנוי (<code>SUBSCRIBE</code>) מקבל, באותו רגע. בלי שמירה: מי שלא היה מחובר — פספס. שימושים: "בטל את ה־cache המקומי שלך" לכל השרתים (E19), התראות בזמן אמת שמועברות ל־WebSocket. ובגלל שאין שמירה — לא לעבודות שחייבות לקרות. לזה יש תורים, בשיעור הבא.</p>
+  <p>פרט טכני שתפגוש: חיבור שעשה <code>SUBSCRIBE</code> נכנס למצב מיוחד ולא יכול להריץ <code>GET</code> — לכן מחזיקים חיבור נפרד למנויים (<code>redis.duplicate()</code>).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26-E09">E09</a> · <a href="exercises.html#P26-E12">E12</a> · <a href="exercises.html#P26-E15">E15</a> · <a href="exercises.html#P26-E19">E19</a> · <a href="exercises.html#P26-E21">E21</a> · <a href="exercises.html#P26-E22">E22</a> · <a href="exercises.html#P26-E25">E25</a></p>
+  </div>

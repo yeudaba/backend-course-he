@@ -10,7 +10,7 @@ describe("החנות (e2e, PostgreSQL אמיתי)", () => {
     t = await createTestApp();
     admin = await t.admin();
   });
-  afterAll(() => t.close());
+  afterAll(() => t?.close());
 
   const product = async (stock: number, priceCents = 1000) =>
     (await t.http().post("/products").set(admin).send({ name: "מוצר", priceCents, stock, category: "test" }).expect(201)).body as { id: number };

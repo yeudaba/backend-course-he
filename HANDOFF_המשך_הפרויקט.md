@@ -144,6 +144,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - פרק 24 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-PROD + PR2-PROD-DB — **ירוק**.
 - **פרויקט 3 (הדגל) הושלם**: `25p-project-shop` — 6 שלבים, 6 בודקי "קופסה שחורה" (PR3-AUTH, PR3-PRODUCTS, PR3-ORDERS, PR3-RACE, PR3-PAY, PR3-SHIP) — **ירוק**. נבדק שהבודק של המרוץ נכשל על גרסה נאיבית (12 הזמנות על 3 יחידות).
 - פרק 25 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR2-CI + PR2-CI-DB — **ירוק**. ה־workflow של שלב ח׳ רץ באמת ב־GitHub Actions (branch זמני `ci-demo-25`) — הריצה הראשונה נכשלה ב־typecheck (גילוי 13), השנייה ירוקה ב־35 שניות.
+- פרק 26 הושלם: 5 שיעורים, 25 תרגילים, 20 בדיקות + PR3-REDIS (פרויקט 3 שלב 5) — **ירוק**. בודקי PR3 של שלבים 1–4 עוברים גם על פתרון שלב 5 (בלי Redis).
 - **מפרק 22 האימות רץ על Node 24** (כמו אצל הלומד): `PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify`. כל הקורס (0–21) עבר גם על Node 24 בלי שינוי.
 
 ---
@@ -194,6 +195,8 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 23 | `23-docker` | Linux ו־bash (הרשאות, תהליכים, pipelines, סקריפט בטוח), Docker (image/container/volume/port), Dockerfile (cache, .dockerignore, multi-stage, USER, HEALTHCHECK), Compose (רשת, healthcheck+condition, משתנים, override). תרגילי shell נבדקים על fixtures (`tools/shell.mjs`); תרגילי Docker — build/run/compose אמיתיים (`tools/docker.mjs`). שיעור 5 = **פרויקט 2 שלב ו׳** (PR2-DOCKER) | ✔ |
 | 24 | `24-production` | לוגים מובנים (JSON, רמות, redact), X-Request-Id ו־AsyncLocalStorage, זמן (רגע מול תאריך מקומי, Intl, שעון קיץ — 27.3.2026/25.10.2026 בישראל, 8.3.2026 בקובה: חצות לא קיים), Idempotency-Key (כולל מרוץ ב־PostgreSQL עם ON CONFLICT — E16 מול המסד), rate limiting (fixed/sliding/token bucket, Retry-After, trust proxy), graceful shutdown. כל התרגילים TS/Express רגילים (`load`), בלי Nest. שיעור 5 = **פרויקט 2 שלב ז׳** (PR2-PROD, PR2-PROD-DB) | ✔ |
 | 25 | `25-deploy` | CI ב־GitHub Actions (workflow, services, cache, matrix, needs/if), הגדרות וסודות (Secrets/Variables, להיכשל מהר, TLS למסד בענן), פריסה (Render + Neon, deploy hook, migrations ב־CI, expand/contract, smoke, rollback, blue/green), HTTPS ו־reverse proxy (ניסוי Caddy אמיתי, trust proxy, security headers, health/ready). תרגילי workflow = קובצי `.yml` שנבדקים עם js-yaml (`tests/_workflow.mjs`). שיעור 5 = **פרויקט 2 שלב ח׳** (PR2-CI, PR2-CI-DB) | ✔ |
+
+| 26 | `26-redis` | Redis (מבני נתונים, TTL, MULTI, keyPrefix), cache-aside (מדידה אמיתית: MISS 68–93ms מול HIT ~2.5ms על 20,000 מוצרים), ביטול בגרסה (INCR), stampede/single-flight, הגבלת קצב משותפת (INCR+EXPIRE NX, sorted set, Lua token bucket), מנעול (SET NX PX + token + Lua release), pub/sub, BullMQ (attempts/backoff/delay/jobId, at-least-once, צרכן idempotent, outbox). תרגילים מול Redis אמיתי (`tools/redis.mjs`). שיעור 5 = **פרויקט 3 שלב 5** (PR3-REDIS) | ✔ |
 
 ### כלי הבודק (`course-src/root/tools/`, מועתקים ל־`backend-course/tools/`)
 - **`check.mjs`** — `npm run check <ID>`.
@@ -275,6 +278,8 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - **בודק קופסה שחורה** — `root/tools/app.mjs` (`startApp`): `CREATE DATABASE chk_shop_…` ← `prisma migrate deploy` של הפרויקט (CLI מ־`createRequire(project).resolve("prisma/build/index.js")`) ← `node dist/main.js` עם PORT/DATABASE_URL/JWT_SECRET/ADMIN_EMAIL/ADMIN_PASSWORD/BCRYPT_ROUNDS=4/NODE_ENV=test ← מחכה ל־/health ← בדיקות HTTP ← SIGTERM ו־`DROP DATABASE … WITH (FORCE)`. ~2 שניות לבדיקה. עוזרים ב־`tests/_shop.mjs` (`shop(t)`: admin, customer, product, orderOf).
 - הפתרון (`solutions/coffee-shop`): Nest + Prisma 7. מלאי: `updateMany({ where: { stock: { gte } }, data: { decrement } })` בטרנזקציה, לפי productId; `CHECK (stock >= 0)` ביד ב־migration; snapshot של שם ומחיר ב־order_items; Idempotency (גם 4xx נשמר) על POST /orders ו־/pay; `FakePaymentGateway` (4242… מצליח, 4000…0002 נדחה, 4000…9995 אין כיסוי, Luhn); `order-status.ts` (מכונת מצבים) + מעברים מותנים; תפקיד מהמסד בכל בקשה; מנהל ראשון ב־onApplicationBootstrap; מחיקה רכה (active). `npm test` = unit בלבד; `npm run test:e2e` = מול DB (schema לכל ריצה, `DATABASE_URL_TEST`). web/ עם `<meta name="api-url">`. נבדק ב־docker compose up (seed של 8 מוצרים) ובדפדפן — הצילום ב־`files/shop-web.png`.
 - גילוי: Prisma generator בלי `importFileExtension = ""` ← ts-jest לא מוצא `./internal/class.js`.
+- **שלב 5 (פרק 26)** — `26-redis/solutions/coffee-shop` (עותק של שלבים 1–4 + Redis; ב־`25p` נשאר שלב 4): `REDIS_URL` רשות (בלעדיו `X-Cache: OFF`, מייל מיד), `REDIS_PREFIX` (shop), `PRODUCTS_CACHE_TTL_SECONDS`, `ORDER_PAYMENT_TIMEOUT_SECONDS` (1800), `WORKER`. `RedisModule` @Global (טוקן ב־`redis.tokens.ts` — אחרת import מעגלי), `CacheService` עם גרסה לקבוצה, BullMQ queue `shop` עם prefix `<prefix>:bull`, jobId `<name>-<orderId>`, Worker באותו תהליך. טבלת `email_outbox` עם `@@unique([kind, orderId])`, `GET /emails` (מנהל). עבודות נוספות **אחרי** ה־COMMIT. `expire` בודק מצב בזמן הריצה (לא מבטלים עבודה בתשלום).
+- **PR3-REDIS** (`26-redis/tests`): מריץ את השרת עם `REDIS_URL`=`COURSE_REDIS_URL` ו־`REDIS_PREFIX` אקראי, מוחק את המפתחות בסוף. cache (MISS/HIT/ביטול), מייל פעם אחת, ביטול אוטומטי עם timeout של 2 שניות.
 
 ### "גילויים" מהדרך שחייבים לזכור
 1. **Prisma 7 + אזור זמן:** כשה־session של המסד לא ב־UTC, Prisma קורא וכותב `timestamptz` בהזזה.
@@ -312,13 +317,20 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 14. **TLS למסד:** `pg` מדפיס SECURITY WARNING על `sslmode=require` (מתייחס אליו כ־verify-full). Prisma CLI עם `sslmode=verify-full` **מתחבר בלי TLS** (מתעלם מהערך) — לכן בכתובת נשאר `require`, ובזמן ריצה `pgConnectionOptions`.
 15. **js-yaml 5 = YAML 1.2**: `on` נשאר "on", אבל `1.10` ← 1.1 ו־`08` ← 8. ייבוא: `import { load } from "js-yaml"` (אין default export). נוסף כתלות מפורשת ב־root ו־course-src.
 16. **Render (נבדק נובמבר 2026):** free web service נרדם אחרי 15 דק׳, Postgres חינמי נמחק אחרי 30 יום (לכן Neon), pre-deploy command רק בתשלום (לכן migrations ב־CI + deploy hook).
+17. **Redis בענן ובבנייה:** `course-redis` (redis:8-alpine) על פורט **6380**. `build.mjs` מעביר לבדיקות `COURSE_REDIS_URL=redis://localhost:6380` ולבלוקי run `REDIS_URL`. אצל הלומד — ברירת מחדל `redis://localhost:6379`. `tools/redis.mjs`: `redisSandbox(t)` ← ioredis עם `keyPrefix` ייחודי (`chk:…`), ניקוי ב־SCAN בסוף, `connection()` ל־BullMQ.
+18. **BullMQ:** לא מקבל `{ url }` ב־connection — צריך `{ host, port, maxRetriesPerRequest: null }` (Worker חוסם). בבדיקות של Worker: לרשום `t.after` **לפני** שמפעילים את קוד הלומד, אחרת starter שזורק משאיר Worker פתוח והבדיקה נתקעת.
+19. **ioredis + Promise.all:** 100 קריאות GET+SET במקביל על חיבור אחד ← כל ה־GET יוצאים לפני SET (auto pipelining) ← תוצאה 1 במקום 100. משמש בשיעור 3 כהדגמת מרוץ דטרמיניסטית.
+20. **e2e של coffee-shop:** `afterAll(() => t?.close())` — אם `beforeAll` נכשל, `t` undefined ו־Jest נתקע.
 
 ---
 
 ## 7. מה נשאר לעשות
 
-### 7.1 הצעד הבא המיידי — פרק 26 (Cache ותורים)
-Redis דרך Docker. לפי האפיון — הרחבה שמשדרגת את פרויקט הדגל: cache לרשימת המוצרים, ותור ל"אישור הזמנה" (ובמקום טבעי: ביטול אוטומטי של הזמנות שלא שולמו).
+### 7.1 הצעד הבא המיידי — פרק 27 (אלגוריתמים וראיונות)
+מרכז את מה שהתחיל מפרק 6 (סיבוכיות, מבני נתונים, שאלות ראיון). לפי האפיון, סעיף 8.
+נקודות מפרק 26:
+- התלויות `ioredis` ו־`bullmq` נוספו ל־`course-src/package.json` ול־`root/package.json` (הלומד: `npm install`).
+- מספרי המדידה בשיעור 2 (MISS/HIT) הם מהרצה אמיתית ב־docker compose עם 20,000 מוצרים; הלוגים והפלט של `GET /emails` בשיעור 5 — מהרצה אמיתית של הפתרון עם `ORDER_PAYMENT_TIMEOUT_SECONDS=20`.
 נקודות מפרק 25:
 - ה־branch הזמני `ci-demo-25` ב־GitHub לא נמחק (מחיקת branch מרוחק נחסמה ע"י מנגנון הבטיחות) — יהודה יכול למחוק ב־GitHub ← Branches.
 - `cloud-setup.sh`: ההמתנה ל־dockerd הוגדלה ל־90 שניות (אחרי הפסקה ארוכה העלייה הראשונה לקחה מעל 30).
@@ -337,7 +349,6 @@ Redis דרך Docker. לפי האפיון — הרחבה שמשדרגת את פר
 
 | פרק | נושא | הערות |
 |---|---|---|
-| 26 | Cache ותורים | Redis דרך Docker |
 | 27 | אלגוריתמים וראיונות | מרכז את מה שהתחיל מפרק 6 |
 | 28 | תכנון מערכת | רשות |
 | 29 | AI ב־Backend | רשות. מודלים עדכניים של Claude: `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`. לבדוק בתיעוד לפני כתיבה |
@@ -390,6 +401,6 @@ Redis דרך Docker. לפי האפיון — הרחבה שמשדרגת את פר
    - פרק לדוגמה: `course-src/chapters/19-prisma/` — chapter.mjs, שיעור, `exercises.txt`, בדיקה, `tests/_shop.mjs`.
    - פרק 20: `course-src/chapters/20-nestjs/` ו־`course-src/root/tools/nest.mjs`.
 2. **להריץ** `node course-src/build.mjs --verify 19`, כדי לוודא שהסביבה עובדת (PG פרטי על 5433 עולה לבד).
-3. ~~פרקים 20–25 ופרויקט 3~~ ✔ הושלמו. **עכשיו: פרק 26** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
+3. ~~פרקים 20–26 ופרויקט 3 (כולל שלב 5)~~ ✔ הושלמו. **עכשיו: פרק 27** (סעיף 7.1–7.2). בענן: קודם `bash course-src/scripts/cloud-setup.sh` (אחרי הפסקה ארוכה הקונטיינר נעצר — הסקריפט מעלה אותו מחדש), ואז `export PATH=/opt/node24/bin:$PATH`.
 4. **להמשיך לפרק 26 והלאה**, כל פרק שלם (שיעורים + תרגילים + פתרונות + בדיקות + אימות) לפני הבא.
 5. **מדי כמה פרקים** — אימות מלא, ועדכון המסמך הזה (סעיפים 6–7).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # הכנת סביבת אימות בענן/לינוקס (Claude Code on the web וכדומה).
 # במק אין צורך — build.mjs משתמש ב־/Library/PostgreSQL/18 ו־course-src/.pgdata.
-# מה זה עושה: מפעיל Docker, מריץ PostgreSQL 18 בקונטיינר course-pg על פורט 5433
+# מה זה עושה: מפעיל Docker, מריץ PostgreSQL 18 בקונטיינר course-pg על פורט 5433 ו־Redis 8 ב־course-redis על 6380
 # (trust, אזור זמן Asia/Jerusalem), מעתיק ממנו psql 18 ל־/opt/pg18, מתקין Node 24 ל־/opt/node24, ומתקין את התלויות.
 # אחר כך מריצים את הבנייה עם Node 24 (כמו אצל הלומד; פרק 22 דורש אותו):
 #   PATH=/opt/node24/bin:$PATH node course-src/build.mjs --verify
@@ -18,6 +18,8 @@ if [ -f /root/.ccr/ca-bundle.crt ] && ! docker run --rm node:24-alpine test -f /
   docker pull -q node:24-alpine >/dev/null && docker build -q -t node:24-alpine "$ca" >/dev/null
 fi
 docker pull -q postgres:18-alpine >/dev/null 2>&1 || true
+# פרק 26: Redis 8 בקונטיינר course-redis על פורט 6380 (לא 6379 — כדי לא להתנגש ב־Redis של הלומד)
+docker start course-redis >/dev/null 2>&1 || docker run -d --name course-redis -p 6380:6379 redis:8-alpine >/dev/null
 if [ ! -x /opt/pg18/bin/psql ]; then
   mkdir -p /opt/pg18img/lib /opt/pg18/bin
   docker cp course-pg:/usr/lib/postgresql/18 /opt/pg18img/

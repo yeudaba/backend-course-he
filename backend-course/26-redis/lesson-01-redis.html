@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis: מבני נתונים בזיכרון — פרק 26</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — Redis: מבני נתונים בזיכרון</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה Redis, ובמה הוא שונה מ־PostgreSQL.</li>
+      <li>פקודות ראשונות ב־<code>redis-cli</code>: מחרוזות, מונים, TTL.</li>
+      <li>חמשת מבני הנתונים — ולאיזו בעיה כל אחד.</li>
+      <li>Redis מ־Node.js עם <code>ioredis</code>: קידומת מפתחות, <code>MULTI</code>, ומה עושים כש־Redis לא זמין.</li>
+    </ul>
+  </div>
+
+  <h2>1. מסד נתונים שחי בזיכרון</h2>
+  <p>Redis הוא שרת שמחזיק <strong>מפתח ← ערך</strong>, הכול ב־RAM. אין טבלאות, אין SQL, אין JOIN. מה שיש: פעולות מהירות מאוד (מיקרו־שניות בתוך השרת), מבני נתונים מוכנים, תוקף (<strong>TTL</strong>) לכל מפתח, ופקודות <strong>אטומיות</strong> — Redis מריץ פקודה אחת בכל רגע, כך ש־<code>INCR</code> משני שרתים במקביל אף פעם לא "מאבד" ספירה.</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>PostgreSQL</th><th>Redis</th></tr>
+    <tr><td>איפה הנתונים</td><td>דיסק (עם cache בזיכרון)</td><td>זיכרון (עם גיבוי לדיסק — אם הוגדר)</td></tr>
+    <tr><td>שאילתות</td><td>SQL: סינון, מיון, JOIN, אגרגציות</td><td>לפי מפתח בלבד, ופקודה לכל מבנה</td></tr>
+    <tr><td>אמינות</td><td>טרנזקציות, constraints, WAL — מקור האמת</td><td>יכול לאבד את השניות האחרונות, או הכול (תלוי בהגדרה)</td></tr>
+    <tr><td>טוב ל־</td><td>הזמנות, משתמשים, כסף, מלאי</td><td>cache, מונים, הגבלות קצב, מנעולים, תורים, סשנים</td></tr>
+  </table></div>
+  <p>הכלל שילווה את כל הפרק: <strong>Redis לא מקור האמת.</strong> כל מה שבו אפשר לבנות מחדש או לאבד בלי נזק אמיתי. ההזמנה, המלאי והתשלום — ב־PostgreSQL, כמו בפרויקט 3. (Redis <em>יכול</em> לשמור לדיסק — RDB ו־AOF — ושירותים מנוהלים עושים את זה. אבל המערכת צריכה לשרוד גם Redis ריק.)</p>
+
+  <h2>2. redis-cli</h2>
+  <p>מהקונטיינר שהרצת בהתקנה: <code>docker exec -it redis redis-cli</code>.</p>
+<pre class="terminal"><span class="dim">127.0.0.1:6379&gt; SET greeting shalom</span>
+<span class="dim">OK</span>
+<span class="dim">127.0.0.1:6379&gt; GET greeting</span>
+<span class="dim">"shalom"</span>
+<span class="dim">127.0.0.1:6379&gt; INCR visits</span>
+<span class="dim">(integer) 1</span>
+<span class="dim">127.0.0.1:6379&gt; INCR visits</span>
+<span class="dim">(integer) 2</span>
+<span class="dim">127.0.0.1:6379&gt; GET visits</span>
+<span class="dim">"2"</span>
+<span class="dim">127.0.0.1:6379&gt; SET code 4821 EX 300</span>
+<span class="dim">OK</span>
+<span class="dim">127.0.0.1:6379&gt; TTL code</span>
+<span class="dim">(integer) 300</span>
+<span class="dim">127.0.0.1:6379&gt; TTL greeting</span>
+<span class="dim">(integer) -1</span>
+<span class="dim">127.0.0.1:6379&gt; GET nothing</span>
+<span class="dim">(nil)</span>
+<span class="dim">127.0.0.1:6379&gt; DEL greeting visits code</span>
+<span class="dim">(integer) 3</span></pre>
+  <ul>
+    <li><code>INCR</code> על מפתח שלא קיים — מתחיל מ־0. ו־<code>GET visits</code> מחזיר <code>"2"</code>, מחרוזת: ב־Redis כל ערך הוא מחרוזת; "מספר" הוא מחרוזת ש־<code>INCR</code> יודע לקרוא.</li>
+    <li><code>EX 300</code> — המפתח נמחק לבד אחרי 5 דקות (קוד אימות, סשן). <code>TTL</code> מחזיר −1 כשאין תוקף, −2 כשאין מפתח.</li>
+    <li>שמות מפתחות — מוסכמה: חלקים עם נקודתיים, <code>shop:cache:products:…</code>, <code>views:2026-11-08</code>.</li>
+  </ul>
+
+  <h2>3. חמישה מבני נתונים</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מבנה</th><th>פקודות</th><th>שימוש טיפוסי</th></tr>
+    <tr><td><strong>String</strong></td><td><code>GET SET INCR</code>, <code>SET … NX EX</code></td><td>cache של JSON, מונה, מנעול</td></tr>
+    <tr><td><strong>Hash</strong></td><td><code>HSET HGET HGETALL HINCRBY</code></td><td>אובייקט עם שדות: סשן, מונים לפי מוצר</td></tr>
+    <tr><td><strong>List</strong></td><td><code>LPUSH RPUSH LPOP LRANGE LTRIM</code></td><td>"צפית לאחרונה", תור פשוט</td></tr>
+    <tr><td><strong>Set</strong></td><td><code>SADD SISMEMBER SCARD</code></td><td>"כבר הצביע?", תגיות, מבקרים ייחודיים</td></tr>
+    <tr><td><strong>Sorted set</strong></td><td><code>ZADD ZINCRBY ZREVRANGE ZRANGEBYSCORE</code></td><td>דירוג, "הכי נמכרים", חלון זמן (score = זמן)</td></tr>
+  </table></div>
+  <p>ואותו דבר מ־Node.js, עם <code>ioredis</code> — כל פקודה היא פונקציה עם אותו שם:</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "lesson26:" });
+
+await redis.hset("user:7", { name: "דנה", city: "חיפה" });
+await redis.hincrby("user:7", "orders", 1);
+console.log(await redis.hgetall("user:7"));
+
+await redis.zadd("bestsellers", 12, "latte", 30, "espresso", 7, "mocha");
+await redis.zincrby("bestsellers", 25, "latte");
+console.log(await redis.zrevrange("bestsellers", 0, 2, "WITHSCORES"));
+
+for (const p of ["latte", "mocha", "latte", "cookie"]) {
+  await redis.lrem("recent:7", 0, p);
+  await redis.lpush("recent:7", p);
+}
+await redis.ltrim("recent:7", 0, 2);
+console.log(await redis.lrange("recent:7", 0, -1));
+
+await redis.del("user:7", "bestsellers", "recent:7");
+await redis.quit();</code></pre>
+<pre class="terminal">{ name: 'דנה', city: 'חיפה', orders: '1' }
+[ 'latte', '37', 'espresso', '30', 'mocha', '7' ]
+[ 'cookie', 'latte', 'mocha' ]</pre>
+  <p>שים לב: <code>hgetall</code> מחזיר את <code>orders</code> כמחרוזת, וגם הניקודים ב־<code>WITHSCORES</code>. ו"צפית לאחרונה" בשלוש פקודות: מוחקים אם כבר שם, דוחפים לראש, וחותכים ל־3 — <code>latte</code> שנצפה שוב עלה לראש, בלי כפילות.</p>
+
+  <h2>4. ioredis: שלושה דברים שכדאי לדעת</h2>
+  <p><strong><code>keyPrefix</code>.</strong> בדוגמה, <code>"user:7"</code> נשמר בפועל כ־<code>lesson26:user:7</code>. כמה אפליקציות (או סביבות — dev, test) על אותו Redis לא דורכות זו על זו. הבודקים של הפרק משתמשים בזה: כל ריצה מקבלת קידומת משלה, ומוחקת רק אותה בסוף. בפרויקט 3: <code>REDIS_PREFIX=shop</code>.</p>
+  <p><strong>MULTI / pipeline.</strong> כמה פקודות בהלוך־חזור אחד:</p>
+<pre><code class="lang-ts">const results = await redis.multi()
+  .hincrby(`views:${day}`, productId, 1)
+  .zincrby(`top:${day}`, 1, productId)
+  .expire(`views:${day}`, 7 * 86400)
+  .exec(); // [[null, 3], [null, "3"], [null, 1]] — [שגיאה, תוצאה] לכל פקודה</code></pre>
+  <p><code>MULTI</code> מריץ את כולן ברצף, בלי שפקודה של לקוח אחר תיכנס באמצע. אבל זה <em>לא</em> טרנזקציה כמו ב־SQL: אין rollback, ואי אפשר להחליט באמצע לפי ערך שנקרא (לזה — Lua, בשיעור 3).</p>
+  <p><strong>מה קורה כש־Redis לא זמין.</strong> ioredis מנסה להתחבר מחדש לבד, ופקודות ממתינות בתור (עד 20 ניסיונות לפקודה, ברירת מחדל). לכן קוד שמשתמש ב־Redis כאופטימיזציה צריך להחליט: ליפול, או להמשיך בלי. ב־cache של הפרויקט — ממשיכים בלי (המסד עונה, רק לאט יותר); בתור של BullMQ — אין "בלי".</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ פקודות שאסור בפרודקשן</span>
+    <p><code>KEYS *</code> סורק את <em>כל</em> המפתחות — ומאחר ש־Redis עושה דבר אחד בכל רגע, בזמן הסריקה כל השרתים שלך מחכים. עם מיליון מפתחות — שניות. בקוד: <code>SCAN</code> (בחלקים), או — עדיף — לתכנן כך שלא צריך לחפש מפתחות (שיעור 2). ו־<code>FLUSHALL</code> מוחק הכול, גם של אפליקציות אחרות.</p>
+  </div>
+
+  <div class="box tip">
+    <span class="box-title">💡 Redis, Valkey, ומה מנוהל</span>
+    <p>ב־2024 שינה Redis את הרישיון, ונוצר fork בקוד פתוח בשם <strong>Valkey</strong> (שספקי ענן גדולים עברו אליו). ב־2025 Redis 8 חזר לרישיון קוד פתוח (AGPL). מבחינת הקוד שלך — אותן פקודות, ו־ioredis ו־BullMQ עובדים מול שניהם. בענן: Upstash (יש תוכנית חינמית, נכון לנובמבר 2026), ElastiCache, Redis Cloud, או Key Value של Render.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26-E01">E01</a> · <a href="exercises.html#P26-E02">E02</a> · <a href="exercises.html#P26-E05">E05</a> · <a href="exercises.html#P26-E06">E06</a> · <a href="exercises.html#P26-E08">E08</a> · <a href="exercises.html#P26-E10">E10</a> · <a href="exercises.html#P26-E11">E11</a> · <a href="exercises.html#P26-E24">E24</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 26</a><a href="lesson-02-cache.html"><small>הבא</small>שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</a></div>
+</main>
+</body>
+</html>

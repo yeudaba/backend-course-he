@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מטמון: cache-aside, ביטול ו־stampede — פרק 26</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>cache-aside: הדפוס, ואיך מתכננים מפתח.</li>
+      <li>מדידה אמיתית: הקטלוג של חנות הקפה עם ובלי cache.</li>
+      <li>ביטול (invalidation): למחוק, או להעלות גרסה.</li>
+      <li>stampede: כשכולם מגלים miss באותו רגע.</li>
+      <li>מה <em>לא</em> שמים ב־cache.</li>
+    </ul>
+  </div>
+
+  <h2>1. cache-aside</h2>
+  <p>הדפוס הנפוץ ביותר: הקוד שלך מנהל את ה־cache. Redis לא יודע כלום על המסד.</p>
+<pre><code class="lang-ts">async function getOrSet&lt;T&gt;(key: string, ttlSeconds: number, load: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  const hit = await redis.get(key);
+  if (hit !== null) return JSON.parse(hit) as T;      // HIT
+  const value = await load();                          // MISS — הולכים למסד
+  await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+  return value;
+}
+
+const page = await getOrSet(`products:${JSON.stringify(query)}`, 60, () =&gt; prisma.product.findMany(…));</code></pre>
+  <p>שלוש החלטות בכל cache:</p>
+  <ul>
+    <li><strong>המפתח</strong> — חייב לכלול <em>כל</em> מה שמשפיע על התשובה. <code>?q=latte&amp;page=2</code> ו־<code>?q=latte&amp;page=1</code> — שני מפתחות. שכחת את <code>page</code>? עמוד 2 מחזיר את עמוד 1 (E20). וסדר: <code>{page, q}</code> ו־<code>{q, page}</code> הם אותה בקשה — בפרויקט בונים את המפתח מה־DTO אחרי ולידציה, בסדר קבוע.</li>
+    <li><strong>ה־TTL</strong> — כמה זמן מותר לתשובה להיות ישנה. גם אם יש ביטול מסודר, תמיד שמים TTL: הוא רשת הביטחון לכל מקום ששכחת לבטל.</li>
+    <li><strong><code>hit !== null</code></strong>, לא <code>if (hit)</code> — <code>0</code>, <code>""</code> ו־<code>[]</code> הם תשובות. ו־<code>JSON.stringify</code>: ioredis שומר אובייקט כ־<code>"[object Object]"</code>.</li>
+  </ul>
+
+  <h2>2. כמה זה שווה? מדידה</h2>
+  <p>הרצתי את חנות הקפה (שלב 5) ב־<code>docker compose</code> עם 20,000 מוצרים, וחיפוש <code>GET /products?q=…</code> — <code>ILIKE</code> שלא יכול להשתמש באינדקס, כך שהמסד סורק. כל בקשה פעמיים: הראשונה MISS, השנייה HIT (זמן כולל מ־<code>curl</code>):</p>
+  <div class="table-wrap"><table>
+    <tr><th>עמוד</th><th>MISS (מסד)</th><th>HIT (Redis)</th></tr>
+    <tr><td>21</td><td>77.4ms</td><td>2.6ms</td></tr>
+    <tr><td>22</td><td>93.2ms</td><td>2.8ms</td></tr>
+    <tr><td>23</td><td>90.6ms</td><td>2.7ms</td></tr>
+    <tr><td>24</td><td>78.7ms</td><td>2.3ms</td></tr>
+    <tr><td>25</td><td>68.2ms</td><td>2.6ms</td></tr>
+  </table></div>
+  <p>פי 30. אבל שים לב מה המספרים <em>לא</em> אומרים: עם 30 מוצרים (כמו ב־seed) המסד עונה ב־2–3ms בעצמו, ו־cache רק מוסיף מורכבות. ולפני cache — אינדקס נכון (פרק 18) הוא בדרך כלל התיקון הנכון. cache שווה כשהשאילתה יקרה <em>וגם</em> חוזרת הרבה <em>וגם</em> מותר לתשובה להיות קצת ישנה.</p>
+  <p>בפרויקט, התשובה מסמנת את עצמה — header שמאוד עוזר בדיבאג:</p>
+<pre class="terminal"><span class="prompt">% </span>curl -si "localhost:3000/products?q=V60" | grep -i "^x-cache"
+<span class="dim">X-Cache: MISS</span>
+<span class="prompt">% </span>curl -si "localhost:3000/products?q=V60" | grep -i "^x-cache"
+<span class="dim">X-Cache: HIT</span></pre>
+
+  <h2>3. ביטול: למחוק, או להעלות גרסה</h2>
+  <p>מנהל שינה מחיר. מה עם ה־cache? הדרך הפשוטה: <code>DEL</code> למפתח. אבל לרשימת המוצרים יש מפתח לכל צירוף של <code>q</code>, <code>sort</code>, <code>page</code>, <code>limit</code> — אלפים. למצוא אותם צריך <code>KEYS</code> (אסור) או <code>SCAN</code> (איטי). הפתרון בפרויקט: <strong>גרסה</strong> לקבוצה.</p>
+<span class="file-label">src/redis/cache.service.ts</span>
+<pre><code class="lang-ts">const version = (await this.redis.get(`v:${group}`)) ?? "0";
+const fullKey = `cache:${group}:${version}:${key}`;   // cache:products:3:{"q":"V60",…}
+…
+async invalidate(group: string) {
+  await this.redis?.incr(`v:${group}`);               // מעכשיו כולם קוראים מ־:4:
+}</code></pre>
+  <p>פקודה אחת, אטומית, בלי לחפש כלום. המפתחות של גרסה 3 לא נמחקים — אף אחד לא קורא אותם, וה־TTL מנקה. המחיר: עוד <code>GET</code> בכל בקשה. מתי מבטלים? בכל שינוי שמשפיע על הרשימה — יצירה, עדכון, מחיקה, <strong>וגם הזמנה</strong>: המלאי (<code>stock</code>) מופיע ברשימה.</p>
+  <p>ובכל זאת, בין ה־<code>UPDATE</code> במסד ל־<code>INCR</code> יש רגע שבו בקשה יכולה לקרוא את הישן — ואפילו לשמור אותו מחדש תחת הגרסה החדשה, אם התחילה לטעון לפני העדכון וסיימה אחריו. זה מקור הקושי ב־cache: "There are only two hard things in Computer Science: cache invalidation and naming things". לכן ה־TTL נשאר תמיד, ולכן מה שחייב להיות מדויק — לא קוראים מ־cache.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ מה לא שמים ב־cache</span>
+    <ul>
+      <li><strong>החלטות.</strong> הקטלוג יכול להראות מחיר ישן לדקה; ההזמנה לוקחת את המחיר והמלאי <em>מהמסד</em>, בתוך הטרנזקציה (פרויקט 3, שלב 2). cache לתצוגה — כן; ל"מותר למכור?" — אף פעם.</li>
+      <li><strong>מידע של משתמש במפתח משותף.</strong> <code>GET /orders</code> ב־cache לפי URL בלבד — והלקוח הבא רואה את ההזמנות של הקודם. מידע אישי: המפתח כולל את המשתמש, או — עדיף — לא שומרים.</li>
+      <li><strong>שגיאות.</strong> המסד נפל, <code>load()</code> זרק — לא שומרים כלום (E07).</li>
+    </ul>
+  </div>
+
+  <h2>4. stampede</h2>
+  <p>מפתח פופולרי פג. באותה מילישנייה מגיעות 200 בקשות, כולן רואות miss, וכולן מריצות את השאילתה היקרה — המסד מקבל פי 200 עומס בדיוק ברגע הכי גרוע. בתוך תהליך אחד זה קל לראות:</p>
+<pre><code class="lang-ts">const db = { calls: 0 };
+const loadProducts = async () =&gt; { db.calls++; await new Promise((r) =&gt; setTimeout(r, 50)); return ["latte", "mocha"]; };
+
+// cache-aside נאיבי (Map במקום Redis — אותה בעיה)
+const cache = new Map&lt;string, string[]&gt;();
+async function naive(key: string) {
+  if (cache.has(key)) return cache.get(key)!;
+  const value = await loadProducts();
+  cache.set(key, value);
+  return value;
+}
+await Promise.all(Array.from({ length: 200 }, () =&gt; naive("products")));
+console.log("נאיבי:", db.calls, "שאילתות");
+
+// single-flight: מי שמגיע בזמן שהטעינה רצה — מחכה לאותו Promise
+db.calls = 0; cache.clear();
+const inFlight = new Map&lt;string, Promise&lt;string[]&gt;&gt;();
+async function singleFlight(key: string) {
+  if (cache.has(key)) return cache.get(key)!;
+  let p = inFlight.get(key);
+  if (!p) {
+    p = loadProducts().then((v) =&gt; { cache.set(key, v); return v; }).finally(() =&gt; inFlight.delete(key));
+    inFlight.set(key, p);
+  }
+  return p;
+}
+await Promise.all(Array.from({ length: 200 }, () =&gt; singleFlight("products")));
+console.log("single-flight:", db.calls, "שאילתות");</code></pre>
+<pre class="terminal">נאיבי: 200 שאילתות
+single-flight: 1 שאילתות</pre>
+  <p>זה פותר בתוך תהליך. עם חמישה שרתים — עדיין 5 שאילתות; כדי להוריד ל־1 צריך מנעול ב־Redis: מי שתפס טוען, השאר מחכים שהערך יופיע (E13). דרכים נוספות: TTL עם רעש אקראי (<code>60 + random(0..10)</code>) כדי שמפתחות לא יפוגו יחד, ו"רענון מוקדם" — טוענים מחדש ברקע קצת לפני שהתוקף נגמר.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 ועוד שכבה: cache בזיכרון התהליך</span>
+    <p>הכי מהיר — בלי רשת בכלל: <code>Map</code> בתוך התהליך (L1), ו־Redis מאחוריו (L2). הבעיה: חמישה שרתים = חמישה עותקים, וביטול צריך להגיע לכולם. pub/sub של Redis עושה את זה (E19) — ועם TTL קצר ל־L1, כי pub/sub לא מבטיח הגעה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26-E03">E03</a> · <a href="exercises.html#P26-E07">E07</a> · <a href="exercises.html#P26-E13">E13</a> · <a href="exercises.html#P26-E14">E14</a> · <a href="exercises.html#P26-E20">E20</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-redis.html"><small>הקודם</small>שיעור 1 — Redis: מבני נתונים בזיכרון</a><a href="lesson-03-shared.html"><small>הבא</small>שיעור 3 — מצב משותף: הגבלת קצב, מנעולים ו־Lua</a></div>
+</main>
+</body>
+</html>

@@ -16,12 +16,11 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕", "26-redis": "⚡",
 };
 
 // מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
 const PLANNED = [
-  { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 26", icon: "⚡", title: "Cache ותורים", topics: "Redis דרך Docker" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 27", icon: "🧠", title: "אלגוריתמים וראיונות", topics: "שאלות ראיון, סיבוכיות" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 28", icon: "🏗️", title: "תכנון מערכת", topics: "רשות, ברמת Junior" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 29", icon: "🤖", title: "AI ב־Backend", topics: "רשות" },
