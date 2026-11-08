@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>איך ניגשים: דרישות ואומדנים — פרק 28</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 28</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — איך ניגשים: דרישות ואומדנים</h1>
+  <p class="subtitle">⏱ ~40 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זו שאלת תכנון, ומה מצפים מ־Junior.</li>
+      <li>שבעה שלבים — ומה אומרים בכל אחד.</li>
+      <li>אומדן "על גב מעטפה": בקשות בשנייה, אחסון, ומספרים שכדאי לזכור.</li>
+    </ul>
+  </div>
+
+  <h2>1. מה מצפים ממך</h2>
+  <p>בשאלת תכנון אין תשובה נכונה אחת. המראיין בודק איך אתה חושב: שואל לפני שמתכנן? יודע להגיד "זה מספיק" ולא מסבך? מבין מה כל רכיב עולה? מ־Junior לא מצפים לתכנן את יוטיוב. מצפים לתכנן משהו קטן <em>היטב</em>, ולדעת מה ישתנה כשהוא יגדל. ובעבודה — אותה חשיבה בכל משימה של "להוסיף פיצ׳ר": איפה הנתונים, מי קורא, מה קורה כשמשהו נופל.</p>
+
+  <h2>2. שבעה שלבים</h2>
+  <div class="table-wrap"><table>
+    <tr><th>שלב</th><th>מה עושים</th><th>דוגמה (קיצור קישורים)</th></tr>
+    <tr><td><strong>1. דרישות</strong></td><td>פונקציונליות (מה עושים) ולא־פונקציונליות (כמה, כמה מהר, כמה אמין). לכתוב אותן</td><td>יצירה, redirect, alias, תפוגה, סטטיסטיקות; redirect מהיר; זמינות גבוהה</td></tr>
+    <tr><td><strong>2. אומדנים</strong></td><td>בקשות בשנייה, יחס קריאה/כתיבה, אחסון. מסדר גודל</td><td>3,000 redirects/s בשיא, 10 כתיבות/s, 1TB ב־5 שנים</td></tr>
+    <tr><td><strong>3. API</strong></td><td>endpoints, מה נכנס ומה יוצא</td><td><code>POST /links</code>, <code>GET /:code</code> ← 302</td></tr>
+    <tr><td><strong>4. מודל נתונים</strong></td><td>טבלאות, מפתחות, אינדקסים</td><td><code>links(code PK, url, expires_at, …)</code></td></tr>
+    <tr><td><strong>5. תרשים</strong></td><td>הגרסה הפשוטה שעובדת: לקוח ← שרת ← מסד</td><td>ואז מוסיפים רק מה שהאומדן מצדיק</td></tr>
+    <tr><td><strong>6. העמקה</strong></td><td>החלק המעניין: איך מייצרים קוד? איפה צוואר הבקבוק?</td><td>קוד אקראי מול מונה; cache לקישורים חמים</td></tr>
+    <tr><td><strong>7. כשלים ו־trade-offs</strong></td><td>מה נופל, מה קורה אז, ומה ויתרנו עליו</td><td>Redis נפל ← ישר למסד; קליקים אולי נספרים באיחור</td></tr>
+  </table></div>
+  <p>הטעות הנפוצה ביותר: לדלג לשלב 5 ולצייר עשר קופסות. התרשים בא <em>אחרי</em> המספרים — הם אלה שאומרים אם צריך cache, כמה שרתים, ואם בכלל צריך sharding (כמעט אף פעם לא).</p>
+
+  <h2>3. אומדנים</h2>
+  <p>הכלים: יום ≈ 100,000 שניות (86,400). מיליון ביום ≈ 12 בשנייה. השיא — פי 2 עד 10 מהממוצע, תלוי במערכת (אתר קניות בבלאק פריידיי — הרבה יותר). ומשם — חשבון:</p>
+<pre><code class="lang-ts">const day = 86_400;
+const scenarios = [
+  { name: "חנות הקפה (היום)", users: 2_000, perUser: 30, writes: 0.1, bytes: 2_000, peak: 5, days: 365 },
+  { name: "קיצור קישורים", users: 10_000_000, perUser: 10, writes: 0.01, bytes: 500, peak: 3, days: 365 * 5 },
+  { name: "רשת חברתית בינונית", users: 5_000_000, perUser: 200, writes: 0.05, bytes: 1_000, peak: 3, days: 365 },
+];
+for (const s of scenarios) {
+  const perDay = s.users * s.perUser;
+  const avg = perDay / day;
+  const storageGB = (perDay * s.writes * s.bytes * s.days) / 1e9;
+  console.log(`${s.name}: ממוצע ${Math.round(avg)}/s · שיא ${Math.round(avg * s.peak)}/s · אחסון ${Math.round(storageGB)}GB`);
+}</code></pre>
+<pre class="terminal">חנות הקפה (היום): ממוצע 1/s · שיא 3/s · אחסון 4GB
+קיצור קישורים: ממוצע 1157/s · שיא 3472/s · אחסון 913GB
+רשת חברתית בינונית: ממוצע 11574/s · שיא 34722/s · אחסון 18250GB</pre>
+  <p>מה המספרים אומרים? חנות הקפה: בקשה בשנייה — שרת אחד ישן רוב הזמן. קיצור קישורים: 3,500 בשנייה בשיא — הרבה לשרת Node אחד אם כל בקשה הולכת למסד, קל עם cache ו־2–3 שרתים. רשת חברתית: 35,000 בשנייה ו־18TB בשנה — כאן מתחילים לדבר על replicas, cache רציני, ואולי חלוקה של הנתונים. <strong>האומדן אומר לך גם ממה לא לפחד.</strong></p>
+
+  <h2>4. מספרים שכדאי לזכור</h2>
+  <p>לא בעל פה במדויק — מסדרי גודל. אלה מספרים מקובלים (מהרשימה המפורסמת "Latency numbers every programmer should know", מעודכנים בערך לחומרה של היום), לא מדידה שלי:</p>
+  <div class="table-wrap"><table>
+    <tr><th>פעולה</th><th>בערך</th></tr>
+    <tr><td>גישה לזיכרון</td><td>100 ננו־שניות</td></tr>
+    <tr><td>קריאה אקראית מ־SSD</td><td>100 מיקרו־שניות</td></tr>
+    <tr><td>הלוך־חזור בתוך אותו data center (שרת ← Redis)</td><td>0.5 מילישנייה</td></tr>
+    <tr><td>שאילתה פשוטה עם אינדקס</td><td>1 מילישנייה</td></tr>
+    <tr><td>הלוך־חזור ישראל ← אירופה</td><td>50–70 מילישניות</td></tr>
+    <tr><td>הלוך־חזור ישראל ← ארה״ב (מערב)</td><td>150–200 מילישניות</td></tr>
+  </table></div>
+  <p>והמספרים שמדדנו בעצמנו בקורס: GET מ־Redis מול שאילתת חיפוש על 20,000 מוצרים — 2.5ms מול 70–90ms (פרק 26); <code>OFFSET 500000</code> מול cursor — 83ms מול 0.06ms (שיעור 4). המסקנה: רשת ודיסק הם היקרים; לולאה בזיכרון כמעט תמיד זניחה לידם. ושאילתה בתוך לולאה (N+1) — הכי יקרה מכולן.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 "מה אם…?" — המשפט שהופך תכנון לטוב</span>
+    <p>אחרי כל קופסה בתרשים: מה אם היא נופלת? מה אם היא איטית? מה אם הבקשה מגיעה פעמיים? מה אם שני משתמשים עושים את זה באותו רגע? רוב הבאגים בפרודקשן הם תשובה שלא נשאלה לאחת מארבע השאלות האלה — וכבר פגשת את כולן בקורס (פרקים 18, 24, 26).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28-E01">E01</a> · <a href="exercises.html#P28-E02">E02</a> · <a href="exercises.html#P28-E07">E07</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרק 28</a><a href="lesson-02-building-blocks.html"><small>הבא</small>שיעור 2 — אבני בניין, וכשלים</a></div>
+</main>
+</body>
+</html>

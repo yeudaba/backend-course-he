@@ -1,0 +1,73 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>שאלת התכנון הקלאסית, מקצה לקצה, בשבעת השלבים.</li>
+      <li>איך מייצרים קוד קצר: מונה, אקראי, או hash — ומה כל אחד עולה.</li>
+      <li>301 או 302, cache לקישורים חמים, וספירת קליקים בלי להאט את ה־redirect.</li>
+    </ul>
+  </div>
+
+  <h2>1. דרישות ומספרים</h2>
+  <p>מ־E01 ו־E02: יצירה (אנונימית, עם הגבלת קצב), alias אופציונלי, תפוגה, ספירת קליקים; redirect מהיר וזמין. 100 מיליון redirects ביום (3,000/s בשיא), מיליון קישורים חדשים ביום (~10/s), 1TB ב־5 שנים. <strong>מערכת קריאה</strong>, יחס 100:1.</p>
+
+  <h2>2. API ונתונים</h2>
+```text
+POST /links          { url, alias?, ttlSeconds? }  →  201 { code, shortUrl, expiresAt }
+GET  /:code          →  302 Location: <url>   ·  404 אם לא קיים  ·  410 אם פג
+GET  /links/:code/stats  →  { clicks, createdAt }        (ליוצר בלבד)
+```
+```sql
+CREATE TABLE links (
+  code        text PRIMARY KEY,           -- החיפוש היחיד ב־redirect: לפי code
+  url         text NOT NULL,
+  owner_id    bigint REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz,
+  clicks      bigint NOT NULL DEFAULT 0
+);
+```
+  <p>ה־redirect הוא <code>SELECT url, expires_at FROM links WHERE code = $1</code> — חיפוש לפי PRIMARY KEY, מילישנייה. 1TB בטבלה אחת זה הרבה לגיבוי, אבל לא בעיה לאינדקס.</p>
+
+  <h2>3. הלב: איך מייצרים קוד?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>שיטה</th><th>איך</th><th>יתרון</th><th>חיסרון</th></tr>
+    <tr><td><strong>מונה + base62</strong></td><td>id מהמסד (1, 2, 3…) ← <code>encode(id)</code> (E06)</td><td>אף פעם לא מתנגש; קצר</td><td>צפוי: אפשר לסרוק את כל הקישורים (<code>/1</code>, <code>/2</code>…), ולדעת כמה קישורים יש. המונה — נקודה מרכזית</td></tr>
+    <tr><td><strong>אקראי</strong></td><td>7 תווים אקראיים; תפוס ← שוב (E10)</td><td>לא צפוי; כל שרת מייצר לבד</td><td>התנגשויות (נדירות) ← צריך <code>UNIQUE</code> וניסיון חוזר</td></tr>
+    <tr><td><strong>hash של ה־URL</strong></td><td>7 התווים הראשונים של sha256(url)</td><td>אותו URL ← אותו קוד</td><td>התנגשויות בין URLs שונים; ושני אנשים שמקצרים אותו URL חולקים סטטיסטיקות</td></tr>
+  </table></div>
+```ts run
+const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const encode = (n: number) => { let s = ""; do { s = ALPHABET[n % 62] + s; n = Math.floor(n / 62); } while (n > 0); return s; };
+
+console.log("מונה:", [1, 2, 3, 61, 62, 1_000_000, 1_000_001].map(encode).join(" "));
+console.log("קודים אפשריים:", [6, 7, 8].map((len) => `${len} תווים = ${(62 ** len).toExponential(1)}`).join(" · "));
+// סיכוי שקוד אקראי חדש יתנגש, כשכבר יש 2 מיליארד קודים (7 תווים)
+console.log("התנגשות לקוד חדש:", (2e9 / 62 ** 7).toFixed(5));
+```
+```out
+מונה: 1 2 3 Z 10 4c92 4c93
+קודים אפשריים: 6 תווים = 5.7e+10 · 7 תווים = 3.5e+12 · 8 תווים = 2.2e+14
+התנגשות לקוד חדש: 0.00057
+```
+  <p>שני מיליארד קישורים, והסיכוי שקוד אקראי חדש כבר תפוס — כחצי פרומיל. ניסיון שני כמעט תמיד מצליח. לכן בחרנו באקראי (E17), עם <code>code</code> כ־PRIMARY KEY: INSERT שנכשל על ייחודיות ← קוד חדש. המסד הוא שמבטיח, לא "בדקתי קודם" (אותו לקח כמו המלאי בפרויקט 3).</p>
+
+  <h2>4. ה־redirect: 301 או 302?</h2>
+  <p><strong>301 Moved Permanently</strong> — הדפדפן שומר את ההפניה ולא שואל אותנו שוב. מהיר יותר, פחות עומס — אבל לא נדע על הקליקים הבאים, ואי אפשר לשנות יעד או לחסום קישור שהתגלה כפישינג. <strong>302 Found</strong> — כל קליק עובר דרכנו. רוב השירותים בוחרים 302 (או 307) — הסטטיסטיקות והשליטה הן המוצר.</p>
+
+  <h2>5. עומס: cache וקליקים</h2>
+  <p>3,000 redirects בשנייה, ורובם — על מעט קישורים (קמפיין שפורסם עכשיו). <strong>cache</strong>: <code>code ← url</code> ב־Redis עם TTL של שעה (פרק 26). קישור חם — מ־Redis תמיד; המסד מקבל רק miss. ביטול: אם מותר לשנות יעד או למחוק — <code>DEL</code> לקוד ביחד עם העדכון.</p>
+  <p><strong>קליקים</strong>: <code>UPDATE links SET clicks = clicks + 1</code> בכל redirect = 3,000 כתיבות בשנייה על <em>אותן</em> שורות חמות — נעילות, ובדיוק במקום שהיה אמור להיות קריאה בלבד. במקום זה: <code>INCR clicks:&lt;code&gt;</code> ב־Redis, ו־job שכל דקה מעביר למסד באצווה (E18 בכיוון ההפוך). אם נאבד דקה של קליקים כש־Redis נופל — זה מחיר סביר, וכדאי להגיד אותו בקול.</p>
+  <p>התרשים הסופי: <code>לקוח ← load balancer ← 2–3 שרתי API (stateless) ← Redis (cache + מונים) ← PostgreSQL (primary + replica)</code>, ו־worker שמעביר קליקים. אין sharding, אין Kafka — המספרים לא מצדיקים.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ מה ששוכחים בשאלה הזו</span>
+    <ul>
+      <li><strong>שימוש לרעה.</strong> קיצור קישורים הוא כלי מועדף לפישינג ולספאם: הגבלת קצב על יצירה, רק <code>http</code>/<code>https</code> (לא <code>javascript:</code> — E17), ובדיקה מול רשימות של אתרים זדוניים.</li>
+      <li><strong>קודים שמורים.</strong> alias בשם <code>api</code> או <code>login</code> ידרוס נתיב של האתר עצמו.</li>
+    </ul>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28-E06">E06</a> · <a href="exercises.html#P28-E10">E10</a> · <a href="exercises.html#P28-E17">E17</a> · <a href="exercises.html#P28-E20">E20</a></p>
+  </div>

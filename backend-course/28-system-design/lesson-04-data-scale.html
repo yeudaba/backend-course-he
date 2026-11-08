@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>נתונים בקנה מידה — פרק 28</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 28</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — נתונים בקנה מידה</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>עימוד: למה OFFSET איטי בעמוד 25,000 — מדידה — ו־cursor.</li>
+      <li>כשמסד אחד לא מספיק: sharding, ולמה <code>hash % n</code> מסוכן.</li>
+      <li>מזהים בלי מסד מרכזי: Snowflake ו־UUIDv7.</li>
+      <li>batching ו־Bloom filter: לחסוך הלוך־חזור.</li>
+      <li>עקביות: מה מותר להיות ישן.</li>
+    </ul>
+  </div>
+
+  <h2>1. עימוד: OFFSET מול cursor</h2>
+  <p>בכל הפרויקטים עימדנו עם <code>?page=</code> — כלומר <code>OFFSET (page − 1) × limit</code>. זה פשוט ומאפשר "קפוץ לעמוד 7". אבל כדי לדלג על חצי מיליון שורות, המסד צריך <em>לעבור</em> עליהן. מדדתי על טבלה של מיליון פוסטים, עם אינדקס על <code>(created_at DESC, id DESC)</code>, שלוש שאילתות של 20 שורות: עמוד ראשון, <code>OFFSET 500000</code>, ו־cursor מאותה נקודה (פלט <code>EXPLAIN ANALYZE</code>, מקוצר):</p>
+<pre class="terminal"><span class="dim">---- offset 0</span>
+<span class="dim">Limit (actual time=0.035..0.039 rows=20.00 loops=1)</span>
+<span class="dim">  -&gt;  Index Only Scan using posts_created_id on posts (actual time=0.033..0.035 rows=20.00 loops=1)</span>
+<span class="dim">Execution Time: 0.053 ms</span>
+<span class="dim">---- offset 500000</span>
+<span class="dim">Limit (actual time=82.980..82.985 rows=20.00 loops=1)</span>
+<span class="dim">  -&gt;  Index Only Scan using posts_created_id on posts (actual time=0.011..70.149 rows=500020.00 loops=1)</span>
+<span class="dim">Execution Time: 83.000 ms</span>
+<span class="dim">---- keyset</span>
+<span class="dim">Limit (actual time=0.026..0.029 rows=20.00 loops=1)</span>
+<span class="dim">  -&gt;  Index Only Scan using posts_created_id on posts (actual time=0.024..0.027 rows=20.00 loops=1)</span>
+<span class="dim">        Index Cond: (ROW(created_at, id) &lt; ROW('2026-01-06 20:53:20+02'::timestamp with time zone, 500000))</span>
+<span class="dim">Execution Time: 0.057 ms</span></pre>
+  <p>שימו לב ל־<code>rows=500020</code>: כדי להחזיר 20, ה־OFFSET קרא חצי מיליון. ה־<strong>cursor</strong> (keyset pagination) אומר "תן לי 20 <em>אחרי</em> השורה הזו" — המסד יורד באינדקס ישר לשם, בכל עמוד באותה מהירות. בונוס: אם נוספות שורות בזמן הגלילה, OFFSET מחזיר כפילויות (הכול "זז" למטה); cursor — לא (E11).</p>
+  <p>המחיר: אין "קפוץ לעמוד 7", רק "הבא". לפיד, לגלילה אינסופית ול־API ציבורי — cursor. לטבלת ניהול עם 30 עמודים — OFFSET בסדר גמור. ה־cursor הוא מחרוזת <strong>אטומה</strong> (base64url) — הלקוח לא בונה אותה, ואתה יכול לשנות את מה שבתוכה.</p>
+
+  <h2>2. sharding</h2>
+  <p>replicas מחלקות קריאות. כשה<em>כתיבות</em> או הנפח גדולים ממסד אחד — מחלקים את הנתונים: <strong>sharding</strong>. כל משתמש (וכל מה ששלו) במסד אחד מתוך כמה, לפי מפתח. המחיר כבד: שאילתה על כמה משתמשים — לכמה מסדים; טרנזקציה בין shards — כמעט בלתי אפשרית; JOIN — בקוד. לכן זה הצעד האחרון, אחרי אינדקסים, cache, replicas ושרת גדול יותר. (PostgreSQL אחד על חומרה טובה מחזיק טרה־בייטים ואלפי כתיבות בשנייה.)</p>
+  <p>ואיך מחליטים איזה shard? הרעיון הראשון — <code>hash(userId) % n</code>. עובד, עד שמוסיפים מסד. מדדתי על 100,000 מפתחות (E16):</p>
+  <div class="table-wrap"><table>
+    <tr><th>שינוי</th><th><code>hash % n</code> — זזו</th><th>consistent hashing — זזו</th></tr>
+    <tr><td>4 ← 5 שרתים</td><td>80.3%</td><td>19.2%</td></tr>
+    <tr><td>10 ← 11 שרתים</td><td>90.9%</td><td>7.9%</td></tr>
+    <tr><td>10 ← 9 (שרת נפל)</td><td>89.9%</td><td>11.5%</td></tr>
+  </table></div>
+  <p><strong>consistent hashing</strong> (E13): השרתים והמפתחות על "מעגל" של מספרים; מפתח שייך לשרת הבא אחריו. שרת חדש "לוקח" רק את המפתחות שבקטע שלו — כ־1/n. ב־sharding זה ההבדל בין להעביר עשירית מהנתונים לבין כמעט הכול; ב־cache מבוזר — בין 8% פספוסים לבין cache ריק ומסד שקורס. וירטואל נודס (100 נקודות לשרת) מיישרים את הפיזור.</p>
+
+  <h2>3. מזהים</h2>
+  <p><code>id SERIAL</code> דורש מסד אחד שסופר. עם כמה shards, או כשרוצים לייצר מזהה לפני שמגיעים למסד — צריך מזהים שכל שרת מייצר לבד:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>גודל</th><th>ממוין לפי זמן</th><th>הערה</th></tr>
+    <tr><td>UUIDv4 (אקראי)</td><td>128 ביט</td><td>לא</td><td>אינדקס B-tree מקבל ערכים בכל מקום — יותר פיצולי דפים ו־cache misses</td></tr>
+    <tr><td>UUIDv7</td><td>128 ביט</td><td>כן (מתחיל בזמן)</td><td>תקן מ־2024 (RFC 9562); הבחירה הנוחה היום</td></tr>
+    <tr><td>Snowflake (E24)</td><td>64 ביט</td><td>כן</td><td>זמן | מכונה | מונה; קטן — אבל צריך לחלק מספרי מכונות, ובלקוח JavaScript — לשלוח כמחרוזת</td></tr>
+  </table></div>
+
+  <h2>4. פחות הלוך־חזור</h2>
+  <p>הלוך־חזור למסד או ל־Redis הוא חצי מילישנייה ומעלה (שיעור 1). מאה כאלה בבקשה — 50ms. שני כלים:</p>
+  <ul>
+    <li><strong>batching</strong> (E18): אוספים בקשות "תביא משתמש X" שמגיעות יחד, ושולחים שאילתה אחת עם <code>IN (…)</code>. זה DataLoader, והפתרון הכללי ל־N+1 (פרק 19). בכתיבה — אותו דבר: קליקים, צפיות ולוגים נכתבים באצוות.</li>
+    <li><strong>Bloom filter</strong> (E25): לענות "בטוח לא קיים" בלי לשאול בכלל. מיליון שמות משתמש עם 1% טעות — 1.2MB (מדדתי 1.002% false positives), מול כ־35MB ל־Set עם אותם שמות. "לא" — עונים מיד; "אולי" — שואלים את המסד.</li>
+  </ul>
+
+  <h2>5. עקביות: מה מותר להיות ישן</h2>
+  <p>ברגע שיש עותקים — replica, cache, CDN, אינדקס חיפוש — יש רגעים שבהם הם לא מסכימים עם המקור. <strong>CAP</strong> אומר שכשהרשת בין שרתים נקטעת, צריך לבחור: לענות (אולי עם מידע ישן) או לסרב. וגם בלי תקלות — כל עותק עולה בעדכניות. התשובה המעשית היא לא לבחור "עקבי" או "זמין" לכל המערכת, אלא <strong>לכל נתון</strong> (E04): קטלוג — דקה ישן זה בסדר; מלאי ברגע ההזמנה ונקודות לפני מימוש — רק מהמקור, בטרנזקציה; סטטוס אחרי תשלום — מהמקור <em>למשתמש ששילם</em>. כך בנית את חנות הקפה, גם אם לא קראנו לזה בשם.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28-E04">E04</a> · <a href="exercises.html#P28-E11">E11</a> · <a href="exercises.html#P28-E13">E13</a> · <a href="exercises.html#P28-E16">E16</a> · <a href="exercises.html#P28-E18">E18</a> · <a href="exercises.html#P28-E22">E22</a> · <a href="exercises.html#P28-E24">E24</a> · <a href="exercises.html#P28-E25">E25</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-03-url-shortener.html"><small>הקודם</small>שיעור 3 — תכנון מלא: קיצור קישורים</a><a href="lesson-05-design-doc.html"><small>הבא</small>שיעור 5 — פיד, ומסמך תכנון לחנות הקפה</a></div>
+</main>
+</body>
+</html>

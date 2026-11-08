@@ -1,0 +1,1012 @@
+@@ P28-E01 | 1 | דרישות לפני ציור | 15 | שיעור 1
+@task
+<p>"תכנן שירות לקיצור קישורים." לפני שמציירים קופסה אחת — כתוב חמש שאלות על <strong>דרישות פונקציונליות</strong> (מה המערכת עושה) וחמש על <strong>דרישות לא־פונקציונליות</strong> (כמה, כמה מהר, כמה אמין). לכל אחת — איך התשובה משנה את התכנון.</p>
+@hint1
+<p>פונקציונלי: מי יוצר קישורים? אפשר לבחור קוד? יש תפוגה? סטטיסטיקות? מחיקה?</p>
+@hint2
+<p>לא־פונקציונלי: כמה קישורים ביום? יחס קריאה/כתיבה? כמה זמן מותר ל־redirect? מה קורה אם השירות נופל? כמה זמן שומרים?</p>
+@solution
+<div class="table-wrap"><table>
+<tr><th>שאלה</th><th>מה זה משנה</th></tr>
+<tr><td>צריך משתמשים, או שכל אחד יוצר אנונימית?</td><td>אימות, הגבלת קצב לפי IP, ניטור שימוש לרעה (פישינג)</td></tr>
+<tr><td>אפשר לבחור קוד (alias)?</td><td>בדיקת ייחודיות, מילים שמורות (<code>admin</code>, <code>api</code>)</td></tr>
+<tr><td>יש תפוגה?</td><td>עמודת <code>expires_at</code>, 410 Gone, ניקוי</td></tr>
+<tr><td>סטטיסטיקות קליקים?</td><td>כתיבה בכל redirect ← לא בתוך הבקשה: תור או מונה ב־Redis</td></tr>
+<tr><td>אפשר לשנות יעד אחרי יצירה?</td><td>302 ולא 301 (דפדפן שומר 301 לתמיד)</td></tr>
+<tr><td>כמה קישורים ביום ובכמה זמן?</td><td>אורך הקוד, גודל האחסון (E02)</td></tr>
+<tr><td>יחס קריאות לכתיבות?</td><td>לרוב 100:1 ומעלה ← cache ו־replicas לקריאה</td></tr>
+<tr><td>כמה מהר redirect?</td><td>p99 של עשרות ms ← cache, קרוב למשתמש</td></tr>
+<tr><td>זמינות?</td><td>קישור שבור באמצע קמפיין = כסף. כמה שרתים, מה קורה כש־Redis נופל</td></tr>
+<tr><td>קוד צפוי מותר?</td><td>מונה עולה (<code>/1</code>, <code>/2</code>...) מאפשר לסרוק את כל הקישורים — אקראי או מעורבל</td></tr>
+</table></div>
+@mistakes
+<ul><li>לקפוץ ל"Kafka ו־Cassandra" לפני שיודעים אם מדובר באלף קישורים ביום או במיליארד. רוב המערכות בעולם רצות על PostgreSQL אחד.</li></ul>
+
+@@ P28-E02 | 1 | חישוב על גב מעטפה | 15 | שיעור 1
+@task
+<p>בלי מחשבון מדויק — מסדרי גודל. שירות קיצור קישורים: 100 מיליון redirects ביום, מיליון קישורים חדשים ביום, כל קישור כ־500 בתים, שומרים 5 שנים, והשיא פי 3 מהממוצע. (1) כמה redirects לשנייה בממוצע ובשיא? (2) כמה אחסון? (3) כמה קודים צריך, ומה אורך קוד base62 מספיק? (4) מה המשמעות לתכנון?</p>
+@hint1
+<p>יום ≈ 100,000 שניות (86,400 — אבל לגב מעטפה, 10⁵).</p>
+@hint2
+<p>62⁶ ≈ 57 מיליארד, 62⁷ ≈ 3.5 טריליון.</p>
+@solution
+<ol>
+<li>10⁸ / 10⁵ = <strong>כ־1,000 בשנייה</strong> בממוצע, <strong>כ־3,000</strong> בשיא. כתיבות: 10⁶ / 10⁵ = כ־10 בשנייה.</li>
+<li>10⁶ × 500 בתים = 500MB ביום ← × 365 × 5 ≈ <strong>כ־1TB</strong>.</li>
+<li>10⁶ × 365 × 5 ≈ 1.8 מיליארד קודים. 6 תווים (57 מיליארד) מספיקים פי 30; 7 נותנים מרווח ענק, וקוד אקראי כמעט לא מתנגש.</li>
+<li>3,000 קריאות בשנייה ו־10 כתיבות: זו מערכת <em>קריאה</em>. cache (רוב הקליקים על מעט קישורים חמים) ו־replicas פותרים; מסד אחד מחזיק את הכתיבות בקלות. 1TB — שרת PostgreSQL אחד, בלי sharding. זו המסקנה החשובה: <strong>החישוב אומר לך ממה לא צריך לפחד</strong>.</li>
+</ol>
+<p>(E07 עושה את אותו חישוב בקוד.)</p>
+@mistakes
+<ul><li>לחשב רק ממוצע — שרת שעומד בממוצע נופל בשיא. ולשכוח שגיבוי ו־replicas מכפילים את האחסון.</li></ul>
+
+@@ P28-E03 | 1 | איזו קופסה פותרת? | 10 | שיעור 2
+@task
+<p>לכל תסמין — רכיב (load balancer, replica לקריאה, cache, תור, CDN, הגבלת קצב, circuit breaker, אינדקס) ולמה:</p>
+<ol>
+<li>שרת אחד ב־100% CPU, השני ב־10%.</li>
+<li>דף הבית איטי, והשאילתה שלו זהה לכל המשתמשים.</li>
+<li>תמונות המוצרים נטענות לאט ללקוחות באוסטרליה.</li>
+<li>שליחת קבלה ב־PDF לוקחת 4 שניות בתוך הבקשה של התשלום.</li>
+<li>ספק המשלוחים נופל, וכל בקשה אליו מחכה 30 שניות — והשרת שלנו נגמרים לו החיבורים.</li>
+<li><code>SELECT … WHERE email = $1</code> לוקח 300ms בטבלה של 5 מיליון.</li>
+<li>הדוחות של המנהלים מאטים את כל האתר.</li>
+<li>בוט שולח 500 בקשות התחברות בדקה.</li>
+</ol>
+@hint1
+<p>שאל קודם: מה הבעיה — חישוב, קריאה חוזרת, מרחק, עבודה איטית, תלות שנופלת, או חיפוש?</p>
+@hint2
+<p>לפחות אחד מהם הוא לא "קופסה" חדשה בכלל.</p>
+@solution
+<ol>
+<li><strong>load balancer</strong> (או אלגוריתם אחר בו — least connections, E08).</li>
+<li><strong>cache</strong> (פרק 26) — אותה תשובה לכולם.</li>
+<li><strong>CDN</strong> — קבצים סטטיים מעותקים קרובים למשתמש.</li>
+<li><strong>תור</strong> ו־worker (פרק 26) — הלקוח מקבל תשובה מיד.</li>
+<li><strong>timeout קצר + circuit breaker</strong> (E15) — נכשלים מהר במקום לחכות.</li>
+<li><strong>אינדקס</strong> — לא קופסה בכלל. לפני כל רכיב חדש — EXPLAIN (פרק 18).</li>
+<li><strong>replica לקריאה</strong> — הדוחות רצים עליה (מותר להם להיות שנייה מאחור).</li>
+<li><strong>הגבלת קצב</strong> לפי IP ולפי חשבון (פרקים 24, 26).</li>
+</ol>
+@mistakes
+<ul><li>להוסיף cache לבעיה 6. הבקשה הראשונה עדיין איטית, וכל email אחר — miss.</li></ul>
+
+@@ P28-E04 | 1 | מה מותר להיות ישן? | 15 | שיעור 4
+@task
+<p>במערכת מבוזרת אי אפשר לקבל הכול: כשרשת בין שרתים נקטעת, בוחרים בין לענות (אולי עם מידע ישן) לבין לסרב (CAP). ובלי תקלות — בין מהירות לעדכניות. לכל נתון בחנות הקפה: מותר לו להיות ישן? כמה? ומה זה אומר על מאיפה קוראים אותו?</p>
+<ul><li>רשימת המוצרים · המלאי בדף מוצר · המלאי ברגע ההזמנה · סטטוס הזמנה אחרי תשלום · מספר הצפיות במוצר · יתרת "נקודות מועדון" לפני מימוש · דוח מכירות חודשי</li></ul>
+@hint1
+<p>מה המחיר של טעות? לקוח רואה מחיר ישן לדקה, או מוכרים יחידה שאין?</p>
+@hint2
+<p>"קריאה אחרי כתיבה": משתמש ששילם ורואה "ממתין לתשלום" — יחשוב שזה לא עבד.</p>
+@solution
+<div class="table-wrap"><table>
+<tr><th>נתון</th><th>ישן?</th><th>מאיפה</th></tr>
+<tr><td>רשימת המוצרים</td><td>דקה — בסדר</td><td>cache (פרק 26)</td></tr>
+<tr><td>מלאי בדף מוצר</td><td>שניות — בסדר ("נשארו 3")</td><td>cache או replica</td></tr>
+<tr><td>מלאי ברגע ההזמנה</td><td><strong>לא</strong></td><td>primary, בתוך טרנזקציה, UPDATE מותנה</td></tr>
+<tr><td>סטטוס הזמנה אחרי תשלום</td><td>לא — <em>למשתמש הזה</em></td><td>primary לזמן קצר אחרי כתיבה (E14)</td></tr>
+<tr><td>מספר צפיות</td><td>דקות — בסדר, וגם קצת לא מדויק</td><td>מונה ב־Redis, נכתב למסד באצוות</td></tr>
+<tr><td>נקודות לפני מימוש</td><td><strong>לא</strong> — זה כסף</td><td>primary, טרנזקציה</td></tr>
+<tr><td>דוח חודשי</td><td>שעות — בסדר</td><td>replica, או מחסן נתונים</td></tr>
+</table></div>
+<p>הכלל: <strong>החלטות על כסף ומלאי — מהמקור. תצוגה — ממה שמהיר.</strong> בדיוק העיקרון מפרק 26.</p>
+@mistakes
+<ul><li>"הכול מה־primary, ליתר ביטחון" — עובד עד שה־primary נהיה צוואר הבקבוק. רוב הקריאות לא צריכות להיות מדויקות לשנייה.</li></ul>
+
+@@ P28-E05 | 1 | ביקורת על מסמך תכנון | 20 | שיעור 5
+@task
+<p>מישהו בצוות כתב: <em>"שירות התראות: כל שרת API שולח push ישירות ל־Apple/Google בתוך הבקשה. אם השליחה נכשלת — מנסים שוב מיד, עד 10 פעמים. כדי לא לשלוח פעמיים, שומרים ב־Map בזיכרון של השרת אילו התראות נשלחו. מזהה התראה: Date.now(). כדי לעמוד בעומס נוסיף 5 שרתי API."</em> מצא לפחות חמש בעיות, ולכל אחת — הצעה.</p>
+@hint1
+<p>מה קורה כשיש 5 שרתים, ו־Map בכל אחד?</p>
+@hint2
+<p>ומה קורה ל־Apple כשהיא חוזרת מתקלה, ואלף שרתים "מנסים שוב מיד"?</p>
+@solution
+<ol>
+<li><strong>שליחה בתוך הבקשה</strong> — הלקוח מחכה לספק חיצוני. ← תור ו־worker (פרק 26).</li>
+<li><strong>ניסיון חוזר מיד, 10 פעמים</strong> — מכה את הספק בדיוק כשהוא חלש, וחוסם את הבקשה. ← backoff אקספוננציאלי עם jitter (E12), מספר ניסיונות סביר, ו־circuit breaker (E15).</li>
+<li><strong>Map בזיכרון</strong> — עם 5 שרתים, כל אחד יודע רק על עצמו; ואחרי restart — שוכח הכול. ← ייחודיות במסד (<code>UNIQUE</code>) או ב־Redis (<code>SET NX</code>, פרק 26).</li>
+<li><strong><code>Date.now()</code> כמזהה</strong> — שתי התראות באותה מילישנייה, או בשני שרתים = אותו מזהה. ← UUID, מזהה מהמסד, או Snowflake (E24).</li>
+<li><strong>"נוסיף שרתים"</strong> — לפני שיודעים מה צוואר הבקבוק. אם הבעיה היא ההמתנה לספק, עוד שרתים רק יכפילו את ההמתנה. ← למדוד; ועם תור — מגדילים workers, לא API.</li>
+<li>(בונוס) אין התייחסות לטוקן שפג (משתמש מחק את האפליקציה) — ספקי push מחזירים שגיאה שצריך לטפל בה ולמחוק את הטוקן, לא "לנסות שוב".</li>
+</ol>
+@mistakes
+<ul><li>ביקורת בלי הצעה ("זה לא יעבוד"). בצוות, ובראיון, מה שעוזר הוא "הבעיה היא X, והייתי עושה Y כי Z".</li></ul>
+@@ P28-E06 | 2 | base62 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>28-system-design/starter/P28-E06.ts</code>: <code>encode(n)</code> — מספר שלם אי־שלילי ← מחרוזת base62 (<code>0-9a-zA-Z</code>, הספרה המשמעותית ראשונה: 62 ← <code>"10"</code>); <code>decode(code)</code> — ההפך. קלט לא תקין (שלילי, שבר, קוד ריק או עם תווים אחרים, קוד שמפוענח מעבר ל־<code>MAX_SAFE_INTEGER</code>) ← שגיאה.</p>
+@hint1
+<p>כמו להמיר לבסיס 2: שארית החלוקה ב־62 היא הספרה האחרונה; מחלקים (שלם) וממשיכים.</p>
+@hint2
+<p>decode: <code>n = n * 62 + ALPHABET.indexOf(ch)</code>, משמאל לימין.</p>
+@solution
+```ts save=solutions/P28-E06.ts
+// P28-E06
+// base62: ספרות 0-9, a-z, A-Z. כמו בסיס 10 או 16 — רק עם 62 "ספרות". 7 תווים = 62⁷ ≈ 3.5 טריליון קודים
+const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export function encode(n: number): string {
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error("רק מספר שלם אי־שלילי");
+  if (n === 0) return "0";
+  let out = "";
+  while (n > 0) {
+    out = ALPHABET[n % 62] + out;
+    n = Math.floor(n / 62);
+  }
+  return out;
+}
+
+export function decode(code: string): number {
+  if (!/^[0-9a-zA-Z]+$/.test(code)) throw new Error("קוד לא תקין");
+  let n = 0;
+  for (const ch of code) n = n * 62 + ALPHABET.indexOf(ch);
+  if (!Number.isSafeInteger(n)) throw new Error("קוד ארוך מדי");
+  return n;
+}
+```
+@mistakes
+<ul><li>לשכוח את 0 — הלולאה לא רצה, ומתקבלת מחרוזת ריקה (E20).</li></ul>
+
+@@ P28-E07 | 2 | אומדן בקוד 🤖 | 10 | שיעור 1
+@task
+<p>בקובץ <code>P28-E07.ts</code>: <code>estimate(inputs)</code> ← <code>{ avgRps, peakRps, writesPerSecond, storageGB }</code> (כולם מעוגלים ל־<code>Math.round</code>; יום = 86,400 שניות; GB = 10⁹ בתים). הקלט: משתמשים פעילים ביום, בקשות למשתמש ביום, חלק הכתיבות, בתים לכתיבה, פי כמה השיא, וכמה ימים שומרים.</p>
+@hint1
+<p>בקשות ביום = משתמשים × בקשות למשתמש. כתיבות ביום = בקשות × writeRatio.</p>
+@hint2
+<p>שים לב לסדר: מעגלים רק בסוף — <code>peakRps</code> מהממוצע <em>לפני</em> עיגול.</p>
+@solution
+```ts save=solutions/P28-E07.ts
+// P28-E07
+// "חישוב על גב מעטפה": מסדרי גודל, לא דיוק. יום = 86,400 שניות ≈ 100,000
+export interface Inputs {
+  dailyActiveUsers: number;
+  requestsPerUserPerDay: number;
+  writeRatio: number; // חלק הבקשות שכותבות (0..1)
+  bytesPerWrite: number;
+  peakFactor: number; // השיא פי כמה מהממוצע
+  retentionDays: number;
+}
+
+export function estimate(i: Inputs) {
+  const perDay = i.dailyActiveUsers * i.requestsPerUserPerDay;
+  const avgRps = perDay / 86_400;
+  const writesPerDay = perDay * i.writeRatio;
+  const storageBytes = writesPerDay * i.bytesPerWrite * i.retentionDays;
+  return {
+    avgRps: Math.round(avgRps),
+    peakRps: Math.round(avgRps * i.peakFactor),
+    writesPerSecond: Math.round(writesPerDay / 86_400),
+    storageGB: Math.round(storageBytes / 1e9),
+  };
+}
+```
+@mistakes
+<ul><li>לעגל את הממוצע ואז להכפיל בשיא — טעות קטנה שהבודק תופס, וטעות גדולה כשהממוצע הוא 0.4.</li></ul>
+
+@@ P28-E08 | 2 | load balancer: שני אלגוריתמים 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P28-E08.ts</code>: <code>roundRobin(servers)</code> ← פונקציה שכל קריאה מחזירה את השרת הבא בתורו; <code>leastConnections(servers)</code> ← <code>{ acquire(), release(server), active(server) }</code>: acquire בוחר את השרת עם הכי מעט חיבורים פעילים (בתיקו — הראשון ברשימה) ומגדיל לו; release מקטין (לא מתחת ל־0; שרת לא מוכר ← שגיאה). רשימה ריקה ← שגיאה.</p>
+@hint1
+<p>round robin: מונה ו־<code>% length</code>, בתוך closure.</p>
+@hint2
+<p>least connections: Map של שרת ← מונה.</p>
+@solution
+```ts save=solutions/P28-E08.ts
+// P28-E08
+// שני אלגוריתמים של load balancer: round robin (בתורות) ו־least connections (למי שהכי פנוי)
+export function roundRobin(servers: readonly string[]) {
+  if (servers.length === 0) throw new Error("אין שרתים");
+  let next = 0;
+  return () => servers[next++ % servers.length];
+}
+
+export function leastConnections(servers: readonly string[]) {
+  if (servers.length === 0) throw new Error("אין שרתים");
+  const active = new Map(servers.map((s) => [s, 0]));
+  return {
+    // בתיקו — הראשון ברשימה (סדר קבוע)
+    acquire(): string {
+      let best = servers[0];
+      for (const s of servers) if (active.get(s)! < active.get(best)!) best = s;
+      active.set(best, active.get(best)! + 1);
+      return best;
+    },
+    release(server: string) {
+      const n = active.get(server);
+      if (n === undefined) throw new Error(`שרת לא מוכר: ${server}`);
+      if (n > 0) active.set(server, n - 1);
+    },
+    active: (server: string) => active.get(server) ?? 0,
+  };
+}
+```
+<p>מתי מה? round robin — כשכל הבקשות דומות. least connections — כשיש בקשות ארוכות (העלאת קבצים, WebSocket), ושרת אחד "נתקע" עם הכבדות. ב־nginx: <code>least_conn;</code>. ב־load balancers של הענן — הגדרה.</p>
+@mistakes
+<ul><li>מונה גלובלי משותף לכמה load balancers — עם הרבה מופעים, round robin "מושלם" הוא לא המטרה; פיזור סביר כן.</li></ul>
+
+@@ P28-E09 | 2 | health checks 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>P28-E09.ts</code>: <code>createBalancer(servers, { failThreshold, recoverAfterMs, now })</code> ← <code>{ pick(), report(server, ok), healthy() }</code>. round robin על השרתים הבריאים. <code>failThreshold</code> כישלונות <em>ברצף</em> ← השרת יוצא; הצלחה מאפסת את הרצף. אחרי <code>recoverAfterMs</code> — חוזר לסבב, אבל כישלון אחד נוסף מוציא אותו שוב. כולם למטה ← <code>pick()</code> מחזיר <code>null</code>.</p>
+@hint1
+<p>שני Maps: כישלונות ברצף, ו"למטה מאז".</p>
+@hint2
+<p>"כישלון אחד נוסף מוציא שוב": כשמחזירים שרת, קבע את מונה הכישלונות שלו ל־<code>failThreshold − 1</code>.</p>
+@solution
+```ts save=solutions/P28-E09.ts
+// P28-E09
+// load balancer עם health checks: אחרי failThreshold כישלונות ברצף — השרת יוצא מהסבב; אחרי recoverAfterMs — מקבל הזדמנות
+export function createBalancer(servers: readonly string[], { failThreshold = 3, recoverAfterMs = 10_000, now = () => Date.now() } = {}) {
+  const fails = new Map(servers.map((s) => [s, 0]));
+  const downSince = new Map<string, number>();
+  let next = 0;
+
+  const isUp = (s: string) => {
+    const since = downSince.get(s);
+    if (since === undefined) return true;
+    if (now() - since >= recoverAfterMs) {
+      downSince.delete(s); // הזדמנות שנייה; כישלון אחד נוסף יוריד שוב
+      fails.set(s, failThreshold - 1);
+      return true;
+    }
+    return false;
+  };
+
+  return {
+    pick(): string | null {
+      for (let i = 0; i < servers.length; i++) {
+        const s = servers[next++ % servers.length];
+        if (isUp(s)) return s;
+      }
+      return null; // כולם למטה — 503 ללקוח
+    },
+    report(server: string, ok: boolean) {
+      if (ok) {
+        fails.set(server, 0);
+        return;
+      }
+      const n = (fails.get(server) ?? 0) + 1;
+      fails.set(server, n);
+      if (n >= failThreshold && !downSince.has(server)) downSince.set(server, now());
+    },
+    healthy: () => servers.filter((s) => !downSince.has(s) || now() - downSince.get(s)! >= recoverAfterMs),
+  };
+}
+```
+<p>זה מה שה־HEALTHCHECK ב־Dockerfile (פרק 23) ו־<code>/ready</code> (פרק 25) מזינים: ה־load balancer שואל, ושרת שלא עונה — לא מקבל תנועה. ולכן <code>/ready</code> מחזיר 503 כשהמסד לא זמין: "אל תשלחו אליי".</p>
+@mistakes
+<ul><li>להוציא שרת אחרי כישלון בודד — בעומס, שגיאה אחת "מזיזה" תנועה לשרת השני, שגם הוא נכשל פעם, וכולם יוצאים.</li></ul>
+
+@@ P28-E10 | 2 | קוד אקראי והתנגשויות 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>P28-E10.ts</code>: <code>generateCode(exists, { length = 7, maxAttempts = 5, random })</code> — קוד אקראי מ־62 התווים (תו = <code>ALPHABET[Math.floor(random() * 62)]</code>); אם <code>await exists(code)</code> — מנסים שוב; אחרי <code>maxAttempts</code> ← שגיאה שמזכירה את המספר.</p>
+@hint1
+<p>לולאת ניסיונות, ובתוכה לולאה שבונה את הקוד.</p>
+@hint2
+<p><code>random</code> מוזרק — כך הבודק קובע מה יוגרל.</p>
+@solution
+```ts save=solutions/P28-E10.ts
+// P28-E10
+// קוד קצר אקראי: אין צורך במונה משותף בין שרתים. התנגשות — נדירה, אבל קורית: בודקים ומנסים שוב
+const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export async function generateCode(
+  exists: (code: string) => Promise<boolean>,
+  { length = 7, maxAttempts = 5, random = Math.random }: { length?: number; maxAttempts?: number; random?: () => number } = {},
+): Promise<string> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let code = "";
+    for (let i = 0; i < length; i++) code += ALPHABET[Math.floor(random() * 62)];
+    if (!(await exists(code))) return code;
+  }
+  throw new Error(`לא נמצא קוד פנוי אחרי ${maxAttempts} ניסיונות`);
+}
+```
+<p>"בודקים ואז מכניסים" — יש פה מרוץ: שני שרתים מגרילים אותו קוד, שניהם רואים "פנוי". הסיכוי זעום, אבל הפתרון הנכון זהה לפרויקט 3: <code>UNIQUE</code> במסד, ו־INSERT שנכשל ← קוד חדש. כך עושה E17 (<code>insert</code> מחזיר false).</p>
+@mistakes
+<ul><li>לולאה בלי גבול — אם ה־store תמיד אומר "תפוס" (באג, או מסד מלא בקודים קצרים), השרת נתקע.</li></ul>
+
+@@ P28-E11 | 2 | עימוד עם cursor 🤖 | 25 | שיעור 4
+@task
+<p>בקובץ <code>P28-E11.ts</code>: <code>encodeCursor({ createdAt, id })</code> ← מחרוזת base64url; <code>decodeCursor(raw)</code> ← האובייקט, או <code>Error</code> שההודעה שלו כוללת "cursor" (על כל דבר לא תקין: לא base64, לא JSON, תאריך לא חוקי, id לא שלם חיובי). ו־<code>nextPage(rows, limit, after?)</code> — ממיין (createdAt יורד, ואז id יורד), מחזיר עד limit שורות <em>אחרי</em> ה־cursor, ו־<code>nextCursor</code> (או <code>null</code> בעמוד האחרון).</p>
+@hint1
+<p><code>Buffer.from(json).toString("base64url")</code>, ובחזרה <code>Buffer.from(raw, "base64url")</code>. כל השלב בתוך try.</p>
+@hint2
+<p>"אחרי" במיון יורד: <code>createdAt</code> קטן יותר, או שווה ו־<code>id</code> קטן יותר — בדיוק <code>(created_at, id) &lt; ($1, $2)</code> ב־SQL.</p>
+@solution
+```ts save=solutions/P28-E11.ts
+// P28-E11
+// cursor "אטום": הלקוח לא יודע (ולא צריך לדעת) מה בפנים. base64url של JSON — ובדיקה כשהוא חוזר
+export interface Cursor {
+  createdAt: string; // ISO
+  id: number;
+}
+
+export function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify([c.createdAt, c.id])).toString("base64url");
+}
+
+export function decodeCursor(raw: string): Cursor {
+  try {
+    const [createdAt, id] = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt)) || !Number.isSafeInteger(id) || id < 1) throw new Error();
+    return { createdAt, id };
+  } catch {
+    throw new Error("cursor לא תקין");
+  }
+}
+
+// keyset: "אחרי השורה הזו" במיון (createdAt DESC, id DESC). בלי OFFSET — מהיר בכל עמוד, ולא מדלג/מכפיל כשנוספות שורות
+export function nextPage<T extends Cursor>(rows: readonly T[], limit: number, after?: string) {
+  const sorted = [...rows].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : b.id - a.id));
+  const c = after ? decodeCursor(after) : null;
+  const start = c ? sorted.findIndex((r) => r.createdAt < c.createdAt || (r.createdAt === c.createdAt && r.id < c.id)) : 0;
+  const page = start === -1 ? [] : sorted.slice(start, start + limit);
+  const last = page[page.length - 1];
+  const hasMore = start !== -1 && start + limit < sorted.length;
+  return { data: page, nextCursor: hasMore && last ? encodeCursor(last) : null };
+}
+```
+<p>ב־SQL זה <code>WHERE (created_at, id) &lt; ($1, $2) ORDER BY created_at DESC, id DESC LIMIT 20</code> — ובשיעור 4 מדדנו: 0.06ms בכל עמוד, מול 83ms ל־<code>OFFSET 500000</code>.</p>
+@mistakes
+<ul><li>cursor של <code>createdAt</code> לבד — שתי שורות באותה מילישנייה, ואחת מהן נעלמת בין העמודים. תמיד עם id כ"שובר שוויון".</li></ul>
+
+@@ P28-E12 | 2 | retry נכון 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>P28-E12.ts</code>: <code>retry(fn, { retries, baseMs, maxMs, random, sleep })</code>. קורא ל־<code>fn(attempt)</code>; נכשל ← מחכה <code>Math.floor(random() × min(maxMs, baseMs × 2^attempt))</code> ("full jitter") ומנסה שוב, עד <code>retries</code> ניסיונות חוזרים. לא מחכים אחרי האחרון, וזורקים את השגיאה המקורית. <code>HttpError</code> עם status 4xx (חוץ מ־429) — לא מנסים שוב בכלל.</p>
+@hint1
+<p><code>for (let attempt = 0; ; attempt++)</code> עם try/catch, ו־<code>throw</code> בתנאי.</p>
+@hint2
+<p>למה לא לנסות שוב 400? כי אותה בקשה תיכשל באותה דרך. ו־429 — "לאט יותר", לא "לא".</p>
+@solution
+```ts save=solutions/P28-E12.ts
+// P28-E12
+// retry עם exponential backoff ו־jitter: לא כל הלקוחות חוזרים באותה שנייה (thundering herd)
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message = `HTTP ${status}`) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// מה שווה לנסות שוב: רשת, 5xx, 429. 4xx אחר — הבקשה שגויה, ניסיון נוסף ייכשל באותה דרך
+export const isRetryable = (err: unknown) => !(err instanceof HttpError) || err.status >= 500 || err.status === 429;
+
+export async function retry<T>(
+  fn: (attempt: number) => Promise<T>,
+  {
+    retries = 3,
+    baseMs = 100,
+    maxMs = 5000,
+    random = Math.random,
+    sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+  }: { retries?: number; baseMs?: number; maxMs?: number; random?: () => number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      if (attempt >= retries || !isRetryable(err)) throw err; // לא ישנים אחרי הניסיון האחרון
+      const cap = Math.min(maxMs, baseMs * 2 ** attempt);
+      await sleep(Math.floor(random() * cap)); // "full jitter": בין 0 לתקרה
+    }
+  }
+}
+```
+<p>ולמה jitter? אם אלף לקוחות נכשלו באותו רגע (השירות נפל), בלי jitter כולם חוזרים יחד אחרי 100ms, ושוב יחד אחרי 200ms — "עדר" שמפיל את השירות בכל פעם שהוא מנסה לקום. ועוד כלל: מנסים שוב רק פעולות idempotent — או עם <code>Idempotency-Key</code> (פרק 24).</p>
+@mistakes
+<ul><li>retry בכמה שכבות — הלקוח 3, ה־API 3, ה־worker 3 ← 27 קריאות לשירות שנפל. מנסים שוב בשכבה אחת.</li></ul>
+@@ P28-E13 | 3 | consistent hashing 🤖 | 30 | שיעור 4
+@task
+<p>בקובץ <code>P28-E13.ts</code>: <code>createRing({ vnodes = 100 })</code> ← <code>{ add(node), remove(node), get(key), nodes() }</code>. כל שרת = <code>vnodes</code> נקודות על "מעגל" (<code>hash32(`${node}#${i}`)</code>); מפתח שייך לנקודה הראשונה שה־hash שלה ≥ ה־hash שלו — ואם אין, לראשונה במעגל. ריק ← <code>null</code>; <code>add</code> כפול לא משנה כלום. הבודק: פיזור סביר, ושהוספה מזיזה רק מפתחות <em>לשרת החדש</em>, כחמישית.</p>
+@hint1
+<p>מערך של <code>{ at, node }</code> ממוין לפי at, וחיפוש בינארי (פרק 27, E10) — lower bound.</p>
+@hint2
+<p>"אין כזו" = האינדקס יצא <code>length</code> ← עוטפים ל־0.</p>
+@solution
+```ts save=solutions/P28-E13.ts
+// P28-E13
+// consistent hashing: השרתים והמפתחות על אותו "מעגל" של מספרים; מפתח שייך לשרת הראשון אחריו (עם עטיפה).
+// הוספה/הסרה של שרת מזיזה רק את המפתחות שלידו — כ־1/n, לא כמעט הכול כמו ב־hash % n
+import { createHash } from "node:crypto";
+
+export function hash32(s: string): number {
+  return createHash("md5").update(s).digest().readUInt32BE(0);
+}
+
+export function createRing({ vnodes = 100 }: { vnodes?: number } = {}) {
+  let points: { at: number; node: string }[] = []; // ממוין לפי at
+  const nodes = new Set<string>();
+
+  return {
+    add(node: string) {
+      if (nodes.has(node)) return;
+      nodes.add(node);
+      for (let i = 0; i < vnodes; i++) points.push({ at: hash32(`${node}#${i}`), node });
+      points.sort((a, b) => a.at - b.at || (a.node < b.node ? -1 : 1));
+    },
+    remove(node: string) {
+      if (!nodes.delete(node)) return;
+      points = points.filter((p) => p.node !== node);
+    },
+    get(key: string): string | null {
+      if (points.length === 0) return null;
+      const h = hash32(key);
+      // חיפוש בינארי: הנקודה הראשונה שה־at שלה >= h; אין כזו — עוטפים להתחלה
+      let lo = 0;
+      let hi = points.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (points[mid].at < h) lo = mid + 1;
+        else hi = mid;
+      }
+      return points[lo === points.length ? 0 : lo].node;
+    },
+    nodes: () => [...nodes],
+  };
+}
+```
+<p>למה virtual nodes? עם נקודה אחת לשרת, ארבע נקודות "אקראיות" על מעגל יוצרות קטעים בגדלים שונים מאוד — שרת אחד מקבל 40% והשני 10%. 100 נקודות לשרת ממצעות את זה. וזה גם מאפשר משקלים: שרת חזק — יותר נקודות.</p>
+@mistakes
+<ul><li>לא למיין אחרי <code>add</code> — החיפוש הבינארי "עובד" ומחזיר שרת, רק לא הנכון (E22).</li></ul>
+
+@@ P28-E14 | 3 | replicas וקריאה אחרי כתיבה 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>P28-E14.ts</code>: <code>createDbRouter({ primary, replicas, stickyMs = 2000, now })</code> ← <code>{ forWrite(userId), forRead(userId) }</code>. כתיבות ← primary. קריאות ← replicas בתורות — אבל משתמש שכתב ב־<code>stickyMs</code> האחרונות קורא מה־primary. בלי replicas — הכול ל־primary.</p>
+@hint1
+<p>Map של userId ← זמן הכתיבה האחרונה.</p>
+@hint2
+<p><code>now() - at &lt; stickyMs</code> — ב־2999 עוד primary, ב־3000 כבר replica.</p>
+@solution
+```ts save=solutions/P28-E14.ts
+// P28-E14
+// primary + replicas: כתיבות ל־primary, קריאות ל־replicas — חוץ מ"קריאה אחרי כתיבה":
+// משתמש שכתב עכשיו קורא מה־primary לזמן קצר, כי ה־replica עוד לא קיבלה את השינוי (replication lag)
+export function createDbRouter({ primary, replicas, stickyMs = 2000, now = () => Date.now() }: { primary: string; replicas: readonly string[]; stickyMs?: number; now?: () => number }) {
+  const lastWrite = new Map<string, number>();
+  let next = 0;
+  return {
+    forWrite(userId: string): string {
+      lastWrite.set(userId, now());
+      return primary;
+    },
+    forRead(userId: string): string {
+      const at = lastWrite.get(userId);
+      if (at !== undefined && now() - at < stickyMs) return primary;
+      if (replicas.length === 0) return primary;
+      return replicas[next++ % replicas.length];
+    },
+  };
+}
+```
+<p>replica מקבלת שינויים מה־primary באיחור קטן (replication lag) — בדרך כלל מילישניות, בעומס שניות. בלי הכלל הזה: לקוח משלם, הדף מתרענן מ־replica, ורואה "ממתין לתשלום". ב־Prisma יש תוסף (<code>@prisma/extension-read-replicas</code>) שעושה את הניתוב, ו־<code>$primary()</code> לקריאה שחייבת להיות עדכנית.</p>
+@mistakes
+<ul><li>sticky לפי <em>שרת</em> במקום לפי משתמש — משתמש אחד שכתב שולח את כולם ל־primary.</li></ul>
+
+@@ P28-E15 | 3 | circuit breaker 🤖 | 30 | שיעור 2
+@task
+<p>בקובץ <code>P28-E15.ts</code>: <code>createBreaker(call, { failureThreshold = 5, openMs = 30000, now })</code> ← <code>{ state, exec() }</code>. <strong>closed</strong>: <code>exec</code> קורא ל־<code>call</code>; <code>failureThreshold</code> כישלונות (הצלחה מאפסת) ← <strong>open</strong>. ב־open: נכשל מיד עם <code>"circuit open"</code>, בלי לקרוא. אחרי <code>openMs</code> ← <strong>half-open</strong>: בקשת ניסיון <em>אחת</em> עוברת (בזמן שהיא רצה — השאר נדחים); הצליחה ← closed, נכשלה ← open מחדש, לעוד openMs שלם.</p>
+@hint1
+<p>ה־getter של <code>state</code> מחליף open ל־half-open כשהזמן עבר.</p>
+@hint2
+<p>דגל <code>trialRunning</code>, ו־<code>finally</code> שמנקה אותו.</p>
+@solution
+```ts save=solutions/P28-E15.ts
+// P28-E15
+// circuit breaker: שירות שנופל שוב ושוב — מפסיקים לקרוא לו לזמן מה (נכשלים מיד), ואז מנסים בזהירות
+export type BreakerState = "closed" | "open" | "half-open";
+
+export function createBreaker<T>(call: () => Promise<T>, { failureThreshold = 5, openMs = 30_000, now = () => Date.now() } = {}) {
+  let state: BreakerState = "closed";
+  let failures = 0;
+  let openedAt = 0;
+  let trialRunning = false;
+
+  return {
+    get state(): BreakerState {
+      if (state === "open" && now() - openedAt >= openMs) state = "half-open";
+      return state;
+    },
+    async exec(): Promise<T> {
+      const s = this.state;
+      if (s === "open" || (s === "half-open" && trialRunning)) throw new Error("circuit open");
+      if (s === "half-open") trialRunning = true; // רק בקשת ניסיון אחת עוברת
+      try {
+        const result = await call();
+        state = "closed";
+        failures = 0;
+        return result;
+      } catch (err) {
+        failures++;
+        if (s === "half-open" || failures >= failureThreshold) {
+          state = "open";
+          openedAt = now();
+        }
+        throw err;
+      } finally {
+        if (s === "half-open") trialRunning = false;
+      }
+    },
+  };
+}
+```
+<p>הבעיה שזה פותר: ספק משלוחים נופל ועונה אחרי 30 שניות (timeout). כל בקשה שלנו מחזיקה חיבור 30 שניות ← אחרי דקה נגמרים החיבורים, ו<em>השרת שלנו</em> נופל — גם לבקשות שלא קשורות למשלוחים. עם breaker: אחרי 5 כישלונות, נכשלים מיד ("המשלוח יחושב מאוחר יותר"), והשרת חי. ובשילוב: timeout קצר, retry עם jitter, breaker.</p>
+@mistakes
+<ul><li>ב־half-open לשחרר את כל הבקשות — שירות שרק קם מקבל את כל העומס בבת אחת ונופל שוב.</li></ul>
+
+@@ P28-E16 | 3 | כמה זז כשמוסיפים שרת? 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>P28-E16.ts</code>: <code>moduloShard(key, n)</code> — <code>hash32(key) % n</code>; <code>movedFraction(keys, before, after)</code> — איזה חלק מהמפתחות קיבל שרת אחר; ו־<code>compareResharding(keys, from, to, makeRing)</code> ← <code>{ modulo, ring }</code>: כמה זז במעבר מ־<code>from</code> ל־<code>to</code> שרתים (<code>db0</code>, <code>db1</code>…) בכל שיטה. (<code>makeRing</code> — טבעת כמו E13; הבודק נותן אחת משלו.)</p>
+@hint1
+<p><code>movedFraction</code>: לולאה, השוואה, חלוקה. ריק ← 0.</p>
+@hint2
+<p>שתי טבעות — אחת עם <code>from</code> שרתים ואחת עם <code>to</code>.</p>
+@solution
+```ts save=solutions/P28-E16.ts
+// P28-E16
+// כמה מפתחות זזים כשמוסיפים שרת? hash % n מזיז כמעט הכול; consistent hashing — כ־1/n
+import { createHash } from "node:crypto";
+
+export const hash32 = (s: string) => createHash("md5").update(s).digest().readUInt32BE(0);
+export const moduloShard = (key: string, n: number) => hash32(key) % n;
+
+export function movedFraction(keys: readonly string[], before: (k: string) => string | number, after: (k: string) => string | number): number {
+  if (keys.length === 0) return 0;
+  let moved = 0;
+  for (const k of keys) if (before(k) !== after(k)) moved++;
+  return moved / keys.length;
+}
+
+// makeRing — טבעת consistent hashing (כמו E13): { add(node), get(key) }
+export function compareResharding(
+  keys: readonly string[],
+  from: number,
+  to: number,
+  makeRing: () => { add(node: string): void; get(key: string): string | null },
+) {
+  const before = makeRing();
+  const after = makeRing();
+  for (let i = 0; i < from; i++) before.add(`db${i}`);
+  for (let i = 0; i < to; i++) after.add(`db${i}`);
+  return {
+    modulo: movedFraction(keys, (k) => moduloShard(k, from), (k) => moduloShard(k, to)),
+    ring: movedFraction(keys, (k) => before.get(k)!, (k) => after.get(k)!),
+  };
+}
+```
+<p>מה יוצא? על 100,000 מפתחות, מ־4 ל־5 שרתים: modulo — 80.3%, טבעת — 19.2%. מ־10 ל־11: 90.9% מול 7.9%. ב־cache זה ההבדל בין "רוב ה־cache ריק ברגע, והמסד חוטף הכול" לבין "פספוסים ב־8%". ב־sharding של מסד — בין להעביר כמעט את כל הנתונים לבין להעביר עשירית.</p>
+@mistakes
+<ul><li>"נגדל ל־n שרתים מראש ולא נשנה" — הדרך העממית לדחות את הבעיה. עובד, עד שלא.</li></ul>
+
+@@ P28-E17 | 3 | שירות קיצור קישורים 🤖 | 40 | שיעור 3
+@task
+<p>הלוגיקה של השירות משיעור 3, מעל <code>Store</code> (<code>get</code>, <code>insert</code> ← false אם תפוס, <code>incrementClicks</code>; ו־<code>memoryStore()</code> מוכן). בקובץ <code>P28-E17.ts</code>: <code>createShortener(store, { newCode, now })</code> ← <code>{ create, resolve }</code>.</p>
+<ul><li><code>create({ url, alias?, ttlSeconds? })</code>: url — רק <code>http</code>/<code>https</code> תקין (לא <code>javascript:</code>!); alias — 3–30 תווים <code>[a-zA-Z0-9-]</code>, לא שמור (<code>api</code>, <code>admin</code>, <code>health</code>, <code>login</code>), ותפוס ← שגיאה עם "תפוס". בלי alias — <code>newCode()</code> עד 5 ניסיונות.</li><li><code>resolve(code)</code>: לא קיים ← 404; פג ← 410 (בלי לספור); אחרת ← <code>{ status: 302, location }</code> וקליק.</li></ul>
+@hint1
+<p><code>new URL(url)</code> זורק על כתובת לא חוקית; <code>.protocol</code> כולל את הנקודתיים: <code>"https:"</code>.</p>
+@hint2
+<p>תפוגה: <code>expiresAt = now() + ttlSeconds * 1000</code>, ו־<code>now() &gt;= expiresAt</code> ← 410.</p>
+@solution
+```ts save=solutions/P28-E17.ts
+// P28-E17
+// שירות קיצור קישורים — הלוגיקה, מעל store שאפשר להחליף (Map בבדיקות, PostgreSQL + Redis בפרודקשן)
+export interface Link {
+  code: string;
+  url: string;
+  createdAt: number;
+  expiresAt: number | null;
+  clicks: number;
+}
+
+export interface Store {
+  get(code: string): Promise<Link | undefined>;
+  insert(link: Link): Promise<boolean>; // false אם הקוד תפוס
+  incrementClicks(code: string): Promise<void>;
+}
+
+export function memoryStore(): Store & { links: Map<string, Link> } {
+  const links = new Map<string, Link>();
+  return {
+    links,
+    get: async (code) => links.get(code),
+    insert: async (link) => (links.has(link.code) ? false : (links.set(link.code, { ...link }), true)),
+    incrementClicks: async (code) => {
+      const l = links.get(code);
+      if (l) l.clicks++;
+    },
+  };
+}
+
+const RESERVED = new Set(["api", "admin", "health", "login"]);
+
+export function createShortener(store: Store, { newCode, now = () => Date.now() }: { newCode: () => string; now?: () => number }) {
+  return {
+    async create({ url, alias, ttlSeconds }: { url: string; alias?: string; ttlSeconds?: number }): Promise<Link> {
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        throw new Error("כתובת לא תקינה");
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("רק http/https"); // לא javascript: ולא data:
+      if (alias !== undefined && (!/^[a-zA-Z0-9-]{3,30}$/.test(alias) || RESERVED.has(alias.toLowerCase()))) throw new Error("alias לא תקין");
+      const base = { url: parsed.toString(), createdAt: now(), expiresAt: ttlSeconds ? now() + ttlSeconds * 1000 : null, clicks: 0 };
+      if (alias !== undefined) {
+        if (!(await store.insert({ ...base, code: alias }))) throw new Error("alias תפוס");
+        return { ...base, code: alias };
+      }
+      for (let i = 0; i < 5; i++) {
+        const code = newCode();
+        if (await store.insert({ ...base, code })) return { ...base, code };
+      }
+      throw new Error("לא נמצא קוד פנוי");
+    },
+    // מה ה־redirect מחזיר: 302 (לא 301 — דפדפן שומר 301 לתמיד, ואז לא סופרים קליקים ואי אפשר לשנות יעד)
+    async resolve(code: string): Promise<{ status: 302; location: string } | { status: 404 } | { status: 410 }> {
+      const link = await store.get(code);
+      if (!link) return { status: 404 };
+      if (link.expiresAt !== null && now() >= link.expiresAt) return { status: 410 };
+      await store.incrementClicks(code);
+      return { status: 302, location: link.url };
+    },
+  };
+}
+```
+<p>מכאן לשירות אמיתי — הכול כבר בקורס: Nest controller עם <code>@Redirect</code>, store ב־PostgreSQL (<code>code</code> כ־PRIMARY KEY), cache של <code>code ← url</code> ב־Redis (רוב הקליקים על מעט קישורים), והקליקים — <code>INCR</code> ב־Redis או תור, שנכתבים למסד באצוות. הגבלת קצב על <code>create</code>. אולי פרויקט קטן לתיק העבודות?</p>
+@mistakes
+<ul><li>לקבל כל מחרוזת כ־URL — <code>javascript:</code> בקישור "קצר" שמופץ ברשת הוא מתקפה מוכנה.</li></ul>
+
+@@ P28-E18 | 3 | batching 🤖 | 30 | שיעור 4
+@task
+<p>בקובץ <code>P28-E18.ts</code>: <code>createBatcher(loadMany, { maxBatch = 100, waitMs = 0 })</code> ← פונקציה <code>get(key)</code> שמחזירה Promise. כל ה־<code>get</code> שנקראו "יחד" (עד ש־<code>setTimeout(waitMs)</code> רץ) מצטרפים לקריאה אחת ל־<code>loadMany(keys)</code> — בלי כפילויות; מגיעים ל־<code>maxBatch</code> מפתחות ← שולחים מיד. מפתח שלא חזר ← <code>undefined</code>; <code>loadMany</code> נכשל ← כל ה־Promises של ה־batch נדחים.</p>
+@hint1
+<p>תור של <code>{ key, resolve, reject }</code>, וטיימר אחד.</p>
+@hint2
+<p>ב־flush: "לוקחים" את התור (<code>const batch = queue; queue = []</code>) לפני הקריאה האסינכרונית — כדי שבקשות חדשות ייכנסו ל־batch הבא.</p>
+@solution
+```ts save=solutions/P28-E18.ts
+// P28-E18
+// batching: הרבה בקשות "תביא את X" באותו רגע ← שאילתה אחת עם כולם (כמו DataLoader מול N+1)
+export function createBatcher<K, V>(
+  loadMany: (keys: K[]) => Promise<Map<K, V>>,
+  { maxBatch = 100, waitMs = 0 }: { maxBatch?: number; waitMs?: number } = {},
+) {
+  let queue: { key: K; resolve: (v: V | undefined) => void; reject: (e: unknown) => void }[] = [];
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const batch = queue;
+    queue = [];
+    const keys = [...new Set(batch.map((b) => b.key))];
+    loadMany(keys).then(
+      (result) => batch.forEach((b) => b.resolve(result.get(b.key))),
+      (err) => batch.forEach((b) => b.reject(err)),
+    );
+  };
+
+  return (key: K) =>
+    new Promise<V | undefined>((resolve, reject) => {
+      queue.push({ key, resolve, reject });
+      if (new Set(queue.map((q) => q.key)).size >= maxBatch) flush();
+      else if (!timer) timer = setTimeout(flush, waitMs);
+    });
+}
+```
+<p>זה DataLoader (הספרייה של GraphQL) בגרסה קטנה, והתשובה הכללית ל־N+1 (פרק 19): עשרים resolvers שכל אחד מבקש "משתמש X" ← שאילתה אחת <code>WHERE id IN (…)</code>. אותו רעיון בכתיבה: במקום INSERT לכל קליק — אצווה כל שנייה.</p>
+@mistakes
+<ul><li>להחזיר תוצאות לפי <em>סדר</em> ולא לפי מפתח — המסד לא מבטיח ש־<code>IN (3, 1, 2)</code> יחזור באותו סדר.</li></ul>
+
+@@ P28-E19 | 3 | פיד היברידי 🤖 | 40 | שיעור 5
+@task
+<p>בקובץ <code>P28-E19.ts</code>: <code>createFeed({ celebrityThreshold = 1000, timelineCap = 500 })</code> ← <code>{ stats, follow, post, timeline }</code>.</p>
+<ul><li><code>post(author, at)</code> — מזהה עולה מ־1. אם למחבר פחות מ־<code>celebrityThreshold</code> עוקבים — נכתב לפיד של כל עוקב (<code>stats.timelineWrites++</code> לכל אחד; פיד מוגבל ל־<code>timelineCap</code>). סלבריטי — לא נכתב לאף פיד.</li><li><code>timeline(user, limit = 20)</code> — הפיד, ועוד הפוסטים של הסלבריטאים שהוא עוקב אחריהם (נמשכים בזמן הקריאה), בלי כפילויות, מהחדש (<code>at</code> ואז <code>id</code>).</li></ul>
+@hint1
+<p>Maps: עוקבים, נעקבים, פיד לכל משתמש, פוסטים לכל מחבר.</p>
+@hint2
+<p>כפילות: פוסט של מי שהפך לסלבריטי <em>אחרי</em> שפרסם — כבר בפיד, וגם נמשך. Map לפי id.</p>
+@solution
+```ts save=solutions/P28-E19.ts
+// P28-E19
+// פיד: fan-out on write (כל פוסט נכתב לפיד של כל עוקב) — קריאה מהירה; אבל לסלבריטי עם מיליון עוקבים זה מיליון כתיבות.
+// היברידי: לסלבריטאים — fan-out on read (מושכים את הפוסטים שלהם בזמן הקריאה וממזגים)
+export interface Post {
+  id: number;
+  author: string;
+  at: number;
+}
+
+export function createFeed({ celebrityThreshold = 1000, timelineCap = 500 }: { celebrityThreshold?: number; timelineCap?: number } = {}) {
+  const followers = new Map<string, Set<string>>();
+  const following = new Map<string, Set<string>>();
+  const timelines = new Map<string, Post[]>(); // החדש ראשון
+  const postsBy = new Map<string, Post[]>(); // החדש ראשון
+  const stats = { timelineWrites: 0 };
+  let nextId = 1;
+
+  const set = (m: Map<string, Set<string>>, k: string) => m.get(k) ?? m.set(k, new Set()).get(k)!;
+  const isCelebrity = (u: string) => (followers.get(u)?.size ?? 0) >= celebrityThreshold;
+  const newestFirst = (a: Post, b: Post) => b.at - a.at || b.id - a.id;
+
+  return {
+    stats,
+    follow(user: string, target: string) {
+      set(followers, target).add(user);
+      set(following, user).add(target);
+    },
+    post(author: string, at: number): Post {
+      const p = { id: nextId++, author, at };
+      (postsBy.get(author) ?? postsBy.set(author, []).get(author)!).unshift(p);
+      if (!isCelebrity(author)) {
+        for (const f of followers.get(author) ?? []) {
+          const tl = timelines.get(f) ?? timelines.set(f, []).get(f)!;
+          tl.unshift(p);
+          if (tl.length > timelineCap) tl.length = timelineCap;
+          stats.timelineWrites++;
+        }
+      }
+      return p;
+    },
+    timeline(user: string, limit = 20): Post[] {
+      // Map לפי id: פוסט של מי שהפך לסלבריטי אחרי שפרסם — כבר בפיד, וגם נמשך עכשיו. לא להציג פעמיים
+      const merged = new Map((timelines.get(user) ?? []).map((p) => [p.id, p]));
+      for (const t of following.get(user) ?? []) {
+        if (isCelebrity(t)) for (const p of (postsBy.get(t) ?? []).slice(0, limit)) merged.set(p.id, p);
+      }
+      return [...merged.values()].sort(newestFirst).slice(0, limit);
+    },
+  };
+}
+```
+@mistakes
+<ul><li>fan-out on read לכולם — כל פתיחה של האפליקציה = שאילתה על מאות חשבונות, ממוזגת. איטי בדיוק בפעולה הנפוצה.</li></ul>
+@@ P28-E20 | 4 | base62 עם שלוש תקלות 🤖 | 15 | שיעור 3
+@task
+<p><code>encode</code> ב־<code>P28-E20.ts</code>: <code>encode(62)</code> מחזיר מחרוזת ארוכה ומוזרה במקום <code>"10"</code>, <code>encode(0)</code> מחזיר קוד ריק, וקודים יוצאים הפוכים. מצא ותקן (<code>guard</code> שם רק כדי שהבאג לא יתקע את המחשב — אחרי התיקון אפשר למחוק).</p>
+@hint1
+<p><code>n / 62</code> ב־JavaScript — מה הוא מחזיר ל־63?</p>
+@hint2
+<p><code>out += ch</code> מוסיף לסוף. איזו ספרה מחושבת ראשונה?</p>
+@solution
+```ts save=solutions/P28-E20.ts
+// P28-E20
+const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+export function encode(n: number): string {
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error("רק מספר שלם אי־שלילי");
+  if (n === 0) return "0"; // תקלה 1: בלי זה, 0 ← "" (הלולאה לא רצה), וקוד ריק לא מתפענח
+  let out = "";
+  while (n > 0) {
+    out = ALPHABET[n % 62] + out; // תקלה 2: היה out += … ← הספרות יוצאות הפוך (הקטנה ראשונה)
+    n = Math.floor(n / 62); // תקלה 3: היה n / 62 ← שבר, והלולאה ממשיכה עם 0.0something עד שמתקבל אפס
+  }
+  return out;
+}
+
+export function decode(code: string): number {
+  if (!/^[0-9a-zA-Z]+$/.test(code)) throw new Error("קוד לא תקין");
+  let n = 0;
+  for (const ch of code) n = n * 62 + ALPHABET.indexOf(ch);
+  return n;
+}
+```
+@mistakes
+<ul><li>"לתקן" עם <code>.split("").reverse().join("")</code> בסוף — עובד, אבל הקוד הנכון פשוט יותר.</li></ul>
+
+@@ P28-E21 | 4 | retry עם שלוש תקלות 🤖 | 15 | שיעור 2
+@task
+<p>ב־<code>P28-E21.ts</code>: תשלום שנדחה (402) נשלח שוב ושוב, אחרי הכישלון האחרון מחכים לחינם, וכשהשירות נופל — כל הלקוחות חוזרים אליו יחד באותה מילישנייה. מצא ותקן.</p>
+@hint1
+<p>מה בודקים לפני שמנסים שוב? ומתי?</p>
+@hint2
+<p>איפה <code>random</code> בחישוב ההמתנה?</p>
+@solution
+```ts save=solutions/P28-E21.ts
+// P28-E21
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+    this.status = status;
+  }
+}
+
+export async function retry<T>(
+  fn: () => Promise<T>,
+  { retries = 3, baseMs = 100, random = Math.random, sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) } = {},
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      // תקלה 1: היה ניסיון חוזר על כל שגיאה ← 400/404/409 נשלחים שוב ושוב, ותשלום שנדחה "מנסים שוב"
+      const retryable = !(err instanceof HttpError) || err.status >= 500 || err.status === 429;
+      // תקלה 2: הבדיקה הייתה אחרי ה־sleep ← אחרי הניסיון האחרון ישנו לחינם לפני שזרקו
+      if (attempt >= retries || !retryable) throw err;
+      // תקלה 3: היה baseMs * 2 ** attempt בדיוק ← אלף לקוחות חוזרים יחד באותה מילישנייה. jitter מפזר אותם
+      await sleep(Math.floor(random() * baseMs * 2 ** attempt));
+    }
+  }
+}
+```
+@mistakes
+<ul><li>retry על 402 במערכת תשלומים — במקרה הגרוע, חיוב כפול כשה"דחייה" הייתה בעצם timeout של התשובה.</li></ul>
+
+@@ P28-E22 | 4 | טבעת עם שלוש תקלות 🤖 | 20 | שיעור 4
+@task
+<p>הטבעת ב־<code>P28-E22.ts</code>: חלק מהמפתחות מקבלים <code>undefined</code>, שרת שהוסר ממשיך לקבל מפתחות, ואחרי הוספת שרת מפתחות "קופצים" בין שרתים ישנים. מצא ותקן.</p>
+@hint1
+<p>חיפוש בינארי דורש... ?</p>
+@hint2
+<p>לכל שרת יש <code>vnodes</code> נקודות. כמה <code>splice</code> מוחק?</p>
+@solution
+```ts save=solutions/P28-E22.ts
+// P28-E22
+import { createHash } from "node:crypto";
+
+const hash32 = (s: string) => createHash("md5").update(s).digest().readUInt32BE(0);
+
+export function createRing({ vnodes = 50 } = {}) {
+  let points: { at: number; node: string }[] = [];
+  return {
+    add(node: string) {
+      for (let i = 0; i < vnodes; i++) points.push({ at: hash32(`${node}#${i}`), node });
+      points.sort((a, b) => a.at - b.at); // תקלה 1: לא מיינו אחרי הוספה ← החיפוש הבינארי על מערך לא ממוין
+    },
+    remove(node: string) {
+      points = points.filter((p) => p.node !== node); // תקלה 2: הסירו רק את הנקודה הראשונה של השרת ← "שרת רפאים" ממשיך לקבל מפתחות
+    },
+    get(key: string): string | null {
+      if (points.length === 0) return null;
+      const h = hash32(key);
+      let lo = 0;
+      let hi = points.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (points[mid].at < h) lo = mid + 1;
+        else hi = mid;
+      }
+      return points[lo % points.length].node; // תקלה 3: היה points[lo] ← מפתח אחרי הנקודה האחרונה מקבל undefined במקום לעטוף להתחלה
+    },
+  };
+}
+```
+@mistakes
+<ul><li>לתקן את ה־undefined עם <code>?? points[0].node</code> בלי להבין — עובד במקרה, כי זו בדיוק העטיפה. עדיף לכתוב את הכוונה: <code>lo % length</code>.</li></ul>
+
+@@ P28-E23 | 4 | circuit breaker עם שלוש תקלות 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P28-E23.ts</code>: שלוש תקלות שקרו במשך יום ופותחות את המעגל, כשהמעגל "פתוח" הבקשות עדיין מגיעות לשירות המת, ואחרי ניסיון שנכשל ב־half-open — כל הבקשות עוברות. מצא ותקן.</p>
+@hint1
+<p>מה הצלחה עושה למונה?</p>
+@hint2
+<p>איפה בודקים "open" — לפני הקריאה, או אחרי?</p>
+@solution
+```ts save=solutions/P28-E23.ts
+// P28-E23
+export function createBreaker<T>(call: () => Promise<T>, { failureThreshold = 3, openMs = 10_000, now = () => Date.now() } = {}) {
+  let state: "closed" | "open" | "half-open" = "closed";
+  let failures = 0;
+  let openedAt = 0;
+  return {
+    get state() {
+      if (state === "open" && now() - openedAt >= openMs) state = "half-open";
+      return state;
+    },
+    async exec(): Promise<T> {
+      const s = this.state;
+      // תקלה 2: הבדיקה הייתה רק אחרי שהקריאה נכשלה ← כשהמעגל פתוח, כל בקשה עדיין פנתה לשירות המת (וחיכתה ל־timeout שלו)
+      if (s === "open") throw new Error("circuit open");
+      try {
+        const result = await call();
+        failures = 0; // תקלה 1: הצלחה לא איפסה את המונה ← 3 כישלונות "מפוזרים" לאורך יום פותחים את המעגל
+        state = "closed";
+        return result;
+      } catch (err) {
+        failures++;
+        // תקלה 3: התנאי היה רק s === "closed" ← כישלון של בקשת הניסיון ב־half-open השאיר אותו half-open, וכל הבקשות עברו לשירות
+        if (s === "half-open" || failures >= failureThreshold) {
+          state = "open";
+          openedAt = now();
+        }
+        throw err;
+      }
+    },
+  };
+}
+```
+@mistakes
+<ul><li>לבדוק "open" רק אחרי כישלון — כל הטעם הוא <em>לא</em> לחכות ל־timeout של שירות שאנחנו כבר יודעים שהוא מת.</li></ul>
+
+@@ P28-E24 | 5 | אתגר: מזהי Snowflake 🤖 | 45 | שיעור 4
+@task
+<p>בקובץ <code>P28-E24.ts</code>: <code>createIdGenerator(workerId, { now })</code> ← <code>{ next() }</code> שמחזיר <code>bigint</code> של 64 ביט: 41 ביט זמן (מילישניות מאז <code>EPOCH</code> = 1.1.2026), 10 ביט worker (0–1023, אחרת שגיאה), 12 ביט מונה. באותה מילישנייה — המונה עולה; 4096 באותה מילישנייה ← מחכים (קוראים ל־<code>now()</code>) עד הבאה. שעון שחזר אחורה ← שגיאה שמזכירה בכמה. ו־<code>parseId(id)</code> ← <code>{ time (ISO), workerId, seq }</code>.</p>
+@hint1
+<p><code>((ms − EPOCH) &lt;&lt; 22n) | (worker &lt;&lt; 12n) | seq</code> — הכול BigInt (<code>BigInt(x)</code>).</p>
+@hint2
+<p>פירוק: <code>id &gt;&gt; 22n</code>, <code>(id &gt;&gt; 12n) &amp; 1023n</code>, <code>id &amp; 4095n</code>.</p>
+@solution
+```ts save=solutions/P28-E24.ts
+// P28-E24
+// מזהה בסגנון Snowflake (טוויטר): 64 ביט = 41 זמן (מילישניות מ־epoch משלנו) | 10 worker | 12 מונה.
+// כל שרת מייצר לבד, בלי לתאם, והמזהים ממוינים בערך לפי זמן. BigInt — כי Number שומר רק 53 ביט
+const EPOCH = 1_767_225_600_000n; // 2026-01-01T00:00:00Z
+
+export function createIdGenerator(workerId: number, { now = () => Date.now() }: { now?: () => number } = {}) {
+  if (!Number.isInteger(workerId) || workerId < 0 || workerId > 1023) throw new Error("workerId בין 0 ל־1023");
+  let lastMs = -1;
+  let seq = 0;
+  return {
+    next(): bigint {
+      let ms = now();
+      if (ms < lastMs) throw new Error(`השעון חזר אחורה ב־${lastMs - ms}ms — מסרבים לייצר מזהים כפולים`);
+      if (ms === lastMs) {
+        seq = (seq + 1) & 4095;
+        if (seq === 0) {
+          while (ms <= lastMs) ms = now(); // 4096 מזהים באותה מילישנייה — מחכים לבאה
+        }
+      } else {
+        seq = 0;
+      }
+      lastMs = ms;
+      return ((BigInt(ms) - EPOCH) << 22n) | (BigInt(workerId) << 12n) | BigInt(seq);
+    },
+  };
+}
+
+export function parseId(id: bigint) {
+  return {
+    time: new Date(Number((id >> 22n) + EPOCH)).toISOString(),
+    workerId: Number((id >> 12n) & 1023n),
+    seq: Number(id & 4095n),
+  };
+}
+```
+<p>למה לא מספר אוטומטי מהמסד? כי אז כל יצירה צריכה את המסד — ועם כמה מסדים (sharding) כל אחד סופר לבד. למה לא UUID אקראי? 128 ביט, ולא ממוין — אינדקס B-tree שמקבל ערכים אקראיים מתפצל בכל מקום. Snowflake: 64 ביט, ממוין בערך לפי זמן, בלי תיאום. היום יש גם <strong>UUIDv7</strong> — UUID שמתחיל בזמן — שנותן את רוב היתרונות עם תקן מוכר. ובצד הלקוח: מזהה של 64 ביט הוא מעבר ל־<code>Number.MAX_SAFE_INTEGER</code> — ב־JSON שולחים אותו <em>כמחרוזת</em>.</p>
+@mistakes
+<ul><li><code>Number</code> במקום <code>BigInt</code> — מעבר ל־53 ביט מספרים "נעגלים" בשקט, ושני מזהים שונים הופכים לאותו מספר.</li></ul>
+
+@@ P28-E25 | 5 | אתגר: Bloom filter 🤖 | 45 | שיעור 4
+@task
+<p>"השם הזה תפוס?" על מיליון משתמשים, בלי לשאול את המסד על כל הקלדה. בקובץ <code>P28-E25.ts</code>: <code>createBloom(expected, falsePositiveRate)</code> ← <code>{ m, k, bytes, add(item), mightContain(item) }</code>. <code>m = ceil(−n·ln p / (ln 2)²)</code> ביטים, <code>k = round(m/n · ln 2)</code> (לפחות 1), ומערך <code>Uint8Array</code> של <code>ceil(m/8)</code> בתים. k מיקומים לכל פריט: מ־sha256 של הפריט, <code>h1</code> = 4 הבתים הראשונים, <code>h2</code> = 4 הבאים (אי־זוגי), מיקום i = <code>(h1 + i·h2) % m</code>.</p>
+@hint1
+<p>ביט p: בית <code>p &gt;&gt; 3</code>, ביט <code>p &amp; 7</code> בתוכו. הדלקה: <code>|= 1 &lt;&lt; (p &amp; 7)</code>.</p>
+@hint2
+<p><code>d.readUInt32BE(4) | 1</code> — מה הסימן של התוצאה, כשהביט העליון דלוק?</p>
+@solution
+```ts save=solutions/P28-E25.ts
+// P28-E25
+// Bloom filter: "בטוח לא קיים" או "אולי קיים" — במעט זיכרון. אין false negatives; false positives בשיעור שבוחרים.
+// m ביטים ו־k פונקציות hash, מחושבים מגודל צפוי n ושיעור טעות p
+import { createHash } from "node:crypto";
+
+export function createBloom(expected: number, falsePositiveRate: number) {
+  const m = Math.ceil((-expected * Math.log(falsePositiveRate)) / Math.LN2 ** 2);
+  const k = Math.max(1, Math.round((m / expected) * Math.LN2));
+  const bits = new Uint8Array(Math.ceil(m / 8));
+
+  // double hashing: שני hashים מ־sha256, ומהם k מיקומים (h1 + i·h2)
+  const positions = (item: string) => {
+    const d = createHash("sha256").update(item).digest();
+    const h1 = d.readUInt32BE(0);
+    const h2 = (d.readUInt32BE(4) | 1) >>> 0; // ">>> 0": בלי זה, | הופך מספר גדול לשלילי — ומיקום שלילי ב־Uint8Array פשוט לא נכתב
+    return Array.from({ length: k }, (_, i) => (h1 + i * h2) % m);
+  };
+
+  return {
+    m,
+    k,
+    bytes: bits.length,
+    add(item: string) {
+      for (const p of positions(item)) bits[p >> 3] |= 1 << (p & 7);
+    },
+    mightContain(item: string): boolean {
+      return positions(item).every((p) => (bits[p >> 3] & (1 << (p & 7))) !== 0);
+    },
+  };
+}
+```
+<p>על מיליון שמות עם 1% טעות: 1.2MB ו־7 hashים. מדדתי: 1.002% false positives. Set עם אותם מיליון שמות תפס כ־35MB. "לא קיים" — בטוח, ואפשר לענות מיד; "אולי" — שואלים את המסד. כך עושים Cassandra ו־RocksDB (לדלג על קבצים שבטוח אין בהם את המפתח), וכך דפדפנים בדקו פעם אתרים זדוניים.</p>
+@mistakes
+<ul><li>זה הבאג שהיה לי בפתרון הראשון: <code>x | 1</code> ב־JavaScript מחזיר מספר <em>עם סימן</em> של 32 ביט. כשהביט העליון דלוק — שלילי, המיקום שלילי, ו־<code>bits[-5] |= …</code> לא זורק — פשוט לא כותב. התוצאה: false negatives, הדבר היחיד שאסור ל־Bloom filter. הבודק תפס את זה; <code>&gt;&gt;&gt; 0</code> מחזיר ל־unsigned.</li></ul>
