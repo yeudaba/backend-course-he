@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>תכנון: דרישות, חוזה ומודל נתונים — פרויקט 3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 3</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — תכנון: דרישות, חוזה ומודל נתונים</h1>
+  <p class="subtitle">⏱ ~60 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>הדרישות, וה<strong>חוזה</strong> של ה־API — בדיוק מה שהבודק מצפה.</li>
+      <li>מודל הנתונים, וההחלטות שכדאי לקבל לפני שורת קוד ראשונה.</li>
+      <li>הקמה: repo חדש, Nest, Prisma, מסד.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדרישות</h2>
+  <div class="table-wrap"><table>
+    <tr><th>תחום</th><th>מה</th></tr>
+    <tr><td>משתמשים</td><td>הרשמה וכניסה עם JWT. תפקידים: לקוח, מנהל. מנהל ראשון — מהגדרות</td></tr>
+    <tr><td>מוצרים</td><td>CRUD למנהל; חיפוש, סינון, מיון ו־pagination לכולם</td></tr>
+    <tr><td>הזמנות</td><td>עגלה ← הזמנה. <strong>המחיר נשמר ברגע ההזמנה.</strong> ביטול מחזיר מלאי</td></tr>
+    <tr><td>נכונות</td><td><strong>אין מלאי שלילי</strong>, גם כששני לקוחות קונים את היחידה האחרונה באותו רגע</td></tr>
+    <tr><td>בקשה כפולה</td><td>Idempotency-Key — לחיצה כפולה על "הזמן" לא יוצרת שתי הזמנות</td></tr>
+    <tr><td>תשלום</td><td>מדומה, כולל מצב כישלון</td></tr>
+    <tr><td>בדיקות</td><td>unit ו־e2e, כולל תרחיש המרוץ</td></tr>
+    <tr><td>מסירה</td><td>Swagger, README מלא, <code>docker compose up</code>, CI, קישור חי, דף HTML</td></tr>
+  </table></div>
+
+  <h2>2. החוזה</h2>
+  <p>הבודק לא קורא את הקוד שלך — הוא מדבר עם השרת. לכן החוזה מדויק: נתיבים, status codes ו־<code>code</code> של שגיאות. איך תממש — שלך לגמרי.</p>
+  <p><strong>שגיאות</strong> — תמיד <code>{ "error": { "code", "message", "details"? } }</code>. <strong>כסף</strong> — <code>priceCents</code>, <code>totalCents</code>: מספרים שלמים, באגורות.</p>
+  <div class="table-wrap"><table>
+    <tr><th>בקשה</th><th>מי</th><th>הצלחה</th><th>שגיאות (status · code)</th></tr>
+    <tr><td><code>POST /auth/register</code> <code>{email, password, name}</code></td><td>כולם</td><td>201 משתמש (<code>role: "customer"</code>, בלי hash)</td><td>400 VALIDATION_ERROR · 409 EMAIL_TAKEN</td></tr>
+    <tr><td><code>POST /auth/login</code></td><td>כולם</td><td>200 <code>{ accessToken, … }</code></td><td>401 INVALID_CREDENTIALS</td></tr>
+    <tr><td><code>GET /auth/me</code></td><td>מחובר</td><td>200 משתמש</td><td>401 UNAUTHORIZED</td></tr>
+    <tr><td><code>GET /products</code></td><td>כולם</td><td>200 <code>{ data, meta: {page, limit, total, totalPages} }</code></td><td>400</td></tr>
+    <tr><td><code>GET /products/:id</code></td><td>כולם</td><td>200</td><td>404 PRODUCT_NOT_FOUND</td></tr>
+    <tr><td><code>POST /products</code> · <code>PATCH</code> · <code>DELETE /products/:id</code></td><td>מנהל</td><td>201 · 200 · 204</td><td>400 · 401 · 403 FORBIDDEN · 404</td></tr>
+    <tr><td><code>GET /cart</code></td><td>מחובר</td><td>200 <code>{ items: [{productId, name, priceCents, quantity, …}], totalCents }</code></td><td></td></tr>
+    <tr><td><code>PUT /cart/items/:productId</code> <code>{quantity}</code></td><td>מחובר</td><td>200 העגלה (0 = הסרה)</td><td>400 · 404 · 409 OUT_OF_STOCK</td></tr>
+    <tr><td><code>DELETE /cart/items/:productId</code></td><td>מחובר</td><td>204</td><td></td></tr>
+    <tr><td><code>POST /orders</code> + <code>Idempotency-Key</code></td><td>מחובר</td><td>201 הזמנה, <code>status: "pending_payment"</code></td><td>400 IDEMPOTENCY_KEY_REQUIRED · 422 CART_EMPTY · 409 OUT_OF_STOCK (עם <code>details: [{productId, requested, available}]</code>)</td></tr>
+    <tr><td><code>GET /orders</code> · <code>GET /orders/:id</code></td><td>מחובר</td><td>200 (לקוח — שלו; מנהל — הכול)</td><td>404 ORDER_NOT_FOUND</td></tr>
+    <tr><td><code>POST /orders/:id/pay</code> <code>{cardNumber}</code> + <code>Idempotency-Key</code></td><td>בעלים</td><td>200, <code>status: "paid"</code></td><td>400 · 402 PAYMENT_DECLINED · 409 ORDER_NOT_PAYABLE</td></tr>
+    <tr><td><code>POST /orders/:id/cancel</code></td><td>בעלים / מנהל</td><td>200, <code>status: "cancelled"</code>, המלאי חוזר</td><td>409 ORDER_NOT_CANCELLABLE</td></tr>
+    <tr><td><code>POST /orders/:id/ship</code></td><td>מנהל</td><td>200, <code>status: "shipped"</code></td><td>403 · 409 ORDER_NOT_SHIPPABLE</td></tr>
+    <tr><td><code>GET /health</code> · <code>/ready</code> · <code>/version</code> · <code>/docs</code></td><td>כולם</td><td>200</td><td></td></tr>
+  </table></div>
+  <p>הזמנה: <code>{ id, status, totalCents, createdAt, paidAt, …, items: [{ productId, name, priceCents, quantity }] }</code>. ההגדרות שהבודק מעביר לשרת (משתני סביבה): <code>PORT</code>, <code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>ADMIN_EMAIL</code>, <code>ADMIN_PASSWORD</code>, <code>BCRYPT_ROUNDS</code>, <code>CORS_ORIGINS</code>, <code>NODE_ENV=test</code>. השרת צריך להאזין ל־<code>PORT</code>, ולהבטיח בעלייה שיש מנהל עם <code>ADMIN_EMAIL</code> ו־<code>ADMIN_PASSWORD</code>.</p>
+
+  <h2>3. מודל הנתונים</h2>
+  <figure>
+    <svg viewBox="0 0 720 270" role="img" aria-label="טבלאות: users, products, cart_items, orders, order_items, payments, idempotency_keys">
+      <defs><marker id="er" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="20" width="140" height="70" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="160" height="90" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="290" y="20" width="140" height="56" rx="8" style="fill:var(--svg-fill);stroke:var(--muted)"/>
+        <rect x="560" y="150" width="140" height="80" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="290" y="150" width="160" height="90" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="170" width="160" height="60" rx="8" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:1.6;fill:none">
+        <path d="M556 50 H 434" marker-end="url(#er)"/>
+        <path d="M184 50 H 286" marker-end="url(#er)"/>
+        <path d="M630 94 V 146" marker-end="url(#er)"/>
+        <path d="M556 190 H 454" marker-end="url(#er)"/>
+        <path d="M100 114 L 330 146" marker-end="url(#er)"/>
+        <path d="M556 210 Q 400 260 184 205" marker-end="url(#er)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:13px;font-weight:700">
+        <text x="630" y="44">users</text><text x="100" y="44">products</text><text x="360" y="44">cart_items</text>
+        <text x="630" y="174">orders</text><text x="370" y="174">order_items</text><text x="100" y="194">payments</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:10.5px">
+        <text x="630" y="64">role: customer|admin</text>
+        <text x="100" y="64">price_cents · stock</text><text x="100" y="80">CHECK (stock &gt;= 0)</text><text x="100" y="96">active (soft delete)</text>
+        <text x="360" y="60">PK (user_id, product_id)</text>
+        <text x="630" y="194">status · total_cents</text><text x="630" y="210">paid_at · cancelled_at</text>
+        <text x="370" y="194">name · price_cents</text><text x="370" y="210">quantity</text><text x="370" y="226">(snapshot)</text>
+        <text x="100" y="214">status · last4</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: <code>order_items</code> שומרת שם ומחיר — לא רק <code>product_id</code>. ועוד טבלה, <code>idempotency_keys</code> (פרק 24), שלא מופיעה כאן.</figcaption>
+  </figure>
+
+  <h2>4. החלטות לפני הקוד</h2>
+  <p>כתוב קובץ <code>DECISIONS.md</code> (או טיוטה של סעיף "החלטות טכניות" ב־README) ותן תשובה לכל אחת — לפני שאתה כותב קוד:</p>
+  <ol>
+    <li>איך מורידים מלאי כך ששתי הזמנות במקביל לא ימכרו את אותה יחידה? (רמז: פרק 18.)</li>
+    <li>מה קורה להזמנה ישנה כשמחיר המוצר משתנה? ומה קורה לה כשמוחקים את המוצר?</li>
+    <li>למה מחירים באגורות?</li>
+    <li>אילו מעברים מותרים בין המצבים של הזמנה? (צייר.)</li>
+    <li>איפה נשמר ה־Idempotency-Key, ומה מבטיח שרק בקשה אחת "זוכה"?</li>
+    <li>מה נשמר מהתשלום — ומה <strong>אסור</strong> לשמור?</li>
+  </ol>
+
+  <h2>5. הקמה</h2>
+<pre class="terminal"><span class="prompt">% </span>cd ~/dev &amp;&amp; npx @nestjs/cli new coffee-shop --package-manager npm --skip-git
+<span class="prompt">% </span>cd coffee-shop &amp;&amp; git init &amp;&amp; git add -A &amp;&amp; git commit -m "chore: nest skeleton"
+<span class="prompt">% </span>npm install @prisma/client @prisma/adapter-pg pg zod bcryptjs @nestjs/jwt @nestjs/swagger dotenv
+<span class="prompt">% </span>npm install -D prisma @types/pg</pre>
+  <p>repo ב־GitHub מהיום הראשון, commits קטנים עם הודעות ברורות (<code>feat: …</code>, <code>fix: …</code>) — ההיסטוריה היא חלק ממה שהמראיין רואה. מסד לפיתוח — כמו בפרק 23: <code>docker compose</code> עם <code>postgres:18-alpine</code>, או ה־PostgreSQL המקומי שלך. ואת התבנית של Nest — זכור את הגילויים מפרק 20: TypeScript 6, ו־<code>"types": ["node", "jest"]</code> ב־<code>tsconfig.json</code> (פרק 25, שיעור 1).</p>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת פרויקט 3</a><a href="stage-1-catalog.html"><small>הבא</small>שיעור 2 — שלב 1: משתמשים ומוצרים</a></div>
+</main>
+</body>
+</html>

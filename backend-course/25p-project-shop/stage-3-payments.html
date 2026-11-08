@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 3: Idempotency, תשלום, ביטול ומשלוח — פרויקט 3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 3</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — שלב 3: Idempotency, תשלום, ביטול ומשלוח</h1>
+  <p class="subtitle">⏱ ~240 דקות · 🤖 PR3-PAY</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>מכונת מצבים להזמנה.</li>
+      <li>תשלום מדומה — כולל כישלון — עם Idempotency-Key.</li>
+      <li>ביטול שמחזיר מלאי (פעם אחת!), ומשלוח.</li>
+    </ul>
+  </div>
+
+  <h2>1. מכונת המצבים</h2>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="pending_payment ← paid ← shipped, וביטול מ־pending_payment ומ־paid">
+      <defs><marker id="sm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="540" y="30" width="160" height="50" rx="25" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="300" y="30" width="140" height="50" rx="25" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="40" y="30" width="140" height="50" rx="25" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="300" y="110" width="140" height="44" rx="22" style="fill:var(--svg-fill);stroke:var(--red)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M536 55 H 444" marker-end="url(#sm)"/>
+        <path d="M296 55 H 184" marker-end="url(#sm)"/>
+        <path d="M580 84 L 444 122" marker-end="url(#sm)" style="stroke:var(--red);stroke-dasharray:5 4"/>
+        <path d="M370 84 V 106" marker-end="url(#sm)" style="stroke:var(--red);stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:13px;font-weight:700">
+        <text x="620" y="60">pending_payment</text><text x="370" y="60">paid</text><text x="110" y="60">shipped</text><text x="370" y="137">cancelled</text>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:11px">
+        <text x="490" y="47">pay</text><text x="240" y="47">ship (admin)</text><text x="530" y="118">cancel</text><text x="398" y="98">cancel</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: כל מעבר אחר — 409 עם code משלו: <code>ORDER_NOT_PAYABLE</code>, <code>ORDER_NOT_SHIPPABLE</code>, <code>ORDER_NOT_CANCELLABLE</code>.</figcaption>
+  </figure>
+  <p>שים את הטבלה הזו במקום אחד, כפונקציה טהורה (<code>nextStatus(current, action)</code>) — היא הדבר הכי קל לבדוק ב־unit test בפרויקט. ובמסד — <strong>מעבר מותנה</strong>: <code>UPDATE orders SET status = 'cancelled' WHERE id = $1 AND status IN ('pending_payment', 'paid')</code>. שני ביטולים במקביל: רק אחד מקבל <code>count = 1</code> — ורק הוא מחזיר מלאי. בלי זה, ביטול כפול מחזיר את המלאי פעמיים (הבודק מנסה 5 במקביל).</p>
+
+  <h2>2. תשלום מדומה</h2>
+  <p><code>POST /orders/:id/pay</code> עם <code>{ cardNumber }</code> ו־<code>Idempotency-Key</code> (חיוב כפול גרוע מהזמנה כפולה). הספק המדומה עובד עם מספרי הכרטיסים "לבדיקות" שמקובלים בתעשייה:</p>
+  <div class="table-wrap"><table>
+    <tr><th>כרטיס</th><th>תוצאה</th></tr>
+    <tr><td><code>4242 4242 4242 4242</code> (וכל כרטיס תקין אחר)</td><td>מצליח ← 200, <code>status: "paid"</code>, <code>paidAt</code></td></tr>
+    <tr><td><code>4000 0000 0000 0002</code></td><td>נדחה ← 402 <code>PAYMENT_DECLINED</code>, ההזמנה נשארת <code>pending_payment</code></td></tr>
+    <tr><td><code>4000 0000 0000 9995</code></td><td>אין כיסוי ← 402 <code>PAYMENT_DECLINED</code></td></tr>
+    <tr><td>לא עובר Luhn (ספרת ביקורת)</td><td>400 — לא מגיע בכלל לספק</td></tr>
+  </table></div>
+  <ul>
+    <li>רווחים ומקפים במספר — מותרים ("4242 4242 4242 4242").</li>
+    <li>הספק מאחורי <strong>ממשק</strong> (<code>PaymentGateway</code>, provider ב־Nest): מחר מחליפים בספק אמיתי בלי לגעת בהזמנות.</li>
+    <li><strong>מספר כרטיס מלא — לא נשמר, לא ב־log ולא בתשובה.</strong> 4 ספרות אחרונות מספיקות ("ויזה שמסתיימת ב־4242"). זה גם מה ש־PCI DSS, התקן של חברות האשראי, דורש בפועל.</li>
+    <li>כל ניסיון (גם נדחה) — שורה בטבלת <code>payments</code>: מה ניסו, מתי, והתוצאה.</li>
+  </ul>
+  <p>מהפתרון לדוגמה (פלטים אמיתיים, מקוצרים):</p>
+<pre class="terminal"><span class="prompt">% </span>curl -s -X POST localhost:3000/orders/1/pay -H "Authorization: Bearer $T" -H 'Idempotency-Key: pay-dana-0001' \
+<span class="dim">  -H 'content-type: application/json' -d '{"cardNumber":"4000 0000 0000 0002"}'</span>
+<span class="dim">{"error":{"code":"PAYMENT_DECLINED","message":"התשלום נדחה","details":[{"reason":"declined"}]}}</span>
+<span class="prompt">% </span>curl -s -X POST localhost:3000/orders/1/pay … -H 'Idempotency-Key: pay-dana-0002' -d '{"cardNumber":"4242424242424242"}'
+<span class="dim">{"id":1,"userId":2,"status":"paid","totalCents":49800,…,"paidAt":"2026-11-08T07:00:01.561Z",…}</span>
+<span class="prompt">% </span>curl -s -X POST localhost:3000/orders/1/cancel -H "Authorization: Bearer $T"
+<span class="dim">{"id":1,"userId":2,"status":"cancelled","totalCents":49800,…}</span></pre>
+  <p>שים לב למפתח: ניסיון שני = <strong>מפתח חדש</strong>. אותו מפתח היה מחזיר שוב את ה־402 — "אותה בקשה, אותה תשובה". והביטול של הזמנה ששולמה מחזיר גם את הכסף (ב־<code>refund</code> של הספק המדומה, ושורה <code>refunded</code> ב־<code>payments</code>).</p>
+
+  <h2>3. לבדוק</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run check PR3-PAY -- --dir ~/dev/coffee-shop</pre>
+  <p><strong>PR3-PAY</strong>: Idempotency-Key חובה; Luhn ← 400; שני סוגי דחייה ← 402 וההזמנה ממתינה; הצלחה; תשלום כפול ← 409; מספר הכרטיס לא בתשובה; 4 בקשות במקביל עם אותו מפתח; הזמנה של אחר ← 404; ביטול מחזיר מלאי, ביטול כפול לא מחזיר פעמיים; משלוח רק למנהל ורק אחרי תשלום; אחרי משלוח — אין ביטול; ו־5 ביטולים במקביל.</p>
+
+<div class="pager"><a href="stage-2-orders.html"><small>הקודם</small>שיעור 3 — שלב 2: עגלה, הזמנה ומרוץ על המלאי</a><a href="stage-4-ship.html"><small>הבא</small>שיעור 5 — שלב 4: בדיקות, Docker, CI, פריסה ו־README</a></div>
+</main>
+</body>
+</html>

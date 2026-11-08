@@ -1,0 +1,39 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>משתמשים: הרשמה, כניסה, <code>/auth/me</code>, ומנהל ראשון מההגדרות.</li>
+      <li>guard אחד: כל נתיב דורש התחברות, אלא אם סומן ציבורי; ותפקידים.</li>
+      <li>מוצרים: CRUD למנהל, ו־<code>GET /products</code> עם חיפוש, סינון, מיון ו־pagination.</li>
+    </ul>
+  </div>
+
+  <h2>1. משתמשים</h2>
+  <ul>
+    <li><strong>הרשמה</strong>: <code>{ email, password, name }</code>. אימייל — קטנות, בלי רווחים. סיסמה — 8 תווים לפחות ועד 72 בתים (bcrypt, פרק 21). <code>role</code> — תמיד <code>customer</code>; אם הוא מגיע בגוף הבקשה: 400, או להתעלם — אבל אף פעם לא admin.</li>
+    <li><strong>כניסה</strong>: אימייל שלא קיים וסיסמה שגויה — <em>בדיוק</em> אותה תשובה (401 <code>INVALID_CREDENTIALS</code>). הבודק משווה את שתי התשובות.</li>
+    <li><strong>מנהל ראשון</strong>: אין טופס "הרשמה כמנהל" — ומי ייתן לראשון הרשאות? בעלייה, אם מוגדרים <code>ADMIN_EMAIL</code> ו־<code>ADMIN_PASSWORD</code>, השרת יוצר את המשתמש (או מעדכן אותו ל־admin). ב־Nest: <code>OnApplicationBootstrap</code> ו־<code>upsert</code>.</li>
+    <li><strong>התפקיד — מהמסד, לא מהטוקן.</strong> אם התפקיד בתוך ה־JWT, מנהל שהורד מתפקידו נשאר מנהל עד שהטוקן פג. שאילתה אחת לבקשה, ובתמורה — אמת.</li>
+  </ul>
+  <p>guard גלובלי (<code>APP_GUARD</code>) עם <code>@Public()</code> ו־<code>@Roles("admin")</code> — כמו בפרק 21. 401 = "מי אתה?"; 403 = "אני יודע מי אתה, ולא".</p>
+
+  <h2>2. מוצרים</h2>
+  <p>מוצר: <code>{ id, name, description, priceCents, stock, category, createdAt, updatedAt }</code>. ולידציה: <code>priceCents</code> שלם וחיובי (<code>9.99</code> ← 400 — זה הסימן שמישהו שלח שקלים במקום אגורות), <code>stock</code> שלם ולא שלילי.</p>
+  <div class="table-wrap"><table>
+    <tr><th>פרמטר ב־<code>GET /products</code></th><th>מה</th></tr>
+    <tr><td><code>q</code></td><td>חיפוש בשם <strong>ובתיאור</strong>, בלי תלות באותיות גדולות/קטנות (ב־Prisma: <code>contains</code> עם <code>mode: "insensitive"</code>)</td></tr>
+    <tr><td><code>category</code></td><td>התאמה מדויקת</td></tr>
+    <tr><td><code>minPrice</code> · <code>maxPrice</code></td><td>באגורות, כולל הגבולות</td></tr>
+    <tr><td><code>inStock=true</code></td><td>רק מה שיש במלאי</td></tr>
+    <tr><td><code>sort</code></td><td><code>price</code>, <code>-price</code>, <code>name</code>, <code>-name</code>, <code>newest</code> (ברירת מחדל). ערך אחר ← 400</td></tr>
+    <tr><td><code>page</code> · <code>limit</code></td><td>ברירת מחדל 1 ו־20; <code>limit</code> עד 100 (אחרת 400) — אחרת מישהו מבקש מיליון שורות</td></tr>
+  </table></div>
+  <p>מחיקה — <strong>רכה</strong>: מוצר שכבר הוזמן חייב להישאר, כי <code>order_items</code> מצביעות עליו. מסמנים <code>active = false</code>: הוא נעלם מהרשימה, <code>GET /products/:id</code> מחזיר 404, והוא יוצא מהעגלות. ובמיון, תמיד עוד שדה ייחודי בסוף (<code>id</code>) — אחרת שני מוצרים באותו מחיר יכולים "לקפוץ" בין עמודים.</p>
+
+  <h2>3. לבדוק</h2>
+```term
+% cd ~/dev/coffee-shop && npx prisma generate && npm run build
+% cd ~/dev/backend-course
+% npm run check PR3-AUTH -- --dir ~/dev/coffee-shop
+% npm run check PR3-PRODUCTS -- --dir ~/dev/coffee-shop
+```
+  <p><strong>PR3-AUTH</strong>: הרשמה (אימייל מנורמל, בלי hash בתשובה), 409 על אימייל קיים, אותה תשובה לסיסמה שגויה ולמשתמש שלא קיים, <code>/auth/me</code> עם ובלי טוקן, ולידציה, <code>role</code> בגוף, ומנהל מ־<code>ADMIN_EMAIL</code>. <strong>PR3-PRODUCTS</strong>: יצירה, עדכון ומחיקה רכה; 401/403 ללקוח ולאורח; ולידציה; וחיפוש עם כל הפרמטרים, כולל <code>meta</code> של pagination. כל בדיקה מעלה את השרת שלך מחדש, מול מסד ריק — לכן היא לוקחת כמה שניות.</p>

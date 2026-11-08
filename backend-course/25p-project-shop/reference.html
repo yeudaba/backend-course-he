@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרון לדוגמה והחלטות עיצוב — פרויקט 3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 3</a> ‹ שיעור 6</div>
+  <h1>שיעור 6 — פתרון לדוגמה והחלטות עיצוב</h1>
+  <p class="subtitle">⏱ ~45 דקות · 🔒 אחרי שסיימת</p>
+  <div class="box goal">
+    <span class="box-title">🔒 קרא רק אחרי שסיימת</span>
+    <p>פתרון לדוגמה הוא דרך אחת, לא "התשובה". השווה לשלך: איפה הוא פשוט יותר? איפה שלך? הקבצים המלאים — ב־<code>25p-project-shop/solutions/coffee-shop</code>, ואפשר להריץ עליהם את כל הבודקים: <code>npm run check PR3 -- --dir 25p-project-shop/solutions/coffee-shop</code> (אחרי <code>npm install</code>, <code>npx prisma generate</code> ו־<code>npm run build</code> שם).</p>
+  </div>
+
+  <h2>1. המבנה</h2>
+  <div class="table-wrap"><table>
+    <tr><th>תיקייה</th><th>מה</th></tr>
+    <tr><td><code>src/auth</code></td><td>register/login/me, <code>AuthGuard</code> גלובלי (JWT ← משתמש מהמסד ← תפקיד), מנהל ראשון ב־<code>onApplicationBootstrap</code></td></tr>
+    <tr><td><code>src/products</code></td><td>CRUD, חיפוש ו־pagination; מחיקה רכה</td></tr>
+    <tr><td><code>src/cart</code></td><td>עגלה; <code>PUT</code> קובע כמות</td></tr>
+    <tr><td><code>src/orders</code></td><td>טרנזקציית ההזמנה, תשלום, ביטול, משלוח; <code>order-status.ts</code> — מכונת המצבים</td></tr>
+    <tr><td><code>src/payments</code></td><td><code>PaymentGateway</code> (ממשק) ו־<code>FakePaymentGateway</code>; Luhn</td></tr>
+    <tr><td><code>src/idempotency</code></td><td>כמו בפרק 24, על המסד; שומר גם תשובות 4xx</td></tr>
+    <tr><td><code>test/</code></td><td>e2e מול PostgreSQL אמיתי (schema לכל ריצה), כולל המרוץ</td></tr>
+  </table></div>
+
+  <h2>2. ההזמנה</h2>
+<span class="file-label">src/orders/orders.service.ts</span>
+<pre><code class="lang-ts">  // עגלה ← הזמנה, בטרנזקציה אחת: או שהכול קורה (מלאי ירד, הזמנה נוצרה, עגלה התרוקנה) — או כלום
+  createFromCart(userId: number) {
+    return this.prisma.$transaction(async (tx) =&gt; {
+      // לפי productId: שתי הזמנות עם אותם מוצרים נועלות אותם באותו סדר — בלי deadlock
+      const cart = await tx.cartItem.findMany({ where: { userId, product: { active: true } }, orderBy: { productId: "asc" } });
+      if (cart.length === 0) throw new HttpError(422, "CART_EMPTY", "העגלה ריקה");
+
+      const shortages: { productId: number; requested: number; available: number }[] = [];
+      for (const item of cart) {
+        // UPDATE מותנה ואטומי: "הורד, רק אם יש מספיק". שני לקוחות על היחידה האחרונה — PostgreSQL נועל את השורה,
+        // השני מחכה, ואחרי ה־COMMIT של הראשון התנאי כבר לא מתקיים: count = 0. בלי SELECT-ואז-UPDATE
+        const { count } = await tx.product.updateMany({
+          where: { id: item.productId, active: true, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
+        });
+        if (count === 0) {
+          const p = await tx.product.findUnique({ where: { id: item.productId }, select: { stock: true } });
+          shortages.push({ productId: item.productId, requested: item.quantity, available: p?.stock ?? 0 });
+        }
+      }
+      // זריקה בתוך $transaction = ROLLBACK: גם מה שכבר ירד מהמלאי — חוזר
+      if (shortages.length &gt; 0) throw new HttpError(409, "OUT_OF_STOCK", "חלק מהמוצרים אזלו", shortages);
+
+      // המחיר והשם — עכשיו, אחרי שהשורות נעולות: זה המחיר שהלקוח משלם, גם אם ישתנה מחר
+      const products = await tx.product.findMany({ where: { id: { in: cart.map((c) =&gt; c.productId) } }, select: { id: true, name: true, priceCents: true } });
+      const byId = new Map(products.map((p) =&gt; [p.id, p]));
+      const items = cart.map((c) =&gt; ({ productId: c.productId, name: byId.get(c.productId)!.name, priceCents: byId.get(c.productId)!.priceCents, quantity: c.quantity }));
+      const totalCents = items.reduce((sum, i) =&gt; sum + i.priceCents * i.quantity, 0);
+
+      const order = await tx.order.create({ data: { userId, totalCents, createdAt: this.clock.now(), items: { create: items } }, select: orderView });
+      await tx.cartItem.deleteMany({ where: { userId } });
+      return order;
+    });
+  }</code></pre>
+  <ul>
+    <li>ה־<code>findMany</code> של המחירים בא <em>אחרי</em> העדכונים — השורות כבר נעולות על ידי הטרנזקציה, ולכן המחיר שנקרא הוא בדיוק המחיר שבו נמכר.</li>
+    <li>ה־<code>details</code> של <code>OUT_OF_STOCK</code> אוספים <strong>את כל</strong> החוסרים, לא רק את הראשון — הלקוח מתקן את העגלה פעם אחת.</li>
+  </ul>
+
+  <h2>3. מכונת המצבים</h2>
+<span class="file-label">src/orders/order-status.ts</span>
+<pre><code class="lang-ts">export type OrderStatus = "pending_payment" | "paid" | "shipped" | "cancelled";
+export type OrderAction = "pay" | "ship" | "cancel";
+
+// מכונת המצבים של הזמנה — במקום אחד, בלי מסד, ונבדקת ב־unit tests
+const TRANSITIONS: Record&lt;OrderAction, Partial&lt;Record&lt;OrderStatus, OrderStatus&gt;&gt;&gt; = {
+  pay: { pending_payment: "paid" },
+  ship: { paid: "shipped" },
+  cancel: { pending_payment: "cancelled", paid: "cancelled" }, // נשלחה — כבר אי אפשר לבטל
+};
+
+export function nextStatus(current: OrderStatus, action: OrderAction): OrderStatus | null {
+  return TRANSITIONS[action][current] ?? null;
+}
+
+export function fromStatuses(action: OrderAction): OrderStatus[] {
+  return Object.keys(TRANSITIONS[action]) as OrderStatus[];
+}</code></pre>
+  <p>וב־service, כל מעבר הוא <code>updateMany</code> עם <code>status: { in: fromStatuses(action) }</code> — הטבלה והמסד מסכימים, ומקביליות מטופלת במסד.</p>
+
+  <h2>4. החלטות שכדאי לשים לב אליהן</h2>
+  <ul>
+    <li><strong>תשלום מחוץ לטרנזקציה.</strong> קריאה לספק תשלום (רשת, שניות) בתוך טרנזקציה מחזיקה נעילות כל הזמן הזה. לכן: חיוב ← ואז טרנזקציה קצרה עם מעבר מותנה. ואם ההזמנה בוטלה בינתיים (<code>count = 0</code>) — <code>refund</code> מיד.</li>
+    <li><strong>Idempotency שומר גם 4xx.</strong> <code>OUT_OF_STOCK</code> עם אותו מפתח יחזור כמו שהוא — "אותה בקשה, אותה תשובה". רוצים לנסות שוב אחרי שהמלאי חזר? מפתח חדש. 5xx — לא נשמר.</li>
+    <li><strong>הטביעה של תשלום — 4 ספרות אחרונות</strong>, לא כל הכרטיס (גם לא ב־hash: יש רק 10<sup>16</sup> מספרים, ו־hash שלהם אפשר לנחש).</li>
+    <li><strong><code>/health</code> ו־<code>/ready</code> לא בתיעוד</strong> (<code>@ApiExcludeController</code>) — הם לפלטפורמה, לא ללקוחות של ה־API.</li>
+    <li><strong>הבדיקות של הפרויקט מחליפות רק את <code>PrismaService</code> ואת <code>CONFIG</code></strong> — כל השאר אמיתי, כולל ה־guard, ה־pipes וה־filter.</li>
+  </ul>
+
+<div class="pager"><a href="stage-4-ship.html"><small>הקודם</small>שיעור 5 — שלב 4: בדיקות, Docker, CI, פריסה ו־README</a></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 2: עגלה, הזמנה ומרוץ על המלאי — פרויקט 3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 3</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — שלב 2: עגלה, הזמנה ומרוץ על המלאי</h1>
+  <p class="subtitle">⏱ ~300 דקות · 🤖 PR3-ORDERS, PR3-RACE</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>עגלה לכל משתמש.</li>
+      <li>עגלה ← הזמנה, בטרנזקציה אחת, עם המחיר של עכשיו.</li>
+      <li>הלב של הפרויקט: שני לקוחות, יחידה אחרונה, אותו רגע.</li>
+    </ul>
+  </div>
+
+  <h2>1. עגלה</h2>
+  <p><code>PUT /cart/items/:productId</code> עם <code>{ quantity }</code> <strong>קובע</strong> כמות (0 = הסרה) — PUT, כי זה idempotent: לחיצה כפולה לא מכפילה. יותר מהמלאי ← 409 <code>OUT_OF_STOCK</code>. אבל העגלה היא <em>כוונה</em>, לא שמירת מלאי: עד שהלקוח מזמין, מישהו אחר יכול לקנות. הבדיקה האמיתית — ברגע ההזמנה.</p>
+
+  <h2>2. ההזמנה</h2>
+  <p><code>POST /orders</code> (עם <code>Idempotency-Key</code>, חובה — 400 <code>IDEMPOTENCY_KEY_REQUIRED</code> בלעדיו) עושה ארבעה דברים, <strong>הכול או כלום</strong>:</p>
+  <ol>
+    <li>מוריד מלאי לכל מוצר בעגלה.</li>
+    <li>יוצר הזמנה עם שורה לכל מוצר — עם <strong>השם והמחיר של עכשיו</strong>.</li>
+    <li>מחשב <code>totalCents</code>.</li>
+    <li>מרוקן את העגלה.</li>
+  </ol>
+  <p>מוצר אחד חסר ← 409 <code>OUT_OF_STOCK</code> עם <code>details: [{ productId, requested, available }]</code> — ו<strong>שום דבר</strong> לא השתנה: גם המלאי של מוצרים אחרים שכבר "ירד" חוזר, והעגלה נשארת. זו טרנזקציה (פרק 18). ב־Prisma: <code>prisma.$transaction(async (tx) =&gt; { … })</code> — שגיאה שנזרקת בתוכה = ROLLBACK.</p>
+
+  <h2>3. המרוץ</h2>
+  <p>יחידה אחת במלאי. שני לקוחות לוחצים "הזמן" באותה שנייה. הגרסה ה"טבעית":</p>
+<pre><code class="lang-ts">const product = await tx.product.findUnique({ where: { id } });
+if (product.stock &lt; quantity) throw new HttpError(409, "OUT_OF_STOCK", "…");
+await tx.product.update({ where: { id }, data: { stock: product.stock - quantity } });</code></pre>
+  <p>שתי הבקשות קוראות <code>stock = 1</code>, שתיהן עוברות את הבדיקה, ושתיהן כותבות <code>0</code>. הרצנו בדיוק את זה על הפתרון לדוגמה (עם השהיה קטנה בין הקריאה לכתיבה, כמו שקורה תחת עומס) — 12 לקוחות, 3 יחידות במלאי (פלט אמיתי של הבודק):</p>
+<pre class="terminal"><span class="err">AssertionError [ERR_ASSERTION]: בדיוק 3 הצליחו, השאר 409 OUT_OF_STOCK: 201,201,201,201,201,201,201,201,201,201,201,201</span></pre>
+  <p><strong>12 הזמנות על 3 יחידות.</strong> והמלאי? לא שלילי — כל אחד כתב "מה שקראתי פחות אחד". זה <em>lost update</em>: גם ה־CHECK במסד לא עוזר, כי אף ערך שנכתב לא שלילי. טרנזקציה לבד גם לא — ב־READ COMMITTED (ברירת המחדל) הקריאה לא נועלת.</p>
+  <p>הפתרונות (פרק 18): <strong>עדכון מותנה</strong> — <code>UPDATE products SET stock = stock - $q WHERE id = $id AND stock &gt;= $q</code>, ואם 0 שורות עודכנו ← אין מספיק. ב־Prisma: <code>updateMany</code> עם <code>stock: { gte: q }</code> ו־<code>decrement</code>, ובדיקה של <code>count</code>. PostgreSQL נועל את השורה בעדכון, הבקשה השנייה מחכה, ואחרי ה־COMMIT של הראשונה התנאי נבדק שוב על הערך העדכני. (חלופה: <code>SELECT … FOR UPDATE</code> — נועל כבר בקריאה.) ועוד שני דברים:</p>
+  <ul>
+    <li><strong>סדר קבוע</strong>: עגלה עם מוצרים 3 ו־7, ועגלה עם 7 ו־3 — אם כל אחת נועלת בסדר אחר, הן יכולות לחכות זו לזו לנצח (deadlock). ממיינים לפי <code>productId</code>.</li>
+    <li><strong>רשת ביטחון</strong>: <code>CHECK (stock &gt;= 0)</code> ב־migration. Prisma לא יודע להגדיר CHECK — מוסיפים ביד לקובץ ה־<code>migration.sql</code> (<code>--create-only</code>, עורכים, ואז <code>migrate dev</code>).</li>
+  </ul>
+
+  <h2>4. לבדוק</h2>
+<pre class="terminal"><span class="prompt">% </span>npm run check PR3-ORDERS -- --dir ~/dev/coffee-shop
+<span class="prompt">% </span>npm run check PR3-RACE -- --dir ~/dev/coffee-shop</pre>
+  <p><strong>PR3-ORDERS</strong>: עגלה (קביעת כמות, מלאי, הסרה, עגלה לכל משתמש); הזמנה (מלאי יורד, עגלה מתרוקנת, ושינוי מחיר אחר כך לא משנה אותה); rollback כשמוצר אחד חסר; 422 על עגלה ריקה; Idempotency-Key (חובה, ו־replay); הזמנה של אחר ← 404; מנהל רואה הכול. <strong>PR3-RACE</strong>: 12 לקוחות על 3 יחידות ← בדיוק 3 הזמנות; 5 לחיצות במקביל עם אותו מפתח ← הזמנה אחת; ו־CHECK על המלאי במסד.</p>
+
+<div class="pager"><a href="stage-1-catalog.html"><small>הקודם</small>שיעור 2 — שלב 1: משתמשים ומוצרים</a><a href="stage-3-payments.html"><small>הבא</small>שיעור 4 — שלב 3: Idempotency, תשלום, ביטול ומשלוח</a></div>
+</main>
+</body>
+</html>

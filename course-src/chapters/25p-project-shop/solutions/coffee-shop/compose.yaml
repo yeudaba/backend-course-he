@@ -1,0 +1,53 @@
+# כל המערכת בפקודה אחת: docker compose up --build
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run db:seed"]
+    environment:
+      DATABASE_URL: postgresql://shop:shop@db:5432/shop
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://shop:shop@db:5432/shop
+      JWT_SECRET: ${JWT_SECRET:?הגדר JWT_SECRET בקובץ .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?הגדר ADMIN_PASSWORD בקובץ .env}
+      CORS_ORIGINS: http://localhost:5500
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "${WEB_PORT:-5500}:80"
+    depends_on:
+      - api
+
+volumes:
+  db-data:

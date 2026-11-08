@@ -1,0 +1,132 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs" // פרויקט Nest מתקמפל ל־CommonJS
+  importFileExtension = ""    // בלי ".js" ב־import — כך ts-jest מוצא את הקבצים
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  customer
+  admin
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  shipped
+  cancelled
+}
+
+enum PaymentStatus {
+  succeeded
+  declined
+  refunded
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  name         String
+  role         Role         @default(customer)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  cartItems    CartItem[]
+  orders       Order[]
+  idempotency  IdempotencyKey[]
+
+  @@map("users")
+}
+
+model Product {
+  id          Int         @id @default(autoincrement())
+  name        String
+  description String      @default("")
+  // מחירים במספר שלם של אגורות: 0.1 + 0.2 !== 0.3 ב־float, ובכסף זה לא מקובל
+  priceCents  Int         @map("price_cents")
+  // CHECK (stock >= 0) נוסף ביד ב־migration — רשת ביטחון גם אם יש באג בקוד
+  stock       Int
+  category    String
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([category])
+  @@map("products")
+}
+
+model CartItem {
+  userId    Int     @map("user_id")
+  productId Int     @map("product_id")
+  quantity  Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  userId      Int         @map("user_id")
+  status      OrderStatus @default(pending_payment)
+  totalCents  Int         @map("total_cents")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  paidAt      DateTime?   @map("paid_at") @db.Timestamptz(3)
+  shippedAt   DateTime?   @map("shipped_at") @db.Timestamptz(3)
+  cancelledAt DateTime?   @map("cancelled_at") @db.Timestamptz(3)
+  user        User        @relation(fields: [userId], references: [id])
+  items       OrderItem[]
+  payments    Payment[]
+
+  @@index([userId])
+  @@map("orders")
+}
+
+// שם ומחיר נשמרים ברגע ההזמנה: שינוי מחיר מחר לא משנה הזמנה של אתמול
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int     @map("order_id")
+  productId  Int     @map("product_id")
+  name       String
+  priceCents Int     @map("price_cents")
+  quantity   Int
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Payment {
+  id          Int           @id @default(autoincrement())
+  orderId     Int           @map("order_id")
+  amountCents Int           @map("amount_cents")
+  status      PaymentStatus
+  last4       String
+  reference   String
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model IdempotencyKey {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  key         String
+  fingerprint String
+  status      Int?
+  body        Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@map("idempotency_keys")
+}
