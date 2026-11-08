@@ -41,6 +41,7 @@
 | **חטיבה ג׳** | שרת, מסד נתונים ו־HTML בסיסי | <code>▰▰▰▰▰▰▰▰▰▰</code> | 7/7 |
 | **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 7/7 |
 | **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▰▰▰▰</code> | 5/5 |
+| **חטיבה ו׳** | מה שמבקשים במודעות | <code>▱▱▱▱▱▱▱▱▱▱</code> | 0/7 |
 
 </div>
 
@@ -393,6 +394,18 @@
 5. חיפוש עבודה כתהליך — וסוף הקורס
 
 </details>
+
+### חטיבה ו׳ — מה שמבקשים במודעות
+
+| פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
+|---|---|:-:|:-:|:-:|:-:|
+| פרק 31 | MySQL <br><sub>מ־PostgreSQL ל־MySQL: הבדלים, נעילות, Prisma</sub> | | | | בתוכנית |
+| פרק 32 | תורים ואירועים <br><sub>RabbitMQ, Kafka, SQS</sub> | | | | בתוכנית |
+| פרק 33 | AWS <br><sub>IAM, S3, SQS, RDS, ElastiCache, ECS ו־Lambda</sub> | | | | בתוכנית |
+| פרק 34 | Kubernetes ו־GitOps <br><sub>Deployments, Helm, Argo CD, Jenkins</sub> | | | | בתוכנית |
+| פרק 35 | נתונים בקנה מידה <br><sub>OLAP, מסדים עמודתיים: BigQuery, Snowflake, Databricks, DuckDB</sub> | | | | בתוכנית |
+| פרק 36 | ביצועים ועומס <br><sub>בדיקות עומס, profiling, event loop, תעבורה גבוהה</sub> | | | | בתוכנית |
+| פרק 37 | סוכני AI בפרודקשן <br><sub>agentic AI: לולאות, כלים, MCP, guardrails, evals</sub> | | | | בתוכנית |
 
 </div>
 

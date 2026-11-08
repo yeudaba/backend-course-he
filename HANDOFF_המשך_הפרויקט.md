@@ -341,6 +341,19 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
+### 7.0 חטיבה ו׳ — "מה שמבקשים במודעות" (פרקים 31–37), בבנייה
+נוספה לבקשת יהודה (8.11.2026) אחרי שהראה מודעת Backend Developer (Node.js, MySQL, AWS+K8s, Jenkins/Argo CD, SQS/Kafka/RabbitMQ, agentic AI, Redis/ElastiCache, BigQuery/Snowflake/Databricks, נפחי נתונים ותעבורה גבוהה). פער מול הקורס ← שבעה פרקים, באותו פורמט (5 שיעורים, 25 תרגילים, בודקים אמיתיים):
+| פרק | slug מתוכנן | בודקים מול |
+|---|---|---|
+| 31 MySQL | `31-mysql` | MySQL 8.4 בקונטיינר `course-mysql` (פורט 3307) |
+| 32 תורים ואירועים | `32-messaging` | RabbitMQ, Kafka (KRaft), SQS דרך ElasticMQ/LocalStack |
+| 33 AWS | `33-aws` | LocalStack (S3, SQS, DynamoDB?) + ולידציה של IaC/IAM |
+| 34 Kubernetes ו־GitOps | `34-kubernetes` | ולידציה של manifests/Helm/Jenkinsfile/Argo CD (כמו פרק 25) |
+| 35 נתונים בקנה מידה | `35-data` | DuckDB (`@duckdb/node-api`) — מנוע עמודתי מקומי |
+| 36 ביצועים ועומס | `36-performance` | מדידות אמיתיות, autocannon, perf_hooks |
+| 37 סוכני AI בפרודקשן | `37-agents` | SDK של Anthropic עם fetch מדומה (כמו 29) |
+כל ה־images נבדקו ונמשכים בענן: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4, softwaremill/elasticmq-native.
+
 ### 7.1 מצב: הקורס הושלם
 כל 30 הפרקים (0–30, כולל 15.5 ו־15w), ושלושת הפרויקטים (כולל שלב 5 של פרויקט 3) — בנויים ומאומתים. מה אפשר להמשיך, אם יהודה יבקש:
 - **פרויקט 4 (רשות, אפיון 10.4)** — "עיבוד מסמכים עם AI". לא נבנה. פרק 29 מכסה את היסודות; אפשר לבנות כיחידה `29p-project-docs` בסגנון של 25p (בודק קופסה שחורה עם fetch מדומה של ה־SDK).

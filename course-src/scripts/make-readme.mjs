@@ -21,6 +21,13 @@ const ICONS = {
 
 // מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
 const PLANNED = [
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 31", icon: "🐬", title: "MySQL", topics: "מ־PostgreSQL ל־MySQL: הבדלים, נעילות, Prisma" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 32", icon: "📨", title: "תורים ואירועים", topics: "RabbitMQ, Kafka, SQS" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 33", icon: "☁️", title: "AWS", topics: "IAM, S3, SQS, RDS, ElastiCache, ECS ו־Lambda" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 34", icon: "☸️", title: "Kubernetes ו־GitOps", topics: "Deployments, Helm, Argo CD, Jenkins" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 35", icon: "🧮", title: "נתונים בקנה מידה", topics: "OLAP, מסדים עמודתיים: BigQuery, Snowflake, Databricks, DuckDB" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 36", icon: "🚦", title: "ביצועים ועומס", topics: "בדיקות עומס, profiling, event loop, תעבורה גבוהה" },
+  { part: "חטיבה ו׳ — מה שמבקשים במודעות", label: "פרק 37", icon: "🤖", title: "סוכני AI בפרודקשן", topics: "agentic AI: לולאות, כלים, MCP, guardrails, evals" },
 ];
 
 // פרק 0 נכתב ביד ישירות ב־backend-course — את השיעורים קוראים משם
