@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kafka: partitions, keys ו־consumer groups — יחידה 26.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.5</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — Kafka: partitions, keys ו־consumer groups</h1>
+  <p class="subtitle">⏱ ~55 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>Kafka כ־log: topic, partition, offset, retention.</li>
+      <li>keys: מה קובע partition, ולמה סדר מובטח רק בתוכו.</li>
+      <li>consumer groups: חלוקת partitions, rebalance, ו־offsets לכל group.</li>
+      <li>commit אחרי טיפול, replay, ו־consumer lag.</li>
+    </ul>
+  </div>
+
+  <h2>1. log מחולק</h2>
+  <p>Kafka שומר <strong>topics</strong>. כל topic מחולק ל־<strong>partitions</strong>, וכל partition הוא קובץ שרק מוסיפים לסופו: כל הודעה מקבלת <strong>offset</strong> — מספר רץ בתוך ה־partition. הודעות לא נמחקות כשקוראים אותן; הן נמחקות לפי <strong>retention</strong> (למשל 7 ימים, או לפי גודל). קריאה לא משנה כלום ב־topic — consumer רק זוכר "עד איפה הגעתי".</p>
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="topic עם 3 partitions; producer שולח לפי key; consumer group עם 2 consumers מתחלק ב־partitions">
+      <defs><marker id="kf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="600" y="100" width="110" height="50" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="230" y="30" width="320" height="190" rx="12" style="fill:none;stroke:var(--purple);stroke-dasharray:6 4"/>
+        <rect x="250" y="55" width="280" height="40" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="250" y="110" width="280" height="40" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="250" y="165" width="280" height="40" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="30" y="60" width="140" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="30" y="150" width="140" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M596 115 L 534 78" marker-end="url(#kf)"/>
+        <path d="M596 125 H 534" marker-end="url(#kf)"/>
+        <path d="M596 135 L 534 182" marker-end="url(#kf)"/>
+        <path d="M246 75 L 174 82" marker-end="url(#kf)"/>
+        <path d="M246 130 L 174 165" marker-end="url(#kf)"/>
+        <path d="M246 185 L 174 178" marker-end="url(#kf)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700"><text x="655" y="130">producer</text><text x="100" y="87">consumer A</text><text x="100" y="177">consumer B</text></g>
+      <g class="mono" style="font-size:11px" direction="ltr">
+        <text x="262" y="80">P0 │ 0 1 2 3 4 5 6 →</text>
+        <text x="262" y="135">P1 │ 0 1 2 3 →</text>
+        <text x="262" y="190">P2 │ 0 1 2 3 4 →</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="390" y="22">topic: orders</text>
+        <text x="655" y="170">partition = hash(key) % 3</text>
+        <text x="100" y="230">group "emails": כל partition ל־consumer אחד</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: אותו key ← אותו partition, תמיד (כל עוד מספר ה־partitions לא משתנה). בתוך ה־group, A קורא את P0 ו־B את P1 ו־P2. consumer שלישי יקבל partition; רביעי — לא יקבל כלום.</figcaption>
+  </figure>
+
+  <h2>2. keys וסדר</h2>
+  <p>producer שולח הודעה עם <strong>key</strong> (לא חובה, אבל כמעט תמיד). ה־partition נקבע מ־hash של ה־key, אז כל ההודעות עם אותו key נכנסות לאותו partition — <strong>לפי הסדר</strong>. בלי key — ההודעות מתפזרות (round-robin), וסדר אין (E04, E22).</p>
+  <p>מה בוחרים כ־key? את הישות שהסדר שלה חשוב: מספר הזמנה, מזהה משתמש, מזהה חשבון. "paid" חייב להיקרא לפני "shipped" של <em>אותה</em> הזמנה; בין הזמנות שונות — לא אכפת לנו, וזה מה שמאפשר מקביליות.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ hash של מי?</span>
+    <p>הלקוח (לא ה־broker) מחשב את ה־partition. ל־Java client יש partitioner ידוע (murmur2), ולקוחות בשפות אחרות לא תמיד מחשבים בדיוק כמוהו — <code>@platformatic/kafka</code>, למשל, מספק <code>compatibilityPartitioner</code> בדיוק בשביל זה. אם producers בשתי שפות כותבים לאותו topic עם אותם keys — ודאו שהם מחשבים partition באותה דרך, אחרת "אותו key ← אותו partition" נשבר.</p>
+  </div>
+  <p>ועוד אמת לא נעימה: גם producer יכול לכתוב כפול. אם ה־broker קיבל את ההודעה אבל האישור לא חזר (timeout), ה־producer שולח שוב. בפיתוח היחידה הזו ראינו את זה קורה מול topic שזה עתה נוצר — אותן הודעות פעמיים ב־partition. הפתרון בצד ה־producer: <code>idempotent: true</code> — ה־broker מזהה ניסיון חוזר לפי מספר רץ, ולא כותב פעמיים.</p>
+
+  <h2>3. consumer groups ו־offsets</h2>
+  <p>consumers מתאגדים ב־<strong>group</strong> (לפי <code>groupId</code>). בתוך group, כל partition שייך ל־consumer אחד בדיוק — כך העבודה מתחלקת. consumer מצטרף או נופל ← <strong>rebalance</strong>: ה־partitions מחולקים מחדש. ו־group שונה = קורא עצמאי: שירות המיילים ושירות האנליטיקה קוראים את אותו topic, כל אחד מהמקום שלו.</p>
+  <p>"המקום" הוא ה־<strong>committed offset</strong> — לכל group ולכל partition, ה־offset הבא שצריך לקרוא. Kafka שומר אותו בשבילך (בתוך topic פנימי). והנה כל זה בהרצה אמיתית: שני groups קוראים את אותן ארבע הודעות, ואז "מחזירים אחורה" את אחד מהם:</p>
+<pre><code class="lang-ts">import { Admin, Consumer, Producer, MessagesStreamModes, MessagesStreamFallbackModes, stringSerializers, stringDeserializers } from "@platformatic/kafka";
+
+const brokers = [process.env.KAFKA_BROKERS ?? "localhost:9092"];
+const topic = `lesson4-${Date.now()}`;
+const admin = new Admin({ clientId: "lesson4", bootstrapBrokers: brokers });
+await admin.createTopics({ topics: [topic], partitions: 1, replicas: 1 });
+const producer = new Producer({ clientId: "lesson4", bootstrapBrokers: brokers, serializers: stringSerializers, idempotent: true });
+await producer.send({ messages: ["placed", "paid", "shipped", "delivered"].map((value) =&gt; ({ topic, key: "order-42", value })) });
+
+async function read(groupId: string, max: number) {
+  const consumer = new Consumer({ groupId, clientId: groupId, bootstrapBrokers: brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({
+    topics: [topic],
+    mode: MessagesStreamModes.COMMITTED,               // מאיפה שה־group עצר
+    fallbackMode: MessagesStreamFallbackModes.EARLIEST, // group חדש ← מההתחלה
+    autocommit: false,
+  });
+  const got: string[] = [];
+  for await (const m of stream) {
+    got.push(`${m.offset}:${m.value}`);
+    await m.commit(); // אחרי הטיפול
+    if (got.length &gt;= max) break;
+  }
+  await stream.close();
+  await consumer.close();
+  return got.join(" ");
+}
+
+console.log("emails   :", await read(`${topic}-emails`, 4));
+console.log("analytics:", await read(`${topic}-analytics`, 4));
+// replay: מחזירים את ה־offset של group אחד אחורה (כשאין בו consumers פעילים)
+await admin.alterConsumerGroupOffsets({ groupId: `${topic}-emails`, topics: [{ name: topic, partitionOffsets: [{ partition: 0, offset: 1n }] }] });
+console.log("emails, after reset to offset 1:", await read(`${topic}-emails`, 3));
+
+await producer.close();
+await admin.deleteTopics({ topics: [topic] });
+await admin.close();</code></pre>
+<pre class="terminal">emails   : 0:placed 1:paid 2:shipped 3:delivered
+analytics: 0:placed 1:paid 2:shipped 3:delivered
+emails, after reset to offset 1: 1:paid 2:shipped 3:delivered</pre>
+  <p>שלושה דברים מהפלט: (1) שני ה־groups קיבלו את <em>כל</em> ההודעות — זה לא "תור" שבו הודעה הולכת לאחד. (2) ההודעות לא נמחקו אחרי שנקראו. (3) <strong>replay</strong>: הזזנו offset, וקראנו שוב — כך מתקנים באג ב־consumer ומעבדים מחדש את היום האחרון. בתור רגיל, ההודעות האלה כבר היו מזמן בפח.</p>
+
+  <h2>4. מתי לעשות commit</h2>
+  <p>אותה שאלה כמו ack: commit לפני הטיפול ← at-most-once; אחרי ← at-least-once (E14). <code>autocommit: true</code> עושה commit לפי זמן, <em>בלי קשר</em> לשאלה אם סיימת — נוח, ומסוכן כשהטיפול נכשל. ויש דרך שלישית, למי שכותב למסד: לא לעשות commit ב־Kafka בכלל, אלא לשמור את ה־offset <strong>במסד, באותה טרנזקציה</strong> עם התוצאה, ובעלייה להתחיל ממנו — כך כל הודעה משפיעה בדיוק פעם אחת (E25).</p>
+
+  <h2>5. consumer lag</h2>
+  <p>lag = הסוף של ה־partition פחות ה־committed offset של ה־group: כמה הודעות מחכות. זה המדד הראשון בכל דשבורד של Kafka. lag שעולה בהתמדה אומר שהצרכנים איטיים מהקצב — מוסיפים consumers (עד מספר ה־partitions, שהוא תקרת המקביליות), או מאיצים את הטיפול (E19).</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>שאלות שחוזרות בראיונות על Kafka: "איך מבטיחים סדר?" (key, ובתוך partition); "מה קורה כשמוסיפים consumer?" (rebalance; מעבר למספר ה־partitions — לא עוזר); "consumer נפל באמצע — מה קורה להודעה?" (חוזרת מה־committed offset — לכן אידמפוטנטיות); "מה ההבדל מ־RabbitMQ?" (log מול תור; replay; כמה groups עצמאיים). אחרי היחידה הזו יש לך תשובות — עם קוד שרץ.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.5-E04">E04</a> · <a href="exercises.html#P26.5-E12">E12</a> · <a href="exercises.html#P26.5-E14">E14</a> · <a href="exercises.html#P26.5-E19">E19</a> · <a href="exercises.html#P26.5-E22">E22</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-03-sqs.html"><small>הקודם</small>שיעור 3 — SQS: visibility timeout, FIFO ו־DLQ</a><a href="lesson-05-reliability.html"><small>הבא</small>שיעור 5 — אמינות: אידמפוטנטיות, outbox ו־retries</a></div>
+</main>
+</body>
+</html>

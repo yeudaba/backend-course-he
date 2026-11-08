@@ -1,0 +1,85 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה שירותים מדברים בהודעות ולא רק ב־HTTP.</li>
+      <li>שני מודלים: תור (ההודעה נמחקת אחרי טיפול) ו־log (האירועים נשארים).</li>
+      <li>הבטחות מסירה: at-most-once, at-least-once, ומה "exactly-once" באמת אומר.</li>
+      <li>המפה: BullMQ, RabbitMQ, SQS, Kafka — מתי כל אחד.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה הודעות</h2>
+  <p>הזמנה חדשה בחנות הקפה צריכה: לשלוח מייל, להוריד מלאי, לעדכן אנליטיקה, ואולי להודיע לשירות המשלוחים. אם שירות ההזמנות קורא לכל אחד ב־HTTP, בסדר, הוא <em>תלוי</em> בכולם: שירות המיילים איטי ← ההזמנה איטית; נפל ← ההזמנה נכשלת; נוסף שירות חמישי ← משנים את קוד ההזמנות.</p>
+  <p>עם broker באמצע, שירות ההזמנות מפרסם אירוע אחד — "הזמנה נוצרה" — וממשיך. כל שירות אחר צורך בקצב שלו, נופל וחוזר בלי שאף אחד יודע, ושירות חדש פשוט מתחיל להאזין. זה <strong>decoupling</strong> בזמן (לא צריך שיהיו למעלה יחד), בקצב (קפיצת עומס נבלעת בתור), ובקוד (ה־producer לא יודע מי צורך).</p>
+  <p>המחיר: הכול נהיה <strong>אסינכרוני</strong>. אין "תשובה" מיידית, יש עיכובים, וצריך לחשוב מה קורה כשהודעה מגיעה פעמיים, מאוחר, או לא בסדר. רוב היחידה הזו היא על המחיר הזה.</p>
+
+  <h2>2. תור מול log</h2>
+  <figure>
+    <svg viewBox="0 0 720 260" role="img" aria-label="תור: כל הודעה מגיעה ל־worker אחד ונמחקת. log: ההודעות נשארות, וכל group קורא מה־offset שלו">
+      <defs><marker id="ql" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700" direction="rtl"><text x="540" y="24">תור (RabbitMQ, SQS, BullMQ)</text><text x="180" y="24">log (Kafka)</text></g>
+      <g style="stroke-width:2">
+        <rect x="560" y="50" width="140" height="44" rx="8" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="400" y="50" width="130" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="560" y="130" width="140" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="560" y="180" width="140" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 72 H 534" marker-end="url(#ql)"/>
+        <path d="M465 98 V 150 H 556" marker-end="url(#ql)"/>
+        <path d="M465 150 V 200 H 556" marker-end="url(#ql)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="630" y="77">producer</text><text x="465" y="77">[m3 m2 m1]</text><text x="630" y="155">worker A ← m1</text><text x="630" y="205">worker B ← m2</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl"><text x="540" y="245">כל הודעה ל־worker אחד; אחרי ack — נמחקת</text></g>
+      <g style="stroke-width:2">
+        <rect x="30" y="50" width="300" height="44" rx="8" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--border);stroke-width:2"><path d="M90 50 V 94"/><path d="M150 50 V 94"/><path d="M210 50 V 94"/><path d="M270 50 V 94"/></g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="60" y="77">0</text><text x="120" y="77">1</text><text x="180" y="77">2</text><text x="240" y="77">3</text><text x="300" y="77">4</text>
+      </g>
+      <g style="stroke-width:2">
+        <rect x="40" y="150" width="130" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="190" y="150" width="140" height="40" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M105 146 L 180 98" marker-end="url(#ql)"/>
+        <path d="M260 146 L 300 98" marker-end="url(#ql)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="105" y="167">emails</text><text x="105" y="182">offset 2</text>
+        <text x="260" y="167">analytics</text><text x="260" y="182">offset 4</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl"><text x="180" y="225">האירועים נשארים (לפי זמן); כל group קורא מה־offset שלו,</text><text x="180" y="242">ואפשר להחזיר offset אחורה ולקרוא שוב</text></g>
+    </svg>
+    <figcaption>איור 1: בתור, ההודעה היא "עבודה" — מישהו לוקח, מסיים, והיא נעלמת. ב־log, ההודעה היא "עובדה שקרתה" — נכתבת פעם אחת, וכל מי שרוצה קורא אותה, בקצב שלו, וגם שוב.</figcaption>
+  </figure>
+  <p>שני המודלים פותרים בעיות שונות. <strong>תור</strong> — חלוקת עבודה: "הקטן את התמונה הזו" צריך לקרות פעם אחת, אצל worker אחד. <strong>log</strong> — הפצת עובדות: "הזמנה 42 שולמה" מעניינת חמישה שירותים, ושירות שישי שיעלה בחודש הבא ירצה לקרוא גם את ההיסטוריה.</p>
+
+  <h2>3. הבטחות מסירה</h2>
+  <p>consumer מקבל הודעה, מטפל, ומאשר (ack / delete / commit). הוא יכול ליפול בכל רגע. השאלה היא <em>מה בא קודם</em>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>סדר</th><th>נפל באמצע</th><th>ההבטחה</th></tr>
+    <tr><td>ack ← טיפול</td><td>ההודעה כבר נמחקה, הטיפול לא קרה ← <strong>אבדה</strong></td><td>at-most-once</td></tr>
+    <tr><td>טיפול ← ack</td><td>הטיפול קרה, ה־ack לא ← ההודעה חוזרת ← <strong>כפילות</strong></td><td>at-least-once</td></tr>
+  </table></div>
+  <p>כמעט תמיד בוחרים <strong>at-least-once</strong> — עדיף כפול מחסר — ומשלמים עליו ב־<strong>consumer אידמפוטנטי</strong>: מזהה לכל אירוע, ו"כבר טיפלתי ב־X" שנשמר באותה טרנזקציה עם הפעולה (E15). "exactly-once" שמופיע בשיווק של כלים — נכון רק <em>בתוך</em> המערכת שלהם; ברגע שהטיפול נוגע במסד, ב־API או במייל, חוזרים לאידמפוטנטיות (E02, E25).</p>
+  <p>ועוד שתי אמיתות שכדאי להפנים מהיום הראשון: <strong>סדר</strong> מובטח רק בגבולות מסוימים (partition ב־Kafka, group ב־SQS FIFO, תור עם consumer אחד), ו<strong>הודעה פגומה</strong> אחת שנכשלת שוב ושוב לא יכולה לחסום את כל השאר — לכן dead letter queue.</p>
+
+  <h2>4. המפה</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>BullMQ</th><th>RabbitMQ</th><th>SQS</th><th>Kafka</th></tr>
+    <tr><td>מודל</td><td>תור עבודות</td><td>תורים + ניתוב (exchanges)</td><td>תור</td><td>log מחולק (partitions)</td></tr>
+    <tr><td>רץ על</td><td>Redis שכבר יש לך</td><td>שרת RabbitMQ (או מנוהל)</td><td>AWS, מנוהל לגמרי</td><td>cluster (או MSK / Confluent)</td></tr>
+    <tr><td>מצטיין ב</td><td>jobs בתוך אפליקציה: delayed, retries, cron</td><td>ניתוב גמיש, RPC, latency נמוך</td><td>אפס תפעול, DLQ מובנה</td><td>נפח עצום, כמה צרכנים, replay</td></tr>
+    <tr><td>ההודעה אחרי טיפול</td><td>נמחקת</td><td>נמחקת</td><td>נמחקת</td><td>נשארת (retention)</td></tr>
+    <tr><td>ביחידה</td><td>פרק 26</td><td>שיעור 2</td><td>שיעור 3</td><td>שיעור 4</td></tr>
+  </table></div>
+  <p>והעיקר: <strong>הדפוסים זהים בכולם</strong>. ack אחרי טיפול, אידמפוטנטיות, retry עם backoff, dead letter, outbox — תכתוב אותם כאן שלוש פעמים, בשלושה כלים, ותראה שזה אותו דבר.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.5-E01">E01</a> · <a href="exercises.html#P26.5-E02">E02</a></p>
+  </div>

@@ -1,0 +1,1162 @@
+@@ P26.5-E01 | 1 | איזה כלי? | 15 | שיעור 1
+@task
+<p>לכל תרחיש — BullMQ (פרק 26), RabbitMQ, SQS או Kafka, ולמה. לפעמים יש יותר מתשובה טובה אחת.</p>
+<ol><li>חנות הקפה, שרת אחד ו־Redis: לשלוח מייל אישור אחרי הזמנה, ולבטל הזמנות שלא שולמו אחרי 30 דקות.</li><li>שירות ההזמנות צריך להודיע לשירות המלאי, לשירות המיילים ולשירות ההמלצות על כל הזמנה — וכל אחד צורך בקצב שלו.</li><li>מיליון אירועי קליק בדקה מהאתר, לניתוח בזמן אמת <em>ו</em>לשמירה לטבלאות אנליטיקה — ואנליסט רוצה "להריץ מחדש" את אתמול עם לוגיקה מתוקנת.</li><li>המערכת כולה רצה ב־AWS, וצריך תור עבודות להקטנת תמונות, בלי לנהל שום שרת של תורים.</li><li>ניתוב מורכב: אירועי הזמנה מישראל לתור אחד, מחו״ל לשני, וביטולים מכל מקום — לתור שלישי.</li></ol>
+@hint1
+<p>שתי שאלות מכריעות: האם ההודעה "נמחקת" אחרי שטופלה (תור), או נשארת כדי שאחרים יקראו גם, ושוב (log)? ומי מנהל את התשתית?</p>
+@hint2
+<p>Kafka שומר את האירועים לפי זמן (retention) — לא לפי "מישהו קרא".</p>
+@solution
+<ol><li><strong>BullMQ</strong> — כבר יש Redis, ו־BullMQ נותן delayed jobs ו־retries מובנים. להוסיף RabbitMQ או Kafka בשביל זה — תשתית בלי סיבה.</li><li><strong>RabbitMQ</strong> (fanout/topic exchange — תור לכל שירות) או <strong>Kafka</strong> (topic אחד, consumer group לכל שירות). ב־AWS: <strong>SNS ← SQS</strong> (תור SQS לכל שירות שמנוי ל־topic של SNS).</li><li><strong>Kafka.</strong> נפח גבוה, כמה צרכנים עצמאיים, ו־<em>replay</em>: מזיזים את ה־offset של ה־group אחורה ומעבדים שוב. בתור רגיל ההודעות כבר נמחקו.</li><li><strong>SQS</strong> — מנוהל לגמרי, משלמים לפי בקשות, DLQ מובנה.</li><li><strong>RabbitMQ</strong> עם topic exchange: ישראל — <code>order.*.il</code>; ביטולים — <code>order.cancelled.*</code> (E03, E06). "מחו״ל" קשה יותר: binding לא יודע להגיד "הכול חוץ מ־il" — אז מכניסים את זה למפתח (<code>order.created.abroad</code>), או משתמשים ב־headers exchange. ניתוב גמיש הוא החוזקה של RabbitMQ.</li></ol>
+@mistakes
+<ul><li>"Kafka כי זה מה שחברות גדולות משתמשות" — Kafka דורש תפעול (או שירות מנוהל יקר), ותור עבודות פשוט לא צריך אותו.</li></ul>
+
+@@ P26.5-E02 | 1 | מה קורה כשה־consumer נופל? | 15 | שיעור 1
+@task
+<p>consumer מקבל הודעה "חייב את הלקוח ב־89.90 ₪", מחייב דרך ספק תשלומים, ומאשר (ack). לכל סדר פעולות — מה קורה אם התהליך נופל בנקודה המסומנת ב־💥? ואיזו הבטחה מתקבלת: at-most-once או at-least-once?</p>
+<ol><li><code>ack</code> ← 💥 ← חיוב</li><li>חיוב ← 💥 ← <code>ack</code></li><li>חיוב ← <code>ack</code> ← 💥</li></ol>
+<p>ובונוס: למה "exactly-once" כמעט אף פעם לא זמין "בחינם" — ומה עושים במקום?</p>
+@hint1
+<p>הודעה שלא אושרה — חוזרת (לתור, או אחרי visibility timeout, או מה־offset האחרון).</p>
+@hint2
+<p>החיוב קורה בעולם החיצוני — ה־broker לא יודע עליו.</p>
+@solution
+<ol><li>ההודעה אושרה ונמחקה, החיוב לא קרה ← <strong>הלקוח לא חויב, לתמיד</strong>. זה at-most-once: כל הודעה מטופלת לכל היותר פעם אחת — לפעמים אפס.</li><li>החיוב קרה, ה־ack לא ← ההודעה חוזרת ← <strong>חיוב כפול</strong>. זה at-least-once: לפחות פעם אחת — לפעמים יותר.</li><li>הכול בסדר.</li></ol>
+<p>at-least-once הוא ברירת המחדל הנכונה כמעט תמיד (עדיף כפול מחסר), <strong>בתנאי שה־consumer אידמפוטנטי</strong>: אותה הודעה פעמיים ← אותה תוצאה כמו פעם אחת. איך: מזהה ייחודי לכל אירוע, ו"כבר טיפלתי ב־X" שנשמר <em>באותה טרנזקציה</em> עם הפעולה (E15) — ולספק התשלומים שולחים idempotency key (פרק 21). "exactly-once" של Kafka חל רק בתוך Kafka (קריאה ← כתיבה ל־topic אחר); ברגע שיש צד שלישי — מסד, API, מייל — חוזרים לאידמפוטנטיות.</p>
+
+@@ P26.5-E03 | 1 | לאן הולכת כל הודעה? | 15 | שיעור 2
+@task
+<p>topic exchange, ושלושה תורים: <code>il</code> מקושר ב־<code>order.*.il</code>, <code>cancel</code> ב־<code>order.cancelled.*</code>, ו־<code>all</code> ב־<code>order.#</code>. לאילו תורים מגיעה כל הודעה? נחש, ואז הרץ:</p>
+<p><code>order.created.il</code> · <code>order.cancelled.us</code> · <code>order.cancelled.il</code> · <code>order.created</code> · <code>order.paid.il.vip</code> · <code>payment.failed.il</code></p>
+@hint1
+<p><code>*</code> = בדיוק מילה אחת. <code>#</code> = אפס מילים או יותר. המילים מופרדות בנקודה.</p>
+@hint2
+<p>הודעה שאף binding לא תופס — נזרקת בשקט (אלא אם ביקשת <code>mandatory</code>).</p>
+@solution
+```ts run
+import amqp from "amqplib";
+
+const conn = await amqp.connect(process.env.RABBIT_URL ?? "amqp://localhost:5672");
+const ch = await conn.createChannel();
+const ex = `e03-${Date.now()}`;
+await ch.assertExchange(ex, "topic", { autoDelete: true });
+const bindings = { il: "order.*.il", cancel: "order.cancelled.*", all: "order.#" };
+const queues: Record<string, string> = {};
+for (const [name, pattern] of Object.entries(bindings)) {
+  queues[name] = (await ch.assertQueue("", { exclusive: true })).queue; // תור זמני עם שם אקראי
+  await ch.bindQueue(queues[name], ex, pattern);
+}
+
+const keys = ["order.created.il", "order.cancelled.us", "order.cancelled.il", "order.created", "order.paid.il.vip", "payment.failed.il"];
+for (const k of keys) ch.publish(ex, k, Buffer.from(k));
+await new Promise((r) => setTimeout(r, 300));
+
+for (const [name, q] of Object.entries(queues)) {
+  const got: string[] = [];
+  for (let m; (m = await ch.get(q, { noAck: true })); ) got.push(m.content.toString());
+  console.log(name.padEnd(6), got.join(", ") || "—");
+}
+await conn.close();
+```
+```out
+il     order.created.il, order.cancelled.il
+cancel order.cancelled.us, order.cancelled.il
+all    order.created.il, order.cancelled.us, order.cancelled.il, order.created, order.paid.il.vip
+```
+<p><code>order.created</code> — שתי מילים: לא תואם <code>order.*.il</code> (צריך שלוש), אבל כן <code>order.#</code>. <code>order.paid.il.vip</code> — ארבע מילים: רק <code>#</code> תופס. <code>payment.failed.il</code> — אף אחד, ונזרקה. ו־<code>order.cancelled.il</code> הגיעה לשלושה תורים — עותק לכל אחד.</p>
+
+@@ P26.5-E04 | 1 | key, partition וסדר | 15 | שיעור 4
+@task
+<p>topic עם 3 partitions. שולחים 6 אירועים: <code>order-1 placed</code>, <code>order-2 placed</code>, <code>order-1 paid</code>, <code>order-3 placed</code>, <code>order-2 paid</code>, <code>order-1 shipped</code> — ה־key הוא מספר ההזמנה. ענה, ואז הרץ:</p>
+<ol><li>האם שלושת האירועים של order-1 יגיעו ל־consumer באותו סדר שנשלחו?</li><li>האם האירועים של order-1 ו־order-2 יגיעו בסדר שבו נשלחו <em>ביחס זה לזה</em>?</li><li>ב־consumer group עם 5 consumers — כמה מהם יקבלו הודעות?</li></ol>
+@hint1
+<p>partition = hash(key) % מספר ה־partitions. סדר מובטח רק <em>בתוך</em> partition.</p>
+@hint2
+<p>ב־group, כל partition שייך ל־consumer אחד בדיוק.</p>
+@solution
+```ts run
+import { Admin, Producer, stringSerializers } from "@platformatic/kafka";
+
+const brokers = [process.env.KAFKA_BROKERS ?? "localhost:9092"];
+const topic = `e04-${Date.now()}`;
+const admin = new Admin({ clientId: "e04", bootstrapBrokers: brokers });
+await admin.createTopics({ topics: [topic], partitions: 3, replicas: 1 });
+
+const producer = new Producer({ clientId: "e04", bootstrapBrokers: brokers, serializers: stringSerializers, idempotent: true });
+const events = [["order-1", "placed"], ["order-2", "placed"], ["order-1", "paid"], ["order-3", "placed"], ["order-2", "paid"], ["order-1", "shipped"]];
+for (const [key, value] of events) {
+  const r = await producer.send({ messages: [{ topic, key, value }] });
+  const { partition, offset } = r.offsets![0];
+  console.log(`${key} ${value.padEnd(8)} → partition ${partition}, offset ${offset}`);
+}
+await producer.close();
+await admin.deleteTopics({ topics: [topic] });
+await admin.close();
+```
+```out
+order-1 placed   → partition 1, offset 0
+order-2 placed   → partition 2, offset 0
+order-1 paid     → partition 1, offset 1
+order-3 placed   → partition 2, offset 1
+order-2 paid     → partition 2, offset 2
+order-1 shipped  → partition 1, offset 2
+```
+<ol><li><strong>כן.</strong> אותו key ← אותו partition, וה־offsets שלו עולים לפי סדר השליחה. consumer קורא partition לפי הסדר.</li><li><strong>לא מובטח.</strong> אם הם ב־partitions שונים — כל partition נקרא בקצב משלו, אולי ע״י consumers שונים. וזה בסדר: אין קשר סיבתי בין הזמנות שונות. אם יש — צריך key משותף.</li><li><strong>3.</strong> כל partition ל־consumer אחד; שניים נשארים בלי עבודה (standby למקרה שאחד נופל). מספר ה־partitions הוא תקרת המקביליות של group — לכן בוחרים אותו מראש עם מרווח.</li></ol>
+
+@@ P26.5-E05 | 1 | visibility timeout | 15 | שיעור 3
+@task
+<p>תור SQS עם <code>VisibilityTimeout</code> של 2 שניות. שולחים הודעה אחת, ואז: (1) receive, (2) receive מיד שוב, (3) מחכים 2.5 שניות ו־receive שוב. מה מקבלים בכל פעם? ומה <code>ApproximateReceiveCount</code> בפעם השלישית? (הקוד רץ מול LocalStack.)</p>
+@hint1
+<p>receive לא מוחק — הוא "מסתיר" את ההודעה לזמן מוגבל.</p>
+@hint2
+<p>ההודעה נמחקת רק ב־DeleteMessage.</p>
+@solution
+```ts run
+import { SQSClient, CreateQueueCommand, SendMessageCommand, ReceiveMessageCommand, DeleteQueueCommand } from "@aws-sdk/client-sqs";
+
+const sqs = new SQSClient({
+  region: "us-east-1",
+  endpoint: process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566",
+  credentials: { accessKeyId: "test", secretAccessKey: "test" },
+});
+const { QueueUrl } = await sqs.send(new CreateQueueCommand({ QueueName: `e05-${Date.now()}`, Attributes: { VisibilityTimeout: "2" } }));
+await sqs.send(new SendMessageCommand({ QueueUrl, MessageBody: "resize image 42" }));
+
+const receive = async (label: string) => {
+  const r = await sqs.send(new ReceiveMessageCommand({ QueueUrl, WaitTimeSeconds: 1, MessageSystemAttributeNames: ["ApproximateReceiveCount"] }));
+  const m = r.Messages?.[0];
+  console.log(label, m ? `"${m.Body}" (receive #${m.Attributes?.ApproximateReceiveCount})` : "— nothing");
+};
+await receive("1.");
+await receive("2.");
+await new Promise((r) => setTimeout(r, 2500));
+await receive("3.");
+await sqs.send(new DeleteQueueCommand({ QueueUrl }));
+```
+```out
+1. "resize image 42" (receive #1)
+2. — nothing
+3. "resize image 42" (receive #2)
+```
+<p>(<code>WaitTimeSeconds: 1</code> — long polling קצר. בלי זה, receive "סוקר" רק חלק מהשרתים של SQS, ויכול לחזור ריק גם כשיש הודעה — שיעור 3.) בזמן ה־visibility timeout ההודעה "בטיפול" — consumers אחרים לא רואים אותה. לא נמחקה עד הסוף ← חוזרת, והמונה עולה. כלל: ה־timeout ארוך מהזמן שלוקח לטפל (אחרת ההודעה חוזרת בזמן שעוד מטפלים בה, ומטופלת פעמיים); ועבודה ארוכה מאריכה אותו תוך כדי (<code>ChangeMessageVisibility</code>). ואחרי <code>maxReceiveCount</code> קבלות — ל־DLQ (E11).</p>
+
+@@ P26.5-E06 | 2 | topic exchange 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>26w-messaging/starter/P26.5-E06.ts</code>:</p>
+<ul><li><code>setupTopology(ch, { exchange, emailQueue, analyticsQueue })</code> — topic exchange ושני תורים, כולם durable. emailQueue מקבל רק <code>created</code> ו־<code>shipped</code>; analyticsQueue — כל אירוע הזמנה.</li><li><code>publishOrderEvent(ch, exchange, event)</code> — routing key <code>order.&lt;type&gt;.&lt;country באותיות קטנות&gt;</code>, גוף JSON, persistent, ו־<code>messageId</code> = <code>event.id</code>.</li></ul>
+<p>(השמות מגיעים כפרמטרים — הבודק נותן שמות ייחודיים לכל בדיקה, ומוחק אותם בסוף. בכל תרגילי RabbitMQ: <code>COURSE_RABBIT_URL</code>.)</p>
+@hint1
+<p><code>assertExchange(name, "topic", { durable: true })</code>, <code>assertQueue</code>, <code>bindQueue(queue, exchange, pattern)</code> — פעמיים ל־emailQueue.</p>
+@hint2
+<p><code>ch.publish(exchange, routingKey, Buffer, { persistent, contentType, messageId })</code>.</p>
+@solution
+```ts save=solutions/P26.5-E06.ts
+// P26.5-E06: topic exchange — מי מקבל איזה אירוע
+import type { Channel } from "amqplib";
+
+export interface Topology {
+  exchange: string;
+  emailQueue: string;
+  analyticsQueue: string;
+}
+
+export interface OrderEvent {
+  id: string;
+  type: "created" | "paid" | "shipped" | "cancelled";
+  orderId: number;
+  country: string;
+}
+
+export async function setupTopology(ch: Channel, t: Topology): Promise<void> {
+  await ch.assertExchange(t.exchange, "topic", { durable: true });
+  await ch.assertQueue(t.emailQueue, { durable: true });
+  await ch.assertQueue(t.analyticsQueue, { durable: true });
+  // routing key: order.<type>.<country>  —  * = מילה אחת, # = אפס מילים או יותר
+  await ch.bindQueue(t.emailQueue, t.exchange, "order.created.*");
+  await ch.bindQueue(t.emailQueue, t.exchange, "order.shipped.*");
+  await ch.bindQueue(t.analyticsQueue, t.exchange, "order.#");
+}
+
+export const routingKey = (e: OrderEvent) => `order.${e.type}.${e.country.toLowerCase()}`;
+
+export function publishOrderEvent(ch: Channel, exchange: string, e: OrderEvent): boolean {
+  return ch.publish(exchange, routingKey(e), Buffer.from(JSON.stringify(e)), {
+    persistent: true, // נשמר בדיסק — שורד restart של RabbitMQ (בתור durable)
+    contentType: "application/json",
+    messageId: e.id,
+  });
+}
+```
+<p>durable (התור שורד restart של ה־broker) ו־persistent (ההודעה נכתבת לדיסק) — צריך את שניהם. ובפרודקשן ב־RabbitMQ 4: <strong>quorum queues</strong> (<code>arguments: { "x-queue-type": "quorum" }</code>) — משוכפלים על כמה nodes, ובלי זה נפילה של node אחד מאבדת את התור.</p>
+@mistakes
+<ul><li><code>Buffer.from(event)</code> בלי <code>JSON.stringify</code> — זורק (אובייקט הוא לא מחרוזת).</li></ul>
+
+@@ P26.5-E07 | 2 | worker עם dead letter 🤖 | 25 | שיעור 2
+@task
+<p>ב־<code>P26.5-E07.ts</code>:</p>
+<ul><li><code>setupWorkQueue(ch, { queue, deadLetterExchange, deadLetterQueue })</code> — exchange מסוג fanout ל־dead letters, התור שלו, ותור העבודה עם <code>deadLetterExchange</code>.</li><li><code>startWorker(ch, queue, handler, { prefetch })</code> — לכל הודעה: JSON ← <code>handler</code> ← <code>ack</code>. נכשל (גם JSON פגום) ← <code>nack</code> בלי requeue, כדי שתגיע ל־dead letter. ולא יותר מ־<code>prefetch</code> הודעות בטיפול בבת אחת.</li></ul>
+@hint1
+<p><code>ch.prefetch(n)</code> לפני <code>consume</code>.</p>
+@hint2
+<p><code>ch.nack(msg, false, false)</code> — הפרמטר השלישי הוא requeue.</p>
+@solution
+```ts save=solutions/P26.5-E07.ts
+// P26.5-E07: worker עם prefetch, ack אחרי הצלחה, ו־dead letter לכישלונות
+import type { Channel, ConsumeMessage } from "amqplib";
+
+export interface WorkQueue {
+  queue: string;
+  deadLetterExchange: string;
+  deadLetterQueue: string;
+}
+
+export async function setupWorkQueue(ch: Channel, w: WorkQueue): Promise<void> {
+  await ch.assertExchange(w.deadLetterExchange, "fanout", { durable: true });
+  await ch.assertQueue(w.deadLetterQueue, { durable: true });
+  await ch.bindQueue(w.deadLetterQueue, w.deadLetterExchange, "");
+  await ch.assertQueue(w.queue, { durable: true, deadLetterExchange: w.deadLetterExchange });
+}
+
+export async function startWorker(
+  ch: Channel,
+  queue: string,
+  handler: (job: unknown) => Promise<void>,
+  { prefetch = 5 } = {},
+): Promise<string> {
+  await ch.prefetch(prefetch); // לכל היותר prefetch הודעות שלא אושרו — בזמן נתון
+  const { consumerTag } = await ch.consume(queue, async (msg: ConsumeMessage | null) => {
+    if (!msg) return; // התור נמחק / ה־consumer בוטל
+    try {
+      const job = JSON.parse(msg.content.toString());
+      await handler(job);
+      ch.ack(msg); // רק אחרי שהעבודה הצליחה
+    } catch {
+      ch.nack(msg, false, false); // requeue=false ← ל־dead letter exchange, לא חזרה לראש התור
+    }
+  });
+  return consumerTag;
+}
+```
+@mistakes
+<ul><li><code>nack(msg)</code> עם ברירת המחדל (requeue=true) — ההודעה חוזרת לראש התור מיד ונכשלת שוב, אלפי פעמים בשנייה ("poison message"). E20.</li></ul>
+
+@@ P26.5-E08 | 2 | מעטפת לאירועים 🤖 | 20 | שיעור 5
+@task
+<p>אירוע עובר בין שירותים שנכתבים ומתעדכנים בנפרד — לכן כל אירוע עטוף ב"מעטפת" קבועה. ב־<code>P26.5-E08.ts</code>:</p>
+<ul><li><code>makeEvent(type, version, data, { id?, now?, source? })</code> ← <code>{ id, type, version, occurredAt, source, data }</code> (id אקראי, זמן ISO, source ברירת מחדל <code>"coffee-api"</code>).</li><li><code>parseOrderPlaced(raw)</code> — מאמת מעטפת ו־data עם zod. מקבל <code>order.placed</code> בגרסה 1 (<code>{ orderId, email, totalCents }</code>) <em>וגם</em> 2 (<code>{ orderId, email, total: { amountCents, currency } }</code>), ומחזיר תמיד צורה של v2 (v1 ← currency <code>"ILS"</code>). שדות נוספים — מותרים; סוג אחר, גרסה לא מוכרת או נתונים פגומים — שגיאה.</li></ul>
+@hint1
+<p>קודם המעטפת (<code>data: z.unknown()</code>), ואז סכמה לפי <code>version</code>.</p>
+@hint2
+<p><code>z.iso.datetime()</code> ל־occurredAt, <code>z.email()</code> לכתובת.</p>
+@solution
+```ts save=solutions/P26.5-E08.ts
+// P26.5-E08: מעטפת לאירועים — id, סוג, גרסה, זמן — ואימות בצד שמקבל
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+
+export interface EventEnvelope<T = unknown> {
+  id: string;
+  type: string;
+  version: number;
+  occurredAt: string;
+  source: string;
+  data: T;
+}
+
+export function makeEvent<T>(type: string, version: number, data: T, { id = randomUUID(), now = new Date(), source = "coffee-api" } = {}): EventEnvelope<T> {
+  return { id, type, version, occurredAt: now.toISOString(), source, data };
+}
+
+const envelope = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  version: z.number().int().positive(),
+  occurredAt: z.iso.datetime(),
+  source: z.string().min(1),
+  data: z.unknown(),
+});
+
+const placedV1 = z.object({ orderId: z.number().int().positive(), email: z.email(), totalCents: z.number().int().positive() });
+const placedV2 = z.object({
+  orderId: z.number().int().positive(),
+  email: z.email(),
+  total: z.object({ amountCents: z.number().int().positive(), currency: z.string().length(3) }),
+});
+export type OrderPlaced = z.infer<typeof placedV2>;
+
+// מקבל כל גרסה שאנחנו מכירים, ומחזיר תמיד את הצורה העדכנית (v2)
+export function parseOrderPlaced(raw: string): EventEnvelope<OrderPlaced> {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("לא JSON");
+  }
+  const env = envelope.parse(json);
+  if (env.type !== "order.placed") throw new Error(`סוג לא צפוי: ${env.type}`);
+  if (env.version === 1) {
+    const d = placedV1.parse(env.data);
+    return { ...env, version: 2, data: { orderId: d.orderId, email: d.email, total: { amountCents: d.totalCents, currency: "ILS" } } };
+  }
+  if (env.version === 2) return { ...env, data: placedV2.parse(env.data) };
+  throw new Error(`גרסה לא מוכרת: ${env.version}`);
+}
+```
+<p>למה שתי גרסאות? כי אי אפשר לעדכן את כל ה־producers וה־consumers באותה שנייה. הכלל: <strong>consumer מתעדכן קודם</strong> (מקבל גם v1 וגם v2), ורק אחר כך ה־producer מתחיל לשלוח v2. ובחברות עם הרבה צוותים — Schema Registry שאוכף את זה.</p>
+
+@@ P26.5-E09 | 2 | SQS FIFO 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P26.5-E09.ts</code>: <code>sendOrderEvents(sqs, queueUrl, events)</code> שולחת לתור <strong>FIFO</strong>: ב־batches של עד 10; <code>MessageGroupId</code> = מספר ההזמנה (סדר נשמר בתוך הזמנה); <code>MessageDeduplicationId</code> = <code>eventId</code> (שליחה חוזרת לא מכפילה); attribute בשם <code>type</code>. זורקת אם חלק מה־batch נכשל; מחזירה כמה נשלחו.</p>
+@hint1
+<p><code>SendMessageBatchCommand</code> עם <code>Entries</code>. ה־<code>Id</code> של כל entry — ייחודי רק בתוך ה־batch.</p>
+@hint2
+<p>batch לא זורק כשחלק נכשל — מחזיר <code>Failed</code>.</p>
+@solution
+```ts save=solutions/P26.5-E09.ts
+// P26.5-E09: שליחה לתור FIFO — סדר לכל הזמנה, בלי כפילויות, ב־batches
+import { SQSClient, SendMessageBatchCommand } from "@aws-sdk/client-sqs";
+
+export interface OrderEvent {
+  eventId: string;
+  orderId: number;
+  type: string;
+  data?: unknown;
+}
+
+export async function sendOrderEvents(sqs: SQSClient, queueUrl: string, events: OrderEvent[]): Promise<number> {
+  let sent = 0;
+  for (let i = 0; i < events.length; i += 10) {
+    const chunk = events.slice(i, i + 10); // SQS: עד 10 הודעות ב־batch
+    const res = await sqs.send(
+      new SendMessageBatchCommand({
+        QueueUrl: queueUrl,
+        Entries: chunk.map((e, j) => ({
+          Id: String(j), // ייחודי בתוך ה־batch בלבד
+          MessageBody: JSON.stringify(e),
+          MessageGroupId: String(e.orderId), // סדר נשמר בתוך קבוצה
+          MessageDeduplicationId: e.eventId, // אותו id תוך 5 דקות ← נשלח פעם אחת
+          MessageAttributes: { type: { DataType: "String", StringValue: e.type } },
+        })),
+      }),
+    );
+    if (res.Failed?.length) {
+      const ids = res.Failed.map((f) => chunk[Number(f.Id)].eventId);
+      throw new Error(`שליחה נכשלה עבור: ${ids.join(", ")} (${res.Failed[0].Code})`);
+    }
+    sent += res.Successful?.length ?? 0;
+  }
+  return sent;
+}
+```
+<p>FIFO מול Standard: Standard — כמעט בלי הגבלת קצב, אבל סדר "בערך" ולפעמים כפילויות; FIFO — סדר מדויק בתוך group ו־dedup של 5 דקות, עם תקרת קצב. ושימו לב: סדר בתוך group אומר שהודעה תקועה בהזמנה 7 עוצרת רק את הזמנה 7 — לא את כל התור.</p>
+
+@@ P26.5-E10 | 2 | consumer של SQS 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P26.5-E10.ts</code>: <code>pollOnce(sqs, queueUrl, handler, { waitSeconds })</code> — קבלה אחת עם long polling (עד 10 הודעות), handler לכל אחת (JSON), מחיקה של אלה שהצליחו ב־<code>DeleteMessageBatch</code>, ו־<code>{ handled, failed }</code>. מה שנכשל — לא נמחק.</p>
+@hint1
+<p><code>WaitTimeSeconds</code> — עד 20.</p>
+@hint2
+<p>למחיקה צריך את ה־<code>ReceiptHandle</code> של <em>הקבלה הזו</em> (לא את ה־MessageId).</p>
+@solution
+```ts save=solutions/P26.5-E10.ts
+// P26.5-E10: consumer של SQS — long polling, ומחיקה רק אחרי הצלחה
+import { SQSClient, ReceiveMessageCommand, DeleteMessageBatchCommand } from "@aws-sdk/client-sqs";
+
+export async function pollOnce(
+  sqs: SQSClient,
+  queueUrl: string,
+  handler: (body: unknown) => Promise<void>,
+  { waitSeconds = 20 } = {},
+): Promise<{ handled: number; failed: number }> {
+  const res = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl: queueUrl,
+      MaxNumberOfMessages: 10,
+      WaitTimeSeconds: waitSeconds, // long polling: מחכה עד שיש הודעה, במקום לחזור ריק מיד
+    }),
+  );
+  const done: { Id: string; ReceiptHandle: string }[] = [];
+  let failed = 0;
+  for (const [i, m] of (res.Messages ?? []).entries()) {
+    try {
+      await handler(JSON.parse(m.Body!));
+      done.push({ Id: String(i), ReceiptHandle: m.ReceiptHandle! });
+    } catch {
+      failed++; // לא מוחקים: אחרי ה־visibility timeout ההודעה תחזור (ובסוף — ל־DLQ)
+    }
+  }
+  if (done.length) {
+    const del = await sqs.send(new DeleteMessageBatchCommand({ QueueUrl: queueUrl, Entries: done }));
+    if (del.Failed?.length) throw new Error(`מחיקה נכשלה: ${del.Failed[0].Message}`);
+  }
+  return { handled: done.length, failed };
+}
+```
+<p>ובפועל — לולאה: <code>while (!stopping) await pollOnce(…)</code>, ו־SIGTERM (פרק 24) מסמן stopping, כך שהקבלה הנוכחית מסתיימת לפני היציאה.</p>
+
+@@ P26.5-E11 | 2 | dead-letter queue ב־SQS 🤖 | 15 | שיעור 3
+@task
+<p>ב־<code>P26.5-E11.ts</code>: <code>createQueueWithDlq(sqs, name, { maxReceiveCount, visibilityTimeout })</code> — יוצרת <code>&lt;name&gt;-dlq</code> (שמירה של 14 יום), ואז את <code>name</code> עם <code>VisibilityTimeout</code> ו־<code>RedrivePolicy</code> שמפנה ל־DLQ. מחזירה את שתי הכתובות.</p>
+@hint1
+<p><code>RedrivePolicy</code> הוא <em>מחרוזת</em> JSON עם <code>deadLetterTargetArn</code> ו־<code>maxReceiveCount</code>.</p>
+@hint2
+<p>את ה־ARN של ה־DLQ מקבלים מ־<code>GetQueueAttributes</code>.</p>
+@solution
+```ts save=solutions/P26.5-E11.ts
+// P26.5-E11: תור עם dead-letter queue
+import { SQSClient, CreateQueueCommand, GetQueueAttributesCommand } from "@aws-sdk/client-sqs";
+
+export async function createQueueWithDlq(
+  sqs: SQSClient,
+  name: string,
+  { maxReceiveCount = 5, visibilityTimeout = 30 } = {},
+): Promise<{ queueUrl: string; dlqUrl: string }> {
+  const dlq = await sqs.send(
+    new CreateQueueCommand({ QueueName: `${name}-dlq`, Attributes: { MessageRetentionPeriod: String(14 * 24 * 3600) } }),
+  );
+  const { Attributes } = await sqs.send(new GetQueueAttributesCommand({ QueueUrl: dlq.QueueUrl!, AttributeNames: ["QueueArn"] }));
+  const main = await sqs.send(
+    new CreateQueueCommand({
+      QueueName: name,
+      Attributes: {
+        VisibilityTimeout: String(visibilityTimeout),
+        RedrivePolicy: JSON.stringify({ deadLetterTargetArn: Attributes!.QueueArn, maxReceiveCount }),
+      },
+    }),
+  );
+  return { queueUrl: main.QueueUrl!, dlqUrl: dlq.QueueUrl! };
+}
+```
+<p>ה־DLQ שומר 14 יום כי מישהו צריך להסתכל: alarm על "יש הודעות ב־DLQ", בדיקה, תיקון — ואז redrive חזרה לתור הראשי (יש לזה כפתור בקונסולה ו־API).</p>
+
+@@ P26.5-E12 | 2 | producer של Kafka 🤖 | 15 | שיעור 4
+@task
+<p>ב־<code>P26.5-E12.ts</code>: <code>publishOrderEvents(producer, topic, events)</code> — קריאה אחת ל־<code>send</code> עם כל האירועים: key = מספר ההזמנה, value = JSON של האירוע, headers <code>event-type</code> ו־<code>event-id</code>.</p>
+<p>(בתרגילי Kafka — הבודק יוצר topic ייחודי דרך <code>COURSE_KAFKA_BROKERS</code>, ומוחק אותו בסוף. הספרייה: <code>@platformatic/kafka</code>.)</p>
+@hint1
+<p><code>producer.send({ messages: [{ topic, key, value, headers }] })</code>.</p>
+@hint2
+<p>key חייב להיות מחרוזת (ה־serializer הוא של מחרוזות).</p>
+@solution
+```ts save=solutions/P26.5-E12.ts
+// P26.5-E12: producer של Kafka — key לכל הזמנה, JSON, ו־headers
+import type { Producer } from "@platformatic/kafka";
+
+export interface OrderEvent {
+  eventId: string;
+  orderId: number;
+  type: string;
+  at: string;
+  data?: unknown;
+}
+
+export async function publishOrderEvents(producer: Producer<string, string, string, string>, topic: string, events: OrderEvent[]) {
+  const res = await producer.send({
+    messages: events.map((e) => ({
+      topic,
+      key: String(e.orderId), // אותו key ← אותו partition ← סדר נשמר לכל הזמנה
+      value: JSON.stringify(e),
+      headers: { "event-type": e.type, "event-id": e.eventId },
+    })),
+  });
+  return res.offsets ?? [];
+}
+```
+<p>ובקוד קיים תפגוש את <strong>KafkaJS</strong> — הספרייה הנפוצה ביותר ל־Node.js במשך שנים (<code>producer.send({ topic, messages })</code>, <code>consumer.run({ eachMessage })</code>), שלא קיבלה עדכון מאז 2023. הרעיונות זהים; ה־API שונה מעט.</p>
+
+@@ P26.5-E13 | 3 | projection מזרם לא מסודר 🤖 | 20 | שיעור 5
+@task
+<p>שירות "מצב ההזמנה" בונה טבלה מזרם אירועים — שמגיעים לפעמים פעמיים, ולפעמים לא בסדר. לכל אירוע יש <code>seq</code> — מספר רץ לכל הזמנה. ב־<code>P26.5-E13.ts</code>:</p>
+<ul><li><code>applyEvent(state, e)</code> — מעדכן את <code>state</code> (Map של הזמנה ← <code>{ status, seq }</code>) ומחזיר <code>true</code>; מתעלם (ומחזיר <code>false</code>) מאירוע עם <code>seq</code> שכבר ראינו או ישן ממנו, ומכל אירוע אחרי <code>cancelled</code>.</li><li><code>project(events)</code> ← <code>{ state, applied, ignored }</code>.</li></ul>
+@hint1
+<p>ההשוואה היא ל־<code>seq</code> השמור — לא לסדר ההגעה.</p>
+@hint2
+<p>status = הסוג בלי <code>order.</code>.</p>
+@solution
+```ts save=solutions/P26.5-E13.ts
+// P26.5-E13: projection — מצב ההזמנות מתוך זרם אירועים (עם כפילויות ואי־סדר)
+export interface OrderEvent {
+  orderId: number;
+  seq: number; // מספר רץ לכל הזמנה: 1, 2, 3…
+  type: "order.placed" | "order.paid" | "order.shipped" | "order.cancelled";
+}
+
+export interface OrderView {
+  status: "placed" | "paid" | "shipped" | "cancelled";
+  seq: number;
+}
+
+const STATUS = { "order.placed": "placed", "order.paid": "paid", "order.shipped": "shipped", "order.cancelled": "cancelled" } as const;
+
+export function applyEvent(state: Map<number, OrderView>, e: OrderEvent): boolean {
+  const cur = state.get(e.orderId);
+  if (cur && e.seq <= cur.seq) return false; // כפילות, או אירוע ישן שהגיע מאוחר
+  if (cur?.status === "cancelled") return false; // סופי
+  state.set(e.orderId, { status: STATUS[e.type], seq: e.seq });
+  return true;
+}
+
+export function project(events: OrderEvent[]) {
+  const state = new Map<number, OrderView>();
+  let applied = 0;
+  for (const e of events) if (applyEvent(state, e)) applied++;
+  return { state, applied, ignored: events.length - applied };
+}
+```
+<p>ה־<code>seq</code> מגיע מה־producer — מהמסד שלו (מספר גרסה בשורת ההזמנה, שעולה בכל עדכון). בלעדיו, consumer לא יכול לדעת ש־"paid" שהגיע עכשיו ישן מ־"shipped" שכבר ראה.</p>
+
+@@ P26.5-E14 | 3 | commit אחרי טיפול 🤖 | 25 | שיעור 4
+@task
+<p>ב־<code>P26.5-E14.ts</code>: <code>consumeAndCommit({ brokers, groupId, topic }, handler, { max })</code> — consumer ב־group: ממשיך מה־offset שה־group עשה לו commit (group חדש ← מתחילת ה־topic); לכל הודעה: JSON ← <code>handler</code> ← commit; עוצר אחרי <code>max</code>. handler שזורק ← בלי commit, והשגיאה עולה. ובכל מקרה — סוגר את ה־stream וה־consumer.</p>
+@hint1
+<p><code>mode: MessagesStreamModes.COMMITTED</code>, <code>fallbackMode: MessagesStreamFallbackModes.EARLIEST</code>, <code>autocommit: false</code>.</p>
+@hint2
+<p><code>for await (const m of stream)</code>, ו־<code>await m.commit()</code>. <code>finally</code> לסגירה.</p>
+@solution
+```ts save=solutions/P26.5-E14.ts
+// P26.5-E14: consumer group — commit רק אחרי שהטיפול הצליח
+import { Consumer, MessagesStreamModes, MessagesStreamFallbackModes, stringDeserializers } from "@platformatic/kafka";
+
+export interface ConsumeOptions {
+  brokers: string[];
+  groupId: string;
+  topic: string;
+}
+
+export async function consumeAndCommit(
+  { brokers, groupId, topic }: ConsumeOptions,
+  handler: (event: any) => Promise<void>,
+  { max }: { max: number },
+): Promise<number> {
+  const consumer = new Consumer({ groupId, clientId: `${groupId}-worker`, bootstrapBrokers: brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({
+    topics: [topic],
+    mode: MessagesStreamModes.COMMITTED, // ממשיכים מאיפה שה־group עצר
+    fallbackMode: MessagesStreamFallbackModes.EARLIEST, // group חדש ← מההתחלה
+    autocommit: false,
+  });
+  let processed = 0;
+  try {
+    for await (const m of stream) {
+      await handler(JSON.parse(m.value)); // נכשל ← יוצאים בלי commit; ההודעה תגיע שוב
+      await m.commit();
+      if (++processed >= max) break;
+    }
+  } finally {
+    await stream.close().catch(() => {});
+    await consumer.close();
+  }
+  return processed;
+}
+```
+<p>commit אחרי כל הודעה הוא הכי בטוח, ולא הכי מהיר: בנפח גבוה עושים commit כל N הודעות או כל שנייה (autocommit עם מרווח) — ומקבלים שאחרי קריסה כמה הודעות יטופלו שוב. שוב: consumer אידמפוטנטי.</p>
+
+@@ P26.5-E15 | 3 | consumer אידמפוטנטי 🤖 | 25 | שיעור 5
+@task
+<p>ב־<code>P26.5-E15.ts</code>: <code>handlePaymentEvent(pool, { eventId, orderId, amountCents })</code> — בטרנזקציה אחת: רושם ב־<code>processed_events</code> (consumer <code>'payments'</code>); אם כבר שם ← <code>"duplicate"</code> בלי לעשות כלום; אחרת — שורה ב־<code>payments</code>, ההזמנה ← <code>paid</code>, ו־<code>"processed"</code>. הזמנה שלא קיימת ← שגיאה, ושום דבר לא נשמר. (טבלאות: <code>files/events.sql</code>.)</p>
+@hint1
+<p><code>INSERT … ON CONFLICT DO NOTHING</code>, ו־<code>rowCount</code>.</p>
+@hint2
+<p>שני consumers עם אותו eventId במקביל: ה־INSERT של השני <em>מחכה</em> לטרנזקציה של הראשון, ואז רואה שהשורה קיימת.</p>
+@solution
+```ts save=solutions/P26.5-E15.ts
+// P26.5-E15: consumer אידמפוטנטי — "טופל" נרשם באותה טרנזקציה עם הפעולה
+import type { Pool } from "pg";
+
+export interface PaymentEvent {
+  eventId: string;
+  orderId: number;
+  amountCents: number;
+}
+
+export async function handlePaymentEvent(pool: Pool, e: PaymentEvent): Promise<"processed" | "duplicate"> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const mark = await client.query(
+      "INSERT INTO processed_events (consumer, event_id) VALUES ('payments', $1) ON CONFLICT DO NOTHING",
+      [e.eventId],
+    );
+    if (mark.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return "duplicate"; // כבר טופל (או מטופל ממש עכשיו בטרנזקציה אחרת — ה־INSERT חיכה לה)
+    }
+    await client.query("INSERT INTO payments (order_id, amount_cents, event_id) VALUES ($1, $2, $3)", [e.orderId, e.amountCents, e.eventId]);
+    const upd = await client.query("UPDATE orders SET status = 'paid' WHERE id = $1", [e.orderId]);
+    if (upd.rowCount !== 1) throw new Error(`הזמנה ${e.orderId} לא קיימת`);
+    await client.query("COMMIT");
+    return "processed";
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err; // נכשל ← גם הסימון בוטל, ואפשר לנסות שוב
+  } finally {
+    client.release();
+  }
+}
+```
+@mistakes
+<ul><li>"קודם בודקים <code>SELECT … WHERE event_id = ?</code>, ואם אין — מטפלים" — שני consumers בודקים יחד, שניהם לא מוצאים, שניהם מחייבים. הסימון חייב להיות הפעולה הנועלת עצמה.</li><li>לסמן ב־Redis ולשמור במסד — שתי מערכות, אין טרנזקציה משותפת. קריסה ביניהן ← או כפול או חסר.</li></ul>
+
+@@ P26.5-E16 | 3 | retry עם backoff ו־jitter 🤖 | 20 | שיעור 5
+@task
+<p>ב־<code>P26.5-E16.ts</code>:</p>
+<ul><li><code>isPermanent(err)</code> — <code>err.permanent === true</code>, או status 4xx — חוץ מ־408 ו־429.</li><li><code>nextRetry(attempt, err, { baseMs, maxMs, maxAttempts, random })</code> — שגיאה קבועה ← <code>{ action: "dead-letter", reason: "permanent" }</code>; <code>attempt ≥ maxAttempts</code> ← <code>reason: "max-attempts"</code>; אחרת <code>{ action: "retry", delayMs }</code>: תקרה = <code>min(maxMs, baseMs × 2^(attempt−1))</code>, השהיה = <code>floor(random() × תקרה)</code>; ואם יש <code>err.retryAfterMs</code> גדול יותר — הוא (עד maxMs).</li></ul>
+@hint1
+<p>attempt 1 ← תקרה 500; 2 ← 1000; 3 ← 2000…</p>
+@hint2
+<p>"full jitter" — לא <code>תקרה ± קצת</code>, אלא כל הטווח מ־0.</p>
+@solution
+```ts save=solutions/P26.5-E16.ts
+// P26.5-E16: מתי לנסות שוב, ומתי לוותר — exponential backoff עם jitter
+export type RetryDecision = { action: "retry"; delayMs: number } | { action: "dead-letter"; reason: string };
+
+export interface RetryOptions {
+  baseMs?: number;
+  maxMs?: number;
+  maxAttempts?: number;
+  random?: () => number;
+}
+
+export function isPermanent(err: any): boolean {
+  if (err?.permanent === true) return true;
+  const s = err?.status;
+  return typeof s === "number" && s >= 400 && s < 500 && s !== 408 && s !== 429; // 4xx — לא ישתנה בניסיון חוזר
+}
+
+// attempt = כמה ניסיונות כבר נכשלו (1 אחרי הכישלון הראשון)
+export function nextRetry(attempt: number, err: unknown, { baseMs = 500, maxMs = 30_000, maxAttempts = 5, random = Math.random }: RetryOptions = {}): RetryDecision {
+  if (isPermanent(err)) return { action: "dead-letter", reason: "permanent" };
+  if (attempt >= maxAttempts) return { action: "dead-letter", reason: "max-attempts" };
+  const cap = Math.min(maxMs, baseMs * 2 ** (attempt - 1));
+  let delayMs = Math.floor(random() * cap); // "full jitter": אקראי בין 0 לתקרה — כדי שאלף consumers לא יחזרו באותה שנייה
+  const retryAfter = (err as any)?.retryAfterMs;
+  if (typeof retryAfter === "number" && retryAfter > delayMs) delayMs = Math.min(retryAfter, maxMs);
+  return { action: "retry", delayMs };
+}
+```
+<p>למה jitter? שירות התשלומים נפל לדקה, ואלף consumers נכשלו יחד. בלי jitter — כולם חוזרים יחד אחרי 500ms, ושוב אחרי 1000ms: גלים שמפילים את השירות בדיוק כשהוא מנסה לקום ("thundering herd"). עם jitter — הניסיונות מתפזרים.</p>
+
+@@ P26.5-E17 | 3 | transactional outbox 🤖 | 30 | שיעור 5
+@task
+<p>הבעיה: "שומרים הזמנה במסד ושולחים אירוע ל־broker" — שתי מערכות. אם שומרים ונופלים לפני השליחה — אין אירוע. אם שולחים ואז השמירה נכשלת — אירוע על הזמנה שלא קיימת. הפתרון: האירוע נכתב לטבלת <code>outbox</code> <em>באותה טרנזקציה</em>, ותהליך נפרד (relay) שולח. ב־<code>P26.5-E17.ts</code>:</p>
+<ul><li><code>placeOrder(pool, { email, totalCents })</code> — הזמנה + שורת outbox (<code>topic 'orders'</code>, key = id, payload <code>{ type: "order.placed", orderId, email, totalCents }</code>) בטרנזקציה אחת; מחזירה id.</li><li><code>relayOutbox(pool, publish, { batch })</code> — לוקח עד batch שורות שלא נשלחו, לפי הסדר, נועל אותן כך ש־relay מקביל ידלג עליהן, שולח אחת־אחת, ומסמן <code>published_at</code>. publish נכשל ← עוצר, מסמן את מה שכבר נשלח, וזורק.</li></ul>
+@hint1
+<p><code>SELECT … WHERE published_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED</code>.</p>
+@hint2
+<p>בתוך טרנזקציה: הנעילה מחזיקה עד ה־COMMIT.</p>
+@solution
+```ts save=solutions/P26.5-E17.ts
+// P26.5-E17: transactional outbox — ההזמנה והאירוע נשמרים יחד; relay שולח אחר כך
+import type { Pool } from "pg";
+
+export interface OutboxRow {
+  id: number;
+  topic: string;
+  key: string;
+  payload: any;
+}
+
+export async function placeOrder(pool: Pool, order: { email: string; totalCents: number }): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO orders (email, total_cents) VALUES ($1, $2) RETURNING id", [order.email, order.totalCents]);
+    const id = rows[0].id as number;
+    await client.query("INSERT INTO outbox (topic, key, payload) VALUES ('orders', $1, $2)", [
+      String(id),
+      { type: "order.placed", orderId: id, email: order.email, totalCents: order.totalCents },
+    ]);
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function relayOutbox(pool: Pool, publish: (row: OutboxRow) => Promise<void>, { batch = 100 } = {}): Promise<number> {
+  const client = await pool.connect();
+  const sent: number[] = [];
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      "SELECT id, topic, key, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED",
+      [batch],
+    );
+    let failure: unknown = null;
+    for (const r of rows) {
+      try {
+        await publish({ id: Number(r.id), topic: r.topic, key: r.key, payload: r.payload });
+        sent.push(Number(r.id));
+      } catch (err) {
+        failure = err; // עוצרים: לשמור על הסדר. מה שנשלח — מסמנים
+        break;
+      }
+    }
+    if (sent.length) await client.query("UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[])", [sent]);
+    await client.query("COMMIT");
+    if (failure) throw failure;
+    return sent.length;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>outbox נותן at-least-once: אם ה־relay שלח ונפל לפני ה־COMMIT — השורה תישלח שוב. לכן ה־consumer אידמפוטנטי (E15) — שני הדפוסים באים יחד. ובקנה מידה גדול, במקום relay שסורק — CDC (Debezium) שקורא את ה־WAL של PostgreSQL ושולח ל־Kafka.</p>
+
+@@ P26.5-E18 | 3 | retry עם השהיה ב־RabbitMQ 🤖 | 30 | שיעור 2
+@task
+<p>RabbitMQ לא יודע "תחזיר את ההודעה בעוד 5 שניות". הטריק: תור המתנה עם TTL. ב־<code>P26.5-E18.ts</code>:</p>
+<ul><li><code>setupRetry(ch, { queue, retryQueue, deadQueue }, delayMs)</code> — nack ב־<code>queue</code> ← <code>retryQueue</code>; שם ההודעה מחכה <code>delayMs</code> ← חזרה ל־<code>queue</code>. ו־<code>deadQueue</code>.</li><li><code>startRetryingWorker(ch, names, handler, { maxAttempts })</code> — הצלחה ← ack. כישלון ← nack (לניסיון נוסף), ואחרי <code>maxAttempts</code> ניסיונות ← עותק ל־<code>deadQueue</code> עם headers <code>x-attempts</code> ו־<code>x-error</code>, ו־ack למקור.</li></ul>
+@hint1
+<p>dead letter אל ה־default exchange (<code>""</code>) עם <code>deadLetterRoutingKey</code> = שם התור — מגיע ישר לתור. <code>messageTtl</code> בתור ההמתנה.</p>
+@hint2
+<p>כמה ניסיונות היו? RabbitMQ מוסיף header בשם <code>x-death</code> עם <code>count</code> לכל תור וסיבה.</p>
+@solution
+```ts save=solutions/P26.5-E18.ts
+// P26.5-E18: retry עם השהיה — תור המתנה עם TTL, ו־dead letter חזרה
+import type { Channel, ConsumeMessage } from "amqplib";
+
+export interface RetryNames {
+  queue: string; // העבודה
+  retryQueue: string; // ממתינים delayMs, ואז חוזרים ל־queue
+  deadQueue: string; // נכשלו maxAttempts פעמים
+}
+
+export async function setupRetry(ch: Channel, n: RetryNames, delayMs: number): Promise<void> {
+  // nack ב־queue ← default exchange ("") עם routing key = retryQueue
+  await ch.assertQueue(n.queue, { durable: true, deadLetterExchange: "", deadLetterRoutingKey: n.retryQueue });
+  // TTL פג ב־retryQueue ← default exchange עם routing key = queue
+  await ch.assertQueue(n.retryQueue, { durable: true, messageTtl: delayMs, deadLetterExchange: "", deadLetterRoutingKey: n.queue });
+  await ch.assertQueue(n.deadQueue, { durable: true });
+}
+
+// כמה פעמים ההודעה כבר נדחתה מ־queue (RabbitMQ סופר ב־x-death)
+export function attemptsSoFar(msg: ConsumeMessage, queue: string): number {
+  const deaths = (msg.properties.headers?.["x-death"] ?? []) as { queue: string; reason: string; count: number }[];
+  return deaths.find((d) => d.queue === queue && d.reason === "rejected")?.count ?? 0;
+}
+
+export async function startRetryingWorker(
+  ch: Channel,
+  n: RetryNames,
+  handler: (job: any) => Promise<void>,
+  { maxAttempts = 3 } = {},
+): Promise<string> {
+  await ch.prefetch(10);
+  const { consumerTag } = await ch.consume(n.queue, async (msg) => {
+    if (!msg) return;
+    const attempt = attemptsSoFar(msg, n.queue) + 1;
+    try {
+      await handler(JSON.parse(msg.content.toString()));
+      ch.ack(msg);
+    } catch (err) {
+      if (attempt >= maxAttempts) {
+        ch.sendToQueue(n.deadQueue, msg.content, {
+          persistent: true,
+          contentType: msg.properties.contentType,
+          headers: { "x-attempts": attempt, "x-error": String((err as Error)?.message ?? err) },
+        });
+        ch.ack(msg);
+      } else {
+        ch.nack(msg, false, false); // ← retryQueue, ואחרי delayMs חזרה
+      }
+    }
+  });
+  return consumerTag;
+}
+```
+<p>(ל־RabbitMQ יש גם plugin של delayed messages, ו־quorum queues סופרות ניסיונות בעצמן — <code>x-delivery-limit</code>. הטריק עם TTL עובד בכל התקנה.)</p>
+
+@@ P26.5-E19 | 3 | consumer lag 🤖 | 15 | שיעור 4
+@task
+<p>המדד הראשון שמסתכלים עליו ב־Kafka: כמה ה־consumers מאחור. ב־<code>P26.5-E19.ts</code>:</p>
+<ul><li><code>consumerLag(end, committed, earliest?)</code> — לכל partition: <code>end − committed</code>; בלי commit (חסר, או ‎-1) ← מ־<code>earliest</code> (ברירת מחדל 0). מחזירה <code>{ perPartition, total, worstPartition }</code>.</li><li><code>isFallingBehind(samples, { window })</code> — <code>true</code> אם ב־<code>window</code> הדגימות האחרונות ה־lag עלה בכל אחת (צריך לפחות window+1 דגימות).</li></ul>
+@hint1
+<p><code>Object.entries(end)</code> — המפתחות מחרוזות; <code>Number(p)</code>.</p>
+@hint2
+<p>window 3 ← בודקים 4 דגימות אחרונות: a &lt; b &lt; c &lt; d.</p>
+@solution
+```ts save=solutions/P26.5-E19.ts
+// P26.5-E19: consumer lag — כמה ה־consumers מאחור, והאם הפער גדל
+export interface LagReport {
+  perPartition: Record<number, number>;
+  total: number;
+  worstPartition: number | null;
+}
+
+// end: ה־offset הבא שייכתב בכל partition (high watermark); committed: הבא שה־group יקרא (‎-1 = אין commit)
+export function consumerLag(end: Record<number, number>, committed: Record<number, number>, earliest: Record<number, number> = {}): LagReport {
+  const perPartition: Record<number, number> = {};
+  let total = 0;
+  let worstPartition: number | null = null;
+  for (const [p, hw] of Object.entries(end)) {
+    const part = Number(p);
+    const c = committed[part];
+    const from = c === undefined || c < 0 ? (earliest[part] ?? 0) : c; // בלי commit — כל מה שעוד שמור ב־topic
+    const lag = Math.max(0, hw - from);
+    perPartition[part] = lag;
+    total += lag;
+    if (worstPartition === null || lag > perPartition[worstPartition]) worstPartition = part;
+  }
+  return { perPartition, total, worstPartition };
+}
+
+// מתריעים כשה־lag עולה ברציפות — לא על קפיצה אחת
+export function isFallingBehind(samples: number[], { window = 3 } = {}): boolean {
+  if (samples.length < window + 1) return false;
+  const last = samples.slice(-(window + 1));
+  return last.every((v, i) => i === 0 || v > last[i - 1]);
+}
+```
+<p>lag גבוה אחרי deploy זה טבעי (consumer עלה ומדביק פער). lag ש<em>עולה</em> כל הזמן — הצרכנים איטיים מהקצב: מוסיפים consumers (עד מספר ה־partitions), או מגלים שה־handler איטי (שאילתה בלי אינדקס, קריאת API בכל הודעה).</p>
+
+@@ P26.5-E20 | 4 | worker של מיילים — שלוש תקלות 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P26.5-E20.ts</code>: אחרי deploy (שהפיל את ה־worker באמצע) לקוחות לא קיבלו מייל אישור; בשעת עומס ה־worker צורך זיכרון עד שהוא נופל; וכתובת מייל פגומה אחת מעסיקה את ה־worker בלולאה ומעכבת את כל האחרים. מצא ותקן.</p>
+@hint1
+<p>מתי ה־ack נשלח, ביחס לשליחת המייל?</p>
+@hint2
+<p>מה <code>ch.nack(msg)</code> עושה כברירת מחדל?</p>
+@solution
+```ts save=solutions/P26.5-E20.ts
+// P26.5-E20: ה־worker אחרי התיקון
+import type { Channel } from "amqplib";
+
+export async function startEmailWorker(ch: Channel, queue: string, sendEmail: (to: string, subject: string) => Promise<void>) {
+  await ch.prefetch(10); // תיקון 2: בלי prefetch RabbitMQ שולח את כל התור ל־worker אחד, לזיכרון
+  await ch.consume(queue, async (msg) => {
+    if (!msg) return;
+    try {
+      const { to, subject } = JSON.parse(msg.content.toString());
+      await sendEmail(to, subject);
+      ch.ack(msg); // תיקון 1: ack רק אחרי ששלחנו — לא לפני
+    } catch {
+      ch.nack(msg, false, false); // תיקון 3: requeue=false ← dead letter, לא לולאה אינסופית
+    }
+  });
+}
+```
+
+@@ P26.5-E21 | 4 | חשבוניות מ־SQS — שלוש תקלות 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P26.5-E21.ts</code>: כשה־PDF service נופל — חשבוניות פשוט נעלמות. ובימים רגילים — חלק מהחשבוניות מופקות פעמיים או שלוש. ובחשבון של AWS — מיליוני קריאות ReceiveMessage בחודש, רובן ריקות. מצא ותקן.</p>
+@hint1
+<p>על איזו הודעה בדיוק נשלח ה־DeleteMessage?</p>
+@hint2
+<p>ReceiveMessage בלי <code>WaitTimeSeconds</code> חוזר מיד, גם ריק.</p>
+@solution
+```ts save=solutions/P26.5-E21.ts
+// P26.5-E21: ה־consumer אחרי התיקון
+import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
+
+export async function processInvoices(sqs: SQSClient, queueUrl: string, issue: (invoice: any) => Promise<void>) {
+  const res = await sqs.send(
+    new ReceiveMessageCommand({ QueueUrl: queueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 20 }), // תיקון 3: long polling
+  );
+  let issued = 0;
+  for (const m of res.Messages ?? []) {
+    try {
+      await issue(JSON.parse(m.Body!));
+    } catch {
+      continue; // תיקון 1: לא מוחקים לפני שהצליח — ההודעה תחזור
+    }
+    await sqs.send(new DeleteMessageCommand({ QueueUrl: queueUrl, ReceiptHandle: m.ReceiptHandle! })); // תיקון 2: ה־ReceiptHandle של ההודעה הזו
+    issued++;
+  }
+  return issued;
+}
+```
+<p>הכפילויות היו מתקלה 2: כל ההודעות "נמחקו" עם ה־ReceiptHandle של הראשונה — כלומר רק היא נמחקה (כמה פעמים), והשאר חזרו אחרי ה־visibility timeout ועובדו שוב.</p>
+
+@@ P26.5-E22 | 4 | סטטוסים ב־Kafka — שלוש תקלות 🤖 | 20 | שיעור 4
+@task
+<p>ב־<code>P26.5-E22.ts</code>: לפעמים הזמנה מוצגת כ־"paid" אחרי שכבר נמסרה; כשהמסד נופל לרגע — עדכונים אובדים; ושירות חדש שעלה לא יודע על אף הזמנה שהייתה לפניו. מצא ותקן.</p>
+@hint1
+<p>בלי key — לאיזה partition הולכת כל הודעה?</p>
+@hint2
+<p><code>MessagesStreamModes.LATEST</code> ל־group שעוד לא עשה commit.</p>
+@solution
+```ts save=solutions/P26.5-E22.ts
+// P26.5-E22: אחרי התיקון
+import { Consumer, MessagesStreamModes, MessagesStreamFallbackModes, stringDeserializers, type Producer } from "@platformatic/kafka";
+
+export async function publishStatus(producer: Producer<string, string, string, string>, topic: string, orderId: number, status: string) {
+  await producer.send({
+    messages: [{ topic, key: String(orderId), value: JSON.stringify({ orderId, status }) }], // תיקון 1: key — אחרת אין סדר בין עדכונים של אותה הזמנה
+  });
+}
+
+export async function syncStatuses(
+  opts: { brokers: string[]; groupId: string; topic: string },
+  save: (orderId: number, status: string) => Promise<void>,
+  max: number,
+) {
+  const consumer = new Consumer({ groupId: opts.groupId, clientId: "status-sync", bootstrapBrokers: opts.brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({
+    topics: [opts.topic],
+    mode: MessagesStreamModes.COMMITTED,
+    fallbackMode: MessagesStreamFallbackModes.EARLIEST, // תיקון 3: group חדש מתחיל מההתחלה, לא רק מהודעות חדשות
+    autocommit: false,
+  });
+  let n = 0;
+  try {
+    for await (const m of stream) {
+      const { orderId, status } = JSON.parse(m.value);
+      await save(orderId, status);
+      await m.commit(); // תיקון 2: commit אחרי save, לא לפני
+      if (++n >= max) break;
+    }
+  } finally {
+    await stream.close().catch(() => {});
+    await consumer.close();
+  }
+  return n;
+}
+```
+
+@@ P26.5-E23 | 4 | outbox — שלוש תקלות 🤖 | 20 | שיעור 5
+@task
+<p>ב־<code>P26.5-E23.ts</code>: שירות המיילים שלח "ההזמנה התקבלה" על הזמנות שנכשלו; כשה־broker נפל לכמה שניות, אירועים אבדו; ואחרי שהוסיפו relay שני (לזמינות) — חלק מהאירועים נשלחים פעמיים. מצא ותקן.</p>
+@hint1
+<p><code>pool.query</code> בתוך טרנזקציה של <code>client</code> — על איזה חיבור הוא רץ?</p>
+@hint2
+<p>מה רואה relay שני, בזמן שהראשון עוד שולח?</p>
+@solution
+```ts save=solutions/P26.5-E23.ts
+// P26.5-E23: outbox — אחרי התיקון
+import type { Pool } from "pg";
+
+export async function placeOrder(pool: Pool, order: { email: string; totalCents: number }): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO orders (email, total_cents) VALUES ($1, $2) RETURNING id", [order.email, order.totalCents]);
+    // תיקון 1: client, לא pool — אותה טרנזקציה. pool.query רץ על חיבור אחר, ונשמר גם כשההזמנה נכשלת
+    await client.query("INSERT INTO outbox (topic, key, payload) VALUES ('orders', $1, $2)", [
+      String(rows[0].id),
+      { type: "order.placed", orderId: rows[0].id, totalCents: order.totalCents },
+    ]);
+    await client.query("COMMIT");
+    return rows[0].id;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function relayOutbox(pool: Pool, publish: (row: any) => Promise<void>): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      // תיקון 3: FOR UPDATE SKIP LOCKED — שני relays במקביל לא לוקחים את אותן שורות
+      "SELECT id, topic, key, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT 50 FOR UPDATE SKIP LOCKED",
+    );
+    for (const r of rows) {
+      await publish(r);
+      // תיקון 2: מסמנים אחרי ש־publish הצליח, לא לפני
+      await client.query("UPDATE outbox SET published_at = now() WHERE id = $1", [r.id]);
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>בתיקון הזה, publish שנכשל באמצע מבטל (ROLLBACK) גם את הסימון של מה שכבר נשלח באותה ריצה — אז אלה יישלחו שוב. זה at-least-once, ובסדר — ה־consumers אידמפוטנטיים. E17 מראה גרסה שמסמנת את מה שהצליח.</p>
+
+@@ P26.5-E24 | 5 | אתגר: צינור ההזמנות ב־RabbitMQ 🤖 | 60 | שיעור 5
+@task
+<p>הזמנה בחנות הקפה מפעילה שני שירותים — מייל ומלאי — דרך RabbitMQ. ב־<code>P26.5-E24.ts</code>:</p>
+<ul><li><code>setupOrderPipeline(ch, names)</code> — topic exchange, תור למייל ותור למלאי (שניהם מקבלים <code>order.placed</code>), ו־dead letter exchange + תור לשניהם.</li><li><code>publishOrderPlaced(confirmCh, exchange, event)</code> — persistent, JSON, <code>messageId</code> = <code>eventId</code>, וחוזרת רק אחרי שה־broker <strong>אישר</strong> (publisher confirms).</li><li><code>memoryStore()</code> — <code>markIfNew(consumer, eventId)</code> ו־<code>unmark</code>, בזיכרון (בפרודקשן — טבלה כמו ב־E15).</li><li><code>startConsumer(ch, queue, name, store, handle)</code> — הודעה פגומה (JSON, או חסרים שדות, או כמות ≤ 0) ← dead letter בלי handle; eventId שכבר טופל ע״י <em>אותו</em> consumer ← ack בלי handle; handle נכשל ← unmark ו־dead letter.</li></ul>
+@hint1
+<p><code>conn.createConfirmChannel()</code> (הבודק יוצר אותו), ואז <code>ch.waitForConfirms()</code>.</p>
+@hint2
+<p>המפתח ב־store הוא <code>consumer + eventId</code> — מייל ומלאי מטפלים באותו אירוע, כל אחד בנפרד.</p>
+@solution
+```ts save=solutions/P26.5-E24.ts
+// P26.5-E24: צינור ההזמנות של חנות הקפה ב־RabbitMQ
+import type { Channel, ConfirmChannel } from "amqplib";
+
+export interface PipelineNames {
+  exchange: string;
+  emailQueue: string;
+  inventoryQueue: string;
+  deadLetterExchange: string;
+  deadLetterQueue: string;
+}
+
+export interface OrderPlaced {
+  eventId: string;
+  orderId: number;
+  email: string;
+  items: { productId: number; quantity: number }[];
+}
+
+export async function setupOrderPipeline(ch: Channel, n: PipelineNames): Promise<void> {
+  await ch.assertExchange(n.exchange, "topic", { durable: true });
+  await ch.assertExchange(n.deadLetterExchange, "fanout", { durable: true });
+  await ch.assertQueue(n.deadLetterQueue, { durable: true });
+  await ch.bindQueue(n.deadLetterQueue, n.deadLetterExchange, "");
+  for (const q of [n.emailQueue, n.inventoryQueue]) {
+    await ch.assertQueue(q, { durable: true, deadLetterExchange: n.deadLetterExchange });
+    await ch.bindQueue(q, n.exchange, "order.placed");
+  }
+}
+
+// publisher confirms: מחכים שה־broker אישר שקיבל (ושמר) — רק אז "נשלח"
+export async function publishOrderPlaced(ch: ConfirmChannel, exchange: string, e: OrderPlaced): Promise<void> {
+  ch.publish(exchange, "order.placed", Buffer.from(JSON.stringify(e)), {
+    persistent: true,
+    contentType: "application/json",
+    messageId: e.eventId,
+  });
+  await ch.waitForConfirms();
+}
+
+export interface ProcessedStore {
+  // true אם זו הפעם הראשונה (ונרשם), false אם כבר טופל
+  markIfNew(consumer: string, eventId: string): Promise<boolean>;
+  unmark(consumer: string, eventId: string): Promise<void>;
+}
+
+export function memoryStore(): ProcessedStore {
+  const seen = new Set<string>();
+  return {
+    async markIfNew(c, id) {
+      const k = `${c}:${id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    },
+    async unmark(c, id) {
+      seen.delete(`${c}:${id}`);
+    },
+  };
+}
+
+function isOrderPlaced(x: any): x is OrderPlaced {
+  return (
+    x && typeof x.eventId === "string" && Number.isInteger(x.orderId) && typeof x.email === "string" &&
+    Array.isArray(x.items) && x.items.every((i: any) => Number.isInteger(i.productId) && Number.isInteger(i.quantity) && i.quantity > 0)
+  );
+}
+
+// consumer אידמפוטנטי: אותו eventId פעמיים ← פעולה אחת. הודעה פגומה ← dead letter מיד
+export async function startConsumer(
+  ch: Channel,
+  queue: string,
+  name: string,
+  store: ProcessedStore,
+  handle: (e: OrderPlaced) => Promise<void>,
+): Promise<string> {
+  await ch.prefetch(10);
+  const { consumerTag } = await ch.consume(queue, async (msg) => {
+    if (!msg) return;
+    let e: unknown;
+    try {
+      e = JSON.parse(msg.content.toString());
+    } catch {
+      return ch.nack(msg, false, false);
+    }
+    if (!isOrderPlaced(e)) return ch.nack(msg, false, false);
+    if (!(await store.markIfNew(name, e.eventId))) return ch.ack(msg); // כפילות — כבר טופל
+    try {
+      await handle(e);
+      ch.ack(msg);
+    } catch {
+      await store.unmark(name, e.eventId); // לא הצליח — שיוכל לנסות שוב
+      ch.nack(msg, false, false);
+    }
+  });
+  return consumerTag;
+}
+```
+<p>בלי confirms, <code>publish</code> חוזר כשההודעה נכנסה ל־buffer של הספרייה — לא כשהגיעה ל־broker. נפילה של הרשת באותו רגע ← ההזמנה נשמרה, האירוע לא. עם confirms — יודעים, ואפשר לנסות שוב (או: outbox, E17).</p>
+
+@@ P26.5-E25 | 5 | אתגר: אנליטיקה מ־Kafka, בדיוק פעם אחת 🤖 | 60 | שיעור 5
+@task
+<p>topic של אירועי "הזמנה שולמה" (<code>{ orderId, totalCents, at }</code>), 3 partitions. ב־<code>P26.5-E25.ts</code>: <code>runRevenueAggregator({ brokers, topic, pool, max })</code> בונה ב־<code>revenue_by_minute</code> מספר הזמנות והכנסות לכל דקה — כך שכל אירוע נספר <strong>בדיוק פעם אחת</strong>, גם אם התהליך נופל באמצע.</p>
+<p>הדרך: ה־offsets לא נשמרים ב־Kafka, אלא בטבלה <code>consumer_offsets</code> — <em>באותה טרנזקציה</em> עם העדכון של <code>revenue_by_minute</code>. בעלייה: קוראים את ה־offsets מהמסד, ומתחילים מהם (<code>MessagesStreamModes.MANUAL</code> עם <code>offsets</code>) — partition שאין לו שורה ← מ־0. עוצרים אחרי <code>max</code> אירועים.</p>
+@hint1
+<p>כמה partitions יש? <code>new Admin(…).metadata({ topics: [topic] })</code> ← <code>topics.get(topic).partitionsCount</code>.</p>
+@hint2
+<p>שורה לכל אירוע: <code>INSERT … ON CONFLICT (minute) DO UPDATE SET orders = orders + 1 …</code>, ו־upsert של <code>next_offset = offset + 1</code> — בין BEGIN ל־COMMIT אחד. ה־offset הוא <code>bigint</code>: <code>m.offset + 1n</code>.</p>
+@solution
+```ts save=solutions/P26.5-E25.ts
+// P26.5-E25: אנליטיקה מ־Kafka ל־PostgreSQL — ה־offset נשמר באותה טרנזקציה עם התוצאה
+import { Admin, Consumer, MessagesStreamModes, stringDeserializers } from "@platformatic/kafka";
+import type { Pool } from "pg";
+import { randomUUID } from "node:crypto";
+
+export interface AggregatorOptions {
+  brokers: string[];
+  topic: string;
+  pool: Pool;
+  max: number;
+}
+
+async function partitionsOf(brokers: string[], topic: string): Promise<number[]> {
+  const admin = new Admin({ clientId: "revenue-meta", bootstrapBrokers: brokers });
+  try {
+    const md = await admin.metadata({ topics: [topic] });
+    return Array.from({ length: md.topics.get(topic)!.partitionsCount }, (_, i) => i);
+  } finally {
+    await admin.close();
+  }
+}
+
+export async function runRevenueAggregator({ brokers, topic, pool, max }: AggregatorOptions): Promise<number> {
+  const { rows } = await pool.query("SELECT partition, next_offset FROM consumer_offsets WHERE topic = $1", [topic]);
+  const stored = new Map(rows.map((r: any) => [Number(r.partition), BigInt(r.next_offset)]));
+  const offsets = (await partitionsOf(brokers, topic)).map((partition) => ({ topic, partition, offset: stored.get(partition) ?? 0n }));
+
+  // group חד־פעמי לכל ריצה: ה־offsets של Kafka לא נקראים ולא נכתבים — האמת במסד
+  const consumer = new Consumer({ groupId: `revenue-${topic}-${randomUUID()}`, clientId: "revenue", bootstrapBrokers: brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({ topics: [topic], mode: MessagesStreamModes.MANUAL, offsets, autocommit: false });
+  let n = 0;
+  try {
+    for await (const m of stream) {
+      const e = JSON.parse(m.value) as { orderId: number; totalCents: number; at: string };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO revenue_by_minute (minute, orders, revenue_cents) VALUES (date_trunc('minute', $1::timestamptz), 1, $2)
+           ON CONFLICT (minute) DO UPDATE SET orders = revenue_by_minute.orders + 1, revenue_cents = revenue_by_minute.revenue_cents + EXCLUDED.revenue_cents`,
+          [e.at, e.totalCents],
+        );
+        await client.query(
+          `INSERT INTO consumer_offsets (topic, partition, next_offset) VALUES ($1, $2, $3)
+           ON CONFLICT (topic, partition) DO UPDATE SET next_offset = EXCLUDED.next_offset`,
+          [topic, m.partition, String(m.offset + 1n)],
+        );
+        await client.query("COMMIT"); // התוצאה וה־offset — יחד, או אף אחד
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+      if (++n >= max) break;
+    }
+  } finally {
+    await stream.close().catch(() => {});
+    await consumer.close();
+  }
+  return n;
+}
+```
+<p>זה הדפוס שמאחורי "exactly-once" אמיתי מול מסד: התוצאה וה"איפה עצרתי" נכתבים אטומית, אז אין מצב ביניים. הבודק מפיל את התהליך בשני מקומות שונים — ומימוש עם שתי טרנזקציות (קודם התוצאה, אחר כך ה־offset) נכשל באחד מהם: אירוע נספר פעמיים.</p>

@@ -1,0 +1,92 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>consumer אידמפוטנטי: "כבר טיפלתי" באותה טרנזקציה.</li>
+      <li>dual write, ו־transactional outbox שפותר אותו.</li>
+      <li>retries: מתי לנסות שוב, כמה לחכות, ומתי לוותר.</li>
+      <li>אירועים לאורך זמן: מעטפת, גרסאות, ו־seq לסדר.</li>
+    </ul>
+  </div>
+
+  <h2>1. consumer אידמפוטנטי</h2>
+  <p>at-least-once אומר שכל consumer יקבל, מתישהו, הודעה שכבר טיפל בה. התשובה היא לא "לוודא שזה לא יקרה" — אלא שזה לא יזיק. שלוש דרכים, מהפשוטה:</p>
+  <ul>
+    <li><strong>פעולה אידמפוטנטית מטבעה:</strong> <code>UPDATE orders SET status = 'shipped'</code> — פעמיים זה כמו פעם. <code>UPDATE … SET stock = stock - 1</code> — לא.</li>
+    <li><strong>upsert לפי מפתח טבעי:</strong> <code>INSERT … ON CONFLICT (order_id) DO NOTHING</code> — "רשומת משלוח להזמנה 42" יכולה להיות רק אחת.</li>
+    <li><strong>טבלת אירועים שטופלו:</strong> <code>processed_events (consumer, event_id) PRIMARY KEY</code> — ה־INSERT אליה <em>באותה טרנזקציה</em> עם הפעולה. אם ה־INSERT לא הכניס (כבר קיים) ← דילוג (E15).</li>
+  </ul>
+  <p>ה"באותה טרנזקציה" הוא כל הסיפור. "בדוק אם טופל ← טפל ← סמן" בשלושה צעדים נפרדים נשבר בשני מקרים: שני consumers בודקים יחד (שניהם "לא טופל"), או נפילה בין הטיפול לסימון (טופל, לא סומן ← יטופל שוב).</p>
+
+  <h2>2. dual write ו־outbox</h2>
+  <p>הקוד הכי נפוץ — ושבור:</p>
+```ts
+await db.orders.create(order);       // 1. מסד
+await broker.publish("order.placed", order); // 2. broker  ← נפילה כאן = הזמנה בלי אירוע
+```
+  <p>שתי מערכות, בלי טרנזקציה משותפת. נפילה בין 1 ל־2 — ההזמנה קיימת, ואף שירות לא יודע. להפוך את הסדר — אירוע על הזמנה שאולי תיכשל. זו בעיית ה־<strong>dual write</strong>, ואין לה פתרון בתוך הקוד הזה. הפתרון המקובל — <strong>transactional outbox</strong>:</p>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="טרנזקציה אחת כותבת הזמנה ושורת outbox; relay קורא את ה־outbox ושולח ל־broker ומסמן; consumers מקבלים">
+      <defs><marker id="ob" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="330" y="20" width="380" height="120" rx="12" style="fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4"/>
+      <g style="stroke-width:2">
+        <rect x="590" y="160" width="120" height="44" rx="8" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="530" y="50" width="160" height="60" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="350" y="50" width="150" height="60" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="170" y="56" width="120" height="48" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="56" width="110" height="48" rx="8" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M650 156 V 114" marker-end="url(#ob)"/>
+        <path d="M600 156 L 440 114" marker-end="url(#ob)"/>
+        <path d="M346 80 H 294" marker-start="url(#ob)"/>
+        <path d="M166 80 H 134" marker-end="url(#ob)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="650" y="187">placeOrder</text><text x="610" y="76">orders</text><text x="425" y="76">outbox</text><text x="230" y="84">relay</text><text x="75" y="84">broker</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="520" y="38">טרנזקציה אחת: או שתיהן, או אף אחת</text>
+        <text x="610" y="96">id 42</text><text x="425" y="96">order.placed #42</text>
+        <text x="318" y="104" style="font-size:10px">SKIP LOCKED</text>
+        <text x="230" y="125">שולח ← מסמן published_at</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: ההזמנה והאירוע נכתבים יחד, אטומית. relay נפרד (לולאה, cron, או CDC) שולח את מה שעוד לא נשלח. relay שנפל אחרי השליחה ולפני הסימון ישלח שוב — at-least-once, וה־consumers אידמפוטנטיים (E17, E23).</figcaption>
+  </figure>
+  <p>שני הדפוסים — outbox ו־consumer אידמפוטנטי — הם זוג. outbox מבטיח שאף אירוע לא יאבד; אידמפוטנטיות מבטיחה שכפילות לא תזיק. יחד: "בדיוק פעם אחת" <em>בהשפעה</em>, גם בלי שה־broker מבטיח את זה.</p>
+
+  <h2>3. retries</h2>
+  <p>הטיפול נכשל. לפני "לנסות שוב" — שתי שאלות:</p>
+  <ol>
+    <li><strong>האם ניסיון נוסף יעזור?</strong> timeout, 503, חיבור שנפל — כנראה. 400 (נתונים לא תקינים), 404 (ההזמנה לא קיימת), JSON פגום — לעולם לא. שגיאה קבועה ← dead letter <em>מיד</em>, בלי לבזבז ניסיונות.</li>
+    <li><strong>כמה לחכות?</strong> exponential backoff — 0.5, 1, 2, 4 שניות… עם תקרה — <strong>ועם jitter</strong>: השהיה אקראית עד התקרה. בלי jitter, אלף consumers שנכשלו יחד חוזרים יחד, ומפילים שוב את השירות שבדיוק התאושש. ואם השירות אמר כמה לחכות (<code>Retry-After</code> ב־429) — מכבדים (E16).</li>
+  </ol>
+  <p>ואחרי N ניסיונות — dead letter queue, עם alarm. DLQ שאף אחד לא מסתכל עליו הוא פח אשפה עם שם יפה.</p>
+
+  <h2>4. אירועים לאורך זמן</h2>
+  <p>אירוע שנכתב היום ייקרא מחר ע״י consumer שעוד לא נכתב. לכן כל אירוע עטוף ב<strong>מעטפת</strong> קבועה:</p>
+```json
+{
+  "id": "4f1c2a9e-…",
+  "type": "order.placed",
+  "version": 2,
+  "occurredAt": "2026-11-08T10:00:00.000Z",
+  "source": "coffee-api",
+  "data": { "orderId": 42, "email": "dana@example.com", "total": { "amountCents": 8990, "currency": "ILS" } }
+}
+```
+  <ul>
+    <li><code>id</code> — לאידמפוטנטיות. <code>type</code> ו־<code>version</code> — כדי שה־consumer יידע איך לקרוא את <code>data</code>.</li>
+    <li><strong>שינוי שובר</strong> (שדה שהשתנה) ← גרסה חדשה. consumers מתעדכנים <em>קודם</em> לקבל את שתיהן, ורק אז ה־producer עובר (E08). שדה <em>נוסף</em> — לא שובר, אם consumers מתעלמים משדות שהם לא מכירים.</li>
+    <li><strong>סדר:</strong> גם עם key ו־partition, retries ו־DLQ יכולים לשבש סדר. מספר רץ לכל ישות (<code>seq</code>, מגרסת השורה במסד) נותן ל־consumer לזהות אירוע ישן ולהתעלם ממנו (E13).</li>
+  </ul>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"ספר על מערכת event-driven שבנית" — הנה התשובה, משלושת הפרויקטים של הקורס ומהיחידה הזו: outbox כדי שאירוע לא יאבד, consumer אידמפוטנטי כדי שכפילות לא תזיק, key לסדר, DLQ עם alarm, backoff עם jitter, ו־exactly-once מול מסד עם offsets באותה טרנזקציה. מעט מועמדים לג׳וניור יודעים להסביר את כל השרשרת — ופרויקט 4 בונה אותה מקצה לקצה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.5-E08">E08</a> · <a href="exercises.html#P26.5-E13">E13</a> · <a href="exercises.html#P26.5-E15">E15</a> · <a href="exercises.html#P26.5-E16">E16</a> · <a href="exercises.html#P26.5-E17">E17</a> · <a href="exercises.html#P26.5-E23">E23</a> · <a href="exercises.html#P26.5-E24">E24</a> · <a href="exercises.html#P26.5-E25">E25</a></p>
+  </div>

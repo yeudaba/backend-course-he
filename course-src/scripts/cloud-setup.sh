@@ -24,6 +24,15 @@ docker start course-redis >/dev/null 2>&1 || docker run -d --name course-redis -
 docker start course-mysql >/dev/null 2>&1 || docker run -d --name course-mysql -p 3307:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:8.4 >/dev/null
 # יחידה 25.5: LocalStack (אמולטור של AWS — S3, SQS, IAM) על 4566
 docker start course-localstack >/dev/null 2>&1 || docker run -d --name course-localstack -p 4566:4566 -e SERVICES=s3,sqs,iam,sts localstack/localstack:4.14.0 >/dev/null
+# יחידה 26.5: RabbitMQ על 5673, Kafka (KRaft, broker אחד) על 9095
+docker start course-rabbit >/dev/null 2>&1 || docker run -d --name course-rabbit -p 5673:5672 rabbitmq:4-alpine >/dev/null
+docker start course-kafka >/dev/null 2>&1 || docker run -d --name course-kafka -p 9095:9092 \
+  -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
+  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9095 \
+  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+  -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e KAFKA_NUM_PARTITIONS=3 apache/kafka:4.1.0 >/dev/null
 if [ ! -x /opt/pg18/bin/psql ]; then
   mkdir -p /opt/pg18img/lib /opt/pg18/bin
   docker cp course-pg:/usr/lib/postgresql/18 /opt/pg18img/

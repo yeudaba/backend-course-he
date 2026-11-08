@@ -1,0 +1,144 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>המודל של RabbitMQ: producer ← exchange ← binding ← queue ← consumer.</li>
+      <li>ארבעה סוגי exchanges, ו־routing keys עם <code>*</code> ו־<code>#</code>.</li>
+      <li>ack, nack, prefetch — ומה קורה כש־consumer נופל.</li>
+      <li>dead letters, ו־retry עם השהיה.</li>
+    </ul>
+  </div>
+
+  <h2>1. המודל</h2>
+  <p>ב־RabbitMQ, producer <strong>לא</strong> שולח לתור. הוא שולח ל־<strong>exchange</strong>, עם <strong>routing key</strong>; ה־exchange מעתיק את ההודעה לכל תור שיש לו <strong>binding</strong> מתאים; consumers קוראים מתורים. ההפרדה הזו היא מה שנותן ניתוב גמיש: ה־producer לא יודע כמה תורים יש ומי מאזין.</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="producer שולח ל־topic exchange עם routing key; bindings מעתיקים לתורים emails ו־analytics; consumers קוראים">
+      <defs><marker id="rb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="590" y="90" width="120" height="50" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="400" y="80" width="140" height="70" rx="35" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="170" y="40" width="150" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="170" y="146" width="150" height="44" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="40" width="110" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="146" width="110" height="44" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M586 115 H 544" marker-end="url(#rb)"/>
+        <path d="M410 100 L 324 66" marker-end="url(#rb)"/>
+        <path d="M410 130 L 324 166" marker-end="url(#rb)"/>
+        <path d="M166 62 H 134" marker-end="url(#rb)"/>
+        <path d="M166 168 H 134" marker-end="url(#rb)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="650" y="120">producer</text><text x="470" y="112">exchange</text>
+        <text x="245" y="67" class="mono" style="font-size:12px">emails</text><text x="245" y="173" class="mono" style="font-size:12px">analytics</text>
+        <text x="75" y="67">consumer</text><text x="75" y="173">consumer</text>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="655" y="80">order.created.il</text>
+        <text x="470" y="130">type: topic</text>
+        <text x="375" y="68">order.created.*</text>
+        <text x="375" y="170">order.#</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl"><text x="360" y="220">binding = "תעתיק לתור הזה כל הודעה שה־routing key שלה מתאים לתבנית"</text></g>
+    </svg>
+    <figcaption>איור 1: <code>order.created.il</code> מתאים לשתי התבניות — אז שני התורים מקבלים עותק. <code>order.paid.il</code> — רק ל־analytics (E03, E06).</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>exchange</th><th>מנתב לפי</th><th>שימוש</th></tr>
+    <tr><td><code>direct</code></td><td>routing key זהה בדיוק ל־binding</td><td>"עבודות של סוג X לתור X"</td></tr>
+    <tr><td><code>topic</code></td><td>תבנית: <code>*</code> = מילה אחת, <code>#</code> = אפס או יותר</td><td>אירועים — הכי נפוץ</td></tr>
+    <tr><td><code>fanout</code></td><td>מתעלם מה־key — לכל התורים המקושרים</td><td>broadcast, dead letters</td></tr>
+    <tr><td><code>headers</code></td><td>headers של ההודעה</td><td>נדיר</td></tr>
+  </table></div>
+  <p>ויש גם <strong>default exchange</strong> (שמו מחרוזת ריקה): כל תור מקושר אליו אוטומטית בשמו. <code>ch.sendToQueue("emails", …)</code> הוא בעצם publish ל־default exchange עם key <code>emails</code>.</p>
+
+  <h2>2. ack, prefetch ו־nack</h2>
+  <p>RabbitMQ שולח הודעה ל־consumer ומסמן אותה "unacked". שלוש אפשרויות:</p>
+  <ul>
+    <li><code>ack</code> — טופלה, למחוק.</li>
+    <li><code>nack(msg, false, true)</code> — לא טופלה, <strong>להחזיר לתור</strong> (requeue). זהירות: לראש התור, ומיד.</li>
+    <li><code>nack(msg, false, false)</code> — לא טופלה, <strong>לא להחזיר</strong>: אם לתור יש dead letter exchange — לשם; אחרת נזרקת.</li>
+  </ul>
+  <p>ואם ה־consumer נופל (החיבור נסגר) עם הודעות unacked — RabbitMQ מחזיר אותן לתור, ו־consumer אחר יקבל אותן. זה at-least-once — בתנאי שה־ack בא <em>אחרי</em> הטיפול (E20).</p>
+  <p><strong>prefetch</strong> — כמה הודעות unacked consumer מחזיק לכל היותר. בלעדיו, RabbitMQ דוחף לו את כל התור — אלפי הודעות לזיכרון, ו־consumer שני שעולה לא מקבל כלום. הרצה אמיתית: worker עם prefetch 2, ש"מטפל" בכל הודעה 100ms ונכשל על עבודה 3:</p>
+```ts run
+import amqp from "amqplib";
+
+const conn = await amqp.connect(process.env.RABBIT_URL ?? "amqp://localhost:5672");
+const ch = await conn.createChannel();
+const dlx = `lesson2-dlx-${Date.now()}`;
+await ch.assertExchange(dlx, "fanout", { autoDelete: true });
+const dead = (await ch.assertQueue("", { exclusive: true })).queue;
+await ch.bindQueue(dead, dlx, "");
+const work = (await ch.assertQueue("", { exclusive: true, deadLetterExchange: dlx })).queue;
+
+for (let id = 1; id <= 5; id++) ch.sendToQueue(work, Buffer.from(JSON.stringify({ id })));
+
+await ch.prefetch(2);
+let inFlight = 0;
+let maxInFlight = 0;
+let done = 0;
+await ch.consume(work, async (msg) => {
+  const { id } = JSON.parse(msg!.content.toString());
+  maxInFlight = Math.max(maxInFlight, ++inFlight);
+  console.log(`start ${id}`);
+  await new Promise((r) => setTimeout(r, 100));
+  inFlight--;
+  if (id === 3) ch.nack(msg!, false, false); // נכשל ← dead letter
+  else ch.ack(msg!);
+  done++;
+});
+while (done < 5) await new Promise((r) => setTimeout(r, 20));
+console.log("max in flight:", maxInFlight);
+console.log("dead letters:", (await ch.checkQueue(dead)).messageCount);
+await conn.close();
+```
+```out
+start 1
+start 2
+start 3
+start 4
+start 5
+max in flight: 2
+dead letters: 1
+```
+  <p>לעולם לא יותר משתיים בטיפול. ועבודה 3 לא חזרה לתור — היא ב־dead letter, מחכה שמישהו יסתכל.</p>
+
+  <h2>3. retry עם השהיה</h2>
+  <p>כשל זמני (שירות התשלומים לא עונה) מצדיק ניסיון נוסף — אבל לא מיד, ולא לראש התור. ל־RabbitMQ אין "החזר בעוד 5 שניות", אבל יש שני כלים שמרכיבים את זה: dead letter, ו־TTL של תור:</p>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="nack מתור העבודה עובר לתור retry עם TTL; כשה־TTL פג ההודעה חוזרת לתור העבודה; אחרי N ניסיונות — לתור dead">
+      <defs><marker id="rt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="480" y="50" width="160" height="56" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="200" y="50" width="170" height="56" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="490" y="120" width="140" height="40" rx="8" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M476 66 H 374" marker-end="url(#rt)"/>
+        <path d="M374 92 H 476" marker-end="url(#rt)"/>
+        <path d="M560 110 V 116" marker-end="url(#rt)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="560" y="76">work</text><text x="285" y="76">work.retry</text><text x="560" y="145">work.dead</text>
+        <text x="285" y="94" style="font-size:11px">x-message-ttl: 5000</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="425" y="58">nack ← dead letter</text>
+        <text x="425" y="88">TTL פג ← dead letter</text>
+        <text x="560" y="94">x-death: count</text>
+        <text x="672" y="145">ניסיון N ← לכאן</text>
+      </g>
+    </svg>
+    <figcaption>איור 2: התור <code>work.retry</code> אין לו consumers בכלל — הודעות רק מחכות בו עד שה־TTL פג, ואז "מתות" חזרה ל־<code>work</code>. RabbitMQ סופר כל מעבר ב־header בשם <code>x-death</code> — כך ה־worker יודע באיזה ניסיון הוא (E18).</figcaption>
+  </figure>
+
+  <div class="box tip">
+    <span class="box-title">💡 quorum queues</span>
+    <p>הדוגמאות כאן משתמשות בתורים "classic" — פשוטים ומתאימים לפיתוח. בפרודקשן עם RabbitMQ 4 משתמשים ב־<strong>quorum queues</strong> (<code>arguments: { "x-queue-type": "quorum" }</code>): משוכפלים על כמה שרתים, ושורדים נפילה של אחד. הם גם סופרים ניסיונות מסירה בעצמם (<code>x-delivery-limit</code>) — הגנה מובנית מ־poison messages.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.5-E03">E03</a> · <a href="exercises.html#P26.5-E06">E06</a> · <a href="exercises.html#P26.5-E07">E07</a> · <a href="exercises.html#P26.5-E18">E18</a> · <a href="exercises.html#P26.5-E20">E20</a></p>
+  </div>

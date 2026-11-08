@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>יחידה 26.5 — תורים ואירועים: RabbitMQ, Kafka ו־SQS</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ יחידה 26.5</div>
+  <h1>יחידה 26.5 — תורים ואירועים: RabbitMQ, Kafka ו־SQS</h1>
+  <p class="subtitle">⏱ 4 מפגשים</p>
+  <div class="box install"><span class="box-title">🧰 לפני שמתחילים — יחידה 26.5</span>
+<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop, PostgreSQL מפרק 16, ו־LocalStack מיחידה 25.5 (לתרגילי SQS).</p>
+<p><strong>מה מתקינים / מריצים עכשיו</strong> (פעם אחת; אחר כך <code>docker start rabbitmq kafka</code>):</p>
+<ul>
+<li><strong>RabbitMQ 4</strong>:
+<pre class="mono">docker run -d --name rabbitmq -p 5672:5672 rabbitmq:4-alpine</pre></li>
+<li><strong>Kafka 4.1</strong> — broker אחד במצב KRaft (בלי ZooKeeper). ה־image הרשמי עולה עם הגדרות ברירת מחדל שמתאימות בדיוק לזה:
+<pre class="mono">docker run -d --name kafka -p 9092:9092 apache/kafka:4.1.0</pre></li>
+<li>בדיקה: <code>docker exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list</code> ← בלי שגיאה (רשימה ריקה). ו־<code>docker logs rabbitmq | grep "Server startup complete"</code>.</li>
+<li>ב־<code>~/dev/backend-course/.env</code>: <code>COURSE_RABBIT_URL=amqp://localhost:5672</code> ו־<code>COURSE_KAFKA_BROKERS=localhost:9092</code>.</li>
+<li><code>npm install</code> בתיקיית הקורס — מוסיף את <code>amqplib</code> (RabbitMQ) ואת <code>@platformatic/kafka</code> (לקוח Kafka מודרני, ב־TypeScript, בלי רכיבים native).</li>
+</ul>
+<p><strong>📂 העתקת חומרי הפרק:</strong> ב־Finder, העתק את התיקייה <code>26w-messaging</code> מתוך <code>~/Desktop/Backend/backend-course</code> אל <code>~/dev/backend-course</code> (גרירה עם <kbd>⌥ Option</kbd>). אם התיקייה כבר שם מהעתקה קודמת ואתה רוצה לשמור את מה שכתבת — בחר <strong>Keep Both</strong> / <strong>Stop</strong> ולא <strong>Replace</strong>.</p>
+<p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm install && npm run check P26.5-E06</code> ← הבודק מתחבר ל־RabbitMQ ונכשל על הקובץ הריק. <code>ECONNREFUSED 127.0.0.1:5672</code> — הקונטיינר לא רץ.</p>
+  </div>
+
+  <div class="box goal"><span class="box-title">🎯 בסוף הפרק תדע</span>
+  <ul><li>להבין מתי תור ומתי log, at-most-once מול at-least-once — ולמה consumer חייב להיות אידמפוטנטי.</li><li>RabbitMQ: exchanges, bindings, ack/nack, prefetch, dead letters ו־retry עם השהיה.</li><li>SQS: Standard מול FIFO, visibility timeout, long polling, batches ו־DLQ — מול LocalStack.</li><li>Kafka: topics, partitions, keys, consumer groups, offsets ו־commit אחרי טיפול; lag.</li><li>דפוסי אמינות: outbox, idempotent consumer, backoff עם jitter, מעטפת וגרסאות לאירועים — ו־exactly-once מול מסד.</li></ul></div>
+<h2>🤔 למה צריך את זה?</h2>
+<p>בפרק 26 שלחת מייל אישור ברקע עם BullMQ: שרת אחד, Redis אחד, תור אחד. כשהמערכת גדלה לעשרות שירותים — הזמנות, תשלומים, מלאי, מיילים, אנליטיקה — הם מדברים ביניהם ב<strong>הודעות</strong>, לא בקריאות HTTP ישירות: שירות ההזמנות לא מחכה לשירות המיילים, ולא נופל כשהוא נופל. המודעה שראית ביקשה "SQS/Kafka/RabbitMQ" — שלושת הכלים הנפוצים לזה, כל אחד עם מודל אחר. ביחידה הזו תריץ את שלושתם, תבין מתי כל אחד, ובעיקר — את מה שמשותף להם: הודעות מגיעות פעמיים, לא בסדר, או בכלל לא, אם לא בונים נכון. מי שיודע לענות בראיון "איך תמנע חיוב כפול כש־consumer נופל?" — עבר את החלק הקשה.</p>
+  <h2>השיעורים</h2>
+  <div class="cards">
+    <a class="card" href="lesson-01-why.html"><span class="num">שיעור 1 · ~40 דק׳</span><br><strong>למה הודעות: תור מול log, והבטחות מסירה</strong></a>
+    <a class="card" href="lesson-02-rabbitmq.html"><span class="num">שיעור 2 · ~50 דק׳</span><br><strong>RabbitMQ: exchanges, ack ו־dead letters</strong></a>
+    <a class="card" href="lesson-03-sqs.html"><span class="num">שיעור 3 · ~40 דק׳</span><br><strong>SQS: visibility timeout, FIFO ו־DLQ</strong></a>
+    <a class="card" href="lesson-04-kafka.html"><span class="num">שיעור 4 · ~55 דק׳</span><br><strong>Kafka: partitions, keys ו־consumer groups</strong></a>
+    <a class="card" href="lesson-05-reliability.html"><span class="num">שיעור 5 · ~50 דק׳</span><br><strong>אמינות: אידמפוטנטיות, outbox ו־retries</strong></a>
+  </div>
+  <h2>תרגול וסיכום</h2>
+  <div class="cards">
+    <a class="card" href="exercises.html"><span class="num">✍️</span><br><strong>דף התרגילים — 25 תרגילים</strong></a>
+    <a class="card" href="solutions.html"><span class="num">🔒 רק אחרי ניסיון</span><br><strong>דף הפתרונות</strong></a>
+  </div>
+  <h2>📘 מילון המושגים של הפרק</h2>
+  <div class="table-wrap"><table>
+    <tr><th>מונח</th><th>הגייה</th><th>פירוש</th></tr>
+    <tr><td><code>Message broker</code></td><td>מֶסֶג׳ בְּרוֹקֶר</td><td>שרת שמקבל הודעות מ־producers ומעביר ל־consumers</td></tr>
+    <tr><td><code>Producer / Consumer</code></td><td>פְּרוֹדְיוּסֶר / קוֹנְסְיוּמֶר</td><td>מי ששולח הודעות / מי שקורא ומטפל</td></tr>
+    <tr><td><code>Ack / Nack</code></td><td>אַק / נַאק</td><td>אישור שההודעה טופלה (ואפשר למחוק) / דחייה</td></tr>
+    <tr><td><code>At-least-once</code></td><td>אֶט־לִיסְט־וַואנְס</td><td>כל הודעה מטופלת לפחות פעם אחת — לפעמים יותר</td></tr>
+    <tr><td><code>Idempotent</code></td><td>אַיידֶמְפּוֹטֶנְט</td><td>פעולה שפעמיים נותנת אותה תוצאה כמו פעם אחת</td></tr>
+    <tr><td><code>Exchange</code></td><td>אֶקְסְצֵ׳יינְג׳</td><td>ב־RabbitMQ: מקבל הודעות ומנתב לתורים לפי bindings</td></tr>
+    <tr><td><code>Routing key</code></td><td>רָאוּטִינְג קִי</td><td>המחרוזת שלפיה exchange מחליט לאן הודעה הולכת</td></tr>
+    <tr><td><code>Prefetch</code></td><td>פְּרִי־פֶטְשׁ</td><td>כמה הודעות לא מאושרות consumer מחזיק בבת אחת</td></tr>
+    <tr><td><code>Dead letter queue (DLQ)</code></td><td>דֶד לֶטֶר קְיוּ</td><td>תור להודעות שנכשלו שוב ושוב — לבדיקה ידנית</td></tr>
+    <tr><td><code>Visibility timeout</code></td><td>וִיזִיבִּילִיטִי טַיימְאָוּט</td><td>ב־SQS: כמה זמן הודעה שהתקבלה מוסתרת מאחרים</td></tr>
+    <tr><td><code>Topic / Partition</code></td><td>טוֹפִּיק / פַּרְטִישֶׁן</td><td>ב־Kafka: זרם אירועים, מחולק לחלקים מסודרים</td></tr>
+    <tr><td><code>Offset</code></td><td>אוֹפְסֶט</td><td>המיקום של הודעה בתוך partition</td></tr>
+    <tr><td><code>Consumer group</code></td><td>קוֹנְסְיוּמֶר גְּרוּפּ</td><td>קבוצת consumers שמתחלקים ב־partitions; לכל group — offsets משלו</td></tr>
+    <tr><td><code>Consumer lag</code></td><td>קוֹנְסְיוּמֶר לַאג</td><td>כמה הודעות ה־group עוד לא קרא</td></tr>
+    <tr><td><code>Outbox</code></td><td>אָאוּטְבּוֹקְס</td><td>טבלה שבה נשמרים אירועים באותה טרנזקציה עם הנתונים, ונשלחים אחר כך</td></tr>
+    <tr><td><code>Backoff + jitter</code></td><td>בֶּקְאוֹף וְגִ׳יטֶר</td><td>השהיה שגדלה בין ניסיונות, עם רכיב אקראי</td></tr>
+  </table></div>
+  <p>המילון המלא: <a href="../glossary.html">glossary.html</a></p>
+<div class="pager"><a href="../26-redis/index.html"><small>הפרק הקודם</small>פרק 26 — Redis: מטמון, מצב משותף ותורים</a><a href="lesson-01-why.html"><small>הבא</small>שיעור 1 — למה הודעות: תור מול log, והבטחות מסירה</a></div>
+</main>
+</body>
+</html>

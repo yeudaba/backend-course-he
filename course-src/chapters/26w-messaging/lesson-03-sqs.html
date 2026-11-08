@@ -1,0 +1,74 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>SQS: תור מנוהל, בלי שרת — ומה זה אומר על המודל.</li>
+      <li>visibility timeout: למה receive לא מוחק.</li>
+      <li>long polling, batches, ו־DLQ עם redrive.</li>
+      <li>Standard מול FIFO, ו־SNS ← SQS ל־fan-out.</li>
+    </ul>
+  </div>
+
+  <h2>1. תור בלי שרת</h2>
+  <p>SQS (Simple Queue Service) הוא תור של AWS: אין מה להתקין, לשדרג או לגבות; יוצרים תור ב־API ומשלמים לפי בקשות. המודל פשוט מזה של RabbitMQ — אין exchanges ואין bindings; יש תור, שולחים אליו, וקוראים ממנו. והכול HTTP: כל receive וכל delete הם בקשה (ולכן גם עלות).</p>
+  <p>ההבדל הגדול מ־RabbitMQ: SQS לא "דוחף" הודעות ל־consumer מחובר. ה־consumer <strong>מושך</strong> (<code>ReceiveMessage</code>) — ומכאן כל השאר.</p>
+
+  <h2>2. visibility timeout</h2>
+  <p>אין חיבור קבוע, אז SQS לא יכול לדעת ש־consumer נפל. במקום זה: receive לא מוחק — הוא <strong>מסתיר</strong> את ההודעה מכולם לזמן מוגבל. אם ה־consumer מוחק (<code>DeleteMessage</code>) לפני שהזמן נגמר — סיימנו. אם לא — ההודעה חוזרת להיות גלויה, ומישהו אחר יקבל אותה:</p>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="ציר זמן: receive מסתיר את ההודעה ל־30 שניות; delete בזמן מסיים; בלי delete ההודעה חוזרת, ואחרי maxReceiveCount עוברת ל־DLQ">
+      <defs><marker id="vt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M700 60 H 20" marker-end="url(#vt)"/><path d="M700 150 H 20" marker-end="url(#vt)"/></g>
+      <g style="stroke-width:2">
+        <rect x="560" y="44" width="120" height="32" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="400" y="44" width="130" height="32" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="560" y="134" width="70" height="32" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="420" y="134" width="70" height="32" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="280" y="134" width="70" height="32" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="80" y="134" width="130" height="32" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="620" y="65">receive #1</text><text x="465" y="65">DeleteMessage ✓</text>
+        <text x="595" y="155">#1</text><text x="455" y="155">#2</text><text x="315" y="155">#3</text><text x="145" y="155">→ DLQ</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="360" y="30">טיפול שהצליח</text>
+        <text x="360" y="120">consumer שנופל כל פעם (maxReceiveCount: 3)</text>
+        <text x="525" y="185">מוסתרת…</text><text x="385" y="185">חוזרת, מוסתרת…</text><text x="245" y="185">חוזרת…</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: למעלה — receive, טיפול, delete. למטה — הודעה שאף consumer לא מצליח לסיים: חוזרת אחרי כל timeout, וה־<code>ApproximateReceiveCount</code> שלה עולה. אחרי <code>maxReceiveCount</code> — SQS מעביר אותה ל־DLQ (E05, E11).</figcaption>
+  </figure>
+  <p>שני כללים נובעים מזה: ה־timeout <strong>ארוך מזמן הטיפול</strong> (אחרת ההודעה חוזרת בזמן שעוד מטפלים בה — וכפילות), ועבודה ארוכה <strong>מאריכה</strong> אותו תוך כדי עם <code>ChangeMessageVisibility</code>. ו־delete — עם ה־<code>ReceiptHandle</code> של הקבלה הזו (E21).</p>
+
+  <h2>3. long polling ו־batches</h2>
+  <p>receive רגיל (short polling) חוזר מיד — גם ריק; ויותר מזה: הוא שואל רק חלק מהשרתים של SQS, אז הוא יכול לחזור ריק גם כשיש הודעות בתור. consumer שמושך בלולאה מבזבז אלפי קריאות ריקות בדקה (וכל קריאה עולה כסף). <strong>long polling</strong> — <code>WaitTimeSeconds</code> עד 20: הבקשה מחכה עד שיש הודעה, או עד שהזמן נגמר:</p>
+```ts
+const res = await sqs.send(new ReceiveMessageCommand({
+  QueueUrl,
+  MaxNumberOfMessages: 10, // עד 10 בבקשה
+  WaitTimeSeconds: 20,     // long polling
+}));
+for (const m of res.Messages ?? []) {
+  await handle(JSON.parse(m.Body!));
+  await sqs.send(new DeleteMessageCommand({ QueueUrl, ReceiptHandle: m.ReceiptHandle! }));
+}
+```
+  <p>וגם שליחה ומחיקה — עד 10 בבקשה (<code>SendMessageBatch</code>, <code>DeleteMessageBatch</code>). batch לא זורק כשחלק נכשל — הוא מחזיר <code>Successful</code> ו־<code>Failed</code>, ואת <code>Failed</code> חייבים לבדוק (E09, E10).</p>
+
+  <h2>4. Standard מול FIFO</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Standard</th><th>FIFO (<code>name.fifo</code>)</th></tr>
+    <tr><td>סדר</td><td>"בערך" — לא מובטח</td><td>מדויק בתוך <code>MessageGroupId</code></td></tr>
+    <tr><td>כפילויות</td><td>נדיר, אבל קורה (at-least-once)</td><td>dedup לפי <code>MessageDeduplicationId</code> ל־5 דקות</td></tr>
+    <tr><td>קצב</td><td>כמעט בלי הגבלה</td><td>מוגבל (גבוה יותר במצב high throughput)</td></tr>
+    <tr><td>מתי</td><td>רוב העבודות — עם consumer אידמפוטנטי</td><td>כשסדר בתוך ישות חשוב: עדכוני הזמנה, תנועות בחשבון</td></tr>
+  </table></div>
+  <p>ב־FIFO, group הוא יחידת הסדר <em>והחסימה</em>: הודעה שנכשלת בהזמנה 7 עוצרת את שאר ההודעות של הזמנה 7 — ולא נוגעת בהזמנה 8. לכן <code>MessageGroupId</code> = הישות (הזמנה, משתמש), לא קבוע אחד לכל התור.</p>
+
+  <h2>5. fan-out: SNS ← SQS</h2>
+  <p>תור SQS הוא "עבודה": כל הודעה ל־consumer אחד. כדי ששלושה שירותים יקבלו כל אירוע, AWS משלבת <strong>SNS</strong> (pub/sub): מפרסמים ל־topic של SNS, ולכל שירות יש תור SQS משלו שמנוי ל־topic — בדיוק כמו fanout exchange ב־RabbitMQ, עם תור לכל שירות. כך כל שירות שומר על DLQ, retries וקצב משלו. (EventBridge הוא גרסה עשירה יותר, עם ניתוב לפי תוכן.)</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.5-E05">E05</a> · <a href="exercises.html#P26.5-E09">E09</a> · <a href="exercises.html#P26.5-E10">E10</a> · <a href="exercises.html#P26.5-E11">E11</a> · <a href="exercises.html#P26.5-E21">E21</a></p>
+  </div>

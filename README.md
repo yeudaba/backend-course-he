@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **37** | **166** | **820** | **571** | **622** |
+| **38** | **171** | **845** | **591** | **627** |
 
 ## מה שונה כאן
 
@@ -39,8 +39,8 @@
 | **חטיבה א׳** | יסודות JavaScript | <code>▰▰▰▰▰▰▰▰▰▰</code> | 12/12 |
 | **חטיבה ב׳** | TypeScript ו־Node.js | <code>▰▰▰▰▰▰▰▰▰▰</code> | 4/4 |
 | **חטיבה ג׳** | שרת, מסד נתונים ו־HTML בסיסי | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
-| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
-| **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▱▱▱▱</code> | 5/9 |
+| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 9/9 |
+| **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▱▱▱▱</code> | 5/8 |
 
 </div>
 
@@ -287,6 +287,7 @@
 | [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 25 | 22 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
 | [יחידה 25.5](backend-course/25w-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 25 | 20 | ✔ |
+| [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 25 | 20 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -355,6 +356,14 @@
 4. Helm ו־GitOps עם Argo CD
 5. Jenkins, והדרך המלאה מ־commit ל־cluster
 
+**יחידה 26.5 — תורים ואירועים: RabbitMQ, Kafka ו־SQS**
+
+1. למה הודעות: תור מול log, והבטחות מסירה
+2. RabbitMQ: exchanges, ack ו־dead letters
+3. SQS: visibility timeout, FIFO ו־DLQ
+4. Kafka: partitions, keys ו־consumer groups
+5. אמינות: אידמפוטנטיות, outbox ו־retries
+
 </details>
 
 ### חטיבה ה׳ — ראיונות והרחבות
@@ -362,7 +371,6 @@
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 5 | 25 | 21 | ✔ |
-| יחידה 26.5 | תורים ואירועים <br><sub>RabbitMQ, Kafka, SQS</sub> | | | | בתוכנית |
 | [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 25 | 20 | ✔ |
 | [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 25 | 20 | ✔ |
 | יחידה 28.5 | ביצועים ונתונים בקנה מידה <br><sub>בדיקות עומס, profiling, OLAP ומסדים עמודתיים: BigQuery, Snowflake, Databricks</sub> | | | | בתוכנית |
