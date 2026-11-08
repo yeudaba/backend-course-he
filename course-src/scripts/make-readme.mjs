@@ -16,12 +16,11 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀",
 };
 
 // מה שעוד לא נבנה — לפי האפיון (אפיון_קורס_Backend_v2.md, סעיף 8)
 const PLANNED = [
-  { part: "חטיבה ד׳ — רמת תעשייה", label: "פרק 25", icon: "🚀", title: "CI ופריסה", topics: "GitHub Actions, secrets, healthcheck, HTTPS — קישור חי" },
   { part: "חטיבה ד׳ — רמת תעשייה", label: "פרויקט 3", icon: "☕", title: "פרויקט הדגל: חנות ציוד קפה", topics: "JWT, עגלה←הזמנה, transactions, idempotency, Docker, CI" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 26", icon: "⚡", title: "Cache ותורים", topics: "Redis דרך Docker" },
   { part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרק 27", icon: "🧠", title: "אלגוריתמים וראיונות", topics: "שאלות ראיון, סיבוכיות" },
@@ -171,11 +170,11 @@ ${lessonsList(part)}
 ${rtl(`
 ## פרויקט 2 — "הפרויקט שגדל"
 
-אותו \`tasks-api\` עובר שמונה גלגולים לאורך הקורס. בכל שלב נוסף משהו — וה־API החיצוני נשאר זהה. כך רואים בפועל למה בונים בשכבות.
+אותו \`tasks-api\` עובר שמונה גלגולים לאורך הקורס — מ־Express עם מערך בזיכרון ועד שרת NestJS שרץ בענן, עם CI/CD וקישור חי. בכל שלב נוסף משהו, וה־API החיצוני נשאר זהה. כך רואים בפועל למה בונים בשכבות.
 
 ${stagesTable}
 
-### הארכיטקטורה היום (שלב ז׳)
+### הארכיטקטורה היום (שלב ח׳)
 
 בקשה עוברת מלמעלה למטה. כל שכבה יכולה לעצור אותה עם שגיאה אחידה — \`{ error: { code, message } }\`.
 `)}
@@ -262,6 +261,7 @@ ${rtl(`
 | בדיקות | node:test · Jest · supertest · mutation testing |
 | תשתית | Linux · bash · Docker · Docker Compose · nginx |
 | פרודקשן | לוגים מובנים · request ID · אזורי זמן · Idempotency-Key · graceful shutdown |
+| CI/CD | GitHub Actions · Render · Neon · HTTPS ו־reverse proxy · בדיקת עשן |
 
 ---
 

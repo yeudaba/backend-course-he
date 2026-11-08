@@ -1,0 +1,58 @@
+# P25-E20
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # תקלה 1: DATABASE_URL של הפרודקשן היה ב־env של כל ה־workflow — וה־test job הריץ עליו migrate reset.
+    # לבדיקות: מסד משלהן, שירות postgres ב־CI
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate reset --force
+      - run: npm test
+
+  deploy:
+    # תקלה 2: בלי needs, deploy רץ במקביל לבדיקות — גם כשהן נכשלות
+    needs: test
+    # תקלה 3: on: [push, pull_request] בלי תנאי — deploy מכל branch ומכל pull request
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      # הסוד של הפרודקשן — רק בצעד שצריך אותו
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

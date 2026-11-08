@@ -1,0 +1,1000 @@
+@@ P25-E01 | 1 | CI, CD, deploy — מה זה מה? | 10 | שיעור 1
+@task
+<p>לכל משפט — נכון או לא, ולמה:</p>
+<ol><li>"יש לנו CI: כל מפתח מריץ <code>npm test</code> לפני push."</li><li>"CI נכשל על ה־pull request שלי, אבל אצלי זה עובר — אז אפשר לעשות merge."</li><li>"Continuous Delivery אומר שכל commit ל־main עולה אוטומטית לפרודקשן."</li><li>"ה־CI צריך לבנות את ה־Docker image, גם אם לא מעלים אותו לשום מקום."</li><li>"deploy שנכשל באמצע — הכי טוב לתקן מהר ולעשות deploy שוב."</li><li>"ב־CI מריצים את הבדיקות מול המסד של הפרודקשן, כדי לבדוק על נתונים אמיתיים."</li></ol>
+@hint1
+<p>CI = שרת שמריץ את הבדיקות על <em>כל</em> שינוי, בסביבה נקייה. ההבדל מ"אצלי" הוא בדיוק העניין.</p>
+@hint2
+<p>Continuous <strong>Delivery</strong> מול Continuous <strong>Deployment</strong> — מילה אחת, הבדל גדול.</p>
+@solution
+<ol><li><strong>לא.</strong> זו משמעת, לא CI. CI הוא שרת שמריץ את הבדיקות על כל push וכל pull request — גם כשמישהו שכח, ממהר, או בטוח ש"זה רק README".</li><li><strong>לא.</strong> "אצלי עובר" הוא בדיוק מה ש־CI נועד לבדוק: אצלך יש קובץ שלא עשית לו commit, <code>node_modules</code> ישן, מסד עם נתונים, אזור זמן אחר. הסביבה הנקייה של ה־CI היא האמת. (בפרק הזה ראינו את זה קורה: <code>npm run typecheck</code> עבר אצלנו ונכשל ב־CI.)</li><li><strong>לא — זה Continuous <em>Deployment</em>.</strong> Delivery: כל commit ב־main <em>מוכן</em> לעלות (נבדק, נבנה), ומישהו לוחץ. Deployment: עולה לבד. בפרויקט שלנו — Deployment, עם בדיקת עשן אחרי.</li><li><strong>נכון.</strong> Dockerfile שבור (קובץ שחסר ב־<code>.dockerignore</code>, שלב שנכשל) צריך להתגלות ב־pull request, לא ב־deploy.</li><li><strong>לא, בדרך כלל.</strong> קודם rollback — חוזרים לגרסה שעבדה, תוך דקה, והמשתמשים בסדר. ואז מתקנים בשקט, עם בדיקה שתופסת את הבאג.</li><li><strong>לא!</strong> בדיקות מוחקות, מאפסות ויוצרות נתונים (<code>TRUNCATE</code>, <code>migrate reset</code>). מסד בדיקות נפרד — שירות PostgreSQL בתוך ה־CI (E13). והסוד של מסד הפרודקשן לא מגיע בכלל ל־job של הבדיקות (E20).</li></ol>
+@mistakes
+<ul><li>"CI ירוק = אין באגים". CI בודק רק מה שיש עליו בדיקות.</li></ul>
+
+@@ P25-E02 | 1 | לקרוא workflow | 10 | שיעור 1
+@task
+<p>זה ה־workflow של הפרויקט (מקוצר). ענה:</p>
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres: { image: postgres:18-alpine, ports: ["5432:5432"] }
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      - run: npm test
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t tasks-api:${{ github.sha }} .
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    environment: production
+    steps:
+      - run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+```
+<ol><li>פתחת pull request מ־branch בשם <code>feature/stats</code>. אילו jobs רצים?</li><li>עשית merge. אילו jobs רצים, ובאיזה סדר?</li><li>push ל־branch <code>experiment</code> (בלי pull request). מה רץ?</li><li>הבדיקות נכשלו ב־main. מה קורה עם deploy?</li><li>מה זה <code>actions/checkout@v5</code>, ולמה צריך אותו?</li><li>למה <code>curl -fsS</code> ולא סתם <code>curl</code>?</li></ol>
+@hint1
+<p><code>on</code> קובע מתי ה־workflow מתחיל. <code>if</code> — אם job מסוים רץ. <code>needs</code> — אחרי מי.</p>
+@hint2
+<p>runner מתחיל ריק: בלי הקוד שלך. ו־<code>curl</code> בלי <code>-f</code> מחזיר exit code 0 גם על 404.</p>
+@solution
+<ol><li><code>test</code> ו־<code>docker</code>, במקביל. <code>deploy</code> מדולג: <code>github.event_name</code> הוא <code>pull_request</code>.</li><li>merge ל־main = push ל־main: <code>test</code> ו־<code>docker</code> במקביל, ורק אם <strong>שניהם</strong> עברו — <code>deploy</code>.</li><li><strong>כלום.</strong> <code>on.push.branches: [main]</code>. (אם רוצים CI גם על branches בלי PR — מוחקים את ה־<code>branches</code> מ־push, ו־deploy עדיין מוגן ב־<code>if</code>.)</li><li><code>deploy</code> לא רץ (<code>needs</code>). הפרודקשן נשאר על הגרסה הקודמת — וזה כל הרעיון.</li><li>action מוכן (קוד של GitHub) שמוריד את ה־repo ל־runner. בלעדיו ה־runner ריק, ו־<code>npm ci</code> נכשל: אין <code>package.json</code>. <code>@v5</code> — גרסה ראשית קבועה: לא מתעדכן לגרסה שוברת לבד.</li><li><code>-f</code>: תשובת HTTP של שגיאה (404, 500) ← exit code שונה מ־0, וה־step נכשל. בלי זה, deploy hook שגוי "מצליח" ואף אחד לא יודע. <code>-sS</code>: בלי פס התקדמות, אבל כן הודעת שגיאה.</li></ol>
+@mistakes
+<ul><li>לחשוב שה־jobs רצים לפי הסדר בקובץ. בלי <code>needs</code> — במקביל.</li></ul>
+
+@@ P25-E03 | 1 | איפה שמים כל דבר? | 10 | שיעור 2
+@task
+<p>לכל ערך — איפה הוא צריך לגור: בקוד, ב־<code>.env</code> המקומי (לא ב־Git), ב־GitHub Secrets, ב־GitHub Variables, בהגדרות של Render — או בכמה מהם:</p>
+<ol><li><code>DATABASE_URL</code> של המסד בענן (Neon)</li><li><code>JWT_SECRET</code> של הפרודקשן</li><li><code>JWT_SECRET</code> לבדיקות ב־CI</li><li>כתובת ה־deploy hook של Render</li><li>הכתובת הציבורית של ה־API (<code>https://tasks-api-xyz.onrender.com</code>)</li><li><code>ACCESS_TOKEN_TTL_SECONDS=900</code></li><li>הסיסמה של PostgreSQL שבתוך ה־CI (<code>services:</code>)</li></ol>
+@hint1
+<p>שאלה לכל ערך: מה יקרה אם כל העולם יראה אותו? (ה־repo שלך ציבורי — זה תיק עבודות.)</p>
+@hint2
+<p>מי צריך את הערך: השרת בזמן ריצה, ה־CI, או שניהם?</p>
+@solution
+<ol><li><strong>Render</strong> (השרת צריך אותו בזמן ריצה) <strong>וגם GitHub Secrets</strong> (ה־deploy job מריץ migrations). אף פעם לא בקוד.</li><li><strong>רק ב־Render.</strong> ה־CI לא צריך אותו. מי שמחזיק אותו יכול לחתום טוקן של admin.</li><li><strong>בקוד / ב־workflow</strong> — ערך מזויף, לבדיקות בלבד (כמו <code>ci-only-secret-…</code> שלנו). הוא לא שווה כלום מחוץ ל־CI. לא צריך "להגן" עליו.</li><li><strong>GitHub Secrets.</strong> מי שמחזיק את הכתובת יכול להפעיל deploy. (כן, URL יכול להיות סוד.)</li><li><strong>GitHub Variables</strong> (<code>vars.PRODUCTION_URL</code>) — לא סוד, אבל הגדרה ולא קוד. וגם ב־README — זה הקישור החי.</li><li><strong>בקוד</strong>, כברירת מחדל (zod <code>.default(900)</code>). לא סוד. env רק אם רוצים לשנות בלי deploy.</li><li><strong>בתוך ה־workflow, גלוי.</strong> המסד הזה חי שתי דקות, ב־runner מבודד, ואין בו כלום.</li></ol>
+@mistakes
+<ul><li>"ה־repo פרטי, אז אפשר בקוד." היום פרטי — מחר תהפוך אותו לציבורי לתיק העבודות, וההיסטוריה של Git זוכרת הכול. סוד שנכנס ל־commit — מחליפים (rotate), לא רק מוחקים.</li></ul>
+
+@@ P25-E04 | 1 | deploy בלי downtime | 15 | שיעור 3
+@task
+<p>הגרסה הנוכחית רצה. ה־deploy: migration ← הגרסה החדשה עולה ← התנועה עוברת אליה. במשך דקה או שתיים <strong>הגרסה הישנה עדיין מקבלת בקשות מול המסד החדש</strong>. לכל migration — בטוח או שובר, ואם שובר — איך עושים אותו בבטחה:</p>
+<ol><li>הוספת עמודה <code>archived_at TIMESTAMPTZ</code> (מותר NULL)</li><li>שינוי שם <code>title</code> ל־<code>name</code></li><li>מחיקת העמודה <code>priority</code>, שהגרסה החדשה כבר לא משתמשת בה</li><li>הוספת <code>time_zone TEXT NOT NULL</code> בלי DEFAULT</li><li>אינדקס על טבלה של 50 מיליון שורות</li></ol>
+@hint1
+<p>שאל: האם הקוד הישן — שלא יודע כלום על השינוי — ממשיך לעבוד?</p>
+@hint2
+<p>"expand / contract": קודם מרחיבים (מוסיפים, בלי לשבור), ורק אחרי שאף קוד לא משתמש בישן — מצמצמים.</p>
+@solution
+<ol><li><strong>בטוח.</strong> הקוד הישן לא יודע על העמודה ולא נפגע.</li><li><strong>שובר:</strong> הקוד הישן עושה <code>SELECT title</code> — ונכשל. בבטחה, בשלושה deploys: (א) מוסיפים <code>name</code>, הקוד כותב לשתיהן; (ב) מעתיקים את הנתונים, והקוד קורא מ־<code>name</code>; (ג) מוחקים את <code>title</code>.</li><li><strong>שובר</strong>, אם זה באותו deploy: הגרסה <em>הישנה</em> עוד קוראת אותה. deploy אחד שמפסיק להשתמש, ורק בבא — <code>DROP</code>.</li><li><strong>שובר:</strong> ה־INSERT של הקוד הישן לא מכיל את העמודה ← <code>null value violates not-null constraint</code>. בבטחה: <code>DEFAULT 'UTC'</code> — בדיוק מה שעשינו בפרק 24.</li><li><strong>שובר בפועל:</strong> <code>CREATE INDEX</code> נועל כתיבות לכל זמן הבנייה (דקות). <code>CREATE INDEX CONCURRENTLY</code> — לא נועל. (ב־Prisma: עורכים את קובץ ה־migration ביד.)</li></ol>
+<p>ומה עם rollback? אם הגרסה החדשה נכשלה וחוזרים לישנה — ה־migration <strong>נשאר</strong>. לכן migration בטוח הוא כזה שגם הגרסה הקודמת עובדת איתו. אותו כלל, משני הכיוונים.</p>
+@mistakes
+<ul><li>להניח ש־deploy הוא רגע אחד. הוא חלון זמן, ושתי הגרסאות חיות בו יחד.</li></ul>
+
+@@ P25-E05 | 1 | HTTPS ו־proxy | 10 | שיעור 4
+@task
+<p>הפרויקט רץ ב־Render: הלקוח ← (HTTPS) ← load balancer של Render ← (HTTP, ברשת הפנימית) ← הקונטיינר שלך.</p>
+<ol><li>הקוד שלך מאזין ל־HTTP, לא ל־HTTPS. האם החיבור של המשתמש מוצפן?</li><li>מה יהיה <code>req.ip</code> בלי <code>trust proxy</code>? ומה זה יעשה להגבלת הקצב מפרק 24?</li><li>מה יהיה <code>req.protocol</code> בלי <code>trust proxy</code>?</li><li>למה לא פשוט <code>app.set("trust proxy", true)</code>?</li><li>מה עושה <code>Strict-Transport-Security</code>, ולמה לא שולחים אותו ב־<code>localhost</code>?</li></ol>
+@hint1
+<p>ה־TLS "נגמר" (terminates) ב־load balancer. מה הקוד שלך רואה?</p>
+@hint2
+<p><code>X-Forwarded-For</code> ו־<code>X-Forwarded-Proto</code> — מי כותב אותם?</p>
+@solution
+<ol><li><strong>כן.</strong> ההצפנה בין הדפדפן ל־load balancer, שמחזיק את התעודה. משם — ברשת הפנימית של הפלטפורמה. זה המודל הרגיל, וכך נמנעים מניהול תעודות בקוד.</li><li>הכתובת של ה־load balancer — <strong>אותה כתובת לכל המשתמשים</strong>. הגבלת הקצב תחסום את כולם יחד אחרי 10 ניסיונות כניסה בדקה. עם <code>trust proxy: 1</code>, Express לוקח את הכתובת שה־proxy הוסיף ל־<code>X-Forwarded-For</code>.</li><li><code>http</code> — כי זה החיבור שהשרת רואה. עם trust proxy — <code>https</code>, מ־<code>X-Forwarded-Proto</code>. (חשוב ל־<code>req.secure</code>, לקישורים שהשרת בונה, ול־cookies עם <code>Secure</code>.)</li><li><code>true</code> = לסמוך על <em>כל</em> השרשרת, כולל מה שהלקוח עצמו כתב ב־header. בדקנו בפרק (פלט אמיתי): עם <code>TRUST_PROXY=1</code> מאחורי Caddy, 11 בקשות עם <code>X-Forwarded-For</code> מזויף שונה בכל פעם ← הבקשה ה־11 קיבלה 429. עם <code>true</code> — כל אחת נראית כמו לקוח חדש (E23).</li><li>אומר לדפדפן: "לאתר הזה — רק HTTPS, גם אם מקלידים http, לתקופה X". שולחים אותו רק על HTTPS אמיתי: דפדפן שקיבל אותו מ־<code>localhost</code> יסרב אחר כך ל־<code>http://localhost:3000</code> של כל פרויקט אחר שלך.</li></ol>
+@mistakes
+<ul><li>להוסיף HTTPS לקוד ה־Node "כי ככה בטוח יותר" — מאחורי load balancer זה רק מסבך.</li></ul>
+
+@@ P25-E06 | 2 | הגדרות: נוח בפיתוח, קשוח בפרודקשן 🤖 | 20 | שיעור 2
+@task
+<p>בקובץ <code>25-deploy/starter/P25-E06.ts</code> כתוב <code>loadConfig(env)</code> עם zod:</p>
+<ul><li><code>NODE_ENV</code>: development / test / production (ברירת מחדל development). <code>PORT</code>: 1–65535 (ברירת מחדל 3000). <code>LOG_LEVEL</code>: debug/info/warn/error (ברירת מחדל info).</li><li>בפיתוח — ברירות מחדל ל־<code>DATABASE_URL</code> (<code>postgresql://postgres@localhost:5432/dev</code>) ול־<code>JWT_SECRET</code> (<code>dev-only-secret-not-for-production!!</code>).</li><li>בפרודקשן: <code>DATABASE_URL</code> חובה, <code>JWT_SECRET</code> חובה ו־32 תווים לפחות, ו־<code>LOG_LEVEL=debug</code> אסור.</li><li>שגיאה ← <code>Error</code> אחד שמזכיר את <strong>כל</strong> השדות הבעייתיים.</li></ul>
+@hint1
+<p><code>z.object({...}).superRefine((e, ctx) =&gt; { if (e.NODE_ENV !== "production") return; ... ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "..." }) })</code>.</p>
+@hint2
+<p><code>safeParse</code> ו־<code>result.error.issues</code> — כל הבעיות, לא רק הראשונה.</p>
+@solution
+```ts save=solutions/P25-E06.ts
+// P25-E06
+import { z } from "zod";
+
+const schema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    DATABASE_URL: z.string().optional(),
+    JWT_SECRET: z.string().optional(),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  })
+  .superRefine((e, ctx) => {
+    if (e.NODE_ENV !== "production") return;
+    if (!e.DATABASE_URL) ctx.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "חובה בפרודקשן" });
+    if (!e.JWT_SECRET || e.JWT_SECRET.length < 32) ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "בפרודקשן — לפחות 32 תווים" });
+    if (e.LOG_LEVEL === "debug") ctx.addIssue({ code: "custom", path: ["LOG_LEVEL"], message: "debug בפרודקשן כותב יותר מדי (ולפעמים מידע רגיש)" });
+  });
+
+export interface Config {
+  env: "development" | "test" | "production";
+  port: number;
+  databaseUrl: string;
+  jwtSecret: string;
+  logLevel: "debug" | "info" | "warn" | "error";
+}
+
+export function loadConfig(env: Record<string, string | undefined>): Config {
+  const r = schema.safeParse(env);
+  if (!r.success) {
+    // כל הבעיות בהודעה אחת — לא "תקן אחת, deploy, גלה את הבאה"
+    throw new Error(`הגדרות לא תקינות:\n${r.error.issues.map((i) => `- ${i.path.join(".")}: ${i.message}`).join("\n")}`);
+  }
+  const e = r.data;
+  return {
+    env: e.NODE_ENV,
+    port: e.PORT,
+    // בפיתוח בלבד: ברירות מחדל נוחות. בפרודקשן הן לא יגיעו לכאן — superRefine כבר נכשל
+    databaseUrl: e.DATABASE_URL ?? "postgresql://postgres@localhost:5432/dev",
+    jwtSecret: e.JWT_SECRET ?? "dev-only-secret-not-for-production!!",
+    logLevel: e.LOG_LEVEL,
+  };
+}
+```
+<p>למה "כל הבעיות בהודעה אחת"? כי deploy לוקח דקות. "תקן אחת, deploy, גלה את הבאה" × שלוש = חצי שעה. ולמה להיכשל בעלייה ולא מאוחר? כי בפלטפורמה, שרת שלא עולה = deploy שנכשל — והגרסה הקודמת ממשיכה לרוץ. שרת שעולה עם הגדרה שגויה נכשל מול משתמשים.</p>
+@mistakes
+<ul><li><code>env.JWT_SECRET ?? "dev-secret"</code> בלי לבדוק סביבה — ובפרודקשן כל אחד יכול לחתום טוקנים (E21).</li></ul>
+
+@@ P25-E07 | 2 | security headers 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>P25-E07.ts</code> כתוב middleware <code>securityHeaders({ hstsMaxAge })</code>:</p>
+<ul><li>בכל תשובה: <code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>, <code>Referrer-Policy: no-referrer</code>, <code>Cross-Origin-Resource-Policy: same-site</code>.</li><li>בלי <code>X-Powered-By</code>.</li><li><code>Strict-Transport-Security: max-age=&lt;hstsMaxAge&gt;; includeSubDomains</code> — <strong>רק</strong> כש־<code>req.secure</code> (ברירת מחדל: 180 יום = 15552000 שניות).</li></ul>
+@hint1
+<p><code>res.setHeader</code>, <code>res.removeHeader("X-Powered-By")</code>.</p>
+@hint2
+<p><code>req.secure</code> מאחורי proxy נכון רק עם <code>trust proxy</code> — אז הוא נקרא מ־<code>X-Forwarded-Proto</code>. בבדיקה בלי trust proxy, header כזה לא אמור להשפיע.</p>
+@solution
+```ts save=solutions/P25-E07.ts
+// P25-E07
+import type { NextFunction, Request, Response } from "express";
+
+export function securityHeaders({ hstsMaxAge = 15_552_000 }: { hstsMaxAge?: number } = {}) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    res.removeHeader("X-Powered-By"); // לא לפרסם באיזו טכנולוגיה (וגרסה) השרת רץ
+    res.setHeader("X-Content-Type-Options", "nosniff"); // הדפדפן לא "מנחש" סוג קובץ
+    res.setHeader("X-Frame-Options", "DENY"); // אי אפשר להטמיע את הדפים ב־iframe (clickjacking)
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    // HSTS — רק על חיבור HTTPS. req.secure נכון גם מאחורי proxy, אם trust proxy מוגדר
+    if (req.secure) res.setHeader("Strict-Transport-Security", `max-age=${hstsMaxAge}; includeSubDomains`);
+    next();
+  };
+}
+```
+<p>בעבודה משתמשים ב־<strong>helmet</strong>, שעושה את זה ועוד (כולל Content-Security-Policy). ל־API שמחזיר JSON בלבד, החשובים הם אלה שכאן.</p>
+@mistakes
+<ul><li>HSTS על כל תשובה — כולל <code>http://localhost</code> (E23).</li></ul>
+
+@@ P25-E08 | 2 | GET /version 🤖 | 15 | שיעור 3
+@task
+<p>בקובץ <code>P25-E08.ts</code>: <code>createApp({ env, now, pkg })</code> עם <code>GET /version</code> ← <code>{ name, version, commit, shortCommit, startedAt, uptimeSeconds }</code>:</p>
+<ul><li><code>commit</code>: <code>GIT_COMMIT</code>, אחרת <code>RENDER_GIT_COMMIT</code>, אחרת <code>"dev"</code>. <code>shortCommit</code> — 7 התווים הראשונים.</li><li><code>startedAt</code> — כשהאפליקציה נוצרה (<code>now()</code> פעם אחת). <code>uptimeSeconds</code> — שניות שלמות מאז.</li><li><code>Cache-Control: no-store</code>.</li></ul>
+@hint1
+<p>את <code>startedAt</code> מחשבים מחוץ ל־handler.</p>
+@hint2
+<p><code>Math.floor((now() - startedAt) / 1000)</code>.</p>
+@solution
+```ts save=solutions/P25-E08.ts
+// P25-E08
+import express from "express";
+
+export function createApp({ env = process.env, now = () => new Date(), pkg }: { env?: Record<string, string | undefined>; now?: () => Date; pkg: { name: string; version: string } }) {
+  const app = express();
+  const startedAt = now(); // פעם אחת — כשהשרת עולה
+  const commit = env.GIT_COMMIT ?? env.RENDER_GIT_COMMIT ?? "dev";
+  app.get("/version", (req, res) => {
+    res.set("Cache-Control", "no-store"); // אחרי deploy רוצים לראות מיד את החדש, לא עותק מ־cache
+    res.json({
+      name: pkg.name,
+      version: pkg.version,
+      commit,
+      shortCommit: commit.slice(0, 7),
+      startedAt: startedAt.toISOString(),
+      uptimeSeconds: Math.floor((now().getTime() - startedAt.getTime()) / 1000),
+    });
+  });
+  return app;
+}
+```
+<p>זה ה־endpoint שבדיקת העשן שואלת: "האם מה שרץ עכשיו הוא ה־commit שהרגע עשיתי לו deploy?". ו־<code>uptimeSeconds</code> קטן באופן חשוד — סימן שהשרת נופל ועולה מחדש.</p>
+@mistakes
+<ul><li>לקרוא <code>process.env</code> בתוך כל בקשה במקום פעם אחת — עובד, אבל אז אי אפשר לבדוק עם <code>env</code> מוזרק.</li></ul>
+
+@@ P25-E09 | 2 | workflow ראשון 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>P25-E09.yml</code> כתוב workflow של GitHub Actions (בפרויקט אמיתי הוא יהיה ב־<code>.github/workflows/ci.yml</code>):</p>
+<ul><li>רץ ב־push ל־main וב־pull request ל־main.</li><li><code>permissions: contents: read</code>.</li><li>job אחד, <code>ubuntu-latest</code>, עם <code>timeout-minutes</code> (עד 30).</li><li>צעדים: <code>actions/checkout@v5</code>, <code>actions/setup-node@v5</code> עם Node 24 ו־<code>cache: npm</code>, <code>npm ci</code>, <code>npm test</code>.</li></ul>
+@hint1
+<p>הצעדים עם action — <code>uses:</code>, עם פקודה — <code>run:</code>. פרמטרים ל־action — <code>with:</code>.</p>
+@hint2
+<p>YAML רגיש להזחה (רווחים, לא tabs). אם הבודק אומר "YAML לא תקין" — בדוק את ההזחה בשורה שהוא מציין. התוסף GitHub Actions ל־VS Code מסמן טעויות בזמן הכתיבה.</p>
+@solution
+```yaml save=solutions/P25-E09.yml
+# P25-E09: CI בסיסי לפרויקט Node
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+```
+<p>למה <code>timeout-minutes</code>? ברירת המחדל של GitHub היא 6 שעות. בדיקה שנתקעת (חיבור למסד שלא נסגר) — מבזבזת 6 שעות של דקות CI. ול־<code>cache: npm</code>: אצלנו <code>npm ci</code> לקח 7 שניות ב־runner (פלט אמיתי, מהריצה בפרק).</p>
+@mistakes
+<ul><li><code>on: push</code> בלי branches + deploy בלי <code>if</code> — deploy מכל branch (E20).</li></ul>
+
+@@ P25-E10 | 2 | בדיקת עשן 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>P25-E10.ts</code>: <code>smokeTest(baseUrl, { expectCommit, timeoutMs, intervalMs, now })</code> ← <code>{ ok, attempts, commit }</code>:</p>
+<ul><li>בכל ניסיון: <code>GET /version</code>. אם 200 ו־<code>commit</code> מתאים (מלא, או ש־<code>expectCommit</code> מקוצר והוא תחילת ה־commit) — <code>GET /ready</code>. 200 ← הצלחה.</li><li>בלי <code>expectCommit</code> — כל commit מתאים.</li><li>כל דבר אחר (503, חיבור שנופל, גרסה ישנה, /ready לא 200) ← מחכים <code>intervalMs</code> ומנסים שוב.</li><li>כשהזמן לפי <code>now()</code> יעבור את <code>timeoutMs</code> — <code>{ ok: false }</code>, עם ה־commit האחרון שנראה (או <code>null</code>).</li></ul>
+@hint1
+<p>לולאה עם <code>try/catch</code> סביב ה־fetch — שגיאת רשת היא מצב רגיל כאן.</p>
+@hint2
+<p>לפני ההמתנה: <code>if (now() - started + intervalMs &gt; timeoutMs) return …</code>.</p>
+@solution
+```ts save=solutions/P25-E10.ts
+// P25-E10
+export interface SmokeResult {
+  ok: boolean;
+  attempts: number;
+  commit: string | null;
+}
+
+export async function smokeTest(
+  baseUrl: string,
+  { expectCommit, timeoutMs = 600_000, intervalMs = 5_000, now = () => Date.now() }: { expectCommit?: string; timeoutMs?: number; intervalMs?: number; now?: () => number } = {},
+): Promise<SmokeResult> {
+  const started = now();
+  let attempts = 0;
+  let commit: string | null = null;
+  while (true) {
+    attempts++;
+    try {
+      const v = await fetch(new URL("/version", baseUrl), { signal: AbortSignal.timeout(10_000) });
+      if (v.status === 200) {
+        commit = ((await v.json()) as { commit?: string }).commit ?? null;
+        // אותו commit (מלא או מקוצר) — הגרסה החדשה רצה. ואז: מוכנה?
+        if (!expectCommit || (commit !== null && (commit.startsWith(expectCommit) || expectCommit.startsWith(commit)) && commit.length >= 7)) {
+          const r = await fetch(new URL("/ready", baseUrl), { signal: AbortSignal.timeout(10_000) });
+          if (r.status === 200) return { ok: true, attempts, commit };
+        }
+      }
+    } catch {
+      // השרת עוד לא עונה (build, התעוררות) — זה צפוי, מנסים שוב
+    }
+    if (now() - started + intervalMs > timeoutMs) return { ok: false, attempts, commit };
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+```
+<p>ב־Render החינמי: build של כמה דקות, ושרת שישן מתעורר תוך כדקה. לכן ב־<code>scripts/smoke.mjs</code> של הפרויקט — 15 דקות.</p>
+@mistakes
+<ul><li>לבדוק רק ש־<code>/health</code> עונה 200: הגרסה <em>הישנה</em> עונה 200 כל זמן הבנייה (E22).</li></ul>
+
+@@ P25-E11 | 2 | DATABASE_URL בלי לחשוף 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25-E11.ts</code>:</p>
+<ul><li><code>redactDatabaseUrl(url)</code> ← אותה כתובת, עם <code>***</code> במקום הסיסמה (בלי סיסמה — כמו שהיא).</li><li><code>describeDb(url)</code> ← <code>{ host, port, database, user, ssl }</code>. <code>port</code> ברירת מחדל 5432; <code>ssl</code> — יש <code>sslmode</code> שאינו <code>disable</code>.</li><li>כתובת לא תקינה (לא URL, או לא <code>postgres:</code>/<code>postgresql:</code>) ← <code>Error("DATABASE_URL לא תקין …")</code> — <strong>בלי</strong> הכתובת בהודעה.</li></ul>
+@hint1
+<p><code>new URL(url)</code> מבין <code>postgresql://</code>: <code>.username</code>, <code>.password</code>, <code>.hostname</code>, <code>.port</code>, <code>.pathname</code>, <code>.searchParams</code>. ואפשר לשנות <code>u.password</code>.</p>
+@hint2
+<p><code>new URL</code> זורק <code>TypeError</code> שההודעה שלו כוללת את הכתובת המלאה. תופסים וזורקים שגיאה משלך.</p>
+@solution
+```ts save=solutions/P25-E11.ts
+// P25-E11
+function parse(url: string): URL {
+  try {
+    const u = new URL(url);
+    if (!/^postgres(ql)?:$/.test(u.protocol)) throw new Error();
+    return u;
+  } catch {
+    // בלי הכתובת עצמה בהודעה: יש בה סיסמה, והודעות שגיאה מגיעות ללוגים
+    throw new Error("DATABASE_URL לא תקין (צריך postgresql://user:password@host:port/db)");
+  }
+}
+
+export function redactDatabaseUrl(url: string): string {
+  const u = parse(url);
+  if (u.password) u.password = "***";
+  return u.toString();
+}
+
+export function describeDb(url: string) {
+  const u = parse(url);
+  const sslmode = u.searchParams.get("sslmode");
+  return {
+    host: u.hostname,
+    port: Number(u.port || 5432),
+    database: decodeURIComponent(u.pathname.slice(1)),
+    user: decodeURIComponent(u.username),
+    ssl: sslmode !== null && sslmode !== "disable",
+  };
+}
+```
+<p>שימוש: בעלייה, <code>logger.info("db", describeDb(process.env.DATABASE_URL))</code> — ויודעים לאיזה מסד השרת מחובר, בלי שהסיסמה מגיעה ללוגים.</p>
+@mistakes
+<ul><li><code>throw new Error(`כתובת לא תקינה: ${url}`)</code> — הסיסמה בדיוק בלוג שרצית להגן עליו.</li></ul>
+
+@@ P25-E12 | 2 | /ready עם כמה בדיקות 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>P25-E12.ts</code>: <code>readyHandler(checks, { timeoutMs })</code> — handler של Express. <code>checks</code> — אובייקט של פונקציות async (למשל <code>{ db: () =&gt; prisma.$queryRaw`SELECT 1` }</code>).</p>
+<ul><li>מריץ את כולן <strong>במקביל</strong>, כל אחת מוגבלת ל־<code>timeoutMs</code>.</li><li>200 <code>{ status: "ok", checks: { db: "up", … } }</code>, או 503 <code>{ status: "unavailable", checks }</code> עם <code>"down"</code> (נכשלה/זרקה) או <code>"timeout"</code>.</li><li><code>Cache-Control: no-store</code>.</li></ul>
+@hint1
+<p><code>Promise.race([check(), timeout])</code> — ו־<code>Promise.all</code> על כולן.</p>
+@hint2
+<p>בדיקה שזורקת <em>סינכרונית</em> (לא async): <code>Promise.resolve().then(check)</code> הופך את זה ל־Promise שנדחה.</p>
+@solution
+```ts save=solutions/P25-E12.ts
+// P25-E12
+import type { Request, Response } from "express";
+
+type Check = () => Promise<unknown>;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+export function readyHandler(checks: Record<string, Check>, { timeoutMs = 1000 }: { timeoutMs?: number } = {}) {
+  return async (req: Request, res: Response) => {
+    // במקביל: בדיקה איטית אחת לא מעכבת את האחרות, וכולן מוגבלות בזמן
+    const results = await Promise.all(
+      Object.entries(checks).map(async ([name, check]) => {
+        try {
+          await withTimeout(Promise.resolve().then(check), timeoutMs);
+          return [name, "up"] as const;
+        } catch (err) {
+          return [name, (err as Error).message === "timeout" ? "timeout" : "down"] as const;
+        }
+      }),
+    );
+    const ok = results.every(([, s]) => s === "up");
+    res.status(ok ? 200 : 503).set("Cache-Control", "no-store").json({ status: ok ? "ok" : "unavailable", checks: Object.fromEntries(results) });
+  };
+}
+```
+@mistakes
+<ul><li>בדיקות בטור — מסד איטי ו־cache איטי = שתי שניות לכל בקשת readiness, והפלטפורמה מחליטה שהשרת מת.</li><li>לבדוק את המסד ב־<code>/health</code> (liveness): המסד נופל לרגע ← הפלטפורמה <em>מפעילה מחדש</em> את כל השרתים, שלא היו בעיה.</li></ul>
+
+@@ P25-E13 | 3 | CI עם PostgreSQL 🤖 | 25 | שיעור 1
+@task
+<p>בקובץ <code>P25-E13.yml</code> — workflow (מ־E09) שמריץ בדיקות integration מול PostgreSQL אמיתי:</p>
+<ul><li><code>services:</code> עם <code>postgres:18-alpine</code>, משתמש/סיסמה/מסד, <code>ports: 5432:5432</code>, ו־healthcheck עם <code>pg_isready</code>.</li><li><code>DATABASE_URL</code> ב־<code>env</code> של ה־job, שמצביע על השירות (<code>localhost</code>).</li><li>צעדים: <code>npm ci</code> ← <code>npx prisma generate</code> ← <code>npx prisma migrate deploy</code> ← <code>npm run test:int</code>.</li></ul>
+@hint1
+<p>הצעדים רצים ישירות על ה־runner (לא בקונטיינר), ולכן מגיעים לשירות דרך <code>localhost</code> וה־port שמופה.</p>
+@hint2
+<p><code>options: &gt;-</code> ואז שורות של <code>--health-cmd "…"</code>, <code>--health-interval 2s</code>… — GitHub מחכה שהשירות healthy לפני הצעד הראשון.</p>
+@solution
+```yaml save=solutions/P25-E13.yml
+# P25-E13: CI עם PostgreSQL אמיתי לבדיקות integration
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/app_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run test:int
+```
+@mistakes
+<ul><li><code>prisma migrate dev</code> ב־CI: הוא נועד לפיתוח — יוצר migrations חדשים, ולפעמים שואל שאלות ונתקע.</li><li>בלי healthcheck: הבדיקות מתחילות כשה־PostgreSQL עוד עולה ← <code>ECONNREFUSED</code> אקראי.</li></ul>
+
+@@ P25-E14 | 3 | strategy.matrix 🤖 | 25 | שיעור 1
+@task
+<p>ב־GitHub Actions, <code>strategy.matrix</code> מריץ את אותו job על כמה שילובים. בקובץ <code>P25-E14.ts</code> כתוב <code>expandMatrix(matrix)</code> שמחזיר את רשימת השילובים, לפי הכללים של GitHub:</p>
+<ol><li>מכפלה של כל הצירים, לפי הסדר (הציר הראשון — הלולאה החיצונית).</li><li><code>exclude</code>: מוחק כל שילוב שמתאים לכל השדות שבפריט (גם פריט חלקי).</li><li><code>include</code> (אחרי exclude): אם הפריט מתאים לשילובים קיימים בצירים המקוריים, והשדות הנוספים לא דורסים ערכים קיימים — מוסיף לכל אחד מהם את השדות הנוספים. אחרת — שילוב חדש בסוף.</li></ol>
+@hint1
+<p>מכפלה: מתחילים מ־<code>[{}]</code>, ולכל ציר — <code>flatMap</code>.</p>
+@hint2
+<p>matrix עם <code>include</code> בלבד (בלי צירים) — כל פריט הוא שילוב.</p>
+@solution
+```ts save=solutions/P25-E14.ts
+// P25-E14
+type Value = string | number | boolean;
+type Combo = Record<string, Value>;
+
+export function expandMatrix(matrix: Record<string, Value[] | Combo[]>): Combo[] {
+  const { include = [], exclude = [], ...axes } = matrix as { include?: Combo[]; exclude?: Combo[] } & Record<string, Value[]>;
+  // 1. מכפלה קרטזית של כל הצירים, לפי הסדר
+  let combos: Combo[] = [{}];
+  for (const [key, values] of Object.entries(axes)) {
+    combos = combos.flatMap((c) => values.map((v) => ({ ...c, [key]: v })));
+  }
+  if (Object.keys(axes).length === 0) combos = [];
+  // 2. exclude: מוחק כל שילוב שמתאים לכל השדות שב־exclude
+  const matches = (c: Combo, partial: Combo) => Object.entries(partial).every(([k, v]) => c[k] === v);
+  combos = combos.filter((c) => !exclude.some((e) => matches(c, e)));
+  // 3. include: מוסיף שדות לשילובים קיימים שמתאימים בצירים המקוריים — ואם אין כאלה, שילוב חדש
+  const axisKeys = new Set(Object.keys(axes));
+  for (const inc of include) {
+    const original = Object.fromEntries(Object.entries(inc).filter(([k]) => axisKeys.has(k)));
+    const targets = combos.filter((c) => matches(c, original) && Object.entries(inc).every(([k, v]) => axisKeys.has(k) || !(k in c) || c[k] === v));
+    if (targets.length > 0 && Object.keys(original).length > 0) targets.forEach((c) => Object.assign(c, inc));
+    else combos.push({ ...inc });
+  }
+  return combos;
+}
+```
+<p>מתי בפועל? ספרייה שצריכה לעבוד על Node 22 וגם 24, או בדיקות שמתחלקות ל־4 jobs במקביל כדי לרוץ מהר יותר. לפרויקט כמו שלנו (שרת אחד, Node 24 אחד) — לא צריך.</p>
+@mistakes
+<ul><li>matrix של 3×3×2 = 18 jobs על כל push. דקות CI הן משאב.</li></ul>
+
+@@ P25-E15 | 3 | הגרסה הבאה מה־commits 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>P25-E15.ts</code>: <code>nextVersion(current, commits)</code> ← <code>{ version, bump, notes }</code>, לפי Conventional Commits ו־SemVer:</p>
+<ul><li>שורה ראשונה: <code>type(scope)!: subject</code> (scope ו־<code>!</code> — רשות). commit שלא בפורמט — מתעלמים.</li><li><code>!</code>, או שורה בגוף שמתחילה ב־<code>BREAKING CHANGE:</code> ← major. <code>feat</code> ← minor. <code>fix</code> ← patch. השאר (docs, chore, ci…) — לא משנים גרסה.</li><li>major מאפס minor ו־patch; minor מאפס patch.</li><li><code>notes</code>: קבוצות בסדר "⚠️ שינויים שוברים", "✨ חדש", "🐛 תיקונים" — רק קבוצות לא ריקות, כל אחת <code>### כותרת</code> ואז <code>- scope: subject</code> (או <code>- subject</code>), עם שורה ריקה בין קבוצות.</li><li>גרסה שאינה <code>X.Y.Z</code> ← <code>Error("גרסה לא תקינה: …")</code>.</li></ul>
+@hint1
+<p>regex עם named groups: <code>/^(?&lt;type&gt;[a-z]+)(\((?&lt;scope&gt;[^)]+)\))?(?&lt;bang&gt;!)?: (?&lt;subject&gt;.+)$/</code>.</p>
+@hint2
+<p>שמור את ה־bump ה"גבוה" ביותר: none &lt; patch &lt; minor &lt; major.</p>
+@solution
+```ts save=solutions/P25-E15.ts
+// P25-E15
+const TYPE = /^(?<type>[a-z]+)(\((?<scope>[^)]+)\))?(?<bang>!)?: (?<subject>.+)$/;
+
+export function nextVersion(current: string, commits: string[]): { version: string; bump: "major" | "minor" | "patch" | "none"; notes: string } {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
+  if (!m) throw new Error(`גרסה לא תקינה: ${current}`);
+  let [major, minor, patch] = m.slice(1).map(Number);
+  const groups: Record<string, string[]> = { "⚠️ שינויים שוברים": [], "✨ חדש": [], "🐛 תיקונים": [] };
+  let bump: "major" | "minor" | "patch" | "none" = "none";
+  const rank = { none: 0, patch: 1, minor: 2, major: 3 };
+  const raise = (b: typeof bump) => { if (rank[b] > rank[bump]) bump = b; };
+  for (const message of commits) {
+    const [title, ...body] = message.split("\n");
+    const c = TYPE.exec(title)?.groups;
+    if (!c) continue; // לא בפורמט — לא משפיע על הגרסה
+    const breaking = Boolean(c.bang) || body.some((l) => l.startsWith("BREAKING CHANGE:"));
+    const line = c.scope ? `${c.scope}: ${c.subject}` : c.subject;
+    if (breaking) { raise("major"); groups["⚠️ שינויים שוברים"].push(line); }
+    else if (c.type === "feat") { raise("minor"); groups["✨ חדש"].push(line); }
+    else if (c.type === "fix") { raise("patch"); groups["🐛 תיקונים"].push(line); }
+  }
+  if (bump === "major") [major, minor, patch] = [major + 1, 0, 0];
+  else if (bump === "minor") [minor, patch] = [minor + 1, 0];
+  else if (bump === "patch") patch++;
+  const version = `${major}.${minor}.${patch}`;
+  const notes = Object.entries(groups)
+    .filter(([, items]) => items.length)
+    .map(([title, items]) => `### ${title}\n${items.map((i) => `- ${i}`).join("\n")}`)
+    .join("\n\n");
+  return { version, bump, notes };
+}
+```
+<p>כלים כמו release-please ו־semantic-release עושים בדיוק את זה ב־CI: קוראים את ה־commits מאז הגרסה האחרונה, קובעים גרסה, כותבים CHANGELOG ויוצרים tag.</p>
+@mistakes
+<ul><li>להשוות גרסאות כמחרוזות: <code>"0.10.0" &lt; "0.9.0"</code> הוא <code>true</code>.</li></ul>
+@@ P25-E16 | 3 | migration שלא שובר את מה שרץ 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>P25-E16.ts</code>: <code>checkMigration(sql)</code> ← רשימת <code>{ line, rule, message }</code> (מספרי שורות מ־1). כללים:</p>
+<ul><li><code>drop-column</code> — <code>DROP COLUMN</code>. <code>drop-table</code> — <code>DROP TABLE</code>.</li><li><code>rename</code> — <code>RENAME COLUMN</code> או <code>RENAME TO</code>.</li><li><code>alter-type</code> — <code>ALTER COLUMN x TYPE</code> / <code>SET DATA TYPE</code>.</li><li><code>index-without-concurrently</code> — <code>CREATE [UNIQUE] INDEX</code> בלי <code>CONCURRENTLY</code>.</li><li><code>not-null-without-default</code> — שורה עם <code>ADD COLUMN</code> ו־<code>NOT NULL</code> בלי <code>DEFAULT</code>.</li></ul>
+<p>בלי תלות באותיות גדולות/קטנות, והערות (<code>-- …</code>) לא נחשבות. לכל ממצא — הסבר קצר ב־<code>message</code>.</p>
+@hint1
+<p>שורה אחרי שורה: <code>sql.split("\n")</code>, ומורידים הערות עם <code>replace(/--.*$/, "")</code>.</p>
+@hint2
+<p>"בלי CONCURRENTLY": negative lookahead — <code>/CREATE\s+(UNIQUE\s+)?INDEX\s+(?!CONCURRENTLY\b)/i</code>.</p>
+@solution
+```ts save=solutions/P25-E16.ts
+// P25-E16
+export interface Finding {
+  line: number;
+  rule: "drop-column" | "drop-table" | "rename" | "not-null-without-default" | "alter-type" | "index-without-concurrently";
+  message: string;
+}
+
+// בזמן deploy, הגרסה הישנה של הקוד עדיין רצה כמה דקות מול המסד *החדש*.
+// שינוי שהקוד הישן לא שורד אותו — שובר את הפרודקשן באמצע ה־deploy.
+const RULES: { rule: Finding["rule"]; re: RegExp; message: string }[] = [
+  { rule: "drop-column", re: /\bDROP\s+COLUMN\b/i, message: "הקוד הישן עוד קורא את העמודה. קודם deploy שמפסיק להשתמש בה, ורק בגרסה הבאה — DROP" },
+  { rule: "drop-table", re: /\bDROP\s+TABLE\b/i, message: "הקוד הישן עוד משתמש בטבלה. מוחקים בשני שלבים" },
+  { rule: "rename", re: /\bRENAME\s+(COLUMN\s+|TO\b)/i, message: "שינוי שם = הקוד הישן לא מוצא. מוסיפים חדש, מעתיקים, ומוחקים את הישן בהמשך" },
+  { rule: "alter-type", re: /\bALTER\s+COLUMN\s+\S+\s+(SET\s+DATA\s+)?TYPE\b/i, message: "שינוי טיפוס כותב מחדש את כל הטבלה תחת נעילה" },
+  { rule: "index-without-concurrently", re: /\bCREATE\s+(UNIQUE\s+)?INDEX\s+(?!CONCURRENTLY\b)/i, message: "CREATE INDEX נועל כתיבות לכל הטבלה. בטבלה גדולה — CONCURRENTLY" },
+];
+
+export function checkMigration(sql: string): Finding[] {
+  const findings: Finding[] = [];
+  const lines = sql.split("\n");
+  lines.forEach((text, i) => {
+    const code = text.replace(/--.*$/, ""); // הערות לא נחשבות
+    for (const r of RULES) if (r.re.test(code)) findings.push({ line: i + 1, rule: r.rule, message: r.message });
+    // NOT NULL על עמודה חדשה בלי DEFAULT: הקוד הישן מכניס שורות בלי העמודה ← נכשל
+    if (/\bADD\s+COLUMN\b/i.test(code) && /\bNOT\s+NULL\b/i.test(code) && !/\bDEFAULT\b/i.test(code)) {
+      findings.push({ line: i + 1, rule: "not-null-without-default", message: "עמודה חדשה NOT NULL בלי DEFAULT — ה־INSERT של הקוד הישן ייכשל" });
+    }
+  });
+  return findings;
+}
+```
+<p>בצוותים: בדיקה כזו רצה ב־CI על כל קובץ ב־<code>prisma/migrations</code> שהשתנה, ו־pull request עם ממצא צריך אישור מפורש. (יש כלים מוכנים — squawk, למשל.)</p>
+@mistakes
+<ul><li>לסמוך על "זה רק שינוי שם". ל־PostgreSQL הוא מהיר; לקוד הישן שרץ עכשיו — שובר.</li></ul>
+
+@@ P25-E17 | 3 | pipeline עם rollback 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>P25-E17.ts</code>: <code>runPipeline(version, steps, log)</code> ← <code>{ ok, running }</code>, כש־<code>steps</code> הוא <code>{ currentVersion, migrate, deploy, smoke }</code>:</p>
+<ol><li>שומרים את הגרסה שרצה עכשיו.</li><li><code>migrate()</code>. נכשל ← עוצרים: לא עושים deploy בכלל.</li><li><code>deploy(version)</code> ו־<code>smoke(version)</code>. הצליח ← <code>{ ok: true, running: version }</code>.</li><li>deploy זרק או smoke החזיר false ← rollback: <code>deploy(הקודמת)</code>, ו־<code>{ ok: false, running: הקודמת }</code>.</li></ol>
+<p>וכתוב שורות ל־<code>log</code> לאורך הדרך.</p>
+@hint1
+<p>שני בלוקים של try: אחד ל־migrate (בלי rollback — לא שינינו גרסה), ואחד ל־deploy+smoke.</p>
+@hint2
+<p>ה־migration לא "חוזר" ב־rollback. לכן הוא חייב להיות תואם גם לגרסה הקודמת (E04, E16).</p>
+@solution
+```ts save=solutions/P25-E17.ts
+// P25-E17
+export interface Steps {
+  migrate(): Promise<void>;
+  deploy(version: string): Promise<void>;
+  smoke(version: string): Promise<boolean>;
+  currentVersion(): Promise<string>;
+}
+
+export async function runPipeline(version: string, steps: Steps, log: (line: string) => void = () => {}): Promise<{ ok: boolean; running: string }> {
+  const previous = await steps.currentVersion(); // לפני הכול: לאן חוזרים אם משהו נכשל
+  log(`deploy ${version} (עכשיו רץ: ${previous})`);
+  try {
+    await steps.migrate();
+  } catch (err) {
+    log(`migrate נכשל: ${(err as Error).message} — לא עושים deploy`);
+    return { ok: false, running: previous };
+  }
+  try {
+    await steps.deploy(version);
+    if (await steps.smoke(version)) {
+      log(`✔ ${version} רץ ותקין`);
+      return { ok: true, running: version };
+    }
+    log(`smoke נכשל על ${version}`);
+  } catch (err) {
+    log(`deploy נכשל: ${(err as Error).message}`);
+  }
+  // rollback: חוזרים לגרסה הקודמת (ה־migration נשאר — לכן הוא חייב להיות תואם לשתי הגרסאות, E16)
+  log(`rollback ל־${previous}`);
+  await steps.deploy(previous);
+  return { ok: false, running: previous };
+}
+```
+@mistakes
+<ul><li>rollback ל"גרסה הקודמת" שמחושבת <em>אחרי</em> ה־deploy — וזו כבר החדשה.</li></ul>
+
+@@ P25-E18 | 3 | מי הלקוח? X-Forwarded-For 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>P25-E18.ts</code>: <code>clientIp(remoteAddress, forwardedFor, hops)</code> — מה Express עושה עם <code>trust proxy: hops</code>.</p>
+<ul><li><code>forwardedFor</code> — הערך של <code>X-Forwarded-For</code>: רשימה מופרדת בפסיקים. כל proxy מוסיף <strong>בסוף</strong> את הכתובת שהתחברה אליו.</li><li><code>hops</code> — כמה proxies שלנו יש לפני השרת. 0 ← <code>remoteAddress</code>.</li><li>סופרים מהסוף: <code>remoteAddress</code> הוא hop 0, הכתובת האחרונה ברשימה — hop 1, וכן הלאה. רשימה קצרה מ־hops — הכתובת הכי רחוקה שיש.</li></ul>
+<p>הבודק משווה גם ל־<code>req.ip</code> של Express האמיתי.</p>
+@hint1
+<p><code>[remoteAddress, ...list.reverse()]</code> ואז אינדקס <code>hops</code>.</p>
+@hint2
+<p>למה לא את הראשונה ברשימה? כי את הראשונה — הלקוח כתב בעצמו.</p>
+@solution
+```ts save=solutions/P25-E18.ts
+// P25-E18
+// כמו "trust proxy" של Express עם מספר: hops = כמה proxies שלנו יש לפני השרת.
+// X-Forwarded-For הוא רשימה: "<מה שהלקוח כתב>, …, <מה שה־proxy הראשון שלנו ראה>". כל proxy מוסיף בסוף.
+// סומכים רק על hops הכתובות האחרונות — את מה שלפניהן כל אחד יכול לזייף.
+export function clientIp(remoteAddress: string, forwardedFor: string | undefined, hops: number): string {
+  const chain = [remoteAddress, ...(forwardedFor ?? "").split(",").map((s) => s.trim()).filter(Boolean).reverse()];
+  // chain[0] = מי שהתחבר אלינו ישירות; chain[k] = מה ש־proxy מספר k כתב
+  return chain[Math.min(hops, chain.length - 1)];
+}
+```
+@mistakes
+<ul><li><code>trust proxy: true</code> — Express לוקח את הכתובת <em>הראשונה</em>, שהלקוח כתב (E23).</li></ul>
+
+@@ P25-E19 | 3 | retry עם backoff 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>P25-E19.ts</code>:</p>
+<ul><li><code>isRetryable(err)</code> — <code>HttpStatusError</code> עם 429 או 5xx ← כן; 4xx אחר ← לא; כל שגיאה אחרת (רשת) ← כן.</li><li><code>backoffDelays({ retries, baseMs, maxMs, random })</code> ← לכל ניסיון חוזר i (מ־0): <code>Math.floor(random() × min(maxMs, baseMs × 2^i))</code>.</li><li><code>retry(fn, { retries, baseMs, maxMs, random, sleep })</code> — קורא ל־<code>fn(attempt)</code> (מ־1). שגיאה שאפשר לנסות שוב ← <code>sleep(delay)</code> ושוב, עד <code>retries</code> פעמים. אחרת, או כשנגמרו — זורק את השגיאה האחרונה.</li></ul>
+@hint1
+<p>"full jitter": לא מחכים בדיוק 100, 200, 400 — אלא מספר אקראי עד התקרה.</p>
+@hint2
+<p><code>sleep</code> מוזרק — כך הבדיקה לא מחכה באמת.</p>
+@solution
+```ts save=solutions/P25-E19.ts
+// P25-E19
+export class HttpStatusError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+    this.status = status;
+  }
+}
+
+// לנסות שוב — רק כשיש סיכוי שזה יעזור
+export function isRetryable(err: unknown): boolean {
+  if (err instanceof HttpStatusError) return err.status === 429 || err.status >= 500; // 4xx אחר — הבקשה עצמה שגויה
+  return true; // שגיאת רשת: ECONNRESET, timeout
+}
+
+export function backoffDelays({ retries, baseMs, maxMs, random = Math.random }: { retries: number; baseMs: number; maxMs: number; random?: () => number }): number[] {
+  // exponential backoff עם "full jitter": אקראי בין 0 לתקרה — כך אלף לקוחות לא חוזרים באותה שנייה
+  return Array.from({ length: retries }, (_, i) => Math.floor(random() * Math.min(maxMs, baseMs * 2 ** i)));
+}
+
+export async function retry<T>(
+  fn: (attempt: number) => Promise<T>,
+  { retries = 3, baseMs = 200, maxMs = 5_000, random = Math.random, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)) }: { retries?: number; baseMs?: number; maxMs?: number; random?: () => number; sleep?: (ms: number) => Promise<unknown> } = {},
+): Promise<T> {
+  const delays = backoffDelays({ retries, baseMs, maxMs, random });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      if (attempt > retries || !isRetryable(err)) throw err;
+      await sleep(delays[attempt - 1]);
+    }
+  }
+}
+```
+<p>למה jitter? 1,000 לקוחות שנכשלו באותה שנייה (השרת נפל) ומנסים שוב בדיוק אחרי 200ms — יפילו אותו שוב, בדיוק כשהוא עולה. עם jitter הם מתפזרים. ולמה לא לנסות שוב על 4xx? בקשה לא תקינה תישאר לא תקינה; ו־POST שנכשל באמצע — ננסה שוב רק עם Idempotency-Key (פרק 24).</p>
+@mistakes
+<ul><li><code>retry</code> סביב POST בלי Idempotency-Key — כל ניסיון חוזר יכול ליצור עוד הזמנה.</li></ul>
+
+@@ P25-E20 | 4 | workflow מסוכן 🤖 | 20 | שיעור 2
+@task
+<p>ה־workflow ב־<code>P25-E20.yml</code> "עובד". בשבוע הראשון הוא מחק את כל המשתמשים בפרודקשן, ופעם אחרת העלה לאוויר גרסה שהבדיקות שלה נכשלו. מצא את שלוש התקלות ותקן — כך ש־deploy עדיין יריץ <code>migrate deploy</code> על המסד של הפרודקשן.</p>
+@hint1
+<p>איזה <code>DATABASE_URL</code> רואה ה־job של הבדיקות? ומה עושה <code>prisma migrate reset --force</code>?</p>
+@hint2
+<p>מה מחבר בין <code>deploy</code> ל־<code>test</code>? ומתי בכלל <code>deploy</code> רץ?</p>
+@solution
+```yaml save=solutions/P25-E20.yml
+# P25-E20
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # תקלה 1: DATABASE_URL של הפרודקשן היה ב־env של כל ה־workflow — וה־test job הריץ עליו migrate reset.
+    # לבדיקות: מסד משלהן, שירות postgres ב־CI
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate reset --force
+      - run: npm test
+
+  deploy:
+    # תקלה 2: בלי needs, deploy רץ במקביל לבדיקות — גם כשהן נכשלות
+    needs: test
+    # תקלה 3: on: [push, pull_request] בלי תנאי — deploy מכל branch ומכל pull request
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      # הסוד של הפרודקשן — רק בצעד שצריך אותו
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+```
+@mistakes
+<ul><li>"תיקון" של 1 ע"י מחיקת <code>migrate reset</code> — והבדיקות עדיין כותבות לפרודקשן.</li></ul>
+
+@@ P25-E21 | 4 | הגדרות עם שלוש תקלות 🤖 | 15 | שיעור 2
+@task
+<p><code>loadConfig</code> ב־<code>P25-E21.ts</code> עבד מצוין בפיתוח. בפרודקשן: השרת עלה בלי <code>JWT_SECRET</code> (ואף אחד לא שם לב), <code>DEBUG=true</code> לא מדליק כלום, ו־CORS חוסם את הדומיין השני. מצא ותקן.</p>
+@hint1
+<p>מה הטיפוס של כל ערך ב־<code>process.env</code>?</p>
+@hint2
+<p><code>"https://a.com, https://b.com".split(",")</code> — הדפס את התוצאה עם <code>JSON.stringify</code>.</p>
+@solution
+```ts save=solutions/P25-E21.ts
+// P25-E21
+export function loadConfig(env: Record<string, string | undefined>) {
+  const production = env.NODE_ENV === "production";
+  // תקלה 1: בפרודקשן בלי JWT_SECRET — השרת עלה עם "dev-secret", וכל אחד יכול לחתום טוקנים
+  if (production && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) throw new Error("JWT_SECRET חובה בפרודקשן (32+ תווים)");
+  return {
+    production,
+    jwtSecret: env.JWT_SECRET ?? "dev-secret",
+    // תקלה 2: ב־env הכול מחרוזות. "true" === true הוא תמיד false
+    debug: env.DEBUG === "true" || env.DEBUG === "1",
+    // תקלה 3: "https://a.com, https://b.com" ← " https://b.com" עם רווח, שלא שווה ל־Origin של הדפדפן
+    corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5500").split(",").map((o) => o.trim()).filter(Boolean),
+  };
+}
+```
+@mistakes
+<ul><li><code>Boolean(env.DEBUG)</code> — <code>Boolean("false")</code> הוא <code>true</code>.</li></ul>
+
+@@ P25-E22 | 4 | בדיקת עשן שמשקרת 🤖 | 15 | שיעור 3
+@task
+<p><code>smokeCheck</code> ב־<code>P25-E22.ts</code> אומרת "✔" גם כשה־deploy נכשל, ו"✖" כשהכול בסדר אבל השרת עוד מתעורר. שלוש תקלות. מצא ותקן — בלי לשנות את החתימה.</p>
+@hint1
+<p>מה עונה ב־<code>/version</code> בזמן שהגרסה החדשה עוד נבנית?</p>
+@hint2
+<p>גרסה שעלתה, אבל לא מצליחה להתחבר למסד — עוברת?</p>
+@solution
+```ts save=solutions/P25-E22.ts
+// P25-E22
+export async function smokeCheck(base: string, expectCommit: string, { attempts = 30, intervalMs = 5000 } = {}): Promise<boolean> {
+  // תקלה 1: ניסיון אחד. אחרי deploy השרת עוד בונה/מתעורר — "✖" על deploy תקין
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(`${base}/version`);
+      // תקלה 2: res.ok בלבד — הגרסה *הישנה* עונה 200 בזמן שהחדשה נבנית (או אחרי שנכשלה). בודקים את ה־commit
+      if (res.ok && ((await res.json()) as { commit?: string }).commit === expectCommit) {
+        // תקלה 3: גרסה שעלתה בלי מסד היא לא "תקינה" — /ready
+        const ready = await fetch(`${base}/ready`);
+        if (ready.ok) return true;
+      }
+    } catch {
+      // עוד לא עונה
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+```
+@mistakes
+<ul><li>בדיקת עשן ש"תמיד ירוקה" גרועה מבלי בדיקה: היא נותנת ביטחון מזויף.</li></ul>
+
+@@ P25-E23 | 4 | proxy ו־headers עם שלוש תקלות 🤖 | 20 | שיעור 4
+@task
+<p>השרת ב־<code>P25-E23.ts</code> רץ מאחורי proxy אחד (Render). הגבלת הקצב נעקפת עם header אחד, דפדפנים "ננעלים" על HTTPS גם ב־localhost, והשרת מספר לכל אחד על איזו טכנולוגיה הוא רץ. מצא ותקן.</p>
+@hint1
+<p><code>trust proxy: true</code> מול <code>trust proxy: 1</code> — E18.</p>
+@hint2
+<p>מתי מותר לשלוח <code>Strict-Transport-Security</code>? (E07)</p>
+@solution
+```ts save=solutions/P25-E23.ts
+// P25-E23
+import express from "express";
+
+export function createApp({ limit = 5 }: { limit?: number } = {}) {
+  const app = express();
+  // תקלה 1: trust proxy = true — Express לוקח את הכתובת *הראשונה* ב־X-Forwarded-For, שהלקוח כותב בעצמו.
+  // יש בדיוק proxy אחד לפנינו — סומכים על hop אחד
+  app.set("trust proxy", 1);
+  // תקלה 3: X-Powered-By: Express
+  app.disable("x-powered-by");
+  const hits = new Map<string, number>();
+  app.use((req, res, next) => {
+    // תקלה 2: HSTS על HTTP — דפדפן שקיבל אותו מ־localhost מסרב אחר כך ל־http://localhost. רק כשהחיבור מאובטח
+    if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000");
+    const n = (hits.get(req.ip ?? "") ?? 0) + 1;
+    hits.set(req.ip ?? "", n);
+    if (n > limit) return res.status(429).json({ error: "יותר מדי בקשות" });
+    next();
+  });
+  app.post("/login", (req, res) => res.json({ ok: true }));
+  return app;
+}
+```
+@mistakes
+<ul><li>לתקן את 1 עם <code>trust proxy: false</code> — ואז כל המשתמשים "באים" מה־load balancer וחוסמים זה את זה.</li></ul>
+
+@@ P25-E24 | 5 | אתגר: linter ל־workflows 🤖 | 60 | כל הפרק
+@task
+<p>בקובץ <code>P25-E24.ts</code>: <code>lintWorkflow(yamlText)</code> ← רשימת <code>{ job, rule }</code> (<code>job: null</code> לממצא ברמת הקובץ). קוראים את ה־YAML עם <code>js-yaml</code>. כללים:</p>
+<ul><li><code>yaml</code> — לא נקרא (ואז רק הממצא הזה).</li><li><code>permissions</code> — אין <code>permissions</code> ברמת הקובץ.</li><li><code>timeout</code> — job בלי <code>timeout-minutes</code>.</li><li><code>unpinned-action</code> — <code>uses</code> בלי <code>@</code>, או עם <code>@main</code>/<code>@master</code>.</li><li><code>npm-install</code> — <code>run</code> עם <code>npm install</code> / <code>npm i</code>.</li><li><code>secret-in-run</code> — <code>${{ secrets.… }}</code> בתוך טקסט ה־<code>run</code> עצמו (במקום דרך <code>env</code>).</li><li><code>unknown-needs</code> — <code>needs</code> ל־job שלא קיים.</li><li><code>deploy-without-needs</code> — job ששמו כולל "deploy" בלי <code>needs</code>.</li><li><code>pr-secrets</code> — ה־workflow רץ גם ב־<code>pull_request</code>, ה־job משתמש ב־<code>secrets.</code>, וה־<code>if</code> שלו לא מגביל ל־push.</li></ul>
+<p>ה־<code>ci.yml</code> של הפרויקט (שלב ח׳) חייב לצאת נקי.</p>
+@hint1
+<p>ב־YAML 1.1 (למשל PyYAML) המפתח <code>on</code> נקרא כ־<code>true</code>; ב־js-yaml 5 (YAML 1.2) — כ־<code>"on"</code>. כדי לעבוד עם שניהם: <code>wf.on ?? wf["true"]</code>. ו־<code>on</code> יכול להיות מחרוזת, מערך או אובייקט.</p>
+@hint2
+<p>"משתמש בסודות": <code>/secrets\./.test(JSON.stringify(job))</code> — פשוט ומספיק.</p>
+@solution
+```ts save=solutions/P25-E24.ts
+// P25-E24
+import { load as parseYaml } from "js-yaml";
+
+export interface Finding {
+  job: string | null;
+  rule: "yaml" | "permissions" | "timeout" | "unpinned-action" | "npm-install" | "secret-in-run" | "unknown-needs" | "deploy-without-needs" | "pr-secrets";
+}
+
+interface Step { uses?: string; run?: string; env?: Record<string, string> }
+interface Job { needs?: string | string[]; "timeout-minutes"?: number; steps?: Step[]; env?: Record<string, string>; if?: string }
+
+export function lintWorkflow(text: string): Finding[] {
+  let wf: { on?: unknown; permissions?: unknown; jobs?: Record<string, Job>; env?: Record<string, string> } & Record<string, unknown>;
+  try {
+    wf = parseYaml(text) as typeof wf;
+  } catch {
+    return [{ job: null, rule: "yaml" }];
+  }
+  const out: Finding[] = [];
+  const add = (job: string | null, rule: Finding["rule"]) => out.push({ job, rule });
+  if (wf.permissions === undefined) add(null, "permissions");
+  const on = wf.on ?? wf["true"];
+  const onPr = Array.isArray(on) ? on.includes("pull_request") : typeof on === "object" && on !== null ? "pull_request" in on : on === "pull_request";
+  const jobs = wf.jobs ?? {};
+  for (const [name, job] of Object.entries(jobs)) {
+    if (job["timeout-minutes"] === undefined) add(name, "timeout");
+    const steps = job.steps ?? [];
+    if (steps.some((s) => s.uses && (!s.uses.includes("@") || /@(main|master)$/.test(s.uses)))) add(name, "unpinned-action");
+    if (steps.some((s) => /\bnpm (install|i)\b/.test(s.run ?? ""))) add(name, "npm-install");
+    // ${{ secrets.X }} בתוך הסקריפט עצמו: הערך נכנס לטקסט של הסקריפט (וגם injection). דרך env — כמשתנה
+    if (steps.some((s) => /\$\{\{\s*secrets\./.test(s.run ?? ""))) add(name, "secret-in-run");
+    const needs = [job.needs ?? []].flat();
+    if (needs.some((n) => !(n in jobs))) add(name, "unknown-needs");
+    if (/deploy/i.test(name) && needs.length === 0) add(name, "deploy-without-needs");
+    // job שרץ גם על pull request ומשתמש בסודות, בלי if שמגביל ל־push
+    const usesSecrets = /secrets\./.test(JSON.stringify(job));
+    if (onPr && usesSecrets && !/push|refs\/heads/.test(job.if ?? "")) add(name, "pr-secrets");
+  }
+  return out;
+}
+```
+<p>הכלי האמיתי: <strong>actionlint</strong> — מריצים אותו ב־CI על ה־workflows עצמם. ולמה <code>secret-in-run</code>? <code>${{ }}</code> מוחלף בטקסט <em>לפני</em> שה־shell רץ: הסוד הופך לחלק מהסקריפט (ואם הערך מגיע ממשתמש — script injection). דרך <code>env</code> הוא משתנה רגיל.</p>
+@mistakes
+<ul><li>להיכשל על ה־<code>ci.yml</code> של הפרויקט: למשל, לחשוב ש־<code>needs: [test, docker]</code> הוא מחרוזת.</li></ul>
+
+@@ P25-E25 | 5 | אתגר: blue/green 🤖 | 60 | שיעור 3
+@task
+<p>בקובץ <code>P25-E25.ts</code>: מחלקה <code>BlueGreen</code> מעל <code>Platform</code> (<code>start(color, version)</code>, <code>healthy(color)</code>, <code>stop(color)</code>):</p>
+<ul><li><code>live</code> — <code>{ color, version }</code> של מה שמקבל תנועה, או <code>null</code>. <code>history</code> — הגרסאות שקיבלו תנועה, לפי הסדר (עותק).</li><li><code>deploy(version, { attempts = 5 })</code>: מעלה את הגרסה ב"צבע" הפנוי (בפעם הראשונה — blue), בודק <code>healthy</code> עד <code>attempts</code> פעמים. תקין ← התנועה עוברת אליו, <code>true</code>. לא ← <code>stop</code> על הפנוי, התנועה לא זזה, <code>false</code>.</li><li><code>rollback()</code>: אם בצבע השני רצה גרסה תקינה — התנועה עוברת אליה, <code>true</code>. אחרת <code>false</code>.</li><li><code>retireIdle()</code>: עוצר את הצבע שלא מקבל תנועה (ואז אין rollback מיידי).</li></ul>
+@hint1
+<p>שמור <code>#live</code> ו־<code>#versions: { blue?, green? }</code>. הצבע הפנוי: ההפך מ־<code>#live</code>.</p>
+@hint2
+<p>שדות פרטיים עם <code>#</code>, ו־<code>constructor(platform)</code> שמציב אותם — לא parameter properties.</p>
+@solution
+```ts save=solutions/P25-E25.ts
+// P25-E25
+export type Color = "blue" | "green";
+
+export interface Platform {
+  start(color: Color, version: string): Promise<void>;
+  healthy(color: Color): Promise<boolean>;
+  stop(color: Color): Promise<void>;
+}
+
+// blue/green: שתי "סביבות". אחת מקבלת תנועה; את החדשה מעלים בשנייה, בודקים — ורק אז מעבירים תנועה.
+// rollback = להעביר את התנועה בחזרה, מיד, כי הישנה עוד רצה
+export class BlueGreen {
+  #platform: Platform;
+  #live: Color | null = null;
+  #versions: Partial<Record<Color, string>> = {};
+  #history: string[] = [];
+
+  constructor(platform: Platform) {
+    this.#platform = platform;
+  }
+
+  get live() {
+    return this.#live === null ? null : { color: this.#live, version: this.#versions[this.#live]! };
+  }
+
+  get history() {
+    return [...this.#history];
+  }
+
+  async deploy(version: string, { attempts = 5 } = {}): Promise<boolean> {
+    const idle: Color = this.#live === "blue" ? "green" : "blue";
+    await this.#platform.start(idle, version);
+    this.#versions[idle] = version;
+    for (let i = 0; i < attempts; i++) {
+      if (await this.#platform.healthy(idle)) {
+        this.#live = idle; // המעבר עצמו — אטומי. אף בקשה לא מגיעה לגרסה שלא עברה בדיקה
+        this.#history.push(version);
+        return true;
+      }
+    }
+    await this.#platform.stop(idle); // לא עבר — עוצרים. התנועה בכלל לא זזה
+    delete this.#versions[idle];
+    return false;
+  }
+
+  async rollback(): Promise<boolean> {
+    if (this.#live === null) return false;
+    const other: Color = this.#live === "blue" ? "green" : "blue";
+    if (!this.#versions[other] || !(await this.#platform.healthy(other))) return false;
+    this.#live = other;
+    this.#history.push(this.#versions[other]!);
+    return true;
+  }
+
+  // אחרי שהחדשה יציבה — משחררים את הישנה (וגם את האפשרות ל־rollback מיידי)
+  async retireIdle(): Promise<void> {
+    if (this.#live === null) return;
+    const other: Color = this.#live === "blue" ? "green" : "blue";
+    if (this.#versions[other]) {
+      await this.#platform.stop(other);
+      delete this.#versions[other];
+    }
+  }
+}
+```
+<p>היתרון: rollback בשנייה, כי הישנה עדיין רצה. המחיר: פעמיים משאבים בזמן ה־deploy, ו־migrations שחייבים להתאים לשתי הגרסאות (E04). פלטפורמות כמו Render עושות גרסה של זה בשבילך: הגרסה החדשה מקבלת תנועה רק אחרי שה־health check שלה עובר.</p>
+@mistakes
+<ul><li>להעביר תנועה ואז לבדוק — אז המשתמשים הם הבדיקה.</li></ul>
