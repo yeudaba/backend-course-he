@@ -1,0 +1,127 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מחסנית ותור — ומה <code>shift</code> עושה לביצועים.</li>
+      <li>רקורסיה: עץ קטגוריות, מקרה בסיס, ומתי היא מתפוצצת.</li>
+      <li>מיון וחיפוש בינארי.</li>
+      <li>גרפים: BFS לדרך הקצרה, ומיון טופולוגי לתלויות.</li>
+      <li>תכנון דינמי: רקורסיה שזוכרת.</li>
+    </ul>
+  </div>
+
+  <h2>1. מחסנית ותור</h2>
+  <p><strong>מחסנית</strong> (stack, LIFO): <code>push</code> ו־<code>pop</code> — האחרון שנכנס יוצא ראשון. undo, "חזור" בדפדפן, סוגריים (E09), ו־call stack של JavaScript עצמו (פרק 10). <strong>תור</strong> (queue, FIFO): הראשון שנכנס יוצא ראשון — עבודות ברקע (פרק 26), בקשות שמחכות, BFS.</p>
+  <p>מחסנית ב־JavaScript — מערך רגיל. תור — <code>push</code> ו־<code>shift</code>, עם הסתייגות. לפי ההגדרה <code>shift()</code> מזיז את כל האיברים מקום אחד: O(n). V8 (המנוע של Node) מקצר את ההתחלה של מערכים קטנים בלי להעתיק, אז בפועל זה תלוי בגודל. מדדתי ריקון של תור עם <code>while (q.length) q.shift()</code>:</p>
+  <div class="table-wrap"><table>
+    <tr><th>איברים</th><th>מספרים</th><th>מערכים קטנים (<code>[x, y]</code>)</th></tr>
+    <tr><td>10,000</td><td>0.5ms</td><td>0.5ms</td></tr>
+    <tr><td>100,000</td><td>768ms</td><td>8,225ms</td></tr>
+  </table></div>
+  <p>פי 10 איברים ← פי 1,500 עד 16,000 זמן: מעבר לגודל מסוים האופטימיזציה נעלמת ומקבלים O(n²) מלא. ב־BFS על רשת זה כמעט לא קורה — בתור יש רק את ה"חזית", כמה מאות תאים. בתור שיכול להגיע למאות אלפים — אינדקס <code>head</code> שרץ קדימה, בלי להוציא כלום מהמערך (כמו בפתרון של E15). והלקח הכללי: Big-O אומר מה <em>יכול</em> לקרות; מדידה אומרת מה קורה אצלך.</p>
+
+  <h2>2. רקורסיה</h2>
+  <p>פונקציה שקוראת לעצמה על חלק קטן יותר של הבעיה, עד <strong>מקרה בסיס</strong> שעונים עליו ישירות. ב־Backend הדוגמה הקלאסית היא עץ: קטגוריות ותתי־קטגוריות, תגובות ותשובות, תיקיות.</p>
+```ts run
+type Category = { name: string; products: number; children: Category[] };
+const tree: Category = {
+  name: "קפה", products: 2, children: [
+    { name: "פולים", products: 14, children: [] },
+    { name: "ציוד", products: 3, children: [
+      { name: "מטחנות", products: 6, children: [] },
+      { name: "קומקומים", products: 4, children: [] },
+    ] },
+  ],
+};
+
+// כמה מוצרים בקטגוריה — כולל כל מה שמתחתיה
+const total = (c: Category): number => c.products + c.children.reduce((s, child) => s + total(child), 0);
+// הדפסה עם הזחה — העומק עובר כפרמטר
+const show = (c: Category, depth = 0): void => {
+  console.log(`${"  ".repeat(depth)}${c.name} (${total(c)})`);
+  c.children.forEach((child) => show(child, depth + 1));
+};
+show(tree);
+```
+```out
+קפה (29)
+  פולים (14)
+  ציוד (13)
+    מטחנות (6)
+    קומקומים (4)
+```
+  <p>שתי סכנות: <strong>אין מקרה בסיס</strong> (או נתונים עם מעגל — קטגוריה שהיא ההורה של עצמה) ← <code>RangeError: Maximum call stack size exceeded</code>. ו<strong>עומק</strong>: Node מחזיק עומק של כ־12,000 קריאות (מדדתי 12,525 בפונקציה ריקה — פחות כשיש משתנים מקומיים); רשימה מקושרת של מיליון איברים ברקורסיה תיפול — שם לולאה עם מחסנית מפורשת. במסד, עצים נשלפים עם <code>WITH RECURSIVE</code> — אותו רעיון בתוך SQL.</p>
+
+  <h2>3. מיון וחיפוש בינארי</h2>
+  <p>בראיון כמעט אף פעם לא מבקשים לממש מיון — <code>sort</code> של JavaScript הוא O(n log n) (TimSort). מה שכן שואלים: <strong>מה המיון קונה לך.</strong> אחרי מיון, הרבה בעיות נהיות מעבר אחד: מרווחים חופפים (E13), "אירועים לאורך זמן" (E19), כפילויות סמוכות. וחיפוש בינארי:</p>
+```ts file=P27-E10.ts
+let lo = 0, hi = sorted.length;          // התשובה תמיד בתוך [lo, hi)
+while (lo < hi) {
+  const mid = (lo + hi) >>> 1;
+  if (sorted[mid] < x) lo = mid + 1;      // mid קטן מדי ← התשובה מימין לו
+  else hi = mid;                          // mid מועמד ← אולי יש מוקדם יותר
+}
+return lo;                                // האינדקס הראשון שבו sorted[i] >= x
+```
+  <p>מיליון ערכים ← 20 צעדים. מיליארד ← 30. זה גם מה שאינדקס B-tree במסד עושה (בעץ רחב במקום מערך), ולכן <code>WHERE price BETWEEN 20 AND 35</code> עם אינדקס מהיר גם על טבלה ענקית. הנוסח עם <code>[lo, hi)</code> ו־<code>lowerBound</code> הוא הכי פחות מועד לטעויות — וטעויות פה נפוצות מאוד (E20).</p>
+
+  <h2>4. גרפים</h2>
+  <p>גרף = צמתים וקשתות. מחסן עם מעברים, משתמשים וחברים, שירותים שתלויים זה בזה, migrations. שני הכלים שמכסים את רוב שאלות הראיון:</p>
+  <p><strong>BFS</strong> — סריקה "בגלים" עם תור: כל מה שבמרחק 1, אחר כך 2... הפעם הראשונה שמגיעים ליעד — היא הקצרה. "כמה לחיצות מדף A לדף B", "חבר של חבר".</p>
+```ts run
+const friends: Record<string, string[]> = {
+  dana: ["yossi", "noa"], yossi: ["dana", "avi"], noa: ["dana", "avi", "maya"],
+  avi: ["yossi", "noa", "omer"], maya: ["noa"], omer: ["avi"],
+};
+function degrees(from: string) {
+  const dist = new Map([[from, 0]]);
+  const queue = [from];
+  for (let head = 0; head < queue.length; head++) {
+    const user = queue[head];
+    for (const f of friends[user]) {
+      if (dist.has(f)) continue;         // מסמנים כשמכניסים — כל צומת נכנס פעם אחת
+      dist.set(f, dist.get(user)! + 1);
+      queue.push(f);
+    }
+  }
+  return Object.fromEntries(dist);
+}
+console.log(degrees("dana"));
+```
+```out
+{ dana: 0, yossi: 1, noa: 1, avi: 2, maya: 2, omer: 3 }
+```
+  <p><strong>DFS</strong> — לעומק, עם רקורסיה או מחסנית: "האם יש דרך בכלל", לעבור על כל העץ, למצוא מעגל. לא נותן את הדרך הקצרה (E22). ו<strong>מיון טופולוגי</strong> — "סדר שבו כל אחד אחרי התלויות שלו": מתחילים ממי שאין לו תלויות, ו"משחררים" את מי שחיכה (E17). כך Nest בונה providers, כך Compose מעלה שירותים עם <code>depends_on</code>, וכך כלי migrations מחליטים על סדר.</p>
+  <p>סיבוכיות של BFS ו־DFS: O(V + E) — כל צומת וכל קשת פעם אחת. ברשת של w×h: O(w·h).</p>
+
+  <h2>5. תכנון דינמי</h2>
+  <p>"בכמה דרכים אפשר להחזיר עודף של 200 אגורות?" הרקורסיה הטבעית — "לכל מטבע, פתור את השאר" — מחשבת את אותן תתי־בעיות שוב ושוב, ומספר הקריאות מתפוצץ. <strong>תכנון דינמי</strong> = לזכור כל תשובה ולא לחשב פעמיים. הדוגמה הכי קטנה:</p>
+```ts run
+let calls = 0;
+const fib = (n: number): number => (calls++, n < 2 ? n : fib(n - 1) + fib(n - 2));
+console.log("fib(30) =", fib(30), "· קריאות:", calls);
+
+calls = 0;
+const memo = new Map<number, number>();
+const fibMemo = (n: number): number => {
+  calls++;
+  if (n < 2) return n;
+  if (!memo.has(n)) memo.set(n, fibMemo(n - 1) + fibMemo(n - 2));
+  return memo.get(n)!;
+};
+console.log("fibMemo(30) =", fibMemo(30), "· קריאות:", calls);
+```
+```out
+fib(30) = 832040 · קריאות: 2692537
+fibMemo(30) = 832040 · קריאות: 59
+```
+  <p>אותו רעיון בגרסה "מלמטה למעלה": מערך <code>best[0..amount]</code> שממלאים מ־0 (E24). הסימנים בשאלה: "כמה דרכים", "מה המינימום / המקסימום", והתשובה לבעיה גדולה בנויה מתשובות לבעיות קטנות שחוזרות על עצמן. בראיון ל־Junior לרוב תפגוש לכל היותר אחת כזו — ושווה לזהות את הצורה.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 Trie: לבנות בשביל הקריאה</span>
+    <p>E25 (השלמה אוטומטית) מסכם את השיעור: עץ (Trie) שבו כל צומת הוא אות, וכל צומת זוכר את המובילים שמתחתיו. הכתיבה יקרה יותר, כדי שהקריאה תהיה מיידית — כמו אינדקס במסד וכמו cache. בעולם האמיתי — <code>pg_trgm</code> של PostgreSQL או מנוע חיפוש. אבל ה"למה" זהה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P27-E09">E09</a> · <a href="exercises.html#P27-E10">E10</a> · <a href="exercises.html#P27-E13">E13</a> · <a href="exercises.html#P27-E15">E15</a> · <a href="exercises.html#P27-E17">E17</a> · <a href="exercises.html#P27-E19">E19</a> · <a href="exercises.html#P27-E20">E20</a> · <a href="exercises.html#P27-E22">E22</a> · <a href="exercises.html#P27-E24">E24</a> · <a href="exercises.html#P27-E25">E25</a></p>
+  </div>

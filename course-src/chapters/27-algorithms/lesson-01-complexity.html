@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מדידה אמיתית: אותה פונקציה, שני מבני נתונים, פער של פי 4,000.</li>
+      <li>Big-O: מה זה, ואיך מחשבים בלי מתמטיקה.</li>
+      <li>המחירים של פונקציות מובנות ב־JavaScript.</li>
+      <li>זמן מול זיכרון — ומתי בכלל אכפת לנו.</li>
+      <li>תוכנית: 2–3 שאלות בשבוע, מאיזה פרק.</li>
+    </ul>
+  </div>
+
+  <h2>1. אותו קוד, פי 4,000</h2>
+  <p>"האם ה־email כבר נרשם?" — שתי גרסאות, שתיהן נכונות:</p>
+```ts
+const seen: string[] = [];
+for (const e of emails) { if (seen.includes(e)) …; seen.push(e); }   // מערך
+
+const seen = new Set<string>();
+for (const e of emails) { if (seen.has(e)) …; seen.add(e); }          // Set
+```
+  <p>מדדתי על Node 24, עם emails שונים (המקרה הגרוע — אף פעם לא נמצא):</p>
+  <div class="table-wrap"><table>
+    <tr><th>כמות</th><th>מערך + <code>includes</code></th><th>Set + <code>has</code></th></tr>
+    <tr><td>10,000</td><td>1,021ms</td><td>1.7ms</td></tr>
+    <tr><td>20,000</td><td>2,335ms</td><td>3.6ms</td></tr>
+    <tr><td>40,000</td><td>12,298ms</td><td>7.9ms</td></tr>
+    <tr><td>80,000</td><td>60,878ms</td><td>16.3ms</td></tr>
+  </table></div>
+  <p>ב־Set: פי 2 נתונים ← פי 2 זמן. במערך: פי 2 נתונים ← פי 4 זמן (ובפועל אפילו יותר — מעבר לגודל מסוים, הזיכרון של המעבד כבר לא מכיל את המערך, וכל השוואה איטית יותר). דקה שלמה ל־80,000 משתמשים. עם 10 משתמשים בבדיקות המקומיות — שתי הגרסאות מיידיות. לכן הבאג הזה מגיע לפרודקשן.</p>
+
+  <h2>2. Big-O</h2>
+  <p>Big-O עונה על שאלה אחת: <strong>כשהקלט גדל, איך העבודה גדלה?</strong> לא סופרים מילישניות ולא מחשבים מדויק — רק את הצורה:</p>
+  <div class="table-wrap"><table>
+    <tr><th>סימון</th><th>n פי 10 ← הזמן</th><th>דוגמה</th></tr>
+    <tr><td><code>O(1)</code></td><td>אותו דבר</td><td><code>map.get</code>, <code>set.has</code>, <code>arr[i]</code>, <code>arr.push</code></td></tr>
+    <tr><td><code>O(log n)</code></td><td>+ צעד אחד בערך</td><td>חיפוש בינארי, אינדקס B-tree במסד</td></tr>
+    <tr><td><code>O(n)</code></td><td>פי 10</td><td>לולאה אחת, <code>includes</code>, <code>filter</code>, <code>map</code></td></tr>
+    <tr><td><code>O(n log n)</code></td><td>קצת יותר מפי 10</td><td><code>sort</code></td></tr>
+    <tr><td><code>O(n²)</code></td><td>פי 100</td><td>לולאה בתוך לולאה על אותם נתונים</td></tr>
+    <tr><td><code>O(2ⁿ)</code></td><td>לא יסתיים</td><td>לבדוק כל תת־קבוצה; רקורסיה שמחשבת אותו דבר שוב ושוב (E24)</td></tr>
+  </table></div>
+  <p>ואיך מחשבים? סופרים כמה פעמים השורה הפנימית רצה:</p>
+```ts run
+let ops = 0;
+const linear = (n: number) => { for (let i = 0; i < n; i++) ops++; };
+const quadratic = (n: number) => { for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) ops++; };
+const binary = (n: number) => { let lo = 0, hi = n; while (lo < hi) { ops++; const mid = (lo + hi) >> 1; if (mid < n - 1) lo = mid + 1; else hi = mid; } };
+
+for (const n of [10, 100, 1000, 10000]) {
+  const row = [linear, quadratic, binary].map((f) => { ops = 0; f(n); return ops; });
+  console.log(`n=${n}`.padEnd(8), row.map((x) => String(x).padStart(10)).join(""));
+}
+```
+```out
+n=10             10       100         3
+n=100           100     10000         7
+n=1000         1000   1000000        10
+n=10000       10000 100000000        13
+```
+  <p>שלושה כללים שמספיקים כמעט תמיד:</p>
+  <ul>
+    <li><strong>רצף ← הכי גדול.</strong> לולאה ואחריה מיון: O(n) + O(n log n) = O(n log n).</li>
+    <li><strong>קינון ← כפל.</strong> לולאה על n, ובתוכה <code>includes</code> על n: O(n²). על n משתמשים ו־m הזמנות: O(n·m).</li>
+    <li><strong>קבועים לא משנים.</strong> שתי לולאות נפרדות — עדיין O(n). אבל בעולם האמיתי, "פי 2" כן משנה כשמדובר בשאילתה למסד בכל איטרציה.</li>
+  </ul>
+  <p>ובראיון מוסיפים <strong>זיכרון</strong>: הגרסה עם Set היא O(n) זמן <em>וגם</em> O(n) זיכרון נוסף. זו כמעט תמיד עסקה טובה — אבל צריך להגיד אותה.</p>
+
+  <h2>3. המחירים של JavaScript</h2>
+  <div class="table-wrap"><table>
+    <tr><th>פעולה</th><th>מחיר</th><th>הערה</th></tr>
+    <tr><td><code>arr[i]</code>, <code>push</code>, <code>pop</code>, <code>length</code></td><td>O(1)</td><td></td></tr>
+    <tr><td><code>includes</code>, <code>indexOf</code>, <code>find</code>, <code>findIndex</code>, <code>some</code></td><td>O(n)</td><td>לולאה מוסתרת — הבאג הנפוץ ביותר</td></tr>
+    <tr><td><code>shift</code>, <code>unshift</code>, <code>splice</code> באמצע</td><td>O(n)</td><td>מזיזים את כל השאר. V8 מקצר מערכים קטנים בלי להעתיק — על אלפים לא תרגיש; על מאות אלפים כן (שיעור 3)</td></tr>
+    <tr><td><code>slice</code>, <code>[...arr]</code>, <code>concat</code></td><td>O(n)</td><td>עותק. <code>result = [...result, x]</code> בלולאה = O(n²)</td></tr>
+    <tr><td><code>sort</code></td><td>O(n log n)</td><td>ממיין <em>במקום</em>, ובלי פונקציה — כמחרוזות (E05)</td></tr>
+    <tr><td><code>Map</code>/<code>Set</code>: <code>get</code>, <code>has</code>, <code>set</code>, <code>add</code>, <code>delete</code></td><td>O(1) בממוצע</td><td>שומרים סדר הכנסה</td></tr>
+    <tr><td><code>key in obj</code>, <code>obj[key]</code></td><td>O(1) בממוצע</td><td>אבל למפתחות דינמיים — Map (פרק 7)</td></tr>
+    <tr><td><code>str += x</code> בלולאה</td><td>בפועל מהיר</td><td>מנועים מודרניים מטפלים בזה; <code>parts.join("")</code> — בטוח תמיד</td></tr>
+  </table></div>
+
+  <div class="box tip">
+    <span class="box-title">💡 Big-O ב־Backend</span>
+    <p>בשרת, ה־n הגדול הוא לרוב לא מערך בזיכרון — הוא המסד. "שאילתה בתוך לולאה" (N+1, פרק 19) היא O(n) <em>שאילתות</em>, כל אחת מילישנייה או יותר — הרבה יותר גרוע מ־O(n²) בזיכרון על n קטן. ו־Seq Scan על טבלה של מיליון שורות הוא O(n) לכל בקשה, כשאינדקס הוא O(log n) (פרק 18). אותה חשיבה, יחידות אחרות.</p>
+  </div>
+
+  <h2>4. תוכנית: 2–3 שאלות בשבוע</h2>
+  <p>ראיונות לא עוברים בדחיסה של שבוע. לפי האפיון, מתחילים מפרק 6 ופותרים 2–3 בשבוע. הטבלה — מה צריך לדעת לכל תרגיל (גם אם כבר עברת את הפרקים, זה סדר טוב):</p>
+  <div class="table-wrap"><table>
+    <tr><th>אחרי פרק</th><th>תרגילים</th></tr>
+    <tr><td>6 (מערכים)</td><td>E05 · E09 · E10 · E11 · E13 · E19 · E20 · E24</td></tr>
+    <tr><td>7 (אובייקטים, Map ו־Set)</td><td>E01 · E02 · E06 · E07 · E08 · E14 · E15 · E17 · E21 · E22 · E25</td></tr>
+    <tr><td>12 (מחלקות)</td><td>E16</td></tr>
+    <tr><td>17 (JOIN, תת־שאילתות, window functions)</td><td>E12 · E18 · E23</td></tr>
+    <tr><td>פרויקט 3</td><td>E03 · E04 — ושוב E04 לפני כל ראיון</td></tr>
+  </table></div>
+  <p>ואחרי הקורס: אתרים כמו LeetCode ו־NeetCode מסדרים מאות שאלות לפי אותם דפוסים. 50–80 שאלות "Easy" ו"Medium" מכסות את רוב מה שנשאל בראיונות ל־Junior.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P27-E01">E01</a> · <a href="exercises.html#P27-E05">E05</a> · <a href="exercises.html#P27-E06">E06</a> · <a href="exercises.html#P27-E07">E07</a></p>
+  </div>

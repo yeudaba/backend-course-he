@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map, Set וחלון נע — פרק 27</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 27</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — Map, Set וחלון נע</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>ארבעה דפוסים עם Map ו־Set: "ראיתי כבר", "ההשלמה", ספירה, ומפתח קנוני.</li>
+      <li>שני מצביעים וחלון נע: O(n) במקום O(n²).</li>
+      <li>Map כמבנה עם סדר: LRU cache בעשר שורות.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה Map ו־Set מהירים</h2>
+  <p>Set לא מחפש. הוא מחשב מהמפתח מספר (<strong>hash</strong>), והמספר אומר באיזה "תא" בזיכרון לחפש. לכן <code>has</code> לוקח אותו זמן עם 10 איברים ועם מיליון — O(1) בממוצע. ("בממוצע" — כי שני מפתחות יכולים לקבל אותו תא, ואז בודקים את שניהם. במנועים מודרניים זה כמעט לא מורגש.) המחיר: זיכרון נוסף, ואין סדר לפי ערך — רק לפי הכנסה.</p>
+  <p>אותו רעיון כמו אינדקס hash במסד, ו־<code>GET key</code> ב־Redis. ברוב שאלות הראיון, השאלה הראשונה שכדאי לשאול את עצמך: <strong>"מה אני מחפש שוב ושוב — ואפשר לשים את זה ב־Map?"</strong></p>
+
+  <h2>2. ארבעה דפוסים</h2>
+<pre><code class="lang-ts">// 1. "ראיתי כבר?" — Set
+const seen = new Set&lt;string&gt;();
+const firstRepeat = ["dana", "yossi", "noa", "yossi", "dana"].find((u) =&gt; (seen.has(u) ? true : (seen.add(u), false)));
+console.log("ראשון שחוזר:", firstRepeat);
+
+// 2. "ההשלמה" — Map של ערך ← אינדקס (Two Sum)
+const prices = [89, 119, 30, 70, 24];
+const at = new Map&lt;number, number&gt;();
+for (let j = 0; j &lt; prices.length; j++) {
+  const i = at.get(100 - prices[j]);
+  if (i !== undefined) { console.log("זוג ל־100:", [i, j]); break; }
+  at.set(prices[j], j);
+}
+
+// 3. ספירה — Map של ערך ← כמה
+const counts = new Map&lt;string, number&gt;();
+for (const item of ["latte", "mocha", "latte", "tea", "latte"]) counts.set(item, (counts.get(item) ?? 0) + 1);
+console.log("ספירה:", Object.fromEntries(counts));
+
+// 4. מפתח קנוני — מקבצים לפי צורה מנורמלת
+const groups = new Map&lt;string, string[]&gt;();
+for (const email of ["Dana@x.com", "yossi@x.com", " dana@X.com"]) {
+  const key = email.trim().toLowerCase();
+  groups.set(key, [...(groups.get(key) ?? []), email]);
+}
+console.log("קבוצות:", [...groups.values()]);</code></pre>
+<pre class="terminal">ראשון שחוזר: yossi
+זוג ל־100: [ 2, 3 ]
+ספירה: { latte: 3, mocha: 1, tea: 1 }
+קבוצות: [ [ 'Dana@x.com', ' dana@X.com' ], [ 'yossi@x.com' ] ]</pre>
+  <ul>
+    <li><strong>"ראיתי כבר"</strong> — כפילויות, "הראשון שחוזר", מעגל ברשימה (E06, E21).</li>
+    <li><strong>"ההשלמה"</strong> — לכל איבר שואלים: "האם מה שחסר לי כבר הופיע?" במקום לולאה פנימית שמחפשת אותו (E07). שים לב לסדר: <em>קודם</em> בודקים, <em>אחר כך</em> מוסיפים — אחרת 50 מוצא את עצמו.</li>
+    <li><strong>ספירה</strong> — "הכי נפוץ", "הכי נמכרים", "האם שתי מחרוזות הן אנגרמות" (E14).</li>
+    <li><strong>מפתח קנוני</strong> — מנרמלים, ואז מקבצים או משווים (E08). זה בדיוק <code>GROUP BY lower(email)</code>, או אינדקס UNIQUE על <code>lower(email)</code> במסד.</li>
+  </ul>
+
+  <h2>3. שני מצביעים וחלון נע</h2>
+  <p>"הכי הרבה בקשות בדקה אחת", "הרצף הארוך ביותר בלי תו חוזר", "תת־מערך עם סכום X". הגרסה הנאיבית: לכל נקודת התחלה — לולאה שסופרת קדימה. O(n²). הגרסה הטובה: שני אינדקסים, <code>left</code> ו־<code>right</code>, ששניהם רק מתקדמים:</p>
+<span class="file-label">P27-E11.ts</span>
+<pre><code class="lang-ts">let left = 0;
+for (let right = 0; right &lt; timestamps.length; right++) {
+  while (timestamps[right] - timestamps[left] &gt;= windowMs) left++;   // החלון ארוך מדי ← מכווצים משמאל
+  const count = right - left + 1;                                    // מה שבין left ל־right — בתוך החלון
+  …
+}</code></pre>
+  <p>יש <code>while</code> בתוך <code>for</code> — ובכל זאת O(n): <code>left</code> מתקדם לכל היותר n פעמים <em>בסך הכול</em>, לא n פעמים לכל <code>right</code>. כשמסבירים סיבוכיות בראיון, זה בדיוק סוג הנימוק שמראיינים מחפשים: "כל איבר נכנס לחלון פעם אחת ויוצא פעם אחת".</p>
+  <p>נשמע מוכר? זה ה־sliding window של הגבלת קצב (פרק 24) וה־sorted set עם <code>ZREMRANGEBYSCORE</code> (פרק 26): להוציא מה שיצא מהחלון, ולספור מה שנשאר.</p>
+
+  <h2>4. Map עם סדר: LRU</h2>
+  <p>LRU (Least Recently Used) — cache מוגבל בגודל, שכשהוא מתמלא מוציא את מי שהכי מזמן לא נגעו בו. שאלה אהובה בראיונות Backend, כי היא משלבת מבנה נתונים עם בעיה אמיתית. ב־JavaScript הטריק הוא ש־Map זוכר סדר הכנסה:</p>
+<pre><code class="lang-ts">const lru = new Map&lt;string, number&gt;();
+const touch = (k: string, v: number) =&gt; { lru.delete(k); lru.set(k, v); if (lru.size &gt; 3) lru.delete(lru.keys().next().value!); };
+
+touch("a", 1); touch("b", 2); touch("c", 3);
+touch("a", 1);           // a "נגע" ← עובר לסוף
+touch("d", 4);           // מלא ← יוצא הוותיק: b
+console.log([...lru.keys()]);</code></pre>
+<pre class="terminal">[ 'c', 'a', 'd' ]</pre>
+  <p>הפתרון ה"קלאסי" בשפות אחרות הוא hash map + רשימה מקושרת כפולה. בראיון אפשר להגיד: "ב־JavaScript, Map שומר סדר — אז delete ו־set מעבירים לסוף ב־O(1). אם תרצה, אממש עם רשימה מקושרת". זה מראה שאתה מכיר גם את השפה וגם את הרעיון. (E16 — עם <code>get</code>, <code>size</code> ובדיקת קלט.)</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ מתי Map לא מתאים</span>
+    <ul>
+      <li><strong>צריך סדר לפי ערך</strong> ("הכי זול", "בין 20 ל־35") — Map לא עוזר. מיון + חיפוש בינארי (שיעור 3), או במסד: אינדקס B-tree.</li>
+      <li><strong>מפתח שהוא אובייקט</strong> — Map משווה לפי <em>זהות</em>: <code>map.get({ id: 1 })</code> לא ימצא אובייקט אחר עם אותו id. משתמשים במפתח פרימיטיבי (<code>id</code>, או מחרוזת קנונית).</li>
+    </ul>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P27-E02">E02</a> · <a href="exercises.html#P27-E08">E08</a> · <a href="exercises.html#P27-E11">E11</a> · <a href="exercises.html#P27-E14">E14</a> · <a href="exercises.html#P27-E16">E16</a> · <a href="exercises.html#P27-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-complexity.html"><small>הקודם</small>שיעור 1 — סיבוכיות: למה קוד נכון מפיל שרת</a><a href="lesson-03-search-graphs.html"><small>הבא</small>שיעור 3 — מחסנית, חיפוש בינארי, גרפים ו־DP</a></div>
+</main>
+</body>
+</html>
