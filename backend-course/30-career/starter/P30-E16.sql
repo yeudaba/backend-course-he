@@ -1,0 +1,3 @@
+-- P30-E16
+-- cohort: לכל חודש של הזמנה ראשונה (paid, שעון ישראל) — כמה לקוחות חדשים, וכמה מהם הזמינו (paid) שוב בחודש שאחריו.
+-- עמודות: cohort ('YYYY-MM'), customers, returned_next_month — לפי cohort
