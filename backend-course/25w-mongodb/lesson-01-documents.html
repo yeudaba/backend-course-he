@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מסמכים במקום שורות — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — מסמכים במקום שורות</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה מסמך, ואיך הזמנה נראית ב־Mongo מול שלוש טבלאות ב־PostgreSQL.</li>
+      <li>database, collection, מסמך — ו־<code>_id</code>.</li>
+      <li>BSON: הטיפוסים ש־JSON לא מכיר, ו־ObjectId.</li>
+      <li>הפעולות הראשונות מ־Node.js: <code>insertOne</code>, <code>find</code>, <code>findOne</code>, projection.</li>
+      <li>"בלי schema" — מה זה אומר באמת.</li>
+    </ul>
+  </div>
+
+  <h2>1. הזמנה אחת, שתי צורות</h2>
+  <p>ב־PostgreSQL (פרק 17) הזמנה היא שורה ב־<code>orders</code>, ועוד שורה ב־<code>order_items</code> לכל פריט, ו־JOIN שמחבר אותן. ב־MongoDB הזמנה היא <strong>מסמך</strong> אחד — אובייקט, בדיוק כמו ב־JavaScript, שהפריטים הם מערך בתוכו:</p>
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="הזמנה כשלוש טבלאות מול הזמנה כמסמך אחד עם מערך פריטים">
+      <g style="stroke-width:2">
+        <rect x="390" y="20" width="310" height="70" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="390" y="110" width="310" height="120" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="330" height="210" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g class="mono" direction="ltr" style="font-size:12px">
+        <text x="405" y="44" style="font-weight:700">orders</text>
+        <text x="405" y="70">id=1 · customer_id=1 · status=delivered</text>
+        <text x="405" y="134" style="font-weight:700">order_items</text>
+        <text x="405" y="160">order_id=1 · product_id=1 · qty=2</text>
+        <text x="405" y="184">order_id=1 · product_id=5 · qty=1</text>
+        <text x="405" y="212" style="fill:var(--muted)">JOIN ON order_id</text>
+        <text x="35" y="46">{</text>
+        <text x="50" y="70">_id: "o1",</text>
+        <text x="50" y="92">customerId: "c1",</text>
+        <text x="50" y="114">status: "delivered",</text>
+        <text x="50" y="136">items: [</text>
+        <text x="66" y="158">{ productId: "p1", qty: 2, price: 62 },</text>
+        <text x="66" y="180">{ productId: "p5", qty: 1, price: 89 }</text>
+        <text x="50" y="202">],  total: 213</text>
+        <text x="35" y="222">}</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: מימין — שתי טבלאות ו־JOIN. משמאל — מסמך אחד. קוראים אותו בבת אחת, וכותבים אותו בבת אחת.</figcaption>
+  </figure>
+  <p>המונחים: <strong>database</strong> (כמו ב־Postgres) מכיל <strong>collections</strong> (בערך "טבלאות"), ו־collection מכיל <strong>מסמכים</strong> (בערך "שורות"). אבל שני הבדלים חשובים: מסמך יכול להכיל מערכים ומסמכים מקוננים — ו־collection לא מחייב שכל המסמכים ייראו אותו דבר.</p>
+
+  <h2>2. מסמך ראשון מ־Node.js</h2>
+  <p>ה־driver הרשמי הוא החבילה <code>mongodb</code>. <code>MongoClient</code> אחד לכל התהליך (הוא מחזיק pool של חיבורים, כמו <code>pg.Pool</code> בפרק 18):</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson1"); // database שלא קיים — נוצר בכתיבה הראשונה
+const products = db.collection("products"); // כנ"ל: collection נוצר לבד
+
+const result = await products.insertOne({ name: "Ethiopia Yirgacheffe", price: 62, tags: ["light", "single-origin"] });
+console.log(result.acknowledged, typeof result.insertedId, result.insertedId.constructor.name);
+
+const doc = await products.findOne({ name: "Ethiopia Yirgacheffe" });
+console.log(Object.keys(doc!));
+console.log(doc!.tags[0], doc!._id.equals(result.insertedId));
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">true object ObjectId
+[ '_id', 'name', 'price', 'tags' ]
+light true</pre>
+  <p>לא נתנו <code>_id</code>, ולכן ה־driver יצר אחד: <strong>ObjectId</strong>. לכל מסמך חייב להיות <code>_id</code> ייחודי ב־collection — זה המפתח הראשי, ויש עליו אינדקס תמיד. אפשר לתת <code>_id</code> משלך (מחרוזת, מספר) — בנתוני הדוגמה של היחידה עשינו <code>"p1"</code>, <code>"c1"</code>, <code>"o1"</code> כדי שיהיה קל לקרוא.</p>
+
+  <h2>3. BSON ו־ObjectId</h2>
+  <p>Mongo שומר מסמכים ב־<strong>BSON</strong> — JSON בינארי, עם טיפוסים ש־JSON לא מכיר. שלושה שחשוב להכיר:</p>
+  <ul>
+    <li><strong>Date</strong> — רגע בזמן (כמו <code>timestamptz</code>, פרק 24). שומרים <code>new Date()</code>, לא מחרוזת: על מחרוזת <code>"2026-11-09"</code> אי אפשר לעשות <code>$gte</code> נכון בין אזורי זמן, ולא לקבץ לפי יום.</li>
+    <li><strong>מספרים</strong> — ה־driver שומר מספר שלם כ־Int32 (או Int64 אם גדול), ושבר כ־Double. לכסף מדויק יש <code>Decimal128</code>; ביחידה נשמור מחירים בשקלים שלמים, כמו בחנות הקפה.</li>
+    <li><strong>ObjectId</strong> — 12 בתים, שמוצגים כ־24 תווי hex. 4 הבתים הראשונים הם זמן היצירה, ולכן מזהים חדשים "עולים" בערך לפי סדר היצירה:</li>
+  </ul>
+<pre><code class="lang-ts">import { ObjectId } from "mongodb";
+
+const id = new ObjectId("6af1a8c0e4b0f1a2b3c4d5e6");
+console.log(id.toHexString().length);
+console.log(id.getTimestamp().toISOString()); // מתוך 4 הבתים הראשונים
+
+console.log(ObjectId.isValid("6af1a8c0e4b0f1a2b3c4d5e6"), ObjectId.isValid("abc"));
+console.log(id.equals("6af1a8c0e4b0f1a2b3c4d5e6"), id === new ObjectId("6af1a8c0e4b0f1a2b3c4d5e6"));</code></pre>
+<pre class="terminal">24
+2026-11-09T11:04:32.000Z
+true false
+true false</pre>
+  <p>השורה האחרונה היא מלכודת קלאסית: שני ObjectId הם <strong>אובייקטים</strong>, ו־<code>===</code> משווה הפניות. משווים עם <code>.equals()</code>, או משווים מחרוזות (<code>toHexString()</code>). ומזהה שמגיע מ־URL (<code>/notes/:id</code>) הוא מחרוזת — צריך לבדוק שהוא תקין ולהמיר (<code>new ObjectId(id)</code>), אחרת <code>findOne({ _id: "6af1…" })</code> מחפש <em>מחרוזת</em> ולא מוצא כלום (E19).</p>
+
+  <h2>4. find, findOne ו־projection</h2>
+  <p>שאילתה ב־Mongo היא אובייקט: "מסמכים שבהם השדות האלה שווים לערכים האלה". <code>find</code> מחזיר <strong>cursor</strong> — כמו iterator — ו־<code>toArray()</code> אוסף אותו. <code>projection</code> בוחר שדות (כמו הרשימה אחרי <code>SELECT</code>):</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const products = client.db("lesson1b").collection("products");
+await products.insertMany([
+  { _id: "p1", name: "Ethiopia Yirgacheffe", category: "beans", price: 62, specs: { roast: "light" } },
+  { _id: "p3", name: "House Espresso Blend", category: "beans", price: 48, specs: { roast: "dark" } },
+  { _id: "p5", name: "V60 Dripper", category: "gear", price: 89 },
+]);
+
+// SELECT name, price FROM products WHERE category = 'beans' ORDER BY price
+console.log(await products.find({ category: "beans" }, { projection: { _id: 0, name: 1, price: 1 } }).sort({ price: 1 }).toArray());
+// שדה מקונן — בנקודה, ובמרכאות
+console.log(await products.findOne({ "specs.roast": "dark" }, { projection: { name: 1 } }));
+// שדה שלא קיים במסמך — פשוט לא מתאים
+console.log(await products.countDocuments({ "specs.roast": { $exists: true } }));
+
+await client.db("lesson1b").dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">[
+  { name: 'House Espresso Blend', price: 48 },
+  { name: 'Ethiopia Yirgacheffe', price: 62 }
+]
+{ _id: 'p3', name: 'House Espresso Blend' }
+2</pre>
+  <p>שימו לב ל־<code>V60 Dripper</code>: אין לו <code>specs</code> בכלל — ו־Mongo לא מתלונן. זה ה"בלי schema".</p>
+
+  <h2>5. "בלי schema" — schema שגרה בקוד</h2>
+  <p>Mongo לא מכריח את כל המסמכים להיראות אותו דבר. זה נוח כשמבנה משתנה (מוצרים עם מאפיינים שונים: לפולים יש "קלייה", למטחנה "חומר"), ומסוכן כשזה קורה בטעות: <code>{ prise: 62 }</code> במקום <code>price</code> נשמר בשקט, ו־<code>"62"</code> כמחרוזת לא יימצא ב־<code>price: { $lt: 100 }</code>. ה־schema לא נעלם — הוא עבר לקוד שלך. לכן בפרויקט אמיתי:</p>
+  <ul>
+    <li><strong>ולידציה בכניסה</strong> — Zod (פרק 15) לפני כל כתיבה, בדיוק כמו עם Postgres.</li>
+    <li><strong>טיפוסים</strong> — <code>db.collection&lt;Product&gt;("products")</code>, ו־TypeScript בודק שאילתות ועדכונים (שיעור 5).</li>
+    <li><strong>schema validation בשרת</strong> — כללי <code>$jsonSchema</code> שה־Mongo עצמו אוכף (שיעור 3, E18).</li>
+  </ul>
+  <div class="box tip">
+    <span class="box-title">💡 mongosh</span>
+    <p>ה־shell של Mongo: <code>docker exec -it mongo mongosh</code>, ואז <code>use shop</code>, <code>db.products.find({ category: "gear" })</code>, <code>db.orders.countDocuments()</code>. התחביר כמעט זהה ל־driver (בלי <code>await</code> ו־<code>toArray</code>). טוב לבדיקות מהירות; הקוד שלך — ב־Node.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.7-E01">E01</a> · <a href="exercises.html#P25.7-E06">E06</a> · <a href="exercises.html#P25.7-E07">E07</a> · <a href="exercises.html#P25.7-E11">E11</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת יחידה 25.7</a><a href="lesson-02-queries.html"><small>הבא</small>שיעור 2 — שאילתות ועדכונים</a></div>
+</main>
+</body>
+</html>

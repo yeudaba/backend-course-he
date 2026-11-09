@@ -61,6 +61,6 @@ ${copyStep("25v-mysql")}
 <li>להסביר REPEATABLE READ ולמה SELECT רגיל בתוך טרנזקציה יכול להחזיר ערך ישן.</li>
 <li>לכתוב טרנזקציה עם mysql2 (חיבור אחד מה־pool), ותור עבודות עם SKIP LOCKED.</li>
 <li>לקרוא EXPLAIN ולבנות אינדקס מורכב בסדר הנכון.</li>
-<li><code>npm run check P19.5</code>: 80% מ־E06–E19, ולפחות שני תרגילי תיקון.</li>
+<li><code>npm run check P25.5</code>: 80% מ־E06–E19, ולפחות שני תרגילי תיקון.</li>
 </ul>`,
 };
