@@ -1,0 +1,52 @@
+# P26.3-E09: ה־Deployment של coffee-api
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # המשתמש node מה־Dockerfile
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3

@@ -1,3 +1,0 @@
--- P19.5-E11
--- לכל לקוח עם הזמנות ששולמו (paid או shipped): name, city, paid_orders, paid_total, last_order
--- מהגבוה לנמוך לפי paid_total (בתיקו — id)

@@ -11,7 +11,7 @@ export default {
   testTimeout: 60000,
   time: "4 מפגשים",
   expectedExercises: 25,
-  install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop, PostgreSQL מפרק 16, ו־LocalStack מיחידה 25.5 (לתרגילי SQS).</p>
+  install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop, PostgreSQL מפרק 16, ו־LocalStack מיחידה 26.3 (לתרגילי SQS).</p>
 <p><strong>מה מתקינים / מריצים עכשיו</strong> (פעם אחת; אחר כך <code>docker start rabbitmq kafka</code>):</p>
 <ul>
 <li><strong>RabbitMQ 4</strong>:

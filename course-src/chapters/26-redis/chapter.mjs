@@ -4,7 +4,7 @@ export default {
   num: 26,
   code: "26",
   title: "Redis: מטמון, מצב משותף ותורים",
-  part: "חטיבה ה׳ — ראיונות והרחבות",
+  part: "חטיבה ד׳ — רמת תעשייה",
   checker: true,
   database: true,
   prismaProjects: ["solutions/coffee-shop"],

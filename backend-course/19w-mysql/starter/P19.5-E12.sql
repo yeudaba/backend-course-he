@@ -1,3 +1,0 @@
--- P19.5-E12
--- מוצרי brewing שיש להם material ב־attributes: name, material (טקסט), cups (מספר, או NULL)
--- לפי cups מהגדול (בלי cups — בסוף), ואז לפי name

@@ -1,0 +1,151 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה YAML מועתק בין סביבות הוא בעיה, ואיך Helm פותר אותה: templates + values.</li>
+      <li>GitOps: Git הוא האמת, וכלי בתוך ה־cluster מסנכרן אליו.</li>
+      <li>Argo CD: Application, sync, prune, selfHeal — ו־rollback שהוא revert.</li>
+      <li>repo קוד מול repo תצורה: מי משנה מה.</li>
+    </ul>
+  </div>
+
+  <h2>1. Helm: אותו YAML, ערכים אחרים</h2>
+  <p>יש לך <code>staging</code> ו־<code>production</code>. אותו Deployment, אבל 1 עותק מול 3, דומיין אחר, resources אחרים. להעתיק את הקבצים ולשנות ידנית — עד שמישהו מתקן probe רק באחד. <strong>Helm</strong> הופך את ה־manifests ל<strong>templates</strong> עם משתנים, ומקבל את הערכים מקובצי <strong>values</strong>. חבילה כזו נקראת <strong>chart</strong>:</p>
+```text
+charts/coffee-api/
+├── Chart.yaml            # שם, גרסת ה־chart, appVersion
+├── values.yaml           # ברירות מחדל
+├── values-prod.yaml      # רק מה ששונה ב־production
+└── templates/
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── ingress.yaml
+    └── hpa.yaml
+```
+```yaml
+# templates/deployment.yaml (קטע)
+spec:
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+```
+  <p>השפה היא Go templates: <code>{{ .Values.x }}</code> מציב ערך, <code>| default</code> נותן ברירת מחדל, <code>with</code>/<code>if</code> מדלגים על בלוק כשהערך ריק, ו־<code>toYaml | nindent</code> מכניס מבנה שלם בהזחה הנכונה. ה־annotation <code>checksum/config</code> הוא טריק מוכר: שינוי ב־ConfigMap משנה את ה־hash, ולכן את ה־template — וה־Deployment עושה rollout (E10).</p>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="templates ועוד values.yaml ועוד values-prod.yaml נכנסים ל־helm template ויוצאים כ־manifests">
+      <defs><marker id="hm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="10" width="150" height="44" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="560" y="64" width="150" height="44" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="560" y="118" width="150" height="44" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="320" y="56" width="150" height="60" rx="12" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="20" y="40" width="220" height="92" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M556 32 L 474 76" marker-end="url(#hm)"/>
+        <path d="M556 86 H 474" marker-end="url(#hm)"/>
+        <path d="M556 140 L 474 98" marker-end="url(#hm)"/>
+        <path d="M316 86 H 244" marker-end="url(#hm)"/>
+      </g>
+      <g text-anchor="middle" class="mono" direction="ltr" style="font-size:12px">
+        <text x="635" y="37">templates/*.yaml</text>
+        <text x="635" y="91">values.yaml</text>
+        <text x="635" y="145">values-prod.yaml</text>
+        <text x="395" y="82">helm template</text>
+        <text x="395" y="100">(or Argo CD)</text>
+        <text x="130" y="72">replicas: 3</text>
+        <text x="130" y="92">image: …:1.5.0</text>
+        <text x="130" y="112">Deployment, Service, …</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: Helm ממזג values (הקובץ הימני מנצח את השמאלי, שדה־שדה), מציב ב־templates, ויוצא YAML רגיל. ה־cluster לא יודע שהיה Helm — הוא מקבל manifests (E05).</figcaption>
+  </figure>
+  <p>פקודות: <code>helm template</code> — רק להדפיס את התוצאה (הכי שימושי לבדיקה); <code>helm upgrade --install coffee charts/coffee-api -f values-prod.yaml</code> — להתקין או לעדכן; <code>helm rollback</code>. ו־Helm הוא גם מנהל חבילות: PostgreSQL, Redis, Argo CD עצמו, ingress-nginx — מותקנים מ־charts מוכנים.</p>
+  <p>חלופה שתפגוש: <strong>Kustomize</strong> (מובנה ב־kubectl, <code>kubectl apply -k</code>) — בלי templates, עם "בסיס" ו"שכבות" שמשנות שדות. הרעיון זהה: מקור אחד, הבדלים מפורשים.</p>
+
+  <h2>2. GitOps</h2>
+  <p>בפרק 25, ה־CI עשה deploy: בסוף ה־workflow — קריאה ל־Render. זה <strong>push</strong>: ה־CI מחזיק מפתח לפרודקשן ודוחף. ב־<strong>GitOps</strong> הכיוון הפוך:</p>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="Git מחזיק את המצב הרצוי; Argo CD בתוך ה־cluster מושך ומשווה, ומסנכרן את ה־cluster">
+      <defs><marker id="go" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="20" y="20" width="420" height="170" rx="14" style="fill:none;stroke:var(--border);stroke-width:2;stroke-dasharray:6 4"/>
+      <g style="stroke-width:2">
+        <rect x="530" y="70" width="170" height="70" rx="12" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="270" y="70" width="150" height="70" rx="12" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="40" y="70" width="170" height="70" rx="12" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M424 95 H 526" marker-start="url(#go)"/>
+        <path d="M266 95 H 214" marker-end="url(#go)"/>
+        <path d="M214 120 H 266" marker-end="url(#go)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="615" y="98" direction="rtl">repo התצורה</text>
+        <text x="345" y="98">Argo CD</text>
+        <text x="125" y="98" direction="rtl">המשאבים</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="615" y="118">מצב רצוי (charts, values)</text>
+        <text x="345" y="118">משווה כל ~3 דקות</text>
+        <text x="125" y="118">Deployments, Services</text>
+        <text x="475" y="86">pull</text>
+        <text x="240" y="86">sync</text>
+        <text x="240" y="136">מצב בפועל</text>
+        <text x="230" y="40">ה־cluster</text>
+      </g>
+    </svg>
+    <figcaption>איור 2: Argo CD רץ <em>בתוך</em> ה־cluster ומושך מ־Git. אף אחד מבחוץ — לא ה־CI ולא מפתח — לא צריך הרשאה לכתוב ל־cluster. "מה רץ בפרודקשן?" — מה שב־main של repo התצורה.</figcaption>
+  </figure>
+  <p>היתרונות: <strong>היסטוריה</strong> — כל שינוי בפרודקשן הוא commit עם מחבר ו־review; <strong>rollback</strong> — <code>git revert</code>; <strong>drift</strong> — שינוי ידני ב־cluster מתגלה ומתוקן; ו<strong>אבטחה</strong> — אין מפתח ל־cluster ב־CI.</p>
+
+  <h2>3. Argo CD</h2>
+  <p>ב־Argo CD מגדירים <strong>Application</strong>: מאיפה (repo, ענף, נתיב, values) ולאן (cluster, namespace):</p>
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coffee-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/noa-cohen/coffee-deploy.git
+    targetRevision: main
+    path: charts/coffee-api
+    helm: { valueFiles: [values-prod.yaml] }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: coffee
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+```
+  <p>שני מצבים מופיעים בממשק של Argo CD לכל Application: <strong>Sync</strong> — <code>Synced</code> (ה־cluster זהה ל־Git) או <code>OutOfSync</code>; ו־<strong>Health</strong> — <code>Healthy</code>, <code>Progressing</code> (rollout באמצע) או <code>Degraded</code> (pods לא Ready). <code>prune</code> — משאב שנמחק מ־Git נמחק מה־cluster; <code>selfHeal</code> — שינוי ידני מוחזר (E15). ולסדר: <strong>sync waves</strong> — annotation שאומר "קודם ה־Job של ה־migrations, אחר כך ה־Deployment" (E24).</p>
+
+  <h2>4. שני repos</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>repo הקוד (coffee-shop)</th><th>repo התצורה (coffee-deploy)</th></tr>
+    <tr><td>מה בו</td><td>TypeScript, Dockerfile, בדיקות, Jenkinsfile</td><td>charts, values לכל סביבה, Applications</td></tr>
+    <tr><td>מי כותב</td><td>מפתחים</td><td>ה־CI (עדכון tag) ומפתחים/DevOps (שינויי תצורה)</td></tr>
+    <tr><td>מה commit גורם</td><td>build, בדיקות, image חדש</td><td>Argo CD מסנכרן</td></tr>
+  </table></div>
+  <p>למה שניים? כדי ששינוי replicas לא יבנה image, ו־commit של קוד לא ישנה את הפרודקשן לפני שה־image נבנה ונבדק. הקשר ביניהם הוא שורה אחת: ה־tag. ה־CI, בסוף, משנה אותה ב־repo התצורה ועושה commit — וזה E25: לשנות את השורה בלי להרוס את שאר הקובץ.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>ביום הראשון בחברה עם Argo CD תקבל קישור לממשק שלו ותראה עשרות Applications — כל שירות, בכל סביבה. השאלה הראשונה כש"משהו לא עובד בפרודקשן": האם ה־Application שלך <code>Synced</code> ו־<code>Healthy</code>? אם <code>Degraded</code> — לחיצה על ה־pod מראה את ה־Events והלוגים, בדיוק כמו <code>kubectl describe</code>.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26.3-E05">E05</a> · <a href="exercises.html#P26.3-E15">E15</a> · <a href="exercises.html#P26.3-E25">E25</a></p>
+  </div>

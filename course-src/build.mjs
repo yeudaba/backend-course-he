@@ -120,7 +120,7 @@ function checkRun(run, expected, ctx) {
   const nodeArgs = run.lang === "ts" ? ["--experimental-strip-types", "--no-warnings", file] : [file];
   let r;
   if (run.lang === "sql" && run.attrs.mysql) {
-    // יחידה 19.5: SQL מול MySQL 8.4 (הקונטיינר course-mysql, ראה scripts/cloud-setup.sh), database נקי לכל דוגמה.
+    // יחידה 25.5: SQL מול MySQL 8.4 (הקונטיינר course-mysql, ראה scripts/cloud-setup.sh), database נקי לכל דוגמה.
     // הפלט — כמו ב־mysql CLI עם --table
     const mysqlCli = (args, input) => spawnSync("docker", ["exec", "-i", "course-mysql", "mysql", "-uroot", "--default-character-set=utf8mb4", ...args], { encoding: "utf8", input });
     mysqlCli(["-e", "DROP DATABASE IF EXISTS snippet; CREATE DATABASE snippet CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"]);

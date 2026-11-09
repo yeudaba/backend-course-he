@@ -1,4 +1,4 @@
-// עוזר לבדיקות של יחידה 25.5: קורא קובצי YAML של Kubernetes (גם כמה מסמכים בקובץ, מופרדים ב־---)
+// עוזר לבדיקות של יחידה 26.3: קורא קובצי YAML של Kubernetes (גם כמה מסמכים בקובץ, מופרדים ב־---)
 // ובודק אותם כמו ש־kubectl --dry-run היה בודק את החלקים החשובים — בלי cluster.
 import fs from "node:fs";
 import assert from "node:assert/strict";

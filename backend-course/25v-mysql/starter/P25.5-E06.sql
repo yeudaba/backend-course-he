@@ -1,0 +1,3 @@
+-- P25.5-E06
+-- טבלת reviews: id (BIGINT UNSIGNED, AUTO_INCREMENT), product_id ו־customer_id (מפתחות זרים), rating 1–5,
+-- body (טקסט, גם אמוג׳י), created_at (DATETIME(3), ברירת מחדל עכשיו), ביקורת אחת למוצר ללקוח, ואינדקס (product_id, created_at)

@@ -8,7 +8,7 @@ export default {
   checker: true,
   testTimeout: 120000,
   time: "3–4 שבועות",
-  install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> מהיחידות 19.5, 25.5, 26.5, 28.5 ו־29.5 — MySQL, Kafka, DuckDB ו־SDK של Claude. הקונטיינרים של MySQL ו־Kafka רצים (<code>docker start mysql kafka</code>).</p>
+  install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> מהיחידות 25.5, 26.3, 26.5, 28.5 ו־29.5 — MySQL, Kafka, DuckDB ו־SDK של Claude. הקונטיינרים של MySQL ו־Kafka רצים (<code>docker start mysql kafka</code>).</p>
 <p><strong>מה מתחילים עכשיו:</strong> repo חדש, <code>~/dev/events-platform</code>, מאפס: <code>npm init -y</code>, <code>"type": "module"</code>, ו־<code>npm install mysql2 @platformatic/kafka @duckdb/node-api zod @anthropic-ai/sdk</code>. TypeScript רץ ישירות ב־Node 24 (<code>node src/main-ingest.ts</code>), בלי build.</p>
 ${copyStep("29x-project-events")}
 <p><strong>✔ הבודק:</strong> קופסה שחורה, כמו בפרויקט 3 — הוא טוען את המודולים שלך לפי החוזה (שלב 0), ומריץ אותם מול MySQL ו־Kafka אמיתיים (database ו־topic חדשים לכל בדיקה):</p>
