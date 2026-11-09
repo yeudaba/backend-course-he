@@ -312,7 +312,8 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
    - הודעות ברירת המחדל: `Invalid input: expected number, received string`.
 6. **PostgreSQL 18:** EXPLAIN ANALYZE מציג `rows=10.00` ו־`Index Searches`. בשיעורים משתמשים ב־`(ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)` כדי שהפלט יהיה יציב.
 7. **NestJS 12:**
-   - פרויקטים הם CommonJS, מקומפלים עם tsc (`experimentalDecorators`, `emitDecoratorMetadata`).
+   - `nest new` שואל שתי שאלות (נבדק בהרצה, CLI 12.0.12): `@nestjs/observe` (שירות מנוהל — מדלגים עם `--no-observe`) ומערכת מודולים — **ברירת המחדל ESM + Vitest**. בקורס בוחרים **CJS + Jest** (פרק 20 שיעורים 1 ו־4, פרק 22 שיעור 4).
+   - הפרויקטים בקורס הם CommonJS, מקומפלים עם tsc (`experimentalDecorators`, `emitDecoratorMetadata`).
    - בדיקות Jest 30.
    - TypeScript ^6 בתבנית.
    - קובץ ה־AGENTS.md בתבנית מקדם שירות בתשלום — **לא להכניס לקורס**.
@@ -352,16 +353,16 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 יהודה הראה מודעת Backend Developer (Node.js, MySQL, AWS+K8s, Jenkins/Argo CD, SQS/Kafka/RabbitMQ, agentic AI, Redis/ElastiCache, BigQuery/Snowflake/Databricks, נפחי נתונים ותעבורה גבוהה). **החלטות שלו (8.11.2026):** לא חטיבה חדשה — לשלב בסדר הלימוד, כ**חצאי־פרקים** (כמו 15.5, כדי שמזהי תרגילים קיימים לא ישתנו), ו**פרויקט 4 חדש** שמחבר את הנושאים.
 | יחידה | slug (מיון לפי שם התיקייה) | אחרי | בודקים מול |
 |---|---|---|---|
-| 19.5 MySQL | `19w-mysql` (מזהים `P19.5-E06`) | Prisma | MySQL 8.4 בקונטיינר `course-mysql` (3307) — `root/tools/mysql.mjs` |
-| 25.5 ענן ו־Kubernetes | `25w-cloud` | פרויקט 3 | LocalStack (S3, SQS…) + ולידציה של manifests/Helm/Jenkinsfile/Argo CD |
+| 25.5 MySQL (היה 19.5) | `25v-mysql` (מזהים `P25.5-E06`) | פרויקט 3 | MySQL 8.4 בקונטיינר `course-mysql` (3307) — `root/tools/mysql.mjs` |
+| 26.3 ענן ו־Kubernetes (היה 25.5) | `26c-cloud` (מזהים `P26.3-E06`) | Redis (פרק 26) | LocalStack (S3, SQS…) + ולידציה של manifests/Helm/Jenkinsfile/Argo CD |
 | 26.5 תורים ואירועים | `26w-messaging` | Redis | RabbitMQ, Kafka (KRaft), SQS (ElasticMQ/LocalStack) |
 | 28.5 ביצועים ונתונים בקנה מידה | `28w-scale` | תכנון מערכת | מדידות, autocannon; DuckDB כמנוע עמודתי |
 | 29.5 סוכני AI | `29w-agents` | פרק 29 | SDK של Anthropic עם fetch מדומה |
 | פרויקט 4 | `29x-project-events` | 29.5 | מערכת אירועים ואנליטיקה: Kafka ← MySQL + עמודתי, על Kubernetes |
-- `build.mjs`: fence חדש ```` ```sql run mysql db=19w-mysql/files/shop.sql ```` — רץ ב־`docker exec course-mysql mysql --table`; בלוקי ts מקבלים `MYSQL_URL`, ובדיקות `COURSE_MYSQL_URL`.
+- `build.mjs`: fence חדש ```` ```sql run mysql db=25v-mysql/files/shop.sql ```` — רץ ב־`docker exec course-mysql mysql --table`; בלוקי ts מקבלים `MYSQL_URL`, ובדיקות `COURSE_MYSQL_URL`.
 - כל ה־images נבדקו ונמשכים: mysql:8.4, rabbitmq:4-alpine, apache/kafka:4.1.0, localstack/localstack:4.14.0, softwaremill/elasticmq-native.
-- **מצב 19.5:** בנוי ומאומת (5 שיעורים, 25 תרגילים, 20 בודקים — כולל deadlock אמיתי וסימולציה של 6 workers).
-- **מצב 25.5:** בנוי ומאומת (`--verify 25w`). LocalStack בקונטיינר `course-localstack` על **4566**, **מוצמד ל־`localstack/localstack:4.14.0`** — ה־tag `:4` נעצר ב־4.14 (פברואר 2026), והגרסאות שאחריו דורשות auth token. `root/tools/aws.mjs`: `bucketSandbox(t)`, `queueSandbox(t)` (bucket/queue ייחודי, ניקוי בסוף); `build.mjs` מעביר `COURSE_AWS_ENDPOINT` לבדיקות ו־`AWS_ENDPOINT_URL` לבלוקי run. בודקים בלי cluster: `tests/_k8s.mjs` (קריאת multi-doc YAML עם החבילה `yaml`, selector↔labels, כמויות, ports בשם), `tests/_iam.mjs` (מעריך policy: Deny מפורש ← Allow ← implicit deny, wildcards, Condition על s3:prefix), `tests/_jenkins.mjs` (parser של declarative pipeline לעץ בלוקים — מדלג על מחרוזות והערות). **kind/helm לא הורצו בסביבת הבנייה** (המסווג חסם הרצת binary שהורד; get.helm.sh חסום) — לכן אין דוגמאות עם פלט של kubectl/helm, רק פקודות בלי פלט. E25 (`bumpImageTag`) משתמש ב־`yaml.parseAllDocuments` ששומר הערות ומרכאות — נבדק שה־diff הוא רק שורות ה־image.
+- **מצב 25.5 (MySQL, לשעבר 19.5):** בנוי ומאומת (5 שיעורים, 25 תרגילים, 20 בודקים — כולל deadlock אמיתי וסימולציה של 6 workers).
+- **מצב 26.3 (ענן, לשעבר 25.5):** בנוי ומאומת (`--verify 26c`). LocalStack בקונטיינר `course-localstack` על **4566**, **מוצמד ל־`localstack/localstack:4.14.0`** — ה־tag `:4` נעצר ב־4.14 (פברואר 2026), והגרסאות שאחריו דורשות auth token. `root/tools/aws.mjs`: `bucketSandbox(t)`, `queueSandbox(t)` (bucket/queue ייחודי, ניקוי בסוף); `build.mjs` מעביר `COURSE_AWS_ENDPOINT` לבדיקות ו־`AWS_ENDPOINT_URL` לבלוקי run. בודקים בלי cluster: `tests/_k8s.mjs` (קריאת multi-doc YAML עם החבילה `yaml`, selector↔labels, כמויות, ports בשם), `tests/_iam.mjs` (מעריך policy: Deny מפורש ← Allow ← implicit deny, wildcards, Condition על s3:prefix), `tests/_jenkins.mjs` (parser של declarative pipeline לעץ בלוקים — מדלג על מחרוזות והערות). **kind/helm לא הורצו בסביבת הבנייה** (המסווג חסם הרצת binary שהורד; get.helm.sh חסום) — לכן אין דוגמאות עם פלט של kubectl/helm, רק פקודות בלי פלט. E25 (`bumpImageTag`) משתמש ב־`yaml.parseAllDocuments` ששומר הערות ומרכאות — נבדק שה־diff הוא רק שורות ה־image.
 - **מצב 26.5:** בנוי ומאומת (`--verify 26w`). קונטיינרים: `course-rabbit` (rabbitmq:4-alpine) על **5673**, `course-kafka` (apache/kafka:4.1.0, KRaft, advertised `localhost:9095`) על **9095**; SQS דרך LocalStack. `build.mjs` מעביר `COURSE_RABBIT_URL`/`COURSE_KAFKA_BROKERS` לבדיקות ו־`RABBIT_URL`/`KAFKA_BROKERS` לבלוקי run. לקוחות: `amqplib` 2.2.0 (עם טיפוסים; 2.3.0 יצא ביום הבנייה — לא נבחר), ו־**`@platformatic/kafka`** 2.15 (KafkaJS נבדק ועובד מול Kafka 4.1, אבל לא עודכן מאז 2023 ומדפיס TimeoutNegativeWarning ב־Node 24 — מוזכר בשיעור כמה שתפגוש בקוד קיים). `root/tools/mq.mjs`: `rabbitSandbox(t)` (שמות ייחודיים לתורים/exchanges, `depth`, `drain`), `kafkaSandbox(t)` (topic ייחודי, producer **idempotent**, `readAll`, `committed`), `waitFor`, ו־`deadline(promise, ms, msg)` — נכשל עם הסבר ו־`process.exit(1)` אחרי 300ms, כי consumer תקוע של הלומד משאיר את התהליך חי.
 - **מצב 28.5:** בנוי ומאומת (`--verify 28w`). בלי קונטיינרים חדשים: DuckDB רץ בתוך Node (`@duckdb/node-api` **1.5.6-r.2** — 2.0.0-r.1 היה בן שבועיים וגרסה ראשית חדשה, לא נבחר). `files/orders.parquet` (60,000 הזמנות, אוקטובר 2026) נוצר דטרמיניסטית מ־`files/make-orders.mjs`. `tests/_duck.mjs`: `duck(t)` ← view בשם `orders` על הקובץ, `fileRows`/`expectedRows` לתרגילי SQL. בלוקי run של DuckDB מייצרים נתונים עם `range()` (הם רצים בתיקייה זמנית, בלי גישה ל־files). בדיקות זמן (E08, E14, E23, E24) הורצו 3 פעמים ברצף — יציבות.
 - **מצב 29.5:** בנוי ומאומת (`--verify 29w`). בלי קונטיינרים: `tests/_claude.mjs` (עותק של פרק 29 — SDK אמיתי עם fetch מדומה), `tests/_mcp.mjs` (שרת MCP של הלומד + client ב־`InMemoryTransport`). `@modelcontextprotocol/sdk` **1.32.2** (`registerTool`; `tool()` מסומן deprecated). `files/store.ts` — חנות בזיכרון, משותפת לתרגילים. נבדק מול ה־skill של claude-api: Opus 5.5 ($4/$20, cache read $0.20), אין `tool_choice` מאולץ, `fallbacks: "default"` + beta `server-side-fallback-2026-07-01`, היסטוריה append-only (preserved thinking — עריכה של תורות קודמים נכשלת בחשבונות מ־31.8.2026), context editing/compaction בצד השרת. E25 מייבא את `evaluateTrajectory` מ־E13 של הלומד (כתוב בתרגיל).
@@ -413,6 +414,14 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - בדיקה ויזואלית של כמה דפים בדפדפן: RTL, איורי SVG (טקסט עברי ב־SVG עם `direction="rtl"`), מצב כהה.
 - הודעה ליהודה מה מוכן ואיך להתחיל.
 
+### 7.4 עדכון 9.11.2026 — סוכני ביקורת והחלטות של יהודה
+- **סוכנים:** `.claude/agents/` — `lesson-designer` (עיצוב), `market-researcher` (מחקר שוק; שואל לפני שינוי), `curriculum-architect` (מבנה וסדר), `agents-manager` (בקרה ואיחוד). הרצה ראשונה ב־9.11.2026; ההחלטות — באפיון, נספח ב׳.
+- **הועבר:** MySQL 19.5 ← `25v-mysql` (25.5), ענן 25.5 ← `26c-cloud` (26.3). פרק 26 ו־26.5 עברו לחטיבה ד׳ (בדף הבית 26.5 הופיעה לפני 26).
+- **פרקים 28–29 חובה** (בלי "(רשות)").
+- **פרק 24 שיעור 6** (observability, E26–E30), **פרק 26 שיעור 6** (SSE/WebSocket/fan-out, E26–E30, תלות חדשה `ws`), **פרק 30 שיעור 5** (עוזר קוד AI, E26–E30; חיפוש עבודה עבר לשיעור 6). בפרקים האלה `expectedExercises: 30`.
+- **יחידה 25.7 MongoDB** — `25w-mongodb`, מזהים `P25.7-E06`. קונטיינר `course-mongo` (mongo:8, replica set `rs0`) על **27018**; `build.mjs` מעביר `MONGO_URL` לבלוקי run ו־`COURSE_MONGO_URL` לבדיקות. `root/tools/mongo.mjs`: `mongoSandbox(t, url, { seed })` ← database זמני עם `files/seed.mjs`. תלות `mongodb` 7.8.0.
+- **גילויים:** (35) Docker Hub החזיר 429 על mongo:8 — `cloud-setup.sh` מושך מ־`mirror.gcr.io/library/mongo:8` כגיבוי. (36) Mongo standalone בלי replica set: טרנזקציה נכשלת עם "This MongoDB deployment does not support retryable writes". (37) `insertOne` מוסיף `_id` לאובייקט שקיבל — בדוגמה שמדפיסה את האובייקט צריך עותק. (38) `$pull`/`$push` על `db.collection()` בלי טיפוס — שגיאת TypeScript ב־strict; משתמשים ב־`db.collection<T>()`. (39) OpenTelemetry sdk-node 0.301: `NodeSDK` בלבד (אין `tracing` namespace); ConsoleSpanExporter ב־`@opentelemetry/sdk-trace`.
+
 ---
 
 ## 8. כללי סגנון (לשמור על אחידות)
@@ -435,7 +444,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 9. סוכנים, סקילים וזיכרון
 
-- **לא נוצרו סוכנים (agents) ולא סקילים (skills) לפרויקט הזה.** אין `.claude/` בתיקיית הפרויקט, ואין `~/.claude/agents` או `~/.claude/skills`. כל העבודה נעשתה ישירות עם הכלים הרגילים (קבצים, טרמינל, דפדפן מובנה לבדיקות ויזואליות ו־CORS).
+- **סוכנים (מ־9.11.2026):** ב־`.claude/agents/` של המאגר יש ארבעה סוכני ביקורת (ראה 7.4). מריצים את שלושת הבודקים במקביל, ואז את `agents-manager` על הדוחות שלהם. אין סקילים. כל העבודה נעשתה ישירות עם הכלים הרגילים (קבצים, טרמינל, דפדפן מובנה לבדיקות ויזואליות ו־CORS).
 - **זיכרון:** הייתה הערת זיכרון אחת בחשבון הקודם (`backend-course-project`). זה התוכן שלה:
   - **מה:** קורס Backend בעברית ליהודה, שהתחיל ב־2026-10-31. התיקייה `/Users/yeuda/Desktop/Backend`, שקודם נקראה "קורס בBackend".
   - **פלט ותוכן:** הפלט ב־`backend-course/`. בכל פרק: קופסת 🧰, איורי SVG, 25 תרגילים, דף פתרונות נפרד.
