@@ -1,0 +1,67 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>tracing: כל צעד, כל כלי, זמן ועלות — ולקרוא trace.</li>
+      <li>אירועי התקדמות למשתמש.</li>
+      <li>evals לסוכן: המסלול, לא רק התשובה.</li>
+      <li>חבילת evals: כמה ניסיונות, flaky, ומתי מריצים.</li>
+    </ul>
+  </div>
+
+  <h2>1. trace</h2>
+  <p>"הסוכן ענה לא נכון" הוא כמו "השרת איטי" בפרק 24: בלי נתונים — ניחוש. trace של שיחה אחת הוא רשימת <strong>spans</strong>: כל קריאה למודל (stop_reason, טוקנים, cache, עלות, זמן) וכל כלי (שם, זמן, שגיאה). מתוכו רואים בבת אחת לולאות, כלים איטיים, ועלות לשיחה (E05, E12):</p>
+```text
+step 1  model  stop=tool_use  in=3,210  out=88   $0.0146   → list_my_orders (14ms)
+step 2  model  stop=tool_use  in=4,950  out=61   $0.0210   → get_order (12ms)
+step 3  model  stop=end_turn  in=5,180  out=140  $0.0235
+total: 3 steps, 2 tools, $0.0591
+```
+  <p>הטכניקה פשוטה: לעטוף את ה־client (כל <code>messages.create</code> נמדד) ואת הכלים (כל <code>run</code> נמדד), בלי לשנות את קוד הסוכן. בפרודקשן שולחים את זה ל־OpenTelemetry — וכל שיחה של סוכן נראית בכלי הניטור כמו בקשה מבוזרת, עם request id שמחבר אותה ללוגים. ומעל זה: דשבורד של עלות לשיחה, צעדים לשיחה, ואחוז שיחות שהגיעו לתקרה.</p>
+
+  <h2>2. מה המשתמש רואה</h2>
+  <p>סוכן שעובד 30 שניות בשקט נראה תקוע. אותם אירועים שנכנסים ל־trace — "בודק את ההזמנה…", "מחפש במלאי…" — יכולים לצאת גם ללקוח: async generator שמפיק אירועים, ו־Server-Sent Events בשרת (E19). שני בונוסים: הלקוח רואה שמשהו קורה, ו־<code>break</code> כשהוא סוגר את הדף עוצר את הסוכן ולא ממשיך לשלם.</p>
+
+  <h2>3. evals למסלול</h2>
+  <p>בפרק 29 בנית eval קטן: שאלה, תשובה, בדיקה. בסוכן זה לא מספיק — התשובה יכולה להיות נכונה במקרה. "הוחזרו 89.90 ₪" בלי <code>get_order</code> לפני — הסכום נוחש, והוא יהיה שגוי בפעם הבאה. eval של <strong>מסלול</strong> בודק את הדרך (E13):</p>
+  <ul>
+    <li><strong>חייב / אסור:</strong> קרא ל־<code>get_order</code>; לא קרא ל־<code>delete_account</code>.</li>
+    <li><strong>סדר:</strong> <code>get_order</code> לפני <code>refund_order</code>.</li>
+    <li><strong>יעילות:</strong> לכל היותר 5 צעדים, 4 קריאות לכלים.</li>
+    <li><strong>תשובה:</strong> כוללת את מספר ההזמנה; לא כוללת "Done!".</li>
+  </ul>
+
+  <h2>4. חבילה, ניסיונות, flaky</h2>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="שלושה תרחישים, שלושה ניסיונות לכל אחד: refund עובר 2 מ־3 (flaky), status עובר 3 מ־3, no-delete נכשל תמיד">
+      <g text-anchor="end" style="font-size:13px" direction="ltr" class="mono"><text x="140" y="56">refund</text><text x="140" y="106">status</text><text x="140" y="156">no-delete</text></g>
+      <g style="stroke-width:2">
+        <rect x="160" y="36" width="60" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="230" y="36" width="60" height="30" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="300" y="36" width="60" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="160" y="86" width="60" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="230" y="86" width="60" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="86" width="60" height="30" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="160" y="136" width="60" height="30" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="230" y="136" width="60" height="30" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="300" y="136" width="60" height="30" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:12px"><text x="190" y="22">#1</text><text x="260" y="22">#2</text><text x="330" y="22">#3</text></g>
+      <g style="font-size:13px" direction="rtl" text-anchor="start">
+        <text x="680" y="56">2/3 — flaky: הכי מסוכן, עובר בהדגמה</text>
+        <text x="680" y="106">3/3 — עובר</text>
+        <text x="680" y="156">0/3 — נכשל: באג ברור, קל לתקן</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: מודל לא דטרמיניסטי — אותו תרחיש עובר ונכשל. בלי כמה ניסיונות, "refund" היה מסומן כעובר (או כנכשל) לפי מזל (E25).</figcaption>
+  </figure>
+  <p>חבילת evals (E25) מריצה כל תרחיש כמה פעמים, מדווחת pass rate, כישלונות ייחודיים ועלות — ומסמנת <strong>flaky</strong>: תרחישים שעוברים לפעמים. מריצים אותה לפני כל שינוי ב־prompt, בכלים, במודל או ב־effort — כמו בדיקות ב־CI (פרק 25), רק שכאן כל ריצה עולה כסף: חבילה של 50 תרחישים × 3 ניסיונות היא 150 שיחות. התרחישים באים מהעולם: כל תקלה בפרודקשן הופכת לתרחיש, כדי שלא תחזור.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"ניסיון עם agentic AI" בראיון נבדק בשאלות כמו: "הסוכן החזיר כסף ללקוח הלא נכון — איך זה קרה ואיך מונעים?", "איך יודעים שהשינוי ב־prompt שיפר?", "כמה עולה שיחה, ואיך מורידים?". התשובות הטובות הן כמעט כולן Backend: הרשאות לפי session, guardrails בקוד, אישור אנושי, tracing, ו־evals עם כמה ניסיונות. ופרויקט 4 נותן לך מקום לשלב סוכן כזה מעל נתונים אמיתיים.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P29.5-E05">E05</a> · <a href="exercises.html#P29.5-E12">E12</a> · <a href="exercises.html#P29.5-E13">E13</a> · <a href="exercises.html#P29.5-E19">E19</a> · <a href="exercises.html#P29.5-E25">E25</a></p>
+  </div>

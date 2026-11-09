@@ -1,0 +1,62 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>ריצה עמידה: מצב אחרי כל צעד, והמשך אחרי קריסה.</li>
+      <li>מוביל ועובדים: למה הקשר נקי עדיף על הקשר מלא.</li>
+      <li>context: תוצאות כלים שלא מציפות, ומה ה־API עושה בשבילך.</li>
+      <li>refusal, fallback ומקביליות של כלים.</li>
+    </ul>
+  </div>
+
+  <h2>1. ריצה שלא מתחילה מההתחלה</h2>
+  <p>סוכן שעובד 40 דקות יפגוש deploy, OOM או timeout של ה־load balancer. אם המצב בזיכרון בלבד — הכול מתחיל מההתחלה: עוד 40 דקות, עוד עלות, ו<strong>כלים שרצים פעמיים</strong> (מייל שני ללקוח). הפתרון — אותו רעיון כמו ב־outbox וב־data lake: לשמור את המצב אחרי כל צעד.</p>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="ציר זמן של ריצה עמידה: קריאה למודל, שמירה, כלי, שמירה, כלי, קריסה; בהמשך: טוענים, מריצים רק את הכלי שחסר, ממשיכים">
+      <defs><marker id="dr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M700 60 H 20" marker-end="url(#dr)"/><path d="M700 140 H 20" marker-end="url(#dr)"/></g>
+      <g style="stroke-width:2">
+        <rect x="620" y="44" width="70" height="32" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="540" y="44" width="70" height="32" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="460" y="44" width="70" height="32" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="380" y="44" width="70" height="32" rx="6" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="560" y="124" width="70" height="32" rx="6" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="480" y="124" width="70" height="32" rx="6" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="400" y="124" width="70" height="32" rx="6" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="655" y="65">model</text><text x="575" y="65">email ✓💾</text><text x="495" y="65">charge ✓💾</text><text x="415" y="65">invoice 💥</text>
+        <text x="595" y="145">load 💾</text><text x="515" y="145">invoice</text><text x="435" y="145">model</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="360" y="28">ריצה 1</text><text x="360" y="108">ריצה 2 (אחרי restart)</text>
+        <text x="515" y="180">email ו־charge לא רצים שוב — התוצאות שמורות</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: 💾 = שמירה ב־Redis/PostgreSQL. מה שנשמר — לא חוזר. מה שרץ ונפל לפני שנשמר (invoice) — ירוץ שוב: at-least-once, כמו ביחידה 26.5. לכן כלים עם תופעות לוואי מקבלים idempotency key — ה־tool_use id (E14).</figcaption>
+  </figure>
+  <p>ובקנה מידה: כל צעד של סוכן הוא job בתור (BullMQ, SQS — יחידה 26.5). worker לוקח, טוען מצב, מריץ צעד, שומר, ומכניס את הצעד הבא. ככה אלף סוכנים רצים על עשרה workers, ו־deploy לא מאבד אף אחד.</p>
+
+  <h2>2. מוביל ועובדים</h2>
+  <p>סוכן אחד שקורא 200 ביקורות כדי לכתוב דוח — ממלא את ההקשר שלו בקריאה: יקר, איטי, והמשימה המקורית "נשכחת" מתחת לטקסט. דפוס נפוץ: <strong>מוביל</strong> שמפרק את המשימה, ו<strong>עובדים</strong> שמקבלים כל אחד תת־משימה <em>בהקשר נקי</em> — רק ההוראות — ומחזירים תקציר קצר. המוביל רואה 10 תקצירים, לא 200 ביקורות (E15).</p>
+  <ul>
+    <li><strong>הקשר נקי</strong> הוא גם אבטחה: עובד שקורא תוכן לא אמין לא רואה את הכלים והסודות של המוביל.</li>
+    <li><strong>הוראות שלמות:</strong> העובד לא רואה כלום חוץ מההוראות — "תבדוק את זה" לא מספיק; "השווה מחיר, משקל ואחריות של 3 המטחנות הידניות בקטלוג" — כן.</li>
+    <li><strong>המחיר:</strong> יותר טוקנים בסך הכול, ויותר מקום לטעויות תיאום. לא לכל משימה — רק כשהקריאה גדולה מדי לסוכן אחד. (ל־Managed Agents של Anthropic יש מנגנון כזה מובנה, שמריץ את העובדים בשרתים שלהם.)</li>
+  </ul>
+
+  <h2>3. context</h2>
+  <p>כל צעד שולח את <em>כל</em> ההיסטוריה. כלי שמחזיר 300KB — נשלח שוב בכל צעד שאחריו. שלושה כלים, מהפשוט:</p>
+  <ol>
+    <li><strong>כלים שמחזירים מעט:</strong> עימוד (<code>offset</code>/<code>limit</code>), שדות שצריך ולא כל השורה, וקיצור עם הודעה ברורה כשמשהו ארוך מדי (E11). <em>לפני</em> שמוסיפים להיסטוריה — לא עריכה של הודעות ישנות: במודלים הנוכחיים עריכה של תורות קודמים פוסלת את בלוקי ה־thinking, ובחשבונות שנפתחו מסוף אוגוסט 2026 הבקשה נכשלת.</li>
+    <li><strong>prompt caching:</strong> ההיסטוריה שחוזרת בכל צעד נקראת מה־cache, ב־5% מהמחיר (פרק 29).</li>
+    <li><strong>ה־API עושה את זה בשבילך:</strong> <em>context editing</em> מנקה תוצאות כלים ישנות בצד השרת, ו־<em>compaction</em> מסכם את תחילת השיחה כשהיא מתקרבת לגבול — בלי שתערוך היסטוריה בעצמך.</li>
+  </ol>
+
+  <h2>4. סירוב, fallback, ומקביליות</h2>
+  <p>מודלים נוכחיים יכולים לסרב לבקשה (<code>stop_reason: "refusal"</code>) — לפעמים בטעות, על בקשה תמימה. עם <code>fallbacks: "default"</code>, השרת מנתב בקשה שסורבה למודל אחר לפי סוג הסירוב, בלי קוד נוסף. אם גם זה נכשל — הסוכן מקבל סטטוס ברור, לא "תשובה ריקה" (E17).</p>
+  <p>וכשהמודל מבקש 8 שאילתות במקביל — זה מצוין לזמן, ומסוכן ל־pool של 2 חיבורים או לספק מיילים שמרשה אחת בכל רגע. מקביליות מוגבלת <em>לכל כלי</em>, עם תור הוגן (E18) — אותו רעיון כמו prefetch ב־RabbitMQ.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P29.5-E11">E11</a> · <a href="exercises.html#P29.5-E14">E14</a> · <a href="exercises.html#P29.5-E15">E15</a> · <a href="exercises.html#P29.5-E17">E17</a> · <a href="exercises.html#P29.5-E18">E18</a></p>
+  </div>

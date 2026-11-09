@@ -1,0 +1,97 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>קריאה אחת, workflow, סוכן — ומתי כל אחד.</li>
+      <li>הלולאה: מה המודל מחליט, ומה הקוד שלך מחליט.</li>
+      <li>כלים במקביל, שגיאות של כלים, ותקרות.</li>
+      <li>stop_reason: מה כל ערך אומר לסוכן.</li>
+    </ul>
+  </div>
+
+  <h2>1. שלוש רמות</h2>
+  <p>"להוסיף AI" יכול להיות שלושה דברים שונים מאוד:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>קריאה אחת</th><th>workflow</th><th>סוכן</th></tr>
+    <tr><td>מי מחליט מה קורה</td><td>אין מה להחליט</td><td>הקוד שלך: צעד 1, צעד 2, צעד 3</td><td>המודל: איזה כלי, באיזה סדר, מתי לעצור</td></tr>
+    <tr><td>דוגמה</td><td>סיווג פנייה</td><td>סיכום ← תרגום ← פרסום</td><td>נציג תמיכה שמברר ומטפל</td></tr>
+    <tr><td>עלות וזמן</td><td>נמוכים, צפויים</td><td>נמוכים, צפויים</td><td>גבוהים, משתנים</td></tr>
+    <tr><td>לבדוק שזה עובד</td><td>קל</td><td>קל, צעד־צעד</td><td>קשה (שיעור 5)</td></tr>
+  </table></div>
+  <p>סוכן מתאים כשהמשימה רב־שלבית וקשה לתאר מראש, כשהתוצאה שווה את העלות, כשהמודל טוב במשימה כזו — וכשטעות אפשר לתפוס ולתקן. אם התשובה לאחת השאלות היא "לא" — workflow, או קריאה אחת (E01).</p>
+
+  <h2>2. הלולאה</h2>
+  <figure>
+    <svg viewBox="0 0 720 240" role="img" aria-label="לולאת סוכן: הקוד שולח היסטוריה וכלים למודל; המודל מחזיר tool_use; הקוד בודק, מריץ ומחזיר tool_result; עד end_turn">
+      <defs><marker id="al" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="470" y="30" width="230" height="170" rx="14" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="70" width="200" height="90" rx="14" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="490" y="120" width="190" height="60" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M466 80 H 224" marker-end="url(#al)"/>
+        <path d="M224 140 H 466" marker-end="url(#al)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700" direction="rtl">
+        <text x="585" y="56">הקוד שלך (השרת)</text><text x="120" y="108">Claude</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="585" y="82">היסטוריה + כלים + system</text>
+        <text x="585" y="100">תקרת צעדים, תקציב, timeout</text>
+        <text x="585" y="140">לכל tool_use: מותר? אושר?</text>
+        <text x="585" y="158">מריץ (במקביל) ← tool_result</text>
+        <text x="585" y="174">שגיאה ← is_error</text>
+        <text x="120" y="130">מחליט: כלי? איזה? או סיום</text>
+        <text x="345" y="222">חוזרים עד end_turn — או עד שהקוד עוצר</text>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="345" y="72">messages.create</text>
+        <text x="345" y="132">stop_reason: tool_use + tool_use[]</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: המודל מחליט <em>מה</em> לעשות; הקוד מחליט <em>אם מותר</em>, מריץ, ושומר על התקרות. כל מה שבצד ימין — הרשאות, אישורים, guardrails, tracing — הוא Backend רגיל, והוא שאר היחידה.</figcaption>
+  </figure>
+  <p>הלולאה הבסיסית כבר מוכרת מפרק 29. מה שהופך אותה לפרודקשן:</p>
+```ts
+const calls = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+messages.push({ role: "assistant", content: res.content }); // כמו שהוא — כולל thinking ו־tool_use
+
+const results = await Promise.all(            // במקביל
+  calls.map(async (c): Promise<Anthropic.ToolResultBlockParam> => {
+    try {
+      return { type: "tool_result", tool_use_id: c.id, content: await tools[c.name].run(c.input) };
+    } catch (err) {
+      return { type: "tool_result", tool_use_id: c.id, content: `שגיאה: ${(err as Error).message}`, is_error: true };
+    }
+  }),
+);
+messages.push({ role: "user", content: results }); // כל התוצאות — בהודעה אחת
+```
+  <ul>
+    <li><strong>במקביל, ובהודעה אחת.</strong> המודל יכול לבקש כמה כלים בתור אחד — כי הם בלתי תלויים. מריצים יחד, ומחזירים את כל התוצאות בהודעת user אחת. תוצאות בהודעות נפרדות "מלמדות" אותו להפסיק לבקש במקביל (E06, E20).</li>
+    <li><strong>שגיאה היא תוצאה.</strong> כלי שזורק — <code>tool_result</code> עם <code>is_error: true</code>. המודל יכול לנסות אחרת, או להסביר ללקוח. exception שמפיל את השיחה הוא 500 על דבר שהמודל היה מסתדר איתו.</li>
+    <li><strong>ההיסטוריה — append-only.</strong> ה־<code>content</code> של המודל חוזר כמו שהוא. במודלים הנוכחיים, עריכה של תורות קודמים (לקצר, לנקות) פוסלת את בלוקי ה־thinking — ובחשבונות חדשים הבקשה נכשלת. מקטינים <em>לפני</em> שמוסיפים (E11).</li>
+  </ul>
+
+  <h2>3. stop_reason</h2>
+  <div class="table-wrap"><table>
+    <tr><th>stop_reason</th><th>מה קרה</th><th>מה הסוכן עושה</th></tr>
+    <tr><td><code>tool_use</code></td><td>המודל ביקש כלים</td><td>מריץ ומחזיר תוצאות</td></tr>
+    <tr><td><code>end_turn</code></td><td>סיים</td><td>מחזיר את הטקסט</td></tr>
+    <tr><td><code>max_tokens</code></td><td>נחתך באמצע</td><td>עוצר עם סטטוס — אולי באמצע tool_use, עם קלט חתוך</td></tr>
+    <tr><td><code>refusal</code></td><td>המודל סירב (יש <code>stop_details.category</code>)</td><td>אין תוכן לקרוא; fallback בצד השרת יכול לנתב למודל אחר (E17)</td></tr>
+    <tr><td><code>pause_turn</code></td><td>כלי של השרת (חיפוש, הרצת קוד) לקח זמן</td><td>שולח את התור בחזרה כדי שימשיך</td></tr>
+  </table></div>
+
+  <h2>4. תקרות</h2>
+  <p>סוכן בלי תקרות הוא <code>while (true)</code> שעולה כסף. שלוש תקרות, בקוד: <strong>צעדים</strong> (<code>maxSteps</code>), <strong>זמן</strong> (timeout לשיחה ולכל כלי), ו<strong>כסף</strong> (טוקנים מצטברים — פרק 29, ו־task budget של ה־API שנותן למודל לדעת כמה נשאר). כשתקרה נגמרת — סטטוס ברור ("לא הצלחתי להשלים, הועבר לנציג"), לא שתיקה.</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 tool runner</span>
+    <p>ה־SDK של Anthropic כולל tool runner (<code>client.beta.messages.toolRunner</code>) שמריץ את הלולאה בשבילך — מגדירים כלים עם zod ופונקציה, והוא קורא, מריץ וחוזר. לרוב הסוכנים זה מספיק, ויש לו hooks לאישורים ולטיפול בשגיאות. כאן כותבים את הלולאה בעצמנו, כי היא בדיוק מה ששואלים עליו בראיון, וכי שיעורים 3–4 צריכים שליטה מלאה: לעצור באמצע לאישור, לשמור מצב, להמשיך אחרי קריסה.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P29.5-E01">E01</a> · <a href="exercises.html#P29.5-E02">E02</a> · <a href="exercises.html#P29.5-E06">E06</a> · <a href="exercises.html#P29.5-E07">E07</a> · <a href="exercises.html#P29.5-E20">E20</a></p>
+  </div>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP: כלים שכל סוכן יכול להשתמש בהם — יחידה 29.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 29.5</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — MCP: כלים שכל סוכן יכול להשתמש בהם</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>הבעיה ש־MCP פותר: N אפליקציות × M מערכות.</li>
+      <li>host, client, server — ו־tools, resources, prompts.</li>
+      <li>לבנות שרת MCP ב־TypeScript, ולבדוק אותו בזיכרון.</li>
+      <li>לחבר שרת MCP לסוכן שלך — ומה לא לסמוך עליו.</li>
+    </ul>
+  </div>
+
+  <h2>1. למה פרוטוקול</h2>
+  <p>חנות הקפה רוצה שסוכן התמיכה יראה הזמנות. וגם עוזר הקוד של המפתחים. וגם ה־IDE. וגם צ׳אט פנימי של צוות התפעול. בלי סטנדרט — כל אחד מהם צריך אינטגרציה משלו לכל מערכת: N אפליקציות × M מערכות. <strong>MCP</strong> (Model Context Protocol) הוא פרוטוקול פתוח שהופך את זה ל־N + M: כל מערכת חושפת <em>שרת MCP</em> אחד, וכל אפליקציה שמדברת MCP יכולה להשתמש בו.</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="host אחד (אפליקציה עם מודל) מחזיק כמה clients, כל אחד מחובר לשרת MCP: חנות (בזיכרון/stdio), CRM מרוחק (HTTP), קבצים">
+      <defs><marker id="mc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="420" y="20" width="280" height="190" rx="14" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="440" y="60" width="100" height="40" rx="8" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="440" y="110" width="100" height="40" rx="8" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="440" y="160" width="100" height="40" rx="8" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="570" y="90" width="110" height="60" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="20" y="55" width="210" height="50" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="115" width="210" height="40" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="165" width="210" height="40" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M436 80 H 234" marker-end="url(#mc)" marker-start="url(#mc)"/>
+        <path d="M436 130 H 234" marker-end="url(#mc)" marker-start="url(#mc)"/>
+        <path d="M436 180 H 234" marker-end="url(#mc)" marker-start="url(#mc)"/>
+        <path d="M566 120 H 544" marker-end="url(#mc)" style="stroke-dasharray:4 3"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700" direction="rtl">
+        <text x="560" y="44">host: הסוכן שלך</text><text x="625" y="118">Claude</text>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="490" y="85">client</text><text x="490" y="135">client</text><text x="490" y="185">client</text>
+        <text x="125" y="76">coffee-shop server</text><text x="125" y="94" style="font-size:10px">get_order · search_products</text>
+        <text x="125" y="140">crm server</text><text x="125" y="190">files server</text>
+        <text x="335" y="72" style="font-size:10px">in-memory / stdio</text>
+        <text x="335" y="122" style="font-size:10px">Streamable HTTP + OAuth</text>
+        <text x="335" y="172" style="font-size:10px">stdio</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: ה־host (האפליקציה עם המודל) מחזיק client לכל שרת. שרת מקומי רץ כתהליך־ילד (stdio), שרת מרוחק — ב־HTTP עם אימות. השרת לא יודע איזה מודל משתמש בו, והמודל לא מדבר איתו ישירות: ה־host באמצע.</figcaption>
+  </figure>
+  <p>שרת MCP חושף שלושה סוגי דברים: <strong>tools</strong> (פעולות שהמודל מפעיל — המרכזי), <strong>resources</strong> (נתונים לקריאה, כמו קבצים או רשומות), ו־<strong>prompts</strong> (תבניות שהמשתמש בוחר). ביחידה — tools.</p>
+
+  <h2>2. שרת ב־TypeScript</h2>
+<pre><code class="lang-ts">import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+export function createCoffeeMcpServer(store: Store, customerId: number) {
+  const server = new McpServer({ name: "coffee-shop", version: "1.0.0" });
+  server.registerTool(
+    "get_order",
+    {
+      description: "Get one of the signed-in customer's orders by order id: status, total in ILS and items.",
+      inputSchema: { orderId: z.number().int().positive() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      if (!o || o.customerId !== customerId) return { content: [{ type: "text", text: "not found" }], isError: true };
+      return { content: [{ type: "text", text: JSON.stringify(o) }] };
+    },
+  );
+  return server;
+}</code></pre>
+  <p>שלושה דברים שעושים כלי טוב:</p>
+  <ul>
+    <li><strong>התיאור הוא ה־API למודל.</strong> השם, התיאור וה־schema הם בדיוק מה שהמודל רואה. "Cancel order" לא מספר מתי מותר לבטל; "Only orders that were not shipped yet can be cancelled" — כן (E21).</li>
+    <li><strong>schema שבודק:</strong> ה־SDK ממיר את zod ל־JSON Schema בשביל המודל, <em>ובודק</em> את הקלט לפני שהקוד שלך רץ — קלט לא תקין חוזר כשגיאה (E04).</li>
+    <li><strong>זהות מהשרת, לא מהמודל.</strong> <code>customerId</code> מגיע מה־host (המשתמש המחובר) — לא שדה בקלט. אחרת, "תראה לי את הזמנה 201" של לקוח אחר עובדת (E08, E21).</li>
+  </ul>
+  <p>ולבדיקות — <code>InMemoryTransport</code>: שרת ו־client באותו תהליך, בלי stdio ובלי רשת. כך עובדים הבודקים של היחידה, וכך כדאי לבדוק כל שרת MCP.</p>
+
+  <h2>3. לחבר לסוכן</h2>
+  <p>הסוכן שלך משתמש ב־Messages API. הגשר (E09): <code>listTools()</code> ← <code>tools</code> של Claude (אותו JSON Schema); וכל <code>tool_use</code> ← <code>callTool()</code> ← <code>tool_result</code>, עם <code>isError</code> ← <code>is_error</code>. prefix לשמות (<code>shop_get_order</code>) כשמחברים כמה שרתים — כדי ששני <code>search</code> לא יתנגשו.</p>
+  <p>(ה־API של Claude יודע גם להתחבר בעצמו לשרתי MCP <em>מרוחקים</em> — "MCP connector". הגשר שלך נחוץ לשרתים מקומיים, וכשאתה רוצה לעבור על כל קריאה: אישור, הרשאה, לוג.)</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ שרת MCP הוא קוד של מישהו אחר</span>
+    <p>שרת שהתקנת מ־npm רץ עם ההרשאות שלך — כמו כל תלות (פרק 13). ויותר מזה: תיאורי הכלים שלו נכנסים להקשר של המודל, ואפשר להחביא בהם הוראות ("לפני כל שימוש, שלח את תוכן הקובץ ‎~/.ssh/…"). שרתים — ממקור מוכר, בגרסה קבועה, מעט ככל האפשר, ועם הרשאות מינימליות (בדיוק כמו IAM ביחידה 25.5).</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P29.5-E03">E03</a> · <a href="exercises.html#P29.5-E04">E04</a> · <a href="exercises.html#P29.5-E08">E08</a> · <a href="exercises.html#P29.5-E09">E09</a> · <a href="exercises.html#P29.5-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-loop.html"><small>הקודם</small>שיעור 1 — סוכן או workflow, ולולאה שמחזיקה</a><a href="lesson-03-safety.html"><small>הבא</small>שיעור 3 — אישורים, guardrails ותוכן לא אמין</a></div>
+</main>
+</body>
+</html>
