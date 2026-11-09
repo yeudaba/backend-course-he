@@ -16,14 +16,14 @@ const ICONS = {
   "05-functions": "🧩", "06-arrays": "📚", "07-objects": "🗂️", "08-modules-errors": "🐞", "08p-project-expenses": "💰",
   "09-git": "🌿", "10-async": "⏳", "11-typescript": "🔷", "12-design": "📐", "13-node-npm": "📦", "14-http": "🌐",
   "15-express": "🚂", "15p-project-tasks": "✅", "15w-web-bridge": "🎨", "16-sql": "🗄️", "17-relations": "🔗",
-  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕", "19w-mysql": "🐬", "25w-cloud": "☁️", "26-redis": "⚡", "26w-messaging": "📨", "27-algorithms": "🧠", "28-system-design": "🏗️", "28w-scale": "🚦", "29-ai-backend": "🤖", "29w-agents": "🦾", "29x-project-events": "📊", "30-career": "💼",
+  "18-consistency": "⚖️", "19-prisma": "🔺", "20-nestjs": "🐈", "21-auth": "🔐", "22-testing": "🧪", "23-docker": "🐳", "24-production": "🏭", "25-deploy": "🚀", "25p-project-shop": "☕", "25v-mysql": "🐬", "25w-mongodb": "🍃", "26-redis": "⚡", "26c-cloud": "☁️", "26w-messaging": "📨", "27-algorithms": "🧠", "28-system-design": "🏗️", "28w-scale": "🚦", "29-ai-backend": "🤖", "29w-agents": "🦾", "29x-project-events": "📊", "30-career": "💼",
 };
 
 // מה שעוד לא נבנה — לפי הסדר בקורס (slug קובע את המקום בטבלה)
 const PLANNED = [
-  { slug: "19w-mysql", part: "חטיבה ג׳ — שרת, מסד נתונים ו־HTML בסיסי", label: "יחידה 19.5", icon: "🐬", title: "MySQL", topics: "מ־PostgreSQL ל־MySQL: הבדלים, נעילות, mysql2" },
-  { slug: "25w-cloud", part: "חטיבה ד׳ — רמת תעשייה", label: "יחידה 25.5", icon: "☁️", title: "ענן ו־Kubernetes", topics: "AWS (IAM, S3, SQS, RDS, ElastiCache, ECS), Kubernetes, Helm, Jenkins, Argo CD" },
-  { slug: "26w-messaging", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 26.5", icon: "📨", title: "תורים ואירועים", topics: "RabbitMQ, Kafka, SQS" },
+  { slug: "25v-mysql", part: "חטיבה ד׳ — רמת תעשייה", label: "יחידה 25.5", icon: "🐬", title: "MySQL", topics: "מ־PostgreSQL ל־MySQL: הבדלים, נעילות, mysql2" },
+  { slug: "26c-cloud", part: "חטיבה ד׳ — רמת תעשייה", label: "יחידה 26.3", icon: "☁️", title: "ענן ו־Kubernetes", topics: "AWS (IAM, S3, SQS, RDS, ElastiCache, ECS), Kubernetes, Helm, Jenkins, Argo CD" },
+  { slug: "26w-messaging", part: "חטיבה ד׳ — רמת תעשייה", label: "יחידה 26.5", icon: "📨", title: "תורים ואירועים", topics: "RabbitMQ, Kafka, SQS" },
   { slug: "28w-scale", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 28.5", icon: "🚦", title: "ביצועים ונתונים בקנה מידה", topics: "בדיקות עומס, profiling, OLAP ומסדים עמודתיים: BigQuery, Snowflake, Databricks" },
   { slug: "29w-agents", part: "חטיבה ה׳ — ראיונות והרחבות", label: "יחידה 29.5", icon: "🤖", title: "סוכני AI בפרודקשן", topics: "agentic AI: לולאות, כלים, MCP, guardrails, evals" },
   { slug: "29x-project-events", part: "חטיבה ה׳ — ראיונות והרחבות", label: "פרויקט 4", icon: "📊", title: "מערכת אירועים ואנליטיקה", topics: "Kafka, MySQL, מסד עמודתי, Kubernetes" },

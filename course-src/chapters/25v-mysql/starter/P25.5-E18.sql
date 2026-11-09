@@ -1,0 +1,3 @@
+-- P25.5-E18
+-- השאילתה האיטית: SELECT id, total FROM orders WHERE customer_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 10
+-- כתוב כאן את האינדקס שהופך אותה למהירה

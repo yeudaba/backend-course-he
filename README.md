@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **41** | **188** | **895** | **637** | **632** |
+| **42** | **196** | **935** | **669** | **648** |
 
 ## מה שונה כאן
 
@@ -38,9 +38,9 @@
 |---|---|---|:-:|
 | **חטיבה א׳** | יסודות JavaScript | <code>▰▰▰▰▰▰▰▰▰▰</code> | 12/12 |
 | **חטיבה ב׳** | TypeScript ו־Node.js | <code>▰▰▰▰▰▰▰▰▰▰</code> | 4/4 |
-| **חטיבה ג׳** | שרת, מסד נתונים ו־HTML בסיסי | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
-| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 9/9 |
-| **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▰▰▰▰</code> | 8/8 |
+| **חטיבה ג׳** | שרת, מסד נתונים ו־HTML בסיסי | <code>▰▰▰▰▰▰▰▰▰▰</code> | 7/7 |
+| **חטיבה ד׳** | רמת תעשייה | <code>▰▰▰▰▰▰▰▰▰▰</code> | 12/12 |
+| **חטיבה ה׳** | ראיונות והרחבות | <code>▰▰▰▰▰▰▰▰▰▰</code> | 7/7 |
 
 </div>
 
@@ -209,7 +209,6 @@
 | [פרק 17](backend-course/17-relations/index.html) | קשרים ושאילתות | 4 | 25 | 20 | ✔ |
 | [פרק 18](backend-course/18-consistency/index.html) | עקביות וביצועים | 4 | 25 | 20 | ✔ |
 | [פרק 19](backend-course/19-prisma/index.html) | Prisma ו־migrations | 4 | 25 | 21 | ✔ |
-| [יחידה 19.5](backend-course/19w-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 25 | 20 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -265,14 +264,6 @@
 3. שאילתות, transactions ושגיאות
 4. פרויקט 2 עובר ל־PostgreSQL <sub>🤖 PR2-DB</sub>
 
-**יחידה 19.5 — MySQL: מה שונה מ־PostgreSQL**
-
-1. MySQL מול PostgreSQL: טיפוסים, קולציות ומלכודות
-2. שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT
-3. InnoDB: טרנזקציות, נעילות ו־deadlocks
-4. Node.js מול MySQL עם mysql2
-5. אינדקסים, EXPLAIN, migrations והעברת נתונים
-
 </details>
 
 ### חטיבה ד׳ — רמת תעשייה
@@ -283,10 +274,13 @@
 | [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 25 | 22 | ✔ |
 | [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 25 | 21 | ✔ |
 | [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 25 | 21 | ✔ |
-| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 5 | 25 | 22 | ✔ |
+| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 30 | 26 | ✔ |
 | [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 25 | 22 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
-| [יחידה 25.5](backend-course/25w-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 25 | 20 | ✔ |
+| [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 25 | 20 | ✔ |
+| [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 25 | 20 | ✔ |
+| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 30 | 25 | ✔ |
+| [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 25 | 20 | ✔ |
 | [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 25 | 20 | ✔ |
 
 <details>
@@ -330,6 +324,7 @@
 3. Idempotency: לשלוח שוב בלי לחשוש
 4. הגבלת קצב וכיבוי מסודר
 5. פרויקט 2, שלב ז׳: מוכן לפרודקשן <sub>🤖 PR2-PROD</sub>
+6. Observability: מדדים, אחוזונים ו־tracing
 
 **פרק 25 — CI ופריסה: מהמחשב שלך לכתובת חיה**
 
@@ -348,7 +343,32 @@
 5. שלב 4: בדיקות, Docker, CI, פריסה ו־README <sub>🤖 PR3-SHIP</sub>
 6. פתרון לדוגמה והחלטות עיצוב <sub>🔒 אחרי שסיימת</sub>
 
-**יחידה 25.5 — ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD**
+**יחידה 25.5 — MySQL: מה שונה מ־PostgreSQL**
+
+1. MySQL מול PostgreSQL: טיפוסים, קולציות ומלכודות
+2. שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT
+3. InnoDB: טרנזקציות, נעילות ו־deadlocks
+4. Node.js מול MySQL עם mysql2
+5. אינדקסים, EXPLAIN, migrations והעברת נתונים
+
+**יחידה 25.7 — MongoDB: מסד של מסמכים**
+
+1. מסמכים במקום שורות
+2. שאילתות ועדכונים
+3. תכנון מבנה: embed או reference
+4. aggregation ואינדקסים
+5. Node.js, טרנזקציות — ו־Mongo או Postgres?
+
+**פרק 26 — Redis: מטמון, מצב משותף ותורים**
+
+1. Redis: מבני נתונים בזיכרון
+2. מטמון: cache-aside, ביטול ו־stampede
+3. מצב משותף: הגבלת קצב, מנעולים ו־Lua
+4. תורים ועבודות ברקע עם BullMQ
+5. פרויקט 3, שלב 5: Redis בחנות <sub>🤖 PR3-REDIS</sub>
+6. זמן אמת: SSE, WebSocket ו־fan-out
+
+**יחידה 26.3 — ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD**
 
 1. המפה של AWS: מה רץ איפה
 2. IAM, ה־SDK ו־S3
@@ -370,25 +390,16 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 5 | 25 | 21 | ✔ |
 | [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 25 | 20 | ✔ |
 | [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 25 | 20 | ✔ |
 | [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 25 | 20 | ✔ |
 | [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 25 | 20 | ✔ |
 | [יחידה 29.5](backend-course/29w-agents/index.html) | סוכני AI בפרודקשן | 5 | 25 | 20 | ✔ |
 | [פרויקט 4](backend-course/29x-project-events/index.html) | מערכת אירועים ואנליטיקה | 7 | — | 6 | ✔ |
-| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 5 | 25 | 20 | ✔ |
+| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 6 | 30 | 24 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
-
-**פרק 26 — Redis: מטמון, מצב משותף ותורים**
-
-1. Redis: מבני נתונים בזיכרון
-2. מטמון: cache-aside, ביטול ו־stampede
-3. מצב משותף: הגבלת קצב, מנעולים ו־Lua
-4. תורים ועבודות ברקע עם BullMQ
-5. פרויקט 3, שלב 5: Redis בחנות <sub>🤖 PR3-REDIS</sub>
 
 **פרק 27 — אלגוריתמים וראיונות**
 
@@ -446,7 +457,8 @@
 2. קורות חיים ו־LinkedIn
 3. לספר על הפרויקט: שתי דקות ו־STAR
 4. שלוש סימולציות ראיון
-5. חיפוש עבודה כתהליך — וסוף הקורס
+5. לעבוד עם עוזר קוד AI
+6. חיפוש עבודה כתהליך — וסוף הקורס
 
 </details>
 

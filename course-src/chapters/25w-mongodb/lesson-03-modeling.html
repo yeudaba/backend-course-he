@@ -1,0 +1,127 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>השאלה הראשונה בתכנון: איך <em>קוראים</em> את הנתונים, לא איך הם "נראים".</li>
+      <li>embed מול reference — ומתי כל אחד.</li>
+      <li>שכפול מכוון: למה בהזמנה שומרים עותק של המחיר והשם.</li>
+      <li>מערכים שגדלים לנצח, ומגבלת 16MB.</li>
+      <li>schema validation בשרת עם <code>$jsonSchema</code>.</li>
+    </ul>
+  </div>
+
+  <h2>1. מתכננים לפי השאילתות</h2>
+  <p>ב־PostgreSQL תכננת לפי הישויות: טבלה לכל דבר, בלי כפילויות (נרמול, פרק 17), ו־JOIN בזמן הקריאה. ב־Mongo השאלה הפוכה: <strong>מה המסך/ה־endpoint צריך, ואיך הוא מקבל את זה בקריאה אחת?</strong> בחנות הקפה:</p>
+  <ul>
+    <li>דף הזמנה — ההזמנה וכל הפריטים שלה, תמיד ביחד.</li>
+    <li>"ההזמנות שלי" — רשימה של הזמנות של לקוח, מהחדשה.</li>
+    <li>דף מוצר — המוצר, המאפיינים שלו ותקציר הדירוגים.</li>
+    <li>ניהול — מכירות לפי מוצר (aggregation, שיעור 4).</li>
+  </ul>
+
+  <h2>2. embed או reference</h2>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="השוואה: פריטים מוטמעים בתוך ההזמנה מול לקוח שמוחזק כהפניה">
+      <g style="stroke-width:2">
+        <rect x="380" y="20" width="320" height="190" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="20" width="320" height="190" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:14px;font-weight:700">
+        <text x="540" y="46" class="mono" direction="ltr">embed</text>
+        <text x="180" y="46" class="mono" direction="ltr">reference</text>
+      </g>
+      <g class="mono" direction="ltr" style="font-size:12px">
+        <rect x="400" y="62" width="280" height="80" rx="6" style="fill:var(--svg-fill);stroke:var(--green)"/>
+        <text x="412" y="84">order o1</text>
+        <text x="428" y="106">items: [ {p1 ×2}, {p5 ×1} ]</text>
+        <text x="428" y="126">total: 213</text>
+        <rect x="40" y="62" width="120" height="44" rx="6" style="fill:var(--svg-fill);stroke:var(--purple)"/>
+        <text x="52" y="88">order o1</text>
+        <rect x="200" y="62" width="120" height="44" rx="6" style="fill:var(--svg-fill);stroke:var(--purple)"/>
+        <text x="212" y="88">customer c1</text>
+        <rect x="40" y="120" width="120" height="44" rx="6" style="fill:var(--svg-fill);stroke:var(--purple)"/>
+        <text x="52" y="146">order o3</text>
+      </g>
+      <defs><marker id="md" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--purple)"/></marker></defs>
+      <g style="fill:none;stroke:var(--purple);stroke-width:1.8">
+        <path d="M160 84 H 198" marker-end="url(#md)"/>
+        <path d="M160 142 C 185 142 200 125 225 108" marker-end="url(#md)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="540" y="170">נקרא ונכתב ביחד, שייך רק להזמנה</text>
+        <text x="540" y="188">מספר הפריטים קטן ומוגבל</text>
+        <text x="180" y="186">לקוח אחד ← הרבה הזמנות; משתנה לבד</text>
+        <text x="180" y="204">בכל הזמנה: customerId</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: פריטי הזמנה — בתוך ההזמנה. הלקוח — מסמך נפרד, וכל הזמנה מחזיקה <code>customerId</code>.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>embed (בתוך המסמך)</th><th>reference (מזהה בלבד)</th></tr>
+    <tr><td>מתי</td><td>"חלק של" — נקרא ונכתב ביחד, שייך רק להורה</td><td>ישות עצמאית, משותפת לרבים, או משתנה לבד</td></tr>
+    <tr><td>כמות</td><td>קטנה ומוגבלת (פריטים בהזמנה, כתובות של לקוח)</td><td>לא מוגבלת (הזמנות של לקוח, תגובות לפוסט פופולרי)</td></tr>
+    <tr><td>בחנות</td><td>items בהזמנה, specs במוצר, תקציר דירוגים</td><td>customerId בהזמנה, productId בפריט</td></tr>
+    <tr><td>קריאה</td><td>מסמך אחד, בלי join</td><td><code>$lookup</code> או שתי שאילתות</td></tr>
+    <tr><td>כתיבה</td><td>אטומית — מסמך אחד</td><td>כמה מסמכים ← אולי טרנזקציה</td></tr>
+  </table></div>
+
+  <h2>3. שכפול מכוון</h2>
+  <p>בכל פריט בהזמנה שמרנו <code>name</code> ו־<code>price</code> — עותק ממסמך המוצר. ב־Postgres זה "לא מנורמל". כאן זה נכון, משתי סיבות:</p>
+  <ul>
+    <li><strong>זו האמת ההיסטורית.</strong> המחיר במוצר יעלה בחודש הבא; ההזמנה מינואר צריכה להראות כמה <em>שילמו</em>. (גם ב־Postgres שמרנו <code>unit_price</code> ב־<code>order_items</code> מאותה סיבה.)</li>
+    <li><strong>הקריאה זולה.</strong> דף ההזמנה לא צריך <code>$lookup</code> למוצרים כדי להציג שמות.</li>
+  </ul>
+  <p>המחיר של שכפול: אם השדה המשוכפל <em>צריך</em> להתעדכן (שם הלקוח מופיע ב־1,000 פוסטים שלו, והוא שינה שם) — צריך לעדכן 1,000 מסמכים. לכן משכפלים רק מה שלא משתנה, או שמותר לו להיות היסטורי.</p>
+
+  <h2>4. מערכים שגדלים לנצח</h2>
+  <p>מסמך מוגבל ל־<strong>16MB</strong>. זה המון — אבל מערך שגדל בלי הגבלה יגיע לשם, ולפני כן כל קריאה וכתיבה של המסמך תהיה איטית. דוגמה: לשמור את <em>כל</em> ההזמנות בתוך מסמך הלקוח. ללקוחה פעילה יש 3,000 הזמנות, ודף הפרופיל שלה טוען את כולן. הכלל: מערך מוטמע — רק כשיש לו גבול טבעי. אחרת: collection נפרד עם הפניה, ואינדקס (<code>{ customerId: 1, createdAt: -1 }</code>, שיעור 4).</p>
+  <p>ומה עם הדירוגים במוצר? בנתוני הדוגמה הם מוטמעים, כי יש מעט. בחנות אמיתית עם אלפי דירוגים: collection <code>reviews</code> נפרד, ובמוצר רק <strong>תקציר</strong> — <code>ratingCount</code> ו־<code>ratingSum</code>, שמתעדכנים באותה פקודה שמוסיפה דירוג (E16). זה דפוס נפוץ: "computed pattern".</p>
+
+  <h2>5. $lookup — כשבכל זאת צריך join</h2>
+  <p>הצגת "ההזמנה ושם הלקוח" בממשק ניהול: <code>$lookup</code> הוא LEFT JOIN, בתוך aggregation (שיעור 4). הוא עובד, אבל אם כמעט כל שאילתה צריכה <code>$lookup</code> — סימן שהמבנה לא מתאים לדפוסי הגישה, או ש־Postgres היה בחירה טובה יותר לחלק הזה.</p>
+
+  <h2>6. schema validation בשרת</h2>
+  <p>"בלי schema" לא חייב להיות "בלי כללים". <code>$jsonSchema</code> על collection — והשרת דוחה כל insert או update שלא עומד בהם (קוד שגיאה <strong>121</strong>):</p>
+```ts run
+import { MongoClient, MongoServerError } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson3");
+await db.createCollection("products", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["name", "price"],
+      properties: {
+        name: { bsonType: "string", minLength: 1 },
+        price: { bsonType: ["int", "double"], minimum: 0 },
+      },
+    },
+  },
+});
+const products = db.collection("products");
+
+await products.insertOne({ name: "Ceramic Mug", price: 35 });
+for (const bad of [{ name: "Mug" }, { name: "Mug", price: "35" }, { name: "Mug", price: -1 }]) {
+  try {
+    await products.insertOne({ ...bad }); // עותק: insertOne מוסיף _id לאובייקט שקיבל
+  } catch (err) {
+    if (err instanceof MongoServerError) console.log(err.code, JSON.stringify(bad));
+  }
+}
+console.log(await products.countDocuments());
+
+await db.dropDatabase();
+await client.close();
+```
+```out
+121 {"name":"Mug"}
+121 {"name":"Mug","price":"35"}
+121 {"name":"Mug","price":-1}
+1
+```
+  <p>זה רשת ביטחון ברמת המסד — כמו <code>NOT NULL</code> ו־<code>CHECK</code> ב־Postgres. הולידציה הראשית נשארת בקוד (Zod), כדי להחזיר ללקוח 400 עם הודעה ברורה; ה־validator תופס את מה שעבר בטעות (סקריפט migration, שירות אחר שכותב לאותו collection). E18 בונה אחד מלא, כולל <code>enum</code> ו־<code>additionalProperties: false</code>.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.7-E02">E02</a> · <a href="exercises.html#P25.7-E16">E16</a> · <a href="exercises.html#P25.7-E18">E18</a></p>
+  </div>

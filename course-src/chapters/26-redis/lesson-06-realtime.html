@@ -1,0 +1,163 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>איך השרת שולח עדכון בלי שהלקוח ביקש: polling, SSE ו־WebSocket — ומתי כל אחד.</li>
+      <li>Server-Sent Events ב־Express: הפורמט, התחברות מחדש ו־<code>Last-Event-ID</code>.</li>
+      <li>WebSocket עם <code>ws</code>: upgrade, אימות לפני שהחיבור נפתח, והודעות JSON.</li>
+      <li>כמה שרתים: fan-out דרך Redis pub/sub.</li>
+      <li>המלכודות: חיבורים שלא נסגרים, proxies, ו־heartbeat.</li>
+    </ul>
+  </div>
+
+  <h2>1. השרת רוצה לדבר ראשון</h2>
+  <p>HTTP הוא "הלקוח שואל, השרת עונה". אבל בחנות הקפה (פרויקט 3), דנה מסתכלת על דף ההזמנה שלה, והסטטוס משתנה מ"בהכנה" ל"נשלחה" — איך הדף יודע? שלוש דרכים:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>polling</th><th>SSE</th><th>WebSocket</th></tr>
+    <tr><td>איך</td><td>הלקוח שואל כל X שניות</td><td>בקשת HTTP אחת שנשארת פתוחה; השרת כותב אליה אירועים</td><td>החיבור "משודרג" מ־HTTP לערוץ דו־כיווני</td></tr>
+    <tr><td>כיוון</td><td>לקוח ← שרת</td><td>שרת ← לקוח</td><td>שני הכיוונים</td></tr>
+    <tr><td>עיכוב</td><td>עד X שניות</td><td>מיד</td><td>מיד</td></tr>
+    <tr><td>בצד הלקוח</td><td><code>setInterval</code> + <code>fetch</code></td><td><code>new EventSource(url)</code> — מתחבר מחדש לבד</td><td><code>new WebSocket(url)</code> — התחברות מחדש עליך</td></tr>
+    <tr><td>מתאים ל</td><td>עדכונים נדירים, פשטות</td><td>סטטוס, התראות, לוחות בזמן אמת</td><td>צ'אט, עריכה משותפת, משחקים</td></tr>
+  </table></div>
+  <p>הכלל: אם רק השרת מדבר — <strong>SSE</strong>. הוא HTTP רגיל: עובר דרך proxies, עובד עם ה־cookies וה־CORS שכבר יש, ו<strong>הדפדפן מתחבר מחדש לבד</strong>. WebSocket — כשגם הלקוח שולח הרבה הודעות קטנות (E26).</p>
+
+  <h2>2. Server-Sent Events</h2>
+  <p>הפורמט פשוט: <code>Content-Type: text/event-stream</code>, ואז הודעות טקסט. כל הודעה היא שורות <code>שדה: ערך</code>, ושורה ריקה מסיימת אותה. נריץ שרת וקורא באותו קובץ:</p>
+```ts run
+import express from "express";
+
+const app = express();
+app.get("/orders/7/events", (req, res) => {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+  const steps = ["received", "preparing", "shipped"];
+  let id = 0;
+  const timer = setInterval(() => {
+    id++;
+    res.write(`id: ${id}\nevent: status\ndata: ${JSON.stringify({ order: 7, status: steps[id - 1] })}\n\n`);
+    if (id === steps.length) { clearInterval(timer); res.end(); }
+  }, 20);
+  req.on("close", () => clearInterval(timer)); // הלקוח עזב — מפסיקים לכתוב
+});
+
+const server = app.listen(0);
+const res = await fetch(`http://localhost:${server.address().port}/orders/7/events`);
+console.log(res.headers.get("content-type"));
+const decoder = new TextDecoder();
+for await (const chunk of res.body) process.stdout.write(decoder.decode(chunk)); // מה שעובר על החוט
+server.close();
+```
+```out
+text/event-stream
+id: 1
+event: status
+data: {"order":7,"status":"received"}
+
+id: 2
+event: status
+data: {"order":7,"status":"preparing"}
+
+id: 3
+event: status
+data: {"order":7,"status":"shipped"}
+```
+  <p>בדפדפן לא קוראים את הזרם ביד:</p>
+```js file=בדפדפן
+const es = new EventSource("/orders/7/events");
+es.addEventListener("status", (e) => render(JSON.parse(e.data)));
+```
+  <p>שלושה שדות שכדאי להכיר:</p>
+  <ul>
+    <li><code>id</code> — אם החיבור נפל (Wi‑Fi ברכבת, deploy של השרת), <code>EventSource</code> מתחבר מחדש לבד ושולח <strong><code>Last-Event-ID: 2</code></strong>. שרת ששומר את האירועים האחרונים שולח רק את מה שפוספס (E28).</li>
+    <li><code>event</code> — שם הסוג, ל־<code>addEventListener</code>. בלעדיו — <code>message</code>.</li>
+    <li><code>retry</code> — כמה מילישניות הדפדפן מחכה לפני שהוא מתחבר מחדש.</li>
+  </ul>
+  <p>ושורה שמתחילה בנקודתיים (<code>: ping</code>) היא הערה — הדפדפן מתעלם ממנה. שולחים אותה כל 15–30 שניות כ־<strong>heartbeat</strong>: load balancers ו־proxies סוגרים חיבור ששקט יותר מדי זמן.</p>
+
+  <h2>3. WebSocket</h2>
+  <p>WebSocket מתחיל כבקשת HTTP עם <code>Upgrade: websocket</code>. השרת עונה <code>101 Switching Protocols</code>, ומאותו רגע זה כבר לא HTTP: שני הצדדים שולחים הודעות (frames) מתי שהם רוצים, על אותו חיבור TCP. ב־Node, השרת הוא החבילה <code>ws</code>, והלקוח — <code>WebSocket</code> גלובלי (מובנה מ־Node 22, כמו בדפדפן):</p>
+```ts run
+import http from "node:http";
+import { WebSocketServer } from "ws";
+
+const server = http.createServer();
+const wss = new WebSocketServer({ server }); // מחובר לאותו שרת HTTP — אותו פורט
+wss.on("connection", (ws, req) => {
+  console.log("server: connected", req.url);
+  ws.on("message", (raw) => {
+    const msg = JSON.parse(String(raw));
+    ws.send(JSON.stringify({ type: "echo", text: msg.text.toUpperCase() }));
+  });
+});
+await new Promise<void>((r) => server.listen(0, r));
+
+const ws = new WebSocket(`ws://localhost:${(server.address() as any).port}/live?room=7`);
+ws.addEventListener("open", () => ws.send(JSON.stringify({ type: "say", text: "hello" })));
+ws.addEventListener("message", (e) => {
+  console.log("client got:", e.data);
+  ws.close();
+  wss.close();
+  server.close();
+});
+```
+```out
+server: connected /live?room=7
+client got: {"type":"echo","text":"HELLO"}
+```
+  <p>מה שצריך לבנות בעצמך (ו־SSE נתן חינם): התחברות מחדש אחרי ניתוק, ו־<strong>heartbeat</strong> — <code>ws.ping()</code> כל 30 שניות, ומי שלא ענה ב־<code>pong</code> — <code>ws.terminate()</code>. בלי זה, לקוח שהטלפון שלו נכבה נשאר "מחובר" בזיכרון לנצח.</p>
+  <div class="box warn">
+    <span class="box-title">⚠️ אימות — לפני שהחיבור נפתח</span>
+    <p>בדפדפן אי אפשר להוסיף header של <code>Authorization</code> ל־<code>new WebSocket()</code>. האפשרויות: cookie של session, או token קצר־מועד בכתובת (<code>?token=</code>, שהשרת מנפיק לחיבור אחד). את הבדיקה עושים באירוע <code>upgrade</code> של שרת ה־HTTP — ואם לא תקין, מחזירים <code>401</code> וסוגרים, <strong>לפני</strong> שנפתח חיבור (E29). ובכל הודעה: מי שלח נקבע לפי החיבור, אף פעם לא לפי שדה בהודעה. ו־token בכתובת נכתב ללוגים של proxies — לכן קצר־מועד.</p>
+  </div>
+
+  <h2>4. כמה שרתים: fan-out דרך Redis</h2>
+  <figure>
+    <svg viewBox="0 0 720 250" role="img" aria-label="שלושה שרתים עם לקוחות SSE, ו־Redis pub/sub באמצע שמעביר אירוע משרת אחד לכולם">
+      <g style="stroke-width:2">
+        <rect x="290" y="20" width="140" height="56" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="40" y="130" width="160" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="280" y="130" width="160" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="520" y="130" width="160" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <defs><marker id="rt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="fill:none;stroke:var(--svg-stroke);stroke-width:1.8">
+        <path d="M120 130 L 300 78" marker-end="url(#rt)" style="stroke:var(--amber);stroke-width:2.5"/>
+        <path d="M350 78 L 350 128" marker-end="url(#rt)"/>
+        <path d="M410 78 L 590 128" marker-end="url(#rt)"/>
+        <path d="M300 78 L 140 128" marker-end="url(#rt)" style="stroke-dasharray:5 4"/>
+        <path d="M600 180 L 600 215" marker-end="url(#rt)"/>
+        <path d="M360 180 L 360 215" marker-end="url(#rt)"/>
+        <path d="M120 180 L 120 215" marker-end="url(#rt)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="360" y="44" class="mono" direction="ltr">Redis</text>
+        <text x="120" y="160" direction="ltr" class="mono">api A</text><text x="360" y="160" direction="ltr" class="mono">api B</text><text x="600" y="160" direction="ltr" class="mono">api C</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px">
+        <text x="360" y="64" class="mono" direction="ltr">PUBLISH orders</text>
+        <text x="190" y="96" direction="rtl">"הזמנה 7 נשלחה"</text>
+        <text x="120" y="234" direction="rtl">לקוחות של A</text><text x="360" y="234" direction="rtl">לקוחות של B</text><text x="600" y="234" direction="rtl">הדפדפן של דנה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: העדכון קרה ב־A, דנה מחוברת ל־C. כל שרת מנוי לערוץ פעם אחת, ומפיץ ללקוחות שמחוברים <em>אליו</em>. גם A מקבל את ההודעה חזרה מ־Redis — לכן הוא לא שולח מקומית בנפרד.</figcaption>
+  </figure>
+  <p>חיבור SSE או WebSocket מחובר לתהליך <strong>אחד</strong>. עם שלושה שרתים מאחורי load balancer, אירוע שקרה בשרת A צריך להגיע גם ללקוחות של B ו־C. זה בדיוק pub/sub משיעור 3: כל שרת עושה <code>SUBSCRIBE</code> פעם אחת (בחיבור נפרד), ומפיץ כל הודעה ללקוחות המקומיים שלו (E30). ומה ש־pub/sub לא נותן: שמירה. שרת שהיה למטה ברגע ה־publish — פספס. ל־SSE זה בסדר (Last-Event-ID, או טעינה מחדש); למה שאסור לפספס — תור (שיעור 4).</p>
+
+  <h2>5. מלכודות בפרודקשן</h2>
+  <ul>
+    <li><strong>חיבורים פתוחים הם משאב.</strong> כל לקוח מחזיק socket וזיכרון. ניקוי ב־<code>req.on("close")</code> (SSE) וב־<code>ws.on("close")</code>, ו־heartbeat שמזהה חיבורים מתים.</li>
+    <li><strong>proxies ודחיסה.</strong> nginx מחזיק תשובות בזיכרון לפני שהוא שולח (buffering) — האירועים מגיעים בבת אחת, באיחור. <code>X-Accel-Buffering: no</code>, ובלי middleware של compression על נתיב ה־SSE.</li>
+    <li><strong>timeouts.</strong> load balancers סוגרים חיבור "שקט" אחרי 60 שניות בערך. heartbeat מתחת לזה.</li>
+    <li><strong>HTTP/1.1: עד 6 חיבורים לדומיין בדפדפן.</strong> שבע לשוניות עם SSE — השביעית נתקעת. ב־HTTP/2 (שה־reverse proxy מפרק 25 נותן) הבעיה נעלמת.</li>
+    <li><strong>deploy.</strong> כיבוי מסודר (פרק 24) מחכה שבקשות יסתיימו — וחיבור SSE לא מסתיים לעולם. ב־SIGTERM סוגרים את חיבורי ה־SSE והלקוחות מתחברים מחדש לשרת אחר.</li>
+  </ul>
+  <p><strong>בפרויקט 3 (רשות):</strong> <code>GET /orders/:id/events</code> ב־SSE — רק לבעל ההזמנה (אותו בדיקת בעלות כמו ב־<code>GET /orders/:id</code>) — שמודיע על כל שינוי סטטוס. ה־worker של התשלומים (שיעור 5) מפרסם ב־Redis, וכל שרת מפיץ ללקוחות שלו.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P26-E26">E26</a> · <a href="exercises.html#P26-E27">E27</a> · <a href="exercises.html#P26-E28">E28</a> · <a href="exercises.html#P26-E29">E29</a> · <a href="exercises.html#P26-E30">E30</a></p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"תכנן מערכת התראות" ו"איך היית בונה צ'אט?" הן שאלות system design קלאסיות. תשובה טובה מתחילה בשאלה "מי מדבר?" (SSE מול WebSocket), ממשיכה ב"איך זה עובד עם כמה שרתים?" (pub/sub, ולמה לא sticky sessions בלבד), ונגמרת במלכודות: אימות לפני ה־upgrade, heartbeat, ומה קורה ללקוח שהתנתק (Last-Event-ID). בפרק 28 תשתמש בזה בשאלת תכנון שלמה.</p>
+  </div>

@@ -20,9 +20,17 @@ fi
 docker pull -q postgres:18-alpine >/dev/null 2>&1 || true
 # פרק 26: Redis 8 בקונטיינר course-redis על פורט 6380 (לא 6379 — כדי לא להתנגש ב־Redis של הלומד)
 docker start course-redis >/dev/null 2>&1 || docker run -d --name course-redis -p 6380:6379 redis:8-alpine >/dev/null
-# יחידה 19.5: MySQL 8.4 בקונטיינר course-mysql על פורט 3307 (root בלי סיסמה — רק בסביבת האימות)
+# יחידה 25.5: MySQL 8.4 בקונטיינר course-mysql על פורט 3307 (root בלי סיסמה — רק בסביבת האימות)
 docker start course-mysql >/dev/null 2>&1 || docker run -d --name course-mysql -p 3307:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=yes mysql:8.4 >/dev/null
-# יחידה 25.5: LocalStack (אמולטור של AWS — S3, SQS, IAM) על 4566
+# יחידה 25.7: MongoDB 8 בקונטיינר course-mongo על 27018, כ־replica set של שרת אחד (טרנזקציות דורשות replica set).
+# Docker Hub מחזיר לפעמים 429 (מגבלת קצב) — אז מושכים את אותו image מה־mirror של Google
+if ! docker image inspect mongo:8 >/dev/null 2>&1; then
+  docker pull -q mongo:8 >/dev/null 2>&1 || { docker pull -q mirror.gcr.io/library/mongo:8 >/dev/null && docker tag mirror.gcr.io/library/mongo:8 mongo:8; }
+fi
+docker start course-mongo >/dev/null 2>&1 || docker run -d --name course-mongo -p 27018:27017 mongo:8 --replSet rs0 >/dev/null
+for i in $(seq 60); do docker exec course-mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1 && break; sleep 1; done
+docker exec course-mongo mongosh --quiet --eval 'try { rs.status() } catch (e) { rs.initiate() }' >/dev/null
+# יחידה 26.3: LocalStack (אמולטור של AWS — S3, SQS, IAM) על 4566
 docker start course-localstack >/dev/null 2>&1 || docker run -d --name course-localstack -p 4566:4566 -e SERVICES=s3,sqs,iam,sts localstack/localstack:4.14.0 >/dev/null
 # יחידה 26.5: RabbitMQ על 5673, Kafka (KRaft, broker אחד) על 9095
 docker start course-rabbit >/dev/null 2>&1 || docker run -d --name course-rabbit -p 5673:5672 rabbitmq:4-alpine >/dev/null

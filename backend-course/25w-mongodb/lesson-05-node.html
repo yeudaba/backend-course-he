@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Node.js, טרנזקציות — ו־Mongo או Postgres? — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ שיעור 5</div>
+  <h1>שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>MongoClient באפליקציה: אחד לתהליך, נסגר בכיבוי.</li>
+      <li>collections עם טיפוסים ב־TypeScript.</li>
+      <li>ObjectId ב־API: 400 על מזהה לא תקין, ומחרוזת בתשובה.</li>
+      <li>NoSQL injection — הגרסה של Mongo ל־SQL injection.</li>
+      <li>טרנזקציות: מתי צריך, ואיך עם session.</li>
+      <li>Mongo או Postgres — השיקולים, ומה עונים בראיון.</li>
+    </ul>
+  </div>
+
+  <h2>1. MongoClient באפליקציה</h2>
+  <p>כמו <code>pg.Pool</code> (פרק 18) ו־<code>PrismaClient</code> (פרק 19): <strong>לקוח אחד לכל התהליך</strong>, שנוצר בעלייה ונסגר בכיבוי מסודר (פרק 24). הוא מחזיק pool של חיבורים בעצמו (<code>maxPoolSize</code>, ברירת מחדל 100). <code>new MongoClient</code> לכל בקשה פותח חיבורים חדשים כל הזמן — הטעות הנפוצה ביותר.</p>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="תהליך אחד עם MongoClient אחד ו־pool של חיבורים, מול לקוח חדש לכל בקשה">
+      <g style="stroke-width:2">
+        <rect x="390" y="20" width="310" height="150" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="20" width="310" height="150" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="560" y="70" width="120" height="70" rx="8" style="fill:var(--svg-fill);stroke:var(--green)"/>
+      </g>
+      <g style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5">
+        <rect x="405" y="62" width="110" height="22" rx="4"/><rect x="405" y="92" width="110" height="22" rx="4"/><rect x="405" y="122" width="110" height="22" rx="4"/>
+        <rect x="35" y="62" width="110" height="22" rx="4"/><rect x="35" y="92" width="110" height="22" rx="4"/><rect x="35" y="122" width="110" height="22" rx="4"/>
+        <rect x="200" y="62" width="110" height="22" rx="4"/><rect x="200" y="92" width="110" height="22" rx="4"/><rect x="200" y="122" width="110" height="22" rx="4"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:1.5">
+        <path d="M515 73 H 558"/><path d="M515 103 H 558"/><path d="M515 133 H 558"/>
+        <path d="M145 73 H 198"/><path d="M145 103 H 198"/><path d="M145 133 H 198"/>
+      </g>
+      <g class="mono" direction="ltr" style="font-size:11px" text-anchor="middle">
+        <text x="460" y="77">request</text><text x="460" y="107">request</text><text x="460" y="137">request</text>
+        <text x="620" y="100">MongoClient</text><text x="620" y="116">pool</text>
+        <text x="90" y="77">request</text><text x="90" y="107">request</text><text x="90" y="137">request</text>
+        <text x="255" y="77">new client</text><text x="255" y="107">new client</text><text x="255" y="137">new client</text>
+      </g>
+      <g style="font-size:12px;font-weight:700" text-anchor="middle" direction="rtl">
+        <text x="545" y="44">לקוח אחד לתהליך — חיבורים חוזרים</text>
+        <text x="175" y="44">לקוח לכל בקשה — חיבור חדש כל פעם</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: MongoClient הוא pool. יוצרים אותו פעם אחת בעלייה, וכל הבקשות משתמשות בו.</figcaption>
+  </figure>
+<span class="file-label">src/db.ts</span>
+<pre><code class="lang-ts">import { MongoClient, type Collection } from "mongodb";
+
+export interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+  tags: string[];
+}
+
+export const client = new MongoClient(process.env.MONGO_URL!);
+export const db = client.db("shop");
+export const products: Collection&lt;Product&gt; = db.collection&lt;Product&gt;("products");</code></pre>
+  <p>עם הטיפוס, TypeScript בודק גם שאילתות ועדכונים: <code>products.updateOne({ _id: "p1" }, { $inc: { stok: 1 } })</code> — שגיאת קומפילציה על <code>stok</code>, ו־<code>$push: { tags: 5 }</code> — שגיאה כי tags הוא מערך מחרוזות. בלי טיפוס (<code>db.collection("products")</code>) כל שדה הוא <code>any</code>, ואלה נשמרים בשקט.</p>
+
+  <h2>2. ObjectId ב־API</h2>
+  <p>ה־<code>_id</code> בכתובת (<code>GET /notes/6af1a8c0…</code>) מגיע כמחרוזת. שלושה מקרים: לא תקין ← <strong>400</strong> (לא 500 — <code>new ObjectId("abc")</code> זורק); תקין ולא קיים ← <strong>404</strong>; קיים ← 200, וב־JSON מחזירים <code>id</code> כמחרוזת hex. שימו לב ש־<code>ObjectId.isValid</code> מחזיר true גם על כל מחרוזת של 12 תווים (12 בתים) — לכן בודקים גם אורך 24 (E19).</p>
+
+  <h2>3. NoSQL injection</h2>
+  <p>אין כאן מחרוזת SQL לשבור — אבל יש משהו דומה. ב־Express, <code>?category[$ne]=x</code> מגיע כ־<code>req.query.category = { $ne: "x" }</code>, ו־JSON body יכול להכיל כל אובייקט. ואז:</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson5");
+const users = db.collection("users");
+await users.insertMany([{ email: "dana@example.com", role: "admin" }, { email: "yossi@example.com", role: "user" }]);
+
+// מה ש־login נאיבי עושה עם req.body.email
+const body = JSON.parse('{ "email": { "$ne": "nobody" } }');
+console.log(await users.findOne({ email: body.email }, { projection: { _id: 0 } }));
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">{ email: 'dana@example.com', role: 'admin' }</pre>
+  <p>"משתמש שהאימייל שלו לא שווה ל־nobody" — הראשון שנמצא, והוא admin. ההגנה: לוודא שכל ערך מהמשתמש הוא מהטיפוס שציפית (Zod עם <code>z.string()</code>, או <code>typeof</code>), לפני שהוא נכנס ל־filter (E20). ובאותה משפחה: לא להעביר את ה־body כמו שהוא ל־<code>$set</code> — רק שדות מותרים (mass assignment, E21).</p>
+
+  <h2>4. טרנזקציות</h2>
+  <p>שינוי של <strong>מסמך אחד</strong> הוא אטומי תמיד — ובזכות embedding, רוב הפעולות הן כאלה (שיעור 2). אבל לפעמים צריך כמה מסמכים ביחד: הזמנה מורידה מלאי מכמה מוצרים <em>ו</em>יוצרת מסמך הזמנה. אם המוצר השלישי אזל — שני הראשונים צריכים לחזור. בשביל זה יש טרנזקציות (דורשות replica set — לכן ה־<code>--replSet</code> בקופסת ה־🧰):</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson5b");
+const products = db.collection&lt;{ _id: string; stock: number }&gt;("products");
+await products.insertMany([{ _id: "p1", stock: 5 }, { _id: "p7", stock: 0 }]);
+
+const session = client.startSession();
+try {
+  await session.withTransaction(async () =&gt; {
+    for (const [id, qty] of [["p1", 2], ["p7", 1]] as const) {
+      const r = await products.updateOne({ _id: id, stock: { $gte: qty } }, { $inc: { stock: -qty } }, { session });
+      if (r.modifiedCount === 0) throw new Error(`out of stock: ${id}`);
+    }
+  });
+} catch (err) {
+  console.log("aborted:", (err as Error).message);
+} finally {
+  await session.endSession();
+}
+console.log(await products.find().toArray()); // p1 חזר ל־5
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">aborted: out of stock: p7
+[ { _id: 'p1', stock: 5 }, { _id: 'p7', stock: 0 } ]</pre>
+  <ul>
+    <li><strong>כל</strong> פעולה בתוך הטרנזקציה מקבלת <code>{ session }</code>. פעולה בלי session רצה <em>מחוץ</em> לטרנזקציה — ולא מתבטלת כשהטרנזקציה נכשלת. זה הבאג הנפוץ ביותר (E23).</li>
+    <li><code>withTransaction</code> מבצע commit בסוף, abort כשנזרקת שגיאה, ו<strong>מנסה שוב</strong> כשיש התנגשות זמנית עם טרנזקציה אחרת (TransientTransactionError). לכן הקוד בפנים צריך להיות בטוח להרצה חוזרת.</li>
+    <li>טרנזקציות ב־Mongo עובדות, אבל הן לא "הדרך הרגילה" כמו ב־Postgres. אם כמעט כל פעולה צריכה טרנזקציה של כמה collections — שווה לשאול שוב אם המבנה (או המסד) נכון.</li>
+  </ul>
+
+  <h2>5. Mongo או Postgres?</h2>
+  <div class="table-wrap"><table>
+    <tr><th>MongoDB מתאים כש…</th><th>PostgreSQL מתאים כש…</th></tr>
+    <tr><td>הנתונים הם "אובייקטים" שנקראים ונכתבים בשלמותם (הזמנה עם פריטים, פרופיל, קטלוג עם מאפיינים משתנים)</td><td>יש הרבה קשרים בין ישויות, ושאילתות שמחברות אותן בדרכים שלא ידועות מראש (דוחות, אנליטיקה)</td></tr>
+    <tr><td>המבנה משתנה הרבה, או שונה בין מסמכים (מוצרים מסוגים שונים)</td><td>שלמות חשובה מאוד: מפתחות זרים, CHECK, טרנזקציות על פני הרבה טבלאות (כסף, מלאי מורכב)</td></tr>
+    <tr><td>צריך לפצל את הנתונים בין הרבה שרתים (sharding מובנה)</td><td>הצוות יודע SQL, ויש כלים (ORM, BI) שמניחים SQL</td></tr>
+  </table></div>
+  <p>ובפועל: Postgres עם <code>jsonb</code> (פרק 16) מכסה הרבה מהמקרים "של Mongo", ו־Mongo עם <code>$lookup</code> וטרנזקציות מכסה הרבה מהמקרים "של Postgres". בראיון, התשובה הטובה היא לא "Mongo מהיר יותר" ולא "SQL תמיד עדיף" — אלא: <em>"תלוי בדפוסי הגישה. בפרויקט שלי בחרתי ב־Postgres כי יש הזמנות, מלאי ותשלומים שחייבים להיות עקביים ביחד; קטלוג עם מאפיינים שונים לכל סוג מוצר היה מתאים למסמכים, ושם השתמשתי ב־jsonb."</em></p>
+  <div class="box tip">
+    <span class="box-title">💡 Mongoose</span>
+    <p>בהרבה פרויקטים קיימים תפגוש <strong>Mongoose</strong> — ספרייה מעל ה־driver עם schemas, ולידציה, <code>populate</code> (מעין $lookup) ו־middleware. היא עושה בשבילך חלק ממה שעשית ביחידה ביד; הבנה של ה־driver ושל מה שקורה מתחת היא מה שיעזור כשמשהו לא עובד. ב־NestJS יש <code>@nestjs/mongoose</code>.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.7-E17">E17</a> · <a href="exercises.html#P25.7-E19">E19</a> · <a href="exercises.html#P25.7-E23">E23</a> · <a href="exercises.html#P25.7-E25">E25</a></p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>במודעות של חברות Node בארץ MongoDB מופיע לצד PostgreSQL ו־MySQL, ולפעמים במקומם. מה שמבדיל ג׳וניור שעבד עם Mongo באמת: עדכון אטומי עם תנאי במקום "קרא ואז כתוב", אינדקס מורכב לפי השאילתה, הגנה מ־NoSQL injection, ותשובה מנומקת ל"למה Mongo כאן?". ואם במשרה עובדים רק עם Postgres — השאלה "מתי היית בוחר במסד של מסמכים?" עדיין תגיע, ועכשיו יש לך תשובה מניסיון.</p>
+  </div>
+
+<div class="pager"><a href="lesson-04-aggregation.html"><small>הקודם</small>שיעור 4 — aggregation ואינדקסים</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>

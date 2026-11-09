@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true, // סימולציית SQL (E15, E16, E22)
   time: "3 מפגשים — ואחר כך כל שבוע, עד שמגיעה הצעה",
-  expectedExercises: 25,
+  expectedExercises: 30, // 25 + חמישה של שיעור 5 (עבודה עם AI)
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, PostgreSQL עם <code>COURSE_DATABASE_URL</code> (פרק 16) — לסימולציית ה־SQL. ופרויקט 3 באוויר, עם README (פרויקט 3, שלב 4).</p>
 ${copyStep("30-career")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm run check P30-E06</code> ← הבודק רץ ונכשל על התבנית (יש בה TODO).</p>
@@ -18,6 +18,7 @@ ${copyStep("30-career")}
     "קורות חיים חד־עמודיים באנגלית ופרופיל LinkedIn — עם מה שבנית ומדדת בקורס.",
     "להסביר את הפרויקט בשתי דקות, בעברית ובאנגלית, ולענות על שאלות התנהגותיות ב־STAR.",
     "שלוש סימולציות ראיון: שאלות על הפרויקט, שאלת קוד, שאלת SQL.",
+    "לעבוד עם עוזר קוד AI כמו מקצוען: הקשר, שינוי קטן, בדיקות שאתה כתבת — ולדבר על זה בראיון.",
     "חיפוש עבודה כתהליך: מתי מתחילים, איפה מחפשים, מעקב, מטלות בית — ומה עושים עם דחייה.",
   ],
   intro: `<h2>🤔 למה צריך את זה?</h2>
@@ -27,9 +28,13 @@ ${copyStep("30-career")}
     { file: "lesson-02-cv.html", title: "קורות חיים ו־LinkedIn", minutes: 50 },
     { file: "lesson-03-pitch.html", title: "לספר על הפרויקט: שתי דקות ו־STAR", minutes: 40 },
     { file: "lesson-04-interviews.html", title: "שלוש סימולציות ראיון", minutes: 60 },
-    { file: "lesson-05-search.html", title: "חיפוש עבודה כתהליך — וסוף הקורס", minutes: 40 },
+    { file: "lesson-05-ai-tools.html", title: "לעבוד עם עוזר קוד AI", minutes: 45 },
+    { file: "lesson-06-search.html", title: "חיפוש עבודה כתהליך — וסוף הקורס", minutes: 40 },
   ],
   glossary: [
+    ["AI coding assistant", "קוֹדִינְג אַסִיסְטֶנְט", "כלי שמציע ומשנה קוד לפי בקשה בשפה חופשית (Claude Code, Copilot, Cursor) — אתה אחראי לכל שורה"],
+    ["Hallucination", "הָלוּסִינֵיישֶׁן", "תשובה בטוחה בעצמה שאינה נכונה — API, אפשרות או חבילה שלא קיימים"],
+    ["Slopsquatting", "סְלוֹפְּסְקְווֹטִינְג", "רישום חבילה בשם שמודלים נוטים להמציא, כדי שמי שמתקין לפי ההצעה יקבל קוד זדוני"],
     ["Portfolio", "פּוֹרְטְפוֹלְיוֹ", "תיק עבודות: הפרויקטים שאתה מראה, עם קוד, README וקישור חי"],
     ["Pinned repositories", "פִּינְד רֶפּוֹזִיטוֹרִיז", "repos מוצמדים — מה שמופיע ראשון בפרופיל GitHub"],
     ["Profile README", "פְּרוֹפַייל רִידְמִי", "README ב־repo בשם המשתמש — מוצג בראש הפרופיל"],
@@ -51,6 +56,7 @@ ${copyStep("30-career")}
 <li>פרופיל LinkedIn עם Headline, About ו־Featured.</li>
 <li>להסביר את הפרויקט בשתי דקות בעברית ובאנגלית — מוקלט, ושמעת את עצמך.</li>
 <li>לעבור את שלוש הסימולציות: שאלות על הפרויקט (E05), שאלת קוד בזמן (E13), שאלת SQL (E15).</li>
+<li>להסביר איך אתה עובד עם עוזר AI, עם דוגמה לטעות שתפסת — ולמה הבדיקות שלך הן החוזה.</li>
 <li>טבלת מעקב, והגשה ראשונה — כבר השבוע.</li>
 <li><code>npm run check P30</code>: 80% מ־E06–E19, ולפחות שני תרגילי תיקון.</li>
 </ul>`,

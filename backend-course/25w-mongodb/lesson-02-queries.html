@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שאילתות ועדכונים — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ שיעור 2</div>
+  <h1>שיעור 2 — שאילתות ועדכונים</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>אופרטורים בשאילתה: <code>$gt</code>, <code>$in</code>, <code>$ne</code>, <code>$or</code>, <code>$regex</code>.</li>
+      <li>שאילתות על מערכים: "מכיל", <code>$all</code>, <code>$elemMatch</code>.</li>
+      <li>מיון, דילוג והגבלה — ועימוד.</li>
+      <li>עדכונים: <code>$set</code>, <code>$inc</code>, <code>$push</code>, <code>$addToSet</code>, <code>$pull</code>, upsert.</li>
+      <li>עדכון אטומי עם תנאי — איך Mongo מונע את המרוץ מפרק 18.</li>
+    </ul>
+  </div>
+
+  <h2>1. אופרטורים</h2>
+  <p>במקום ערך, אפשר לתת לשדה אובייקט של אופרטורים. התרגום מ־SQL כמעט מילולי:</p>
+  <div class="table-wrap"><table>
+    <tr><th>SQL</th><th>MongoDB</th></tr>
+    <tr><td><code>price &lt;= 50</code></td><td><code>{ price: { $lte: 50 } }</code></td></tr>
+    <tr><td><code>price BETWEEN 40 AND 60</code></td><td><code>{ price: { $gte: 40, $lte: 60 } }</code></td></tr>
+    <tr><td><code>status IN ('paid', 'delivered')</code></td><td><code>{ status: { $in: ["paid", "delivered"] } }</code></td></tr>
+    <tr><td><code>status &lt;&gt; 'cancelled'</code></td><td><code>{ status: { $ne: "cancelled" } }</code></td></tr>
+    <tr><td><code>a = 1 AND b = 2</code></td><td><code>{ a: 1, b: 2 }</code></td></tr>
+    <tr><td><code>a = 1 OR b = 2</code></td><td><code>{ $or: [{ a: 1 }, { b: 2 }] }</code></td></tr>
+    <tr><td><code>name ILIKE '%mug%'</code></td><td><code>{ name: { $regex: "mug", $options: "i" } }</code></td></tr>
+    <tr><td><code>specs IS NOT NULL</code></td><td><code>{ specs: { $exists: true } }</code></td></tr>
+  </table></div>
+  <div class="box warn">
+    <span class="box-title">⚠️ $regex מקלט של משתמש</span>
+    <p>הטקסט שהמשתמש הקליד הוא <em>טקסט</em>, לא regex. <code>"(1"</code> שובר את השאילתה, ו־<code>".*"</code> מחזיר הכול. לפני שמכניסים ל־<code>$regex</code> — escaping של התווים המיוחדים (E20). ו־<code>$regex</code> עם <code>i</code> לא משתמש באינדקס רגיל: על קטלוג גדול — אינדקס טקסט או Atlas Search.</p>
+  </div>
+
+  <h2>2. מערכים</h2>
+  <p>ב־Mongo מערך הוא אזרח מלא, והשאילתות "מבינות" אותו:</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson2");
+const products = db.collection("products");
+await products.insertMany([
+  { _id: "p1", name: "Ethiopia Yirgacheffe", tags: ["light", "single-origin"], reviews: [{ by: "c1", rating: 5 }, { by: "c3", rating: 4 }] },
+  { _id: "p5", name: "V60 Dripper", tags: ["pour-over"], reviews: [{ by: "c3", rating: 5 }] },
+  { _id: "p7", name: "Gooseneck Kettle", tags: ["pour-over", "kettle"], reviews: [{ by: "c1", rating: 2 }, { by: "c2", rating: 5 }] },
+]);
+const ids = async (filter: object) =&gt; (await products.find(filter).toArray()).map((p) =&gt; p._id);
+
+console.log(await ids({ tags: "pour-over" }));               // המערך מכיל את הערך
+console.log(await ids({ tags: { $all: ["pour-over", "kettle"] } })); // מכיל את כולם
+console.log(await ids({ "reviews.by": "c1", "reviews.rating": 5 }));  // ⚠️ כל תנאי — על פריט אחר?
+console.log(await ids({ reviews: { $elemMatch: { by: "c1", rating: 5 } } })); // שני התנאים על אותו פריט
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">[ 'p5', 'p7' ]
+[ 'p7' ]
+[ 'p1', 'p7' ]
+[ 'p1' ]</pre>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="שתי שאילתות על אותו מערך דירוגים: תנאים נפרדים מול elemMatch">
+      <g style="stroke-width:2">
+        <rect x="380" y="20" width="320" height="160" rx="10" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="20" y="20" width="320" height="160" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <g class="mono" direction="ltr" style="font-size:12px">
+        <text x="395" y="46" style="font-weight:700">"reviews.by": "c1", "reviews.rating": 5</text>
+        <text x="35" y="46" style="font-weight:700">$elemMatch: { by: "c1", rating: 5 }</text>
+        <text x="410" y="90">p7.reviews:</text>
+        <text x="425" y="114">{ by: "c1", rating: 2 }  ← by ✓</text>
+        <text x="425" y="138">{ by: "c2", rating: 5 }  ← rating ✓</text>
+        <text x="50" y="90">p7.reviews:</text>
+        <text x="65" y="114">{ by: "c1", rating: 2 }  ✗</text>
+        <text x="65" y="138">{ by: "c2", rating: 5 }  ✗</text>
+      </g>
+      <g style="font-size:12px;font-weight:700" text-anchor="middle" direction="rtl">
+        <text x="540" y="168">p7 חוזר — כל תנאי מצא פריט אחר</text>
+        <text x="180" y="168">p7 לא חוזר — צריך פריט אחד ששניהם עליו</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: על מערך של מסמכים, כמה תנאים נפרדים יכולים להתקיים על פריטים שונים. <code>$elemMatch</code> דורש שכולם יתקיימו על אותו פריט.</figcaption>
+  </figure>
+  <p>השורה השלישית היא המלכודת של השיעור: <code>"reviews.by": "c1"</code> ו־<code>"reviews.rating": 5</code> מתקיימים כל אחד בנפרד — אולי על <em>פריטים שונים</em> במערך. ב־p7, c1 נתן 2 ו־c2 נתן 5, ובכל זאת p7 חזר. כשכמה תנאים צריכים להתקיים על אותו פריט — <code>$elemMatch</code>.</p>
+
+  <h2>3. מיון ועימוד</h2>
+  <p><code>sort</code>, <code>skip</code>, <code>limit</code> — על ה־cursor, בכל סדר שתכתוב (השרת מבצע תמיד sort ← skip ← limit). שני כללים מפרק 18 עובדים גם כאן: מיון חייב להיות <strong>יציב</strong> (<code>{ name: 1, _id: 1 }</code> — אחרת מסמכים "קופצים" בין עמודים), ו־<code>skip</code> גדול איטי. בעמודים עמוקים — keyset: <code>{ _id: { $gt: lastId } }</code>. הספירה לעמוד: <code>countDocuments(filter)</code> עם <strong>אותו filter</strong> (E10).</p>
+
+  <h2>4. עדכונים</h2>
+  <p><code>updateOne(filter, update)</code>: המסמך הראשון שמתאים ל־filter, עם <strong>אופרטורי עדכון</strong>:</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson2b");
+const products = db.collection("products");
+await products.insertOne({ _id: "p1", name: "Ethiopia Yirgacheffe", price: 62, stock: 40, tags: ["light"] });
+const show = async () =&gt; console.log(JSON.stringify(await products.findOne({ _id: "p1" }, { projection: { _id: 0, name: 0 } })));
+
+await products.updateOne({ _id: "p1" }, { $set: { price: 65 }, $inc: { stock: -2 } });
+await show();
+await products.updateOne({ _id: "p1" }, { $push: { tags: "organic" } });
+await products.updateOne({ _id: "p1" }, { $addToSet: { tags: "organic" } }); // כבר קיים — לא מוסיף
+await products.updateOne({ _id: "p1" }, { $pull: { tags: "light" } });
+await show();
+
+const r = await products.updateOne({ _id: "p1" }, { $set: { price: 65 } });
+console.log(r.matchedCount, r.modifiedCount); // התאים — אבל לא השתנה כלום
+
+const up = await products.updateOne({ _id: "p9" }, { $set: { name: "Filter Papers", price: 15 } }, { upsert: true });
+console.log(up.matchedCount, up.upsertedId);
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">{"price":65,"stock":38,"tags":["light"]}
+{"price":65,"stock":38,"tags":["organic"]}
+1 0
+0 p9</pre>
+  <ul>
+    <li><code>$set</code> משנה רק את השדות שכתבת. בלי אופרטור (<code>replaceOne</code>) — <strong>כל המסמך מוחלף</strong>, וכל שדה שלא כתבת נמחק (E21).</li>
+    <li><code>matchedCount</code> מול <code>modifiedCount</code> — כמו <code>affectedRows</code> מול <code>changedRows</code> ב־MySQL. "לא נמצא" זה <code>matchedCount: 0</code>.</li>
+    <li><strong>upsert</strong> — "עדכן, ואם אין — צור". ה־<code>_id</code> מה־filter נכנס למסמך החדש.</li>
+    <li><code>findOneAndUpdate</code> — אותו דבר, ומחזיר את המסמך (<code>returnDocument: "after"</code> — אחרי העדכון). שימושי כשצריך את הערך החדש (E08).</li>
+  </ul>
+
+  <h2>5. עדכון אטומי עם תנאי</h2>
+  <p>זוכר את המרוץ מפרק 18? שני לקוחות קונים את המטחנה האחרונה: שניהם קוראים "1 במלאי", שניהם מורידים. ב־Postgres פתרנו עם <code>UPDATE … WHERE stock &gt;= 1</code>. ב־Mongo — בדיוק אותו רעיון: <strong>התנאי בתוך ה־filter, והשינוי ב־$inc, באותה פקודה</strong>. השרת מבצע את שניהם אטומית על המסמך:</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson2c");
+const products = db.collection&lt;{ _id: string; stock: number }&gt;("products");
+
+// הדרך השבורה: קודם קוראים, אחר כך כותבים
+await products.insertOne({ _id: "naive", stock: 5 });
+let sold = 0;
+await Promise.all(Array.from({ length: 20 }, async () =&gt; {
+  const p = await products.findOne({ _id: "naive" });
+  if (p &amp;&amp; p.stock &gt;= 1) {
+    await products.updateOne({ _id: "naive" }, { $set: { stock: p.stock - 1 } });
+    sold++;
+  }
+}));
+console.log("naive: sold more than 5?", sold &gt; 5); // המספר המדויק משתנה מהרצה להרצה
+
+// הדרך הנכונה: תנאי + $inc בפקודה אחת
+await products.insertOne({ _id: "atomic", stock: 5 });
+const results = await Promise.all(Array.from({ length: 20 }, async () =&gt;
+  (await products.updateOne({ _id: "atomic", stock: { $gte: 1 } }, { $inc: { stock: -1 } })).modifiedCount === 1));
+console.log("atomic:", (await products.findOne({ _id: "atomic" }))!.stock, "sold:", results.filter(Boolean).length);
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">naive: sold more than 5? true
+atomic: 0 sold: 5</pre>
+  <p>הגרסה הנאיבית מכרה יותר מ־5: הבקשות קראו 5 בערך באותו זמן, וכל אחת כתבה "4" מעל השנייה. האטומית מכרה בדיוק 5. זה הכלל החשוב ביותר בעבודה עם Mongo: <strong>כל עוד השינוי הוא במסמך אחד, פקודה אחת עם תנאי היא כל מה שצריך</strong> — בלי טרנזקציה ובלי נעילה (E13, E16).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.7-E03">E03</a> · <a href="exercises.html#P25.7-E05">E05</a> · <a href="exercises.html#P25.7-E08">E08</a> · <a href="exercises.html#P25.7-E09">E09</a> · <a href="exercises.html#P25.7-E10">E10</a> · <a href="exercises.html#P25.7-E13">E13</a> · <a href="exercises.html#P25.7-E20">E20</a> · <a href="exercises.html#P25.7-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-01-documents.html"><small>הקודם</small>שיעור 1 — מסמכים במקום שורות</a><a href="lesson-03-modeling.html"><small>הבא</small>שיעור 3 — תכנון מבנה: embed או reference</a></div>
+</main>
+</body>
+</html>

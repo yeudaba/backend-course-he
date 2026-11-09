@@ -120,7 +120,7 @@ function checkRun(run, expected, ctx) {
   const nodeArgs = run.lang === "ts" ? ["--experimental-strip-types", "--no-warnings", file] : [file];
   let r;
   if (run.lang === "sql" && run.attrs.mysql) {
-    // יחידה 19.5: SQL מול MySQL 8.4 (הקונטיינר course-mysql, ראה scripts/cloud-setup.sh), database נקי לכל דוגמה.
+    // יחידה 25.5: SQL מול MySQL 8.4 (הקונטיינר course-mysql, ראה scripts/cloud-setup.sh), database נקי לכל דוגמה.
     // הפלט — כמו ב־mysql CLI עם --table
     const mysqlCli = (args, input) => spawnSync("docker", ["exec", "-i", "course-mysql", "mysql", "-uroot", "--default-character-set=utf8mb4", ...args], { encoding: "utf8", input });
     mysqlCli(["-e", "DROP DATABASE IF EXISTS snippet; CREATE DATABASE snippet CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"]);
@@ -156,7 +156,7 @@ function checkRun(run, expected, ctx) {
     r = spawnSync("node", [tsc, "--noEmit", "--strict", "--target", "es2022", "--pretty", "false", "--skipLibCheck", "snippet.ts"], { encoding: "utf8", cwd: dir });
   } else {
     // פרק 26: דוגמאות עם Redis מתחברות ל־REDIS_URL (אצל הלומד — ברירת המחדל, localhost:6379)
-    r = spawnSync("node", nodeArgs, { encoding: "utf8", cwd: dir, timeout: 15000, env: { ...process.env, REDIS_URL: "redis://localhost:6380", MYSQL_URL: "mysql://root@localhost:3307", AWS_ENDPOINT_URL: "http://localhost:4566", RABBIT_URL: "amqp://localhost:5673", KAFKA_BROKERS: "localhost:9095" } });
+    r = spawnSync("node", nodeArgs, { encoding: "utf8", cwd: dir, timeout: 15000, env: { ...process.env, REDIS_URL: "redis://localhost:6380", MYSQL_URL: "mysql://root@localhost:3307", MONGO_URL: "mongodb://localhost:27018/?directConnection=true", AWS_ENDPOINT_URL: "http://localhost:4566", RABBIT_URL: "amqp://localhost:5673", KAFKA_BROKERS: "localhost:9095" } });
   }
   const norm = (t) => t.split("\n").map((l) => l.replace(/\s+$/, "")).join("\n").replace(/\s+$/, "");
   const got = norm(r.stdout + (run.attrs.stderr ? r.stderr : ""));
@@ -410,7 +410,7 @@ function verifyTests(ch) {
     const run = (target) =>
       spawnSync("node", ["--experimental-strip-types", "--no-warnings", "--test", "--test-reporter=dot", path.join(testsDir, t)], {
         encoding: "utf8",
-        env: { ...process.env, CHECK_TARGET: target, TSC_PATH: path.join(SRC, "node_modules", "typescript", "bin", "tsc"), COURSE_DATABASE_URL: "postgresql://postgres@localhost:5433/postgres", COURSE_REDIS_URL: "redis://localhost:6380", COURSE_MYSQL_URL: "mysql://root@localhost:3307", COURSE_AWS_ENDPOINT: "http://localhost:4566", COURSE_RABBIT_URL: "amqp://localhost:5673", COURSE_KAFKA_BROKERS: "localhost:9095" },
+        env: { ...process.env, CHECK_TARGET: target, TSC_PATH: path.join(SRC, "node_modules", "typescript", "bin", "tsc"), COURSE_DATABASE_URL: "postgresql://postgres@localhost:5433/postgres", COURSE_REDIS_URL: "redis://localhost:6380", COURSE_MYSQL_URL: "mysql://root@localhost:3307", COURSE_MONGO_URL: "mongodb://localhost:27018/?directConnection=true", COURSE_AWS_ENDPOINT: "http://localhost:4566", COURSE_RABBIT_URL: "amqp://localhost:5673", COURSE_KAFKA_BROKERS: "localhost:9095" },
         timeout: ch.testTimeout ?? 30000, // פרק 22: הבדיקות מריצות Jest כמה פעמים
       });
     const sol = run("solutions");

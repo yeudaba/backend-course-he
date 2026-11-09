@@ -1,0 +1,175 @@
+# P26.3-E24: coffee-shop ב־Kubernetes — כל ה־manifests
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: coffee
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coffee-config
+  namespace: coffee
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  PORT: "3000"
+  TRUST_PROXY: "1"
+  CORS_ORIGINS: https://shop.coffee.example
+---
+# migrations רצות פעם אחת לפני ה־rollout (Argo CD: sync wave קודם; ידנית: kubectl apply ל־Job, ואז ל־Deployment)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coffee-migrate
+  namespace: coffee
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          command: ["npx", "prisma", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  namespace: coffee
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: coffee-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: redis-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  selector:
+    app: coffee-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.coffee.example
+      secretName: coffee-api-tls
+  rules:
+    - host: api.coffee.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: coffee-api
+                port:
+                  name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coffee-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coffee-api

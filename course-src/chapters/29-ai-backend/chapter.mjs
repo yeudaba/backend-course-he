@@ -6,13 +6,13 @@ export default {
   title: "AI ב־Backend: לשלב מודל שפה בשרת",
   part: "חטיבה ה׳ — ראיונות והרחבות",
   checker: true,
-  time: "4 מפגשים (רשות)",
+  time: "4 מפגשים",
   expectedExercises: 25,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24. <code>npm install</code> בתיקיית הקורס מוסיף את <code>@anthropic-ai/sdk</code> (ה־SDK הרשמי של Claude ל־TypeScript).</p>
 ${copyStep("29-ai-backend")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm install && npm run check P29-E06</code> ← הבודק רץ ונכשל על קובץ ההתחלה.</p>
 <p><strong>לא צריך מפתח API ולא עולה כסף.</strong> כל הבודקים משתמשים ב־SDK האמיתי עם <code>fetch</code> מדומה — שום בקשה לא יוצאת לרשת. כדי לנסות מול ה־API האמיתי (לא חובה): חשבון ב־<a href="https://platform.claude.com" target="_blank">platform.claude.com</a>, מפתח, ו־<code>ANTHROPIC_API_KEY</code> ב־<code>.env</code> של פרויקט שלך — עם מגבלת הוצאה חודשית בקונסולה, לפני הקריאה הראשונה.</p>
-<p><strong>פרק רשות.</strong> לפי האפיון — לא חובה כדי להתחיל להגיש מועמדות. אבל "שילבתי מודל שפה בשרת, עם בדיקות, הגבלת עלות והרשאות" הוא משפט שמראיינים שואלים עליו יותר ויותר.</p>`,
+<p><strong>פרק חובה.</strong> יחידה 29.5 ופרויקט 4 נשענים עליו, ו־"שילבתי מודל שפה בשרת, עם בדיקות, הגבלת עלות והרשאות" הוא משפט שמראיינים שואלים עליו יותר ויותר.</p>`,
   goals: [
     "לקרוא ל־Claude מ־Node.js עם ה־SDK הרשמי, ולהבין מה חוזר: בלוקים, stop_reason, usage.",
     "לקבל פלט מובנה ומאומת (structured outputs + Zod), ולהתייחס לפלט של מודל כקלט לא אמין.",

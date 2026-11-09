@@ -1,6 +1,6 @@
-// עוזר לבדיקות של יחידה 19.5 (MySQL): כל בדיקה מקבלת database נקי משלה, טוען אליו נתונים מ־files/,
+// עוזר לבדיקות של יחידה 25.5 (MySQL): כל בדיקה מקבלת database נקי משלה, טוען אליו נתונים מ־files/,
 // ומשווה את התוצאה של קובץ ה־SQL שלך לפתרון לדוגמה — כמו tools/sql.mjs, אבל מול MySQL.
-// החיבור: COURSE_MYSQL_URL ב־.env של תיקיית הקורס (יחידה 19.5, קופסת 🧰)
+// החיבור: COURSE_MYSQL_URL ב־.env של תיקיית הקורס (יחידה 25.5, קופסת 🧰)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,7 @@ export async function connectAdmin() {
   try {
     return await mysql.createConnection({ uri: mysqlUrl, ...OPTIONS });
   } catch (err) {
-    throw new Error(`אין חיבור ל־MySQL (${mysqlUrl.replace(/:[^:@/]*@/, ":***@")}): ${err.message}. הרץ את הקונטיינר (יחידה 19.5, קופסת 🧰) ובדוק את COURSE_MYSQL_URL ב־.env`);
+    throw new Error(`אין חיבור ל־MySQL (${mysqlUrl.replace(/:[^:@/]*@/, ":***@")}): ${err.message}. הרץ את הקונטיינר (יחידה 25.5, קופסת 🧰) ובדוק את COURSE_MYSQL_URL ב־.env`);
   }
 }
 

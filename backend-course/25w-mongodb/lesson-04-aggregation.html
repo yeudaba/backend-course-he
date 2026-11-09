@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aggregation ואינדקסים — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — aggregation ואינדקסים</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>aggregation pipeline: שלבים שכל אחד מעבד את הפלט של הקודם.</li>
+      <li><code>$match</code>, <code>$unwind</code>, <code>$group</code>, <code>$sort</code>, <code>$project</code>, <code>$lookup</code> — ו־<code>$facet</code>.</li>
+      <li>תאריכים ואזורי זמן ב־aggregation.</li>
+      <li>אינדקסים: יחיד, מורכב (ESR), ייחודי ו־TTL.</li>
+      <li>explain: IXSCAN מול COLLSCAN, וכמה מסמכים נבדקו.</li>
+    </ul>
+  </div>
+
+  <h2>1. pipeline</h2>
+  <p>ב־SQL כותבים שאילתה אחת, והמסד מחליט על הסדר. ב־Mongo, <code>aggregate</code> מקבל <strong>מערך של שלבים</strong>, וכל שלב מקבל את המסמכים שיצאו מהקודם — כמו שרשרת של <code>filter</code>, <code>flatMap</code> ו־<code>reduce</code> על מערך:</p>
+  <figure>
+    <svg viewBox="0 0 720 150" role="img" aria-label="pipeline: match, unwind, group, sort — וכמות המסמכים אחרי כל שלב">
+      <g style="stroke-width:2">
+        <rect x="560" y="30" width="140" height="56" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="390" y="30" width="140" height="56" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="220" y="30" width="140" height="56" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="50" y="30" width="140" height="56" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+      </g>
+      <defs><marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--svg-stroke);stroke-width:1.8">
+        <path d="M558 58 H 534" marker-end="url(#ag)"/><path d="M388 58 H 364" marker-end="url(#ag)"/><path d="M218 58 H 194" marker-end="url(#ag)"/>
+      </g>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="630" y="63">$match</text><text x="460" y="63">$unwind</text><text x="290" y="63">$group</text><text x="120" y="63">$sort</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="630" y="110">10 הזמנות ← 7</text><text x="630" y="126">רק paid/delivered</text>
+        <text x="460" y="110">7 ← 11 מסמכים</text><text x="460" y="126">אחד לכל פריט</text>
+        <text x="290" y="110">11 ← 6</text><text x="290" y="126">אחד לכל מוצר</text>
+        <text x="120" y="110">לפי הכנסה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: "מכירות לפי מוצר" (E14) על נתוני הדוגמה. מקדימים <code>$match</code> — כל שלב אחריו עובד על פחות מסמכים, ו־<code>$match</code> בהתחלה יכול להשתמש באינדקס.</figcaption>
+  </figure>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson4");
+const orders = db.collection("orders");
+await orders.insertMany([
+  { _id: "o1", status: "delivered", items: [{ productId: "p1", price: 62, qty: 2 }, { productId: "p5", price: 89, qty: 1 }] },
+  { _id: "o2", status: "delivered", items: [{ productId: "p3", price: 48, qty: 3 }] },
+  { _id: "o4", status: "delivered", items: [{ productId: "p1", price: 62, qty: 1 }] },
+  { _id: "o5", status: "cancelled", items: [{ productId: "p1", price: 62, qty: 9 }] },
+]);
+
+const rows = await orders.aggregate([
+  { $match: { status: { $ne: "cancelled" } } },
+  { $unwind: "$items" },
+  { $group: { _id: "$items.productId", units: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } } } },
+  { $sort: { revenue: -1 } },
+]).toArray();
+console.log(rows);
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">[
+  { _id: 'p1', units: 3, revenue: 186 },
+  { _id: 'p3', units: 3, revenue: 144 },
+  { _id: 'p5', units: 1, revenue: 89 }
+]</pre>
+  <ul>
+    <li><code>$unwind: "$items"</code> — מסמך לכל פריט במערך (o1 הופך לשניים). בלעדיו, <code>"$items.qty"</code> הוא <em>מערך</em> של כמויות, ו־<code>$sum</code> של מערך בתוך <code>$group</code> נותן 0 (E22).</li>
+    <li><code>$group</code> — <code>_id</code> הוא מפתח הקיבוץ (כמו <code>GROUP BY</code>), והשאר מצטברים: <code>$sum</code>, <code>$avg</code>, <code>$min</code>, <code>$max</code>, <code>$first</code>, <code>$push</code>. <code>{ $sum: 1 }</code> סופר מסמכים.</li>
+    <li>שם שדה עם <code>$</code> בהתחלה (<code>"$items.qty"</code>) = "הערך של השדה". בלי <code>$</code> — המחרוזת עצמה.</li>
+    <li><code>$project</code> בסוף — לעצב את התוצאה (לשנות את <code>_id</code> ל־<code>productId</code>).</li>
+  </ul>
+
+  <h2>2. $lookup ו־$facet</h2>
+  <p><code>$lookup</code> מצרף מ־collection אחר: <code>{ from: "customers", localField: "_id", foreignField: "_id", as: "customer" }</code> — התוצאה היא <strong>מערך</strong> (אולי ריק), ולכן אחריו בדרך כלל <code>$unwind</code>. טיפ ביצועים: <code>$limit</code> <em>לפני</em> ה־<code>$lookup</code>, כדי לצרף רק את מה שיוצג (E15).</p>
+  <p><code>$facet</code> מריץ כמה pipelines על אותו קלט ומחזיר את כולם במסמך אחד — דשבורד שלם בבקשה אחת: הכנסות לפי יום, ספירה לפי סטטוס, מוצרים מובילים (E24).</p>
+
+  <h2>3. תאריכים ואזורי זמן</h2>
+  <p>Date ב־Mongo הוא רגע ב־UTC (כמו בפרק 24). "הכנסות לפי יום" — יום לפי <em>איזה</em> שעון? הזמנה ב־22:10 UTC ב־1 בנובמבר היא כבר 2 בנובמבר בישראל. ל־<code>$dateToString</code> ול־<code>$dateTrunc</code> יש פרמטר <code>timezone</code>:</p>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson4b");
+await db.collection("orders").insertMany([
+  { createdAt: new Date("2026-11-01T21:30:00Z"), total: 100 },
+  { createdAt: new Date("2026-11-01T22:10:00Z"), total: 50 },
+]);
+const byDay = (timezone: string) =&gt; db.collection("orders").aggregate([
+  { $group: { _id: { $dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone } }, total: { $sum: "$total" } } },
+  { $sort: { _id: 1 } },
+]).toArray();
+console.log("UTC:   ", await byDay("UTC"));
+console.log("Israel:", await byDay("Asia/Jerusalem"));
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">UTC:    [ { _id: '2026-11-01', total: 150 } ]
+Israel: [ { _id: '2026-11-01', total: 100 }, { _id: '2026-11-02', total: 50 } ]</pre>
+
+  <h2>4. אינדקסים</h2>
+  <p>בלי אינדקס, כל שאילתה היא <strong>COLLSCAN</strong> — מעבר על כל המסמכים (כמו Seq Scan, פרק 18). אינדקסים ב־Mongo הם B-tree, בדיוק כמו ב־Postgres, וגם הכללים דומים:</p>
+  <ul>
+    <li><strong>מורכב, לפי ESR:</strong> שדות של <strong>E</strong>quality (<code>customerId: "c1"</code>) קודם, אחריהם <strong>S</strong>ort (<code>createdAt: -1</code>), ובסוף <strong>R</strong>ange (<code>price: { $lt: 100 }</code>). כך האינדקס גם מסנן וגם נותן את הסדר, בלי מיון בזיכרון.</li>
+    <li><strong>unique</strong> — ה־UNIQUE של Mongo (<code>{ email: 1 }, { unique: true }</code>). הפרה ← שגיאה <strong>11000</strong> (E07).</li>
+    <li><strong>TTL</strong> — <code>{ expiresAt: 1 }, { expireAfterSeconds: 0 }</code>: תהליך רקע מוחק מסמכים שהזמן שלהם עבר (בערך פעם בדקה). ל־sessions, קודי אימות, נתונים זמניים.</li>
+    <li>אינדקס על שדה במערך (<code>tags</code>) הוא <strong>multikey</strong> — רשומה לכל ערך במערך.</li>
+  </ul>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("lesson4c");
+const orders = db.collection("orders");
+// 5,000 הזמנות של 100 לקוחות
+await orders.insertMany(Array.from({ length: 5000 }, (_, i) =&gt; ({ customerId: `c${i % 100}`, createdAt: new Date(Date.UTC(2026, 0, 1) + i * 60_000), total: i % 300 })));
+
+const query = () =&gt; orders.find({ customerId: "c7" }).sort({ createdAt: -1 }).limit(10);
+const summary = async () =&gt; {
+  const ex: any = await query().explain("executionStats");
+  const plan = JSON.stringify(ex.queryPlanner.winningPlan);
+  return { scan: plan.includes("IXSCAN") ? "IXSCAN" : "COLLSCAN", inMemorySort: plan.includes('"SORT"'), docsExamined: ex.executionStats.totalDocsExamined, returned: ex.executionStats.nReturned };
+};
+console.log("before:", await summary());
+await orders.createIndex({ customerId: 1, createdAt: -1 });
+console.log("after: ", await summary());
+
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">before: {
+  scan: 'COLLSCAN',
+  inMemorySort: true,
+  docsExamined: 5000,
+  returned: 10
+}
+after:  { scan: 'IXSCAN', inMemorySort: false, docsExamined: 10, returned: 10 }</pre>
+  <p>לפני: כל 5,000 המסמכים נבדקו, ומוינו בזיכרון. אחרי: נבדקו רק 10 — האינדקס כבר ממוין לפי <code>createdAt</code> בתוך כל <code>customerId</code>, אז Mongo קורא את 10 הראשונים ועוצר. זה ESR בפעולה (E12). ובדיוק כמו ב־Postgres: כל אינדקס מאט כתיבות ותופס מקום — בונים לפי השאילתות שבאמת רצות.</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P25.7-E04">E04</a> · <a href="exercises.html#P25.7-E12">E12</a> · <a href="exercises.html#P25.7-E14">E14</a> · <a href="exercises.html#P25.7-E15">E15</a> · <a href="exercises.html#P25.7-E22">E22</a> · <a href="exercises.html#P25.7-E24">E24</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-03-modeling.html"><small>הקודם</small>שיעור 3 — תכנון מבנה: embed או reference</a><a href="lesson-05-node.html"><small>הבא</small>שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</a></div>
+</main>
+</body>
+</html>

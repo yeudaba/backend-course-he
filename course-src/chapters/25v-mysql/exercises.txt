@@ -1,0 +1,837 @@
+@@ P25.5-E01 | 1 | מילון PostgreSQL ← MySQL | 15 | שיעור 1
+@task
+<p>לכל דבר שעבד ב־PostgreSQL בקורס — המקבילה ב־MySQL 8, או "אין":</p>
+<ol>
+<li><code>id integer GENERATED ALWAYS AS IDENTITY</code></li>
+<li><code>INSERT … RETURNING id</code></li>
+<li><code>ON CONFLICT (…) DO UPDATE</code></li>
+<li><code>'a' || 'b'</code></li>
+<li><code>ILIKE</code></li>
+<li><code>boolean</code>, <code>jsonb</code>, <code>timestamptz</code></li>
+<li><code>SELECT DISTINCT ON (…)</code></li>
+<li><code>FULL OUTER JOIN</code></li>
+<li><code>$1, $2</code> בשאילתה עם פרמטרים</li>
+</ol>
+@hint1
+<p>רוב השפה זהה: SELECT, JOIN, GROUP BY, CTE, window functions (מ־8.0), CHECK (נאכף מ־8.0.16).</p>
+@hint2
+<p>שלושה מהם "קיימים, אבל עושים משהו אחר".</p>
+@solution
+<ol>
+<li><code>INT UNSIGNED AUTO_INCREMENT PRIMARY KEY</code>.</li>
+<li>אין RETURNING. ה־driver מחזיר <code>insertId</code> (mysql2), או <code>SELECT LAST_INSERT_ID()</code> באותו חיבור.</li>
+<li><code>INSERT … AS new ON DUPLICATE KEY UPDATE col = new.col</code> — על <em>כל</em> מפתח ייחודי בטבלה, לא על אחד שבוחרים (E08).</li>
+<li><strong>מלכודת:</strong> <code>||</code> ב־MySQL הוא OR לוגי — <code>'a' || 'b'</code> מחזיר 0. חיבור מחרוזות: <code>CONCAT('a', 'b')</code>.</li>
+<li>אין ILIKE. אבל ברירת המחדל (<code>utf8mb4_0900_ai_ci</code>) כבר לא רגישה לרישיות <em>ולסימנים</em> — <code>LIKE</code> מספיק. לרגישות: <code>COLLATE utf8mb4_bin</code>.</li>
+<li><code>BOOLEAN</code> הוא <code>TINYINT(1)</code> (חוזר כ־0/1); <code>JSON</code> (בינארי, דומה ל־jsonb); <code>DATETIME(3)</code> בלי אזור זמן — שומרים UTC בעצמך, או <code>TIMESTAMP</code> (ממיר לפי אזור הזמן של החיבור, טווח עד 2038).</li>
+<li>אין. <code>ROW_NUMBER() OVER (PARTITION BY …)</code> בתת־שאילתה (E07, E20).</li>
+<li>אין. <code>LEFT JOIN … UNION … RIGHT JOIN</code>.</li>
+<li><code>?</code> (mysql2: <code>execute(sql, [a, b])</code>).</li>
+</ol>
+@mistakes
+<ul><li>להעתיק שאילתה מ־PostgreSQL ולהאמין לה כי "לא הייתה שגיאה". <code>||</code> לא זורק — הוא מחזיר 0 בשקט.</li></ul>
+
+@@ P25.5-E02 | 1 | קולציה: מה שווה למה? | 15 | שיעור 1
+@task
+<p>טבלה עם עמודה <code>s VARCHAR(20)</code> בקולציה <code>utf8mb4_0900_ai_ci</code> (ברירת המחדל של MySQL 8), ובה שורה אחת: <code>'Café '</code> (עם רווח בסוף). ועוד <code>customers</code> עם <code>UNIQUE (email)</code>. מה יקרה?</p>
+<ol>
+<li><code>SELECT COUNT(*) FROM t WHERE s = 'cafe'</code></li>
+<li><code>SELECT COUNT(*) FROM t WHERE s = 'cafe '</code></li>
+<li>יש <code>dana@x.com</code>; מכניסים <code>DANA@x.com</code>.</li>
+<li><code>SELECT 'café' = 'cafe'</code> — בלי טבלה בכלל. (רמז: התשובה שונה ב־mysql2 וב־<code>mysql</code> CLI.)</li>
+<li>מפתח API נשמר בעמודה כזו, ובודקים <code>WHERE api_key = ?</code>.</li>
+</ol>
+@hint1
+<p><code>ai</code> = accent-insensitive, <code>ci</code> = case-insensitive. וקולציות <code>0900</code> הן NO PAD — רווח בסוף נחשב.</p>
+@hint2
+<p>השוואה בין שתי מחרוזות <em>מילוליות</em> משתמשת בקולציה של <em>החיבור</em>, לא של טבלה.</p>
+@solution
+<ol>
+<li><strong>0</strong> — הרווח בסוף נחשב (NO PAD).</li>
+<li><strong>1</strong> — <code>Café</code> ו־<code>cafe</code> שווים: בלי רישיות ובלי ניקוד.</li>
+<li><strong>Duplicate entry 'DANA@x.com'</strong> — ה־UNIQUE משתמש באותה קולציה. ל־email זה בדיוק מה שרוצים (ב־PostgreSQL היינו צריכים <code>lower(email)</code>).</li>
+<li>מדדתי: ב־mysql2 החיבור הוא <code>utf8mb4_unicode_ci</code> ← <strong>1</strong>; ב־<code>mysql</code> CLI בקונטיינר הוא <code>latin1_swedish_ci</code> ← <strong>0</strong>. אותה שאילתה, תשובות שונות — לכן משווים מול עמודות, וקובעים <code>charset</code> בחיבור במפורש.</li>
+<li><strong>בעיה:</strong> <code>abc</code> ו־<code>ABC</code> שווים — מפתח "כמעט נכון" עובר. לעמודות כאלה: <code>VARBINARY</code> או <code>COLLATE utf8mb4_bin</code> (ועדיף לשמור hash ולא את המפתח).</li>
+</ol>
+@mistakes
+<ul><li>להניח שההתנהגות זהה ל־PostgreSQL (שם ההשוואה רגישה לרישיות ולניקוד) — ולגלות כפילויות "דנה"/"DANA" רק בפרודקשן.</li></ul>
+
+@@ P25.5-E03 | 1 | REPEATABLE READ | 15 | שיעור 3
+@task
+<p>ב־MySQL ברירת המחדל היא <code>REPEATABLE READ</code> (ב־PostgreSQL: <code>READ COMMITTED</code>). מלאי = 10. טרנזקציה A: <code>START TRANSACTION; SELECT stock …</code> ← 10. עכשיו B (בחיבור אחר) מוריד ל־7 ועושה COMMIT. מה יראה A ב: (1) <code>SELECT stock</code> שוב? (2) <code>SELECT stock … FOR UPDATE</code>? (3) <code>UPDATE products SET stock = stock - 1</code> ואז SELECT? ומה המסקנה לגבי "קרא ואז החלט"?</p>
+@hint1
+<p>ב־REPEATABLE READ, SELECT רגיל קורא מ"תמונה" שנלקחה בקריאה הראשונה של הטרנזקציה.</p>
+@hint2
+<p>UPDATE ו־FOR UPDATE קוראים את הגרסה המחויבת האחרונה ("locking read").</p>
+@solution
+<ol>
+<li><strong>10</strong> — אותה תמונה. (ב־PostgreSQL, READ COMMITTED: 7.)</li>
+<li><strong>7</strong> — קריאה נועלת רואה את האחרון.</li>
+<li><strong>6</strong> — ה־UPDATE עובד על 7, ואחריו A רואה את השינוי שלו עצמו.</li>
+</ol>
+<p>המסקנה: ב־MySQL, "SELECT ואז החלטה ואז UPDATE" גרוע עוד יותר מב־PostgreSQL — ה־SELECT יכול להחזיר ערך ישן <em>בתוך</em> הטרנזקציה. ההחלטה צריכה להיות בתוך ה־UPDATE (<code>WHERE stock &gt;= ?</code>, E13) או אחרי <code>FOR UPDATE</code> (E09). בשיעור 3 — ההרצה האמיתית של התרחיש.</p>
+@mistakes
+<ul><li>"אני בטרנזקציה, אז אני מוגן" — טרנזקציה לא נועלת שורות שרק קראת.</li></ul>
+
+@@ P25.5-E04 | 1 | DATETIME או TIMESTAMP? | 10 | שיעור 1
+@task
+<p>לכל עמודה — <code>DATETIME(3)</code>, <code>TIMESTAMP(3)</code> או <code>DATE</code>, ולמה: (1) מתי נוצרה הזמנה; (2) תאריך לידה; (3) מתי פג תוקף של מבצע ב־2040; (4) "יום אספקה" שהלקוח בחר.</p>
+@hint1
+<p><code>TIMESTAMP</code> נשמר ב־UTC ומומר לפי <code>time_zone</code> של החיבור; טווח 1970–2038.</p>
+@hint2
+<p><code>DATETIME</code> נשמר כמו שהוא — "שעון על הקיר", בלי אזור זמן.</p>
+@solution
+<ol>
+<li><code>DATETIME(3)</code> שבו <strong>האפליקציה תמיד כותבת UTC</strong> (ומתעדים את זה). <code>TIMESTAMP</code> אפשרי, אבל ההמרה לפי החיבור היא מקור לבאגים כשחיבורים מוגדרים שונה — והטווח נגמר ב־2038.</li>
+<li><code>DATE</code> — אין שעה, ו־TIMESTAMP לא מגיע לפני 1970 (E23).</li>
+<li><code>DATETIME</code> — TIMESTAMP לא מגיע ל־2040.</li>
+<li><code>DATE</code> — יום מקומי, לא רגע (פרק 24: "רגע" מול "תאריך").</li>
+</ol>
+@mistakes
+<ul><li>לערבב: חלק מהקוד כותב UTC וחלק שעון ישראל, לאותה עמודה. החלטה אחת, בתיעוד, ובדיקה.</li></ul>
+
+@@ P25.5-E05 | 1 | מה mysql2 מחזיר? | 10 | שיעור 4
+@task
+<p>נחש לפני שמריצים — מה הטיפוס והערך של כל שדה, ומה ב־<code>insertId</code>, <code>affectedRows</code>, <code>changedRows</code>?</p>
+```ts
+const [rows] = await conn.query("SELECT CAST(89.90 AS DECIMAL(10,2)) AS price, TRUE AS flag, CAST('{\"a\":1}' AS JSON) AS doc, COUNT(*) AS n, CAST('2026-03-01 10:00:00' AS DATETIME) AS at FROM DUAL");
+const [ins] = await conn.query("INSERT INTO t (name) VALUES ('a'), ('b')");
+const [upd] = await conn.query("UPDATE t SET name = 'a' WHERE id IN (1, 2)");
+```
+@hint1
+<p>DECIMAL יכול להיות מדויק יותר מ־number של JavaScript — אז mysql2 לא ממיר אותו.</p>
+@hint2
+<p>affectedRows — שורות שהתאימו; changedRows — שורות שהערך בהן השתנה.</p>
+@solution
+```ts run
+import mysql from "mysql2/promise";
+
+const admin = await mysql.createConnection(process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306");
+await admin.query("CREATE DATABASE IF NOT EXISTS e05_demo");
+const conn = await mysql.createConnection({ uri: process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306", database: "e05_demo" });
+await conn.query("CREATE TABLE IF NOT EXISTS t (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(10))");
+await conn.query("TRUNCATE t");
+
+const [rows] = await conn.query<any[]>("SELECT CAST(89.90 AS DECIMAL(10,2)) AS price, TRUE AS flag, CAST('{\"a\":1}' AS JSON) AS doc, COUNT(*) AS n, CAST('2026-03-01 10:00:00' AS DATETIME) AS at FROM DUAL");
+for (const [k, v] of Object.entries(rows[0])) console.log(k, typeof v, v instanceof Date ? "Date" : JSON.stringify(v));
+const [ins] = await conn.query<any>("INSERT INTO t (name) VALUES ('a'), ('b')");
+console.log("insert:", ins.insertId, ins.affectedRows);
+const [upd] = await conn.query<any>("UPDATE t SET name = 'a' WHERE id IN (1, 2)");
+console.log("update:", upd.affectedRows, upd.changedRows);
+
+await conn.end();
+await admin.query("DROP DATABASE e05_demo");
+await admin.end();
+```
+```out
+price string "89.90"
+flag number 1
+doc object {"a":1}
+n number 1
+at object Date
+insert: 1 2
+update: 2 1
+```
+<ul><li><code>DECIMAL</code> ← מחרוזת. סכום של מחרוזות הוא שרשור (E21). או <code>decimalNumbers: true</code> בחיבור (מאבד דיוק מעל 15 ספרות), או המרה במקום אחד (E10).</li><li><code>TRUE</code> ← 1: אין boolean ב־MySQL.</li><li><code>COUNT(*)</code> ← number (BIGINT קטן). JSON ← אובייקט.</li><li><code>DATETIME</code> ← <code>Date</code> — ומפורש לפי אזור הזמן של <em>התהליך</em> (בשרת שמוגדר לישראל — שעתיים הפרש). <code>dateStrings: true</code> או <code>timezone: "Z"</code> בחיבור — החלטה אחת לכל האפליקציה.</li><li><code>insertId</code> — ה־id של השורה <em>הראשונה</em> ב־INSERT מרובה. <code>changedRows</code> = 1 — רק שורה 2 השתנתה ('b' ← 'a'); <code>affectedRows</code> = 2.</li></ul>
+@mistakes
+<ul><li><code>insertId</code> של INSERT עם כמה שורות כ"ה־id של האחרונה" — הוא של הראשונה; השאר עוקבים (ברוב ההגדרות), אבל עדיף לא להסתמך.</li></ul>
+@@ P25.5-E06 | 2 | טבלה ב־MySQL 🤖 | 20 | שיעור 1
+@task
+<p>בקובץ <code>25v-mysql/starter/P25.5-E06.sql</code>: טבלת <code>reviews</code> — <code>id</code> (BIGINT UNSIGNED, AUTO_INCREMENT, מפתח ראשי), <code>product_id</code> ו־<code>customer_id</code> (מפתחות זרים ל־products ו־customers), <code>rating</code> (1–5, CHECK), <code>body</code> (טקסט, גם אמוג׳י), <code>created_at</code> (<code>DATETIME(3)</code>, ברירת מחדל עכשיו) — כולם NOT NULL; ביקורת אחת למוצר ללקוח; ואינדקס על <code>(product_id, created_at)</code>. הבודק מריץ את הקובץ על נתוני <code>files/shop.sql</code> ובודק את information_schema — ומנסה להכניס שורות טובות ורעות.</p>
+<p>(בכל תרגילי הפרק — הבודק מתחבר ל־MySQL שלך דרך <code>COURSE_MYSQL_URL</code>, יוצר database זמני לכל בדיקה, ומוחק אותו בסוף.)</p>
+@hint1
+<p>הטיפוס של מפתח זר חייב להיות זהה בדיוק לעמודה שהוא מצביע עליה — כולל UNSIGNED.</p>
+@hint2
+<p><code>DEFAULT CHARSET=utf8mb4</code> בסוף ה־CREATE TABLE.</p>
+@solution
+```sql save=solutions/P25.5-E06.sql
+-- P25.5-E06
+-- טבלת ביקורות ב־MySQL: מפתח AUTO_INCREMENT, utf8mb4 (אמוג׳י!), CHECK שנאכף (מ־8.0.16), מפתחות זרים,
+-- ייחודיות "ביקורת אחת למוצר ללקוח", ואינדקס לשאילתה הנפוצה (הביקורות של מוצר, מהחדשה)
+CREATE TABLE reviews (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id  INT UNSIGNED NOT NULL,
+  customer_id INT UNSIGNED NOT NULL,
+  rating      TINYINT UNSIGNED NOT NULL,
+  body        TEXT NOT NULL,
+  created_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_reviews_product FOREIGN KEY (product_id) REFERENCES products (id),
+  CONSTRAINT fk_reviews_customer FOREIGN KEY (customer_id) REFERENCES customers (id),
+  CONSTRAINT chk_reviews_rating CHECK (rating BETWEEN 1 AND 5),
+  UNIQUE KEY uq_reviews_product_customer (product_id, customer_id),
+  KEY idx_reviews_product_created (product_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+@mistakes
+<ul><li><code>product_id INT</code> כש־<code>products.id</code> הוא <code>INT UNSIGNED</code> ← <code>Referencing column and referenced column are incompatible</code>.</li></ul>
+
+@@ P25.5-E07 | 2 | היקר ביותר בכל קטגוריה 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.5-E07.sql</code>: לכל קטגוריה — המוצר היקר ביותר מבין הפעילים שיש במלאי (בתיקו — ה־id הקטן). עמודות: <code>category</code>, <code>name</code>, <code>price</code> — לפי category.</p>
+@hint1
+<p>אין DISTINCT ON. יש window functions.</p>
+@hint2
+<p><code>ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id)</code> בתת־שאילתה, ו־<code>WHERE rn = 1</code> בחוץ.</p>
+@solution
+```sql run mysql db=25v-mysql/files/shop.sql save=solutions/P25.5-E07.sql
+-- P25.5-E07
+-- המוצר היקר ביותר בכל קטגוריה (פעיל ובמלאי); בתיקו — ה־id הקטן. window functions קיימות מ־MySQL 8.0
+SELECT category, name, price
+FROM (
+  SELECT category, name, price,
+         ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id) AS rn
+  FROM products
+  WHERE is_active AND stock > 0
+) ranked
+WHERE rn = 1
+ORDER BY category;
+```
+```out
++-------------+----------------------+--------+
+| category    | name                 | price  |
++-------------+----------------------+--------+
+| accessories | Paper Filters (100)  |  24.90 |
+| beans       | Ethiopia Beans 1kg   |  89.90 |
+| brewing     | Gooseneck Kettle     | 229.00 |
+| grinders    | Electric Grinder Pro | 649.00 |
++-------------+----------------------+--------+
+```
+@mistakes
+<ul><li><code>SELECT category, name, MAX(price) … GROUP BY category</code> — ב־MySQL ישן זה "עבד" ונתן <code>name</code> אקראי; ב־8 עם ONLY_FULL_GROUP_BY — שגיאה. וטוב שכך.</li></ul>
+
+@@ P25.5-E08 | 2 | upsert לעגלה 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.5-E08.sql</code>, פקודה אחת: הוסף 2 יחידות של מוצר 3 לעגלה של לקוח 1 — ואם המוצר כבר בעגלה, הוסף לכמות הקיימת. הבודק מריץ את הקובץ פעמיים ובודק שאין warnings.</p>
+@hint1
+<p><code>INSERT … ON DUPLICATE KEY UPDATE</code>.</p>
+@hint2
+<p><code>VALUES(quantity)</code> בתוך ה־UPDATE מיושן מ־8.0.20 (warning). במקומו: <code>VALUES (1, 3, 2) AS new … quantity = cart_items.quantity + new.quantity</code>.</p>
+@solution
+```sql save=solutions/P25.5-E08.sql
+-- P25.5-E08
+-- "הוסף 2 יחידות של מוצר 3 לעגלה של לקוח 1": אם השורה קיימת — מוסיפים לכמות. ב־PostgreSQL: ON CONFLICT … DO UPDATE.
+-- ב־MySQL: ON DUPLICATE KEY UPDATE, עם alias לשורה החדשה (VALUES() בתוך UPDATE מיושן מ־8.0.20 ומחזיר warning)
+INSERT INTO cart_items (customer_id, product_id, quantity)
+VALUES (1, 3, 2) AS new
+ON DUPLICATE KEY UPDATE quantity = cart_items.quantity + new.quantity;
+```
+<p>שימו לב להבדל מ־PostgreSQL: <code>ON CONFLICT (customer_id, product_id)</code> בוחר מפתח; <code>ON DUPLICATE KEY</code> מופעל על <em>כל</em> מפתח ייחודי בטבלה. בטבלה עם שני מפתחות ייחודיים זה יכול לעדכן שורה שלא התכוונת אליה.</p>
+@mistakes
+<ul><li><code>REPLACE INTO</code> — "upsert" שבעצם מוחק ומכניס מחדש: ה־id משתנה, וטריגרים ומפתחות זרים עם ON DELETE מופעלים.</li></ul>
+
+@@ P25.5-E09 | 2 | הזמנה בטרנזקציה עם mysql2 🤖 | 30 | שיעור 4
+@task
+<p>בקובץ <code>P25.5-E09.ts</code>: <code>insertOrder(pool, { customerId, items })</code> — בטרנזקציה על חיבור אחד מה־pool: נועל את המוצרים (<code>FOR UPDATE</code>, לפי id), בודק מלאי (חסר ← <code>OutOfStock</code> ו־rollback), יוצר הזמנה (<code>pending_payment</code>, total), פריטים במחיר של עכשיו, ומוריד מלאי. מחזיר <code>{ orderId, totalCents }</code>. החיבור חוזר ל־pool תמיד.</p>
+@hint1
+<p><code>const conn = await pool.getConnection()</code>; <code>beginTransaction</code> / <code>commit</code> / <code>rollback</code>; <code>finally { conn.release() }</code>.</p>
+@hint2
+<p>אין RETURNING: <code>const [res] = await conn.execute(…)</code> ואז <code>res.insertId</code>. ו־INSERT מרובה: <code>conn.query("… VALUES ?", [rows])</code>.</p>
+@solution
+```ts save=solutions/P25.5-E09.ts
+// P25.5-E09
+import type { Pool } from "mysql2/promise";
+
+export class OutOfStock extends Error {}
+
+// הזמנה בטרנזקציה ב־mysql2: חיבור אחד מה־pool לכל הטרנזקציה (getConnection), ו־release בכל מקרה.
+// execute = prepared statement עם ? — אף פעם לא שרשור מחרוזות. ואין RETURNING: את ה־id נותן insertId
+export async function insertOrder(pool: Pool, order: { customerId: number; items: { productId: number; quantity: number }[] }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const ids = order.items.map((i) => i.productId).sort((a, b) => a - b); // נועלים תמיד באותו סדר — פחות deadlocks
+    const [rows] = await conn.query<any[]>("SELECT id, price, stock FROM products WHERE id IN (?) ORDER BY id FOR UPDATE", [ids]);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    let totalCents = 0;
+    for (const item of order.items) {
+      const p = byId.get(item.productId);
+      if (!p || p.stock < item.quantity) throw new OutOfStock(`אין מספיק מלאי למוצר ${item.productId}`);
+      totalCents += Math.round(Number(p.price) * 100) * item.quantity;
+    }
+    const [res] = await conn.execute<any>("INSERT INTO orders (customer_id, status, total) VALUES (?, 'pending_payment', ?)", [order.customerId, (totalCents / 100).toFixed(2)]);
+    const orderId: number = res.insertId;
+    await conn.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES ?", [
+      order.items.map((i) => [orderId, i.productId, i.quantity, byId.get(i.productId).price]),
+    ]);
+    for (const item of order.items) {
+      await conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [item.quantity, item.productId]);
+    }
+    await conn.commit();
+    return { orderId, totalCents };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+```
+@mistakes
+<ul><li><code>pool.query("START TRANSACTION")</code> ואז <code>pool.query(…)</code> — כל קריאה ל־pool יכולה לקבל חיבור <em>אחר</em>. טרנזקציה חיה על חיבור אחד.</li></ul>
+
+@@ P25.5-E10 | 2 | טיפוסים מ־mysql2 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>P25.5-E10.ts</code>: <code>toProduct(row)</code> — שורה כמו ש־mysql2 מחזיר בברירת מחדל (<code>price</code> כמחרוזת, <code>is_active</code> כ־0/1, <code>attributes</code> כאובייקט או מחרוזת JSON) ← <code>{ id, name, priceCents, isActive, attributes }</code>. ו־<code>listProducts(conn, category)</code> — <code>execute</code> עם <code>?</code>, לפי id, ממופה.</p>
+@hint1
+<p><code>Math.round(Number("89.90") * 100)</code> — round, כי 89.9 × 100 = 8990.000000000001.</p>
+@hint2
+<p>E05 מראה בדיוק מה חוזר.</p>
+@solution
+```ts save=solutions/P25.5-E10.ts
+// P25.5-E10
+import type { Connection } from "mysql2/promise";
+
+export interface Product {
+  id: number;
+  name: string;
+  priceCents: number;
+  isActive: boolean;
+  attributes: Record<string, unknown> | null;
+}
+
+// mysql2 בברירת מחדל: DECIMAL ← מחרוזת ("89.90" — כדי לא לאבד דיוק), BOOLEAN (TINYINT(1)) ← 0/1,
+// JSON ← אובייקט מפוענח. ממירים פעם אחת, במקום אחד, לטיפוסים של האפליקציה
+export function toProduct(row: { id: number; name: string; price: string | number; is_active: number | boolean; attributes: unknown }): Product {
+  const priceCents = Math.round(Number(row.price) * 100); // 89.9 * 100 = 8990.000000000001 — לכן round
+  return {
+    id: row.id,
+    name: row.name,
+    priceCents,
+    isActive: row.is_active === 1 || row.is_active === true,
+    attributes: typeof row.attributes === "string" ? JSON.parse(row.attributes) : ((row.attributes as Record<string, unknown> | null) ?? null),
+  };
+}
+
+export async function listProducts(conn: Connection, category: string): Promise<Product[]> {
+  const [rows] = await conn.execute<any[]>("SELECT id, name, price, is_active, attributes FROM products WHERE category = ? ORDER BY id", [category]);
+  return rows.map(toProduct);
+}
+```
+@mistakes
+<ul><li>להפעיל <code>decimalNumbers: true</code> "וזהו" — מעל 15 ספרות משמעותיות מאבדים דיוק בשקט. לכסף — אגורות כמספר שלם, או מחרוזת עד הרגע האחרון.</li></ul>
+
+@@ P25.5-E11 | 2 | GROUP BY נכון 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.5-E11.sql</code>: לכל לקוח עם הזמנות ששולמו (<code>paid</code> או <code>shipped</code>): <code>name</code>, <code>city</code>, <code>paid_orders</code>, <code>paid_total</code>, <code>last_order</code> — מהגבוה לנמוך לפי <code>paid_total</code> (בתיקו — לפי id). חייב לעבוד עם <code>ONLY_FULL_GROUP_BY</code> (ברירת המחדל).</p>
+@hint1
+<p>כל עמודה ב־SELECT — או ב־GROUP BY, או בתוך פונקציה מצטברת, או <em>תלויה פונקציונלית</em> במה שב־GROUP BY.</p>
+@hint2
+<p><code>GROUP BY c.id</code> מספיק ל־<code>c.name</code> ו־<code>c.city</code> — כי <code>id</code> הוא המפתח הראשי.</p>
+@solution
+```sql run mysql db=25v-mysql/files/shop.sql save=solutions/P25.5-E11.sql
+-- P25.5-E11
+-- לכל לקוח עם הזמנות ששולמו: כמה, כמה כסף, ומתי האחרונה. ONLY_FULL_GROUP_BY מרשה name ו־city
+-- כי הם תלויים פונקציונלית ב־c.id (המפתח הראשי) — לא צריך להוסיף אותם ל־GROUP BY
+SELECT c.name, c.city,
+       COUNT(*) AS paid_orders,
+       SUM(o.total) AS paid_total,
+       MAX(o.created_at) AS last_order
+FROM customers c
+JOIN orders o ON o.customer_id = c.id AND o.status IN ('paid', 'shipped')
+GROUP BY c.id
+ORDER BY paid_total DESC, c.id;
+```
+```out
++-------------+-----------+-------------+------------+-------------------------+
+| name        | city      | paid_orders | paid_total | last_order              |
++-------------+-----------+-------------+------------+-------------------------+
+| Yossi Cohen | Tel Aviv  |           1 |     649.00 | 2026-03-02 11:30:00.000 |
+| Dana Levi   | Haifa     |           1 |     278.90 | 2026-03-01 09:00:00.000 |
+| Noa Mizrahi | Tel Aviv  |           1 |     238.00 | 2026-03-04 16:45:00.000 |
+| Avi Peretz  | Jerusalem |           1 |     119.00 | 2026-03-06 10:10:00.000 |
++-------------+-----------+-------------+------------+-------------------------+
+```
+@mistakes
+<ul><li>לכבות את ONLY_FULL_GROUP_BY ב־<code>sql_mode</code> כי "השאילתה הישנה נשברה". השאילתה הישנה החזירה ערכים שרירותיים — עכשיו פשוט יודעים.</li></ul>
+
+@@ P25.5-E12 | 2 | עמודת JSON 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.5-E12.sql</code>: מוצרי <code>brewing</code> שיש להם <code>material</code> ב־<code>attributes</code>: <code>name</code>, <code>material</code> (טקסט, בלי מרכאות), <code>cups</code> (מספר, או NULL) — לפי cups מהגדול (בלי cups — בסוף), ואז לפי name.</p>
+@hint1
+<p><code>attributes-&gt;&gt;'$.material'</code> — טקסט; <code>-&gt;</code> — JSON (עם מרכאות).</p>
+@hint2
+<p><code>CAST(attributes-&gt;&gt;'$.cups' AS UNSIGNED)</code>, ו־<code>ORDER BY cups IS NULL, cups DESC</code>.</p>
+@solution
+```sql run mysql db=25v-mysql/files/shop.sql save=solutions/P25.5-E12.sql
+-- P25.5-E12
+-- עמודת JSON: ->> מחזיר טקסט (בלי מרכאות), -> מחזיר JSON. מספר — CAST, כדי למיין ולהשוות כמספר
+SELECT name,
+       attributes->>'$.material' AS material,
+       CAST(attributes->>'$.cups' AS UNSIGNED) AS cups
+FROM products
+WHERE category = 'brewing'
+  AND attributes->>'$.material' IS NOT NULL
+ORDER BY cups IS NULL, cups DESC, name;
+```
+```out
++------------------+-----------+------+
+| name             | material  | cups |
++------------------+-----------+------+
+| French Press 1L  | glass     |    8 |
+| Moka Pot 6 Cups  | aluminium |    6 |
+| Gooseneck Kettle | steel     | NULL |
+| V60 Ceramic      | ceramic   | NULL |
++------------------+-----------+------+
+```
+<p>וכשמחפשים לפי שדה ב־JSON הרבה: עמודה מחושבת (<code>GENERATED ALWAYS AS (attributes-&gt;&gt;'$.material')</code>) עם אינדקס, או functional index. אבל אם שדה מופיע בכל שורה ומחפשים לפיו — הוא כנראה צריך להיות עמודה רגילה.</p>
+@mistakes
+<ul><li>להשוות <code>attributes-&gt;'$.material' = 'glass'</code> — ה־<code>-&gt;</code> מחזיר JSON (<code>"glass"</code> עם מרכאות), וההשוואה מתנהגת אחרת ממה שנראה.</li></ul>
+
+@@ P25.5-E13 | 3 | מלאי תחת עומס 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>P25.5-E13.ts</code>: <code>reserveStock(pool, productId, quantity)</code> — מוריד מלאי רק אם יש מספיק, בפקודה אחת; מחזיר <code>true</code>/<code>false</code>. כמות לא שלמה או ≤ 0 ← שגיאה. הבודק: 20 בקשות במקביל על מוצר עם 3 יחידות.</p>
+@hint1
+<p><code>UPDATE … SET stock = stock - ? WHERE id = ? AND stock &gt;= ?</code>.</p>
+@hint2
+<p><code>affectedRows</code> — לא <code>changedRows</code>.</p>
+@solution
+```ts save=solutions/P25.5-E13.ts
+// P25.5-E13
+import type { Pool } from "mysql2/promise";
+
+// הורדת מלאי בפקודה אחת, מותנית. ב־MySQL: affectedRows = כמה שורות *התאימו* ל־WHERE ושונו.
+// (changedRows — רק שורות שהערך בהן באמת השתנה. כאן זה אותו דבר, אבל ב־UPDATE שקובע ערך זהה — changedRows הוא 0)
+export async function reserveStock(pool: Pool, productId: number, quantity: number): Promise<boolean> {
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error("כמות לא תקינה");
+  const [res] = await pool.execute<any>("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?", [quantity, productId, quantity]);
+  return res.affectedRows === 1;
+}
+```
+@mistakes
+<ul><li><code>SELECT stock</code> ואז <code>UPDATE</code> — ב־REPEATABLE READ ה־SELECT יכול אפילו להחזיר ערך ישן מתוך הטרנזקציה שלך (E03).</li></ul>
+
+@@ P25.5-E14 | 3 | תור עבודות: SKIP LOCKED 🤖 | 25 | שיעור 3
+@task
+<p>טבלת <code>jobs</code> (<code>id</code>, <code>status</code> queued/running/done, <code>locked_by</code>). בקובץ <code>P25.5-E14.ts</code>: <code>claimJobs(pool, workerId, limit)</code> — לוקח עד <code>limit</code> עבודות queued, לפי id, מסמן running ו־locked_by, ומחזיר את ה־ids. 6 workers במקביל — אף עבודה לא נלקחת פעמיים.</p>
+@hint1
+<p>טרנזקציה: <code>SELECT id … ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED</code>, ואז UPDATE על ה־ids, ו־COMMIT.</p>
+@hint2
+<p>בלי SKIP LOCKED — worker שני מחכה לראשון (ואז מוצא את אותן שורות כבר running). עם — מדלג ולוקח את הבאות.</p>
+@solution
+```ts save=solutions/P25.5-E14.ts
+// P25.5-E14
+import type { Pool } from "mysql2/promise";
+
+// תור עבודות על טבלה: כמה workers לוקחים עבודות במקביל, בלי שאותה עבודה תילקח פעמיים.
+// FOR UPDATE נועל את השורות שנבחרו; SKIP LOCKED (MySQL 8.0+) מדלג על נעולות במקום לחכות להן
+export async function claimJobs(pool: Pool, workerId: string, limit: number): Promise<number[]> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query<any[]>("SELECT id FROM jobs WHERE status = 'queued' ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED", [limit]);
+    const ids = rows.map((r) => r.id as number);
+    if (ids.length) await conn.query("UPDATE jobs SET status = 'running', locked_by = ? WHERE id IN (?)", [workerId, ids]);
+    await conn.commit();
+    return ids;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+```
+<p>זה דפוס שמאפשר תור בלי Redis ובלי broker — כשהעומס צנוע. ביחידה 26.5 נראה מתי עוברים ל־RabbitMQ, Kafka או SQS.</p>
+@mistakes
+<ul><li>לשכוח שהנעילה חיה רק עד ה־COMMIT — אם הסימון (UPDATE) לא באותה טרנזקציה, אחרים יראו את העבודות כ־queued.</li></ul>
+
+@@ P25.5-E15 | 3 | deadlock, ואיך חיים איתו 🤖 | 25 | שיעור 3
+@task
+<p>בקובץ <code>P25.5-E15.ts</code>: <code>withDeadlockRetry(fn, { retries = 3, sleep, random })</code> — מריץ את <code>fn(attempt)</code>; אם נזרקה שגיאה עם <code>errno</code> 1213 (deadlock) או 1205 (lock wait timeout) — מחכה קצת (אקראי, גדל) ומנסה שוב, עד <code>retries</code> פעמים. כל שגיאה אחרת — מיד. הבודק גם מייצר deadlock אמיתי: שתי טרנזקציות שנועלות שני מוצרים בסדר הפוך.</p>
+@hint1
+<p><code>(err as { errno?: number }).errno</code>.</p>
+@hint2
+<p>ה־fn הוא <em>כל</em> הטרנזקציה — InnoDB ביטל את כולה, אז מנסים את כולה.</p>
+@solution
+```ts save=solutions/P25.5-E15.ts
+// P25.5-E15
+// InnoDB מזהה deadlock ומבטל את אחת הטרנזקציות (errno 1213, ER_LOCK_DEADLOCK); המתנה ארוכה לנעילה — 1205.
+// שתיהן "בטוחות לנסות שוב": הטרנזקציה בוטלה כולה. מנסים שוב את *כל* הטרנזקציה, עם המתנה קצרה ואקראית
+export const RETRYABLE = new Set([1213, 1205]);
+
+export async function withDeadlockRetry<T>(
+  fn: (attempt: number) => Promise<T>,
+  { retries = 3, sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)), random = Math.random } = {},
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      const errno = (err as { errno?: number }).errno;
+      if (attempt >= retries || errno === undefined || !RETRYABLE.has(errno)) throw err;
+      await sleep(Math.floor(random() * 20 * 2 ** attempt));
+    }
+  }
+}
+```
+<p>מה עדיף על retry: שה־deadlock לא יקרה — לנעול תמיד באותו סדר (<code>ORDER BY id FOR UPDATE</code>, כמו ב־E09 ו־E24), טרנזקציות קצרות, ואינדקסים שמונעים נעילה של יותר שורות מהנדרש. אבל במערכת עמוסה deadlock יקרה בסוף — ו־retry הוא חלק מהתשובה.</p>
+@mistakes
+<ul><li>retry על פקודה בודדת מתוך הטרנזקציה — אחרי deadlock כל הטרנזקציה בוטלה, והפקודות שלפני כבר לא קיימות.</li></ul>
+@@ P25.5-E16 | 3 | חיפוש FULLTEXT 🤖 | 15 | שיעור 5
+@task
+<p>בקובץ <code>P25.5-E16.sql</code>: הוסף אינדקס <code>FULLTEXT</code> על <code>products.name</code>, ומצא מוצרים שיש בשם מילה שמתחילה ב־<code>grinder</code> ואין בו <code>electric</code> — לפי name.</p>
+@hint1
+<p><code>ALTER TABLE products ADD FULLTEXT INDEX … (name)</code>.</p>
+@hint2
+<p><code>MATCH(name) AGAINST ('+grinder* -electric' IN BOOLEAN MODE)</code>.</p>
+@solution
+```sql save=solutions/P25.5-E16.sql
+-- P25.5-E16
+-- חיפוש מלא (FULLTEXT) ב־InnoDB: אינדקס על name, ו־MATCH … AGAINST. במצב BOOLEAN: + חובה, - אסור, * prefix
+ALTER TABLE products ADD FULLTEXT INDEX ft_products_name (name);
+SELECT name
+FROM products
+WHERE MATCH(name) AGAINST ('+grinder* -electric' IN BOOLEAN MODE)
+ORDER BY name;
+```
+<p>ומה עם קלט של משתמש? בתווים כמו <code>+ - * " ( )</code> יש משמעות ב־BOOLEAN MODE — מנקים אותם (או משתמשים ב־NATURAL LANGUAGE MODE). ומעל כמה מיליוני מסמכים, או כשצריך דירוג חכם, פונים למנוע חיפוש (Elasticsearch/OpenSearch, Meilisearch).</p>
+@mistakes
+<ul><li><code>LIKE '%grinder%'</code> על טבלה גדולה — סורק הכול; אינדקס רגיל לא עוזר כשהתבנית מתחילה ב־%.</li></ul>
+
+@@ P25.5-E17 | 3 | idempotency ב־MySQL 🤖 | 25 | שיעור 3
+@task
+<p>טבלת <code>idempotency (idem_key PK, status 'pending'/'done', result JSON)</code>. בקובץ <code>P25.5-E17.ts</code>: <code>once(pool, key, fn)</code> — הראשון עם המפתח מריץ את <code>fn</code> ושומר את התוצאה (<code>{ result, replayed: false }</code>); מי שבא אחריו מקבל את התוצאה השמורה (<code>replayed: true</code>), או <code>InProgress</code> אם הראשון עוד רץ. <code>fn</code> נכשל ← המפתח נמחק, ואפשר לנסות שוב.</p>
+@hint1
+<p><code>INSERT IGNORE</code> ואז <code>affectedRows</code>: 1 = אני הראשון.</p>
+@hint2
+<p>mysql2 מחזיר JSON כאובייקט — אבל אם בעתיד תשנה טיפוס עמודה, בדוק גם מחרוזת.</p>
+@solution
+```ts save=solutions/P25.5-E17.ts
+// P25.5-E17
+import type { Pool } from "mysql2/promise";
+
+export class InProgress extends Error {}
+
+// Idempotency ב־MySQL: INSERT IGNORE על מפתח ראשי — affectedRows 1 = "אני הראשון", 0 = כבר קיים.
+// (ב־PostgreSQL: ON CONFLICT DO NOTHING RETURNING.) התוצאה נשמרת כ־JSON, והבקשה החוזרת מקבלת אותה
+export async function once<T>(pool: Pool, key: string, fn: () => Promise<T>): Promise<{ result: T; replayed: boolean }> {
+  const [ins] = await pool.execute<any>("INSERT IGNORE INTO idempotency (idem_key, status) VALUES (?, 'pending')", [key]);
+  if (ins.affectedRows === 1) {
+    try {
+      const result = await fn();
+      await pool.execute("UPDATE idempotency SET status = 'done', result = ? WHERE idem_key = ?", [JSON.stringify(result), key]);
+      return { result, replayed: false };
+    } catch (err) {
+      await pool.execute("DELETE FROM idempotency WHERE idem_key = ?", [key]); // נכשל ← אפשר לנסות שוב עם אותו מפתח
+      throw err;
+    }
+  }
+  const [rows] = await pool.execute<any[]>("SELECT status, result FROM idempotency WHERE idem_key = ?", [key]);
+  if (!rows[0] || rows[0].status !== "done") throw new InProgress(`בקשה ${key} עדיין בטיפול`);
+  const stored = rows[0].result;
+  return { result: (typeof stored === "string" ? JSON.parse(stored) : stored) as T, replayed: true };
+}
+```
+@mistakes
+<ul><li><code>INSERT IGNORE</code> מתעלם לא רק מכפילות — גם משגיאות אחרות (ערך ארוך מדי נחתך, ועוד). כאן זה בטוח (מפתח קצר), אבל בכל מקום אחר — <code>ON DUPLICATE KEY UPDATE idem_key = idem_key</code> מדויק יותר.</li></ul>
+
+@@ P25.5-E18 | 3 | אינדקס נכון, לפי EXPLAIN 🤖 | 20 | שיעור 5
+@task
+<p>השאילתה הנפוצה בדף "ההזמנות שלי": <code>SELECT id, total FROM orders WHERE customer_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 10</code>. בקובץ <code>P25.5-E18.sql</code> — אינדקס אחד שהופך אותה למהירה. הבודק מוסיף 30,000 הזמנות ללקוח אחד (רובן מבוטלות), ובודק ב־<code>EXPLAIN FORMAT=JSON</code>: לא סריקה מלאה, בלי filesort, ומעט שורות נבדקות.</p>
+@hint1
+<p>סדר העמודות באינדקס: קודם מה שמשווים ב־<code>=</code>, אחר כך מה שממיינים.</p>
+@hint2
+<p>האינדקס הקיים <code>(customer_id, created_at)</code> ממוין נכון — אבל עובר על כל ההזמנות המבוטלות עד שמוצא 10 ששולמו.</p>
+@solution
+```sql save=solutions/P25.5-E18.sql
+-- P25.5-E18
+-- השאילתה: WHERE customer_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 10.
+-- אינדקס מורכב בסדר: שוויון קודם (customer_id, status), ואז המיון (created_at) — בלי filesort, ובלי לסרוק הזמנות בסטטוס אחר
+CREATE INDEX idx_orders_customer_status_created ON orders (customer_id, status, created_at);
+```
+<p>ב־InnoDB כל אינדקס משני מכיל גם את המפתח הראשי — לכן <code>id</code> כבר "באינדקס". הוסף גם <code>total</code> ← covering index: המסד לא צריך לקרוא את השורה בכלל. ולכן גם: מפתח ראשי קצר וממוין (AUTO_INCREMENT), לא UUID אקראי — הוא מוכפל בכל אינדקס.</p>
+@mistakes
+<ul><li>אינדקס נפרד לכל עמודה — MySQL ישתמש ברוב המקרים באחד מהם בלבד.</li></ul>
+
+@@ P25.5-E19 | 3 | migrations עם GET_LOCK 🤖 | 30 | שיעור 5
+@task
+<p>בקובץ <code>P25.5-E19.ts</code>: <code>migrate(pool, migrations)</code> — על חיבור אחד: <code>GET_LOCK('schema_migrations', timeout)</code> (לא התקבל ← שגיאה), יצירת <code>schema_migrations (id PK, applied_at)</code> אם אין, הרצת ה־migrations שלא רצו — לפי סדר ה־id — ורישום כל אחד אחרי שהצליח, ובסוף <code>RELEASE_LOCK</code> (גם בשגיאה). מחזיר את ה־ids שרצו. שלושה "שרתים" במקביל ← כל migration פעם אחת.</p>
+@hint1
+<p><code>SELECT GET_LOCK('schema_migrations', ?) AS ok</code> ← 1 אם קיבלת.</p>
+@hint2
+<p>הנעילה שייכת ל<em>חיבור</em> — לכן <code>pool.getConnection()</code>, לא <code>pool.query</code>.</p>
+@solution
+```ts save=solutions/P25.5-E19.ts
+// P25.5-E19
+import type { Pool } from "mysql2/promise";
+
+// כלי migrations בקטן. שני דברים שמיוחדים ל־MySQL:
+// (1) DDL עושה COMMIT מרומז — אי אפשר לעטוף CREATE/ALTER בטרנזקציה ולבטל. migration שנכשל באמצע — נשאר באמצע.
+// (2) GET_LOCK: נעילה בשם, לכל השרתים — כך שני שרתים שעולים יחד לא מריצים את אותו migration פעמיים
+export async function migrate(pool: Pool, migrations: readonly { id: string; sql: string }[], { lockTimeoutSeconds = 10 } = {}): Promise<string[]> {
+  const conn = await pool.getConnection();
+  try {
+    const [[lock]] = await conn.query<any[]>("SELECT GET_LOCK('schema_migrations', ?) AS ok", [lockTimeoutSeconds]);
+    if (lock.ok !== 1) throw new Error("לא התקבלה נעילה ל־migrations");
+    try {
+      await conn.query("CREATE TABLE IF NOT EXISTS schema_migrations (id VARCHAR(100) PRIMARY KEY, applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))");
+      const [done] = await conn.query<any[]>("SELECT id FROM schema_migrations");
+      const applied = new Set(done.map((r) => r.id));
+      const ran: string[] = [];
+      for (const m of [...migrations].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+        if (applied.has(m.id)) continue;
+        await conn.query(m.sql);
+        await conn.execute("INSERT INTO schema_migrations (id) VALUES (?)", [m.id]);
+        ran.push(m.id);
+      }
+      return ran;
+    } finally {
+      await conn.query("SELECT RELEASE_LOCK('schema_migrations')");
+    }
+  } finally {
+    conn.release();
+  }
+}
+```
+<p>ההבדל הגדול מ־PostgreSQL: שם, <code>CREATE TABLE</code> בתוך טרנזקציה אפשר לבטל. ב־MySQL כל DDL עושה COMMIT מרומז — migration עם שלוש פקודות שנכשל בשלישית משאיר את שתי הראשונות. לכן: migration קטן, פקודה אחת אם אפשר, ו־"expand/contract" (פרק 25).</p>
+@mistakes
+<ul><li><code>GET_LOCK</code> על <code>pool.query</code> — הנעילה נלקחת בחיבור אחד, ה־migrations רצים באחרים, וה־RELEASE משחרר (או לא) בשלישי.</li></ul>
+@@ P25.5-E20 | 4 | שאילתה מ־PostgreSQL — שלוש תקלות 🤖 | 15 | שיעור 2
+@task
+<p>"השאילתה עבדה ב־PostgreSQL": לקוחות מתל אביב (בלי תלות ברישיות) עם ההזמנה האחרונה שלהם. ב־<code>P25.5-E20.sql</code> — היא לא רצה ב־MySQL, ואחרי "תיקון" אחד היא מחזירה 0 במקום שם. מצא ותקן (עמודות: <code>customer</code> — "שם (אימייל)", <code>city</code>, <code>last_total</code> — לפי customer).</p>
+@hint1
+<p>שלושה דברים ש־MySQL לא מכיר, או מכיר אחרת.</p>
+@hint2
+<p><code>||</code>, <code>ILIKE</code>, <code>DISTINCT ON</code>.</p>
+@solution
+```sql run mysql db=25v-mysql/files/shop.sql save=solutions/P25.5-E20.sql
+-- P25.5-E20
+-- "השאילתה עבדה ב־PostgreSQL": שלוש בעיות ב־MySQL
+-- תקלה 1: || ב־MySQL הוא OR לוגי (מחזיר 0/1), לא חיבור מחרוזות ← CONCAT
+-- תקלה 2: אין ILIKE ← LIKE, שבקולציה של הטבלה (_ai_ci) כבר לא רגיש לרישיות
+-- תקלה 3: DISTINCT ON לא קיים ← ROW_NUMBER() בתת־שאילתה
+SELECT customer, city, last_total
+FROM (
+  SELECT CONCAT(c.name, ' (', c.email, ')') AS customer,
+         c.city,
+         o.total AS last_total,
+         ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.created_at DESC) AS rn
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id
+  WHERE c.city LIKE '%aviv%'
+) t
+WHERE rn = 1
+ORDER BY customer;
+```
+```out
++---------------------------------+----------+------------+
+| customer                        | city     | last_total |
++---------------------------------+----------+------------+
+| Noa Mizrahi (noa@example.com)   | Tel Aviv |     238.00 |
+| Yossi Cohen (yossi@example.com) | Tel Aviv |      89.90 |
++---------------------------------+----------+------------+
+```
+@mistakes
+<ul><li>להפעיל <code>PIPES_AS_CONCAT</code> ב־sql_mode כדי ש־<code>||</code> יעבוד — עכשיו הקוד תלוי בהגדרת שרת, ושרת אחר יחזיר 0.</li></ul>
+
+@@ P25.5-E21 | 4 | דוח יומי — שלוש תקלות 🤖 | 15 | שיעור 4
+@task
+<p>ב־<code>P25.5-E21.ts</code>: הדוח היומי מראה סכום כמו <code>"0278.90"</code>, "סמן כנשלח" מחזיר false על הזמנה שכבר נשלחה, ו־<code>dayParam</code> מחזיר Date — שבשרת עם אזור זמן אחר מזיז את תחילת היום. מצא ותקן.</p>
+@hint1
+<p>מה הטיפוס של <code>r.total</code>?</p>
+@hint2
+<p><code>changedRows</code> כשהערך כבר זהה?</p>
+@solution
+```ts save=solutions/P25.5-E21.ts
+// P25.5-E21
+import type { Connection } from "mysql2/promise";
+
+export async function dailyReport(conn: Connection, day: string) {
+  const [rows] = await conn.execute<any[]>(
+    "SELECT total FROM orders WHERE status IN ('paid', 'shipped') AND created_at >= ? AND created_at < ? + INTERVAL 1 DAY",
+    [day, day],
+  );
+  // תקלה 1: היה rows.reduce((s, r) => s + r.total, 0) ← total הוא מחרוזת ("89.90"), והתוצאה "089.90119.00"
+  const cents = rows.reduce((s, r) => s + Math.round(Number(r.total) * 100), 0);
+  return { day, orders: rows.length, totalCents: cents };
+}
+
+export async function markShipped(conn: Connection, orderId: number): Promise<boolean> {
+  const [res] = await conn.execute<any>("UPDATE orders SET status = 'shipped' WHERE id = ? AND status IN ('paid', 'shipped')", [orderId]);
+  // תקלה 2: היה changedRows === 1 ← הזמנה שכבר shipped (ערך זהה) החזירה false, כאילו לא קיימת או לא שולמה.
+  // affectedRows — כמה שורות התאימו ל־WHERE (ב־mysql2 ברירת המחדל: CLIENT_FOUND_ROWS)
+  return res.affectedRows === 1;
+}
+
+// תקלה 3: היה new Date(day) ← "2026-03-01" כ־Date ב־UTC, ו־mysql2 שולח אותו לפי אזור הזמן של התהליך —
+// בשרת בישראל השאילתה התחילה ב־"2026-03-01 02:00". מחרוזת 'YYYY-MM-DD' עוברת כמו שהיא
+export const dayParam = (day: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("תאריך בפורמט YYYY-MM-DD");
+  return day;
+};
+```
+@mistakes
+<ul><li>לתקן את הסכום עם <code>parseFloat</code> ולחבר שברים — אחרי אלף הזמנות מגיעים לאגורה חסרה. אגורות כמספר שלם.</li></ul>
+
+@@ P25.5-E22 | 4 | תור עבודות — שלוש תקלות 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P25.5-E22.ts</code>: שני workers מעבדים את אותה עבודה, ולפעמים worker אחד לוקח את כל התור. מצא ותקן (החוזה של E14).</p>
+@hint1
+<p>איפה הטרנזקציה? ובאיזה חיבור רצה כל פקודה?</p>
+@hint2
+<p>כמה שורות ה־SELECT מחזיר?</p>
+@solution
+```ts save=solutions/P25.5-E22.ts
+// P25.5-E22
+import type { Pool } from "mysql2/promise";
+
+export async function claimJobs(pool: Pool, workerId: string, limit: number): Promise<number[]> {
+  const conn = await pool.getConnection(); // תקלה 1: היה pool.query ישירות ← כל פקודה בחיבור אחר, בלי טרנזקציה — הנעילה משתחררת מיד אחרי ה־SELECT
+  try {
+    await conn.beginTransaction();
+    // תקלה 2: בלי FOR UPDATE SKIP LOCKED ← שני workers קוראים אותן שורות ושניהם "לוקחים"
+    // תקלה 3: לא היה LIMIT ← worker אחד "לקח" את כל התור, והשאר עמדו בטלים
+    const [rows] = await conn.query<any[]>("SELECT id FROM jobs WHERE status = 'queued' ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED", [limit]);
+    const ids = rows.map((r) => r.id as number);
+    if (ids.length) await conn.query("UPDATE jobs SET status = 'running', locked_by = ? WHERE id IN (?)", [workerId, ids]);
+    await conn.commit();
+    return ids;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+```
+@mistakes
+<ul><li>"לתקן" עם <code>FOR UPDATE</code> בלי טרנזקציה — ב־autocommit הנעילה משתחררת בסוף ה־SELECT עצמו.</li></ul>
+
+@@ P25.5-E23 | 4 | טבלה — שלוש תקלות 🤖 | 15 | שיעור 1
+@task
+<p>טבלת <code>members</code> ב־<code>P25.5-E23.sql</code>: משתמשים לא מצליחים לשמור bio עם 🔥 (<code>Incorrect string value: '\xF0\x9F\x94\xA5'</code>), סכום היתרות לא יוצא עגול באגורות, ותאריכי לידה לפני 1970 נדחים. מצא ותקן.</p>
+@hint1
+<p><code>utf8</code> ב־MySQL הוא utf8mb3 — עד 3 בתים לתו. ☕ נכנס (3 בתים); 🔥 לא (4).</p>
+@hint2
+<p>FLOAT לכסף? TIMESTAMP לתאריך לידה?</p>
+@solution
+```sql save=solutions/P25.5-E23.sql
+-- P25.5-E23
+-- תקלה 1: CHARSET utf8 ב־MySQL הוא utf8mb3 — 3 בתים לתו, ואמוג׳י (4 בתים) נכשל ← utf8mb4
+-- תקלה 2: FLOAT לכסף ← 89.90 נשמר כ־89.9000015…; DECIMAL(10,2) מדויק
+-- תקלה 3: TIMESTAMP לתאריך לידה ← טווח 1970–2038 בלבד; תאריך בלי שעה — DATE
+CREATE TABLE members (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL,
+  bio        TEXT NOT NULL,
+  balance    DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  birth_date DATE NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+@mistakes
+<ul><li>לשנות רק את הטבלה ל־utf8mb4 ולשכוח את החיבור — ב־mysql2 הוא utf8mb4 כברירת מחדל, אבל בכלים ישנים צריך <code>charset=utf8mb4</code> גם שם.</li></ul>
+
+@@ P25.5-E24 | 5 | אתגר: "הזמן" של חנות הקפה ב־MySQL 🤖 | 60 | שיעור 5
+@task
+<p>טבלת <code>order_requests (idem_key PK, customer_id, order_id NULL)</code>. בקובץ <code>P25.5-E24.ts</code>: <code>createOrderFromCart(pool, customerId, idemKey)</code> — בטרנזקציה אחת: מפתח idempotency (קיים ← אותה הזמנה, <code>replayed: true</code>; של לקוח אחר או בטיפול ← שגיאה), העגלה (ריקה ← <code>EmptyCart</code>), נעילת המוצרים לפי id, בדיקת מלאי (<code>OutOfStock</code> עם <code>productId</code>), הזמנה ופריטים במחיר של עכשיו, הורדת מלאי, ריקון העגלה. כישלון ← rollback מלא (גם המפתח). הבודק: מחירים, אותו מפתח במקביל, ו־10 לקוחות על 3 יחידות.</p>
+@hint1
+<p>שני פתרונות קודמים בפרק הם רוב הדרך: E09 (הזמנה), E17 (idempotency).</p>
+@hint2
+<p>אחרי <code>INSERT IGNORE</code> שהחזיר 0 — קרא את השורה עם <code>FOR SHARE</code>: ב־REPEATABLE READ קריאה רגילה יכולה להחזיר את התמונה הישנה.</p>
+@solution
+```ts save=solutions/P25.5-E24.ts
+// P25.5-E24
+import type { Pool } from "mysql2/promise";
+
+export class EmptyCart extends Error {}
+export class OutOfStock extends Error {
+  productId: number;
+  constructor(productId: number) {
+    super(`אין מספיק מלאי למוצר ${productId}`);
+    this.productId = productId;
+  }
+}
+
+// "הזמן" של חנות הקפה — ב־MySQL. טרנזקציה אחת: מפתח idempotency, עגלה, נעילת המוצרים (FOR UPDATE, לפי id —
+// סדר קבוע מונע deadlocks), בדיקת מלאי, הזמנה ופריטים עם המחיר של עכשיו, הורדת מלאי, ריקון העגלה
+export async function createOrderFromCart(pool: Pool, customerId: number, idemKey: string): Promise<{ orderId: number; totalCents: number; replayed: boolean }> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // אותו מפתח בבקשה מקבילה: ה־INSERT מחכה לנעילה על המפתח, וממשיך כשהראשונה מסתיימת
+    const [ins] = await conn.execute<any>("INSERT IGNORE INTO order_requests (idem_key, customer_id) VALUES (?, ?)", [idemKey, customerId]);
+    if (ins.affectedRows === 0) {
+      // FOR SHARE — קריאה "נועלת" רואה את הגרסה המחויבת האחרונה (לא את ה־snapshot של REPEATABLE READ)
+      const [[prev]] = await conn.execute<any[]>("SELECT r.customer_id, r.order_id, o.total FROM order_requests r LEFT JOIN orders o ON o.id = r.order_id WHERE r.idem_key = ? FOR SHARE", [idemKey]);
+      await conn.commit();
+      if (!prev || prev.customer_id !== customerId || prev.order_id === null) throw new Error("Idempotency-Key בשימוש");
+      return { orderId: prev.order_id, totalCents: Math.round(Number(prev.total) * 100), replayed: true };
+    }
+    const [cart] = await conn.execute<any[]>("SELECT product_id, quantity FROM cart_items WHERE customer_id = ? ORDER BY product_id", [customerId]);
+    if (cart.length === 0) throw new EmptyCart("העגלה ריקה");
+    const [products] = await conn.query<any[]>("SELECT id, price, stock FROM products WHERE id IN (?) ORDER BY id FOR UPDATE", [cart.map((c) => c.product_id)]);
+    const byId = new Map(products.map((p) => [p.id, p]));
+    let totalCents = 0;
+    for (const c of cart) {
+      const p = byId.get(c.product_id);
+      if (!p || p.stock < c.quantity) throw new OutOfStock(c.product_id);
+      totalCents += Math.round(Number(p.price) * 100) * c.quantity;
+    }
+    const [order] = await conn.execute<any>("INSERT INTO orders (customer_id, status, total) VALUES (?, 'pending_payment', ?)", [customerId, (totalCents / 100).toFixed(2)]);
+    const orderId: number = order.insertId;
+    await conn.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES ?", [cart.map((c) => [orderId, c.product_id, c.quantity, byId.get(c.product_id).price])]);
+    for (const c of cart) await conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [c.quantity, c.product_id]);
+    await conn.execute("DELETE FROM cart_items WHERE customer_id = ?", [customerId]);
+    await conn.execute("UPDATE order_requests SET order_id = ? WHERE idem_key = ?", [orderId, idemKey]);
+    await conn.commit();
+    return { orderId, totalCents, replayed: false };
+  } catch (err) {
+    await conn.rollback(); // גם שורת ה־idempotency מתבטלת — אפשר לנסות שוב עם אותו מפתח
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+```
+@mistakes
+<ul><li>לשמור את ה־idempotency בטרנזקציה נפרדת מההזמנה — קריסה ביניהן משאירה מפתח "בטיפול" לנצח, או הזמנה בלי מפתח.</li></ul>
+
+@@ P25.5-E25 | 5 | אתגר: העברת נתונים מ־PostgreSQL ל־MySQL 🤖 | 45 | שיעור 5
+@task
+<p>בקובץ <code>P25.5-E25.ts</code>: <code>copyCustomers(source, target, { batchSize })</code> — מעתיק את <code>customers</code> מ־PostgreSQL (<code>pg</code>) ל־MySQL (<code>mysql2</code>) בקבוצות (keyset לפי id, לא OFFSET): <code>boolean</code> ← 0/1, <code>numeric</code> ← DECIMAL בלי לעבור דרך float, <code>timestamptz</code> ← <code>DATETIME(3)</code> ב־UTC. הרצה שנייה לא מכפילה ומעדכנת שינויים. מחזיר <code>{ copied, batches }</code>.</p>
+@hint1
+<p>ב־PostgreSQL: <code>balance::text</code> — כך הסכום מגיע כמחרוזת מדויקת.</p>
+@hint2
+<p><code>INSERT … VALUES ? AS new ON DUPLICATE KEY UPDATE …</code> עם מערך של מערכים.</p>
+@solution
+```ts save=solutions/P25.5-E25.ts
+// P25.5-E25
+import type pg from "pg";
+import type { Pool } from "mysql2/promise";
+
+// העברת טבלה מ־PostgreSQL ל־MySQL — משימה אמיתית כשמחליפים מסד או מאחדים מערכות.
+// בקבוצות (keyset לפי id, לא OFFSET), עם המרת טיפוסים, ו־idempotent: הרצה שנייה לא מכפילה (ON DUPLICATE KEY UPDATE)
+export async function copyCustomers(source: pg.Client | pg.Pool, target: Pool, { batchSize = 500 } = {}): Promise<{ copied: number; batches: number }> {
+  let lastId = 0;
+  let copied = 0;
+  let batches = 0;
+  for (;;) {
+    const { rows } = await source.query(
+      "SELECT id, name, email, is_vip, balance::text AS balance, created_at FROM customers WHERE id > $1 ORDER BY id LIMIT $2",
+      [lastId, batchSize],
+    );
+    if (rows.length === 0) break;
+    const values = rows.map((r: any) => [
+      r.id,
+      r.name,
+      r.email,
+      r.is_vip ? 1 : 0, // boolean ← TINYINT(1)
+      r.balance, // numeric כמחרוזת ← DECIMAL — בלי לעבור דרך float
+      // timestamptz ← DATETIME(3) ב־UTC (MySQL DATETIME לא שומר אזור זמן — מחליטים ומתעדים: UTC)
+      (r.created_at as Date).toISOString().slice(0, 23).replace("T", " "),
+    ]);
+    await target.query(
+      "INSERT INTO customers (id, name, email, is_vip, balance, created_at) VALUES ? AS new " +
+        "ON DUPLICATE KEY UPDATE name = new.name, email = new.email, is_vip = new.is_vip, balance = new.balance, created_at = new.created_at",
+      [values],
+    );
+    copied += rows.length;
+    batches++;
+    lastId = rows[rows.length - 1].id;
+  }
+  return { copied, batches };
+}
+```
+<p>במעבר אמיתי: קודם להעתיק (כמו כאן), אחר כך לכתוב לשני המסדים במקביל, להשוות, ורק אז להעביר קריאות — וכל הזמן עם דרך חזרה (expand/contract בגדול).</p>
+@mistakes
+<ul><li><code>created_at.toString()</code> או <code>toLocaleString()</code> ← תאריך באזור הזמן של השרת שמריץ את ההעברה. <code>toISOString()</code> — תמיד UTC.</li></ul>

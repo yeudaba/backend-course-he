@@ -10,7 +10,7 @@ export default {
   prismaProjects: ["solutions/tasks-api"],
   nestProjects: ["solutions/tasks-api"],
   time: "4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 30, // 25 + חמישה של שיעור 6 (observability)
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, PostgreSQL (מפרק 16), Docker Desktop (מפרק 23), ופרויקט 2 בשלב ו׳.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום. כל מה שבפרק — מובנה ב־Node: <code>node:crypto</code>, <code>node:async_hooks</code>, <code>Intl</code> ו־<code>performance</code>. (בעבודה תפגוש ספריות כמו pino ל־logging — אחרי הפרק תדע בדיוק מה הן עושות בשבילך.)</p>
 <p>(רשות) <code>jq</code> — לקרוא לוגים של JSON בטרמינל: <code>brew install jq</code>. ב־macOS חדש הוא כבר מותקן — בדוק עם <code>jq --version</code>.</p>
@@ -23,6 +23,7 @@ ${copyStep("24-production")}
     "Idempotency-Key: ניסיון חוזר בטוח, גם כשבקשות מגיעות במקביל.",
     "הגבלת קצב: fixed window, sliding window ו־token bucket — ו־429 נכון.",
     "כיבוי מסודר: לסיים בקשות לפני שסוגרים את המסד.",
+    "Observability: מדדי RED ב־/metrics, אחוזונים במקום ממוצע, ו־tracing עם traceparent.",
     "פרויקט 2, שלב ז׳: כל אלה ב־tasks-api.",
   ],
   intro: `<h2>🤔 למה צריך את זה?</h2>
@@ -34,6 +35,7 @@ ${copyStep("24-production")}
     { file: "lesson-03-idempotency.html", title: "Idempotency: לשלוח שוב בלי לחשוש", minutes: 50 },
     { file: "lesson-04-limits.html", title: "הגבלת קצב וכיבוי מסודר", minutes: 45 },
     { file: "lesson-05-project.html", title: "פרויקט 2, שלב ז׳: מוכן לפרודקשן", minutes: 75, note: "🤖 PR2-PROD" },
+    { file: "lesson-06-observability.html", title: "Observability: מדדים, אחוזונים ו־tracing", minutes: 50 },
   ],
   glossary: [
     ["Structured logging", "סְטְרַקְצֶ'רְד לוֹגִינְג", "לוג שכל שורה בו היא אובייקט (JSON) עם שדות — לא משפט חופשי"],
@@ -51,6 +53,14 @@ ${copyStep("24-production")}
     ["Rate limiting", "רֵייט לִימִיטִינְג", "הגבלת מספר הבקשות של לקוח בפרק זמן; מעבר — 429"],
     ["Token bucket", "טוֹקֶן בָּאקֶט", "אלגוריתם הגבלה שמאפשר פרץ קצר ושומר על קצב ממוצע"],
     ["Graceful shutdown", "גְרֵייסְפוּל שַׁאטְדָאוּן", "כיבוי שמסיים את הבקשות שבאמצע, ורק אז סוגר משאבים"],
+    ["Observability", "אוֹבְּזֶרְוַבִילִיטִי", "היכולת להבין מה קורה בתוך מערכת ממה שהיא מוציאה: לוגים, מדדים ו־traces"],
+    ["Metric (counter / gauge / histogram)", "מֶטְרִיק", "מספר שנאסף לאורך זמן: מונה שרק עולה, ערך שעולה ויורד, או התפלגות בדליים"],
+    ["Prometheus", "פְּרוֹמֶתֵאוּס", "מערכת שקוראת את /metrics של השרתים (pull) ושומרת את הערכים לאורך זמן"],
+    ["Percentile (p95)", "פֶּרְסֶנְטַייל", "הערך ש־95% מהמדידות קטנות או שוות לו — מתאר את החוויה של רוב המשתמשים טוב יותר מממוצע"],
+    ["Cardinality", "קַרְדִינָלִיטִי", "מספר הסדרות השונות של מדד — כל צירוף של ערכי labels הוא סדרה"],
+    ["Trace / Span", "טְרֵייס / סְפָּאן", "הסיפור של בקשה אחת בין שירותים / פעולה אחת בתוכו, עם הורה ומשך"],
+    ["traceparent", "טְרֵייס־פֵּרֶנְט", "header בתקן W3C שמעביר traceId ו־span הורה לשירות הבא"],
+    ["OpenTelemetry", "אוֹפֶּן־טֶלֶמֶטְרִי", "תקן וספריות פתוחים לאיסוף traces ומדדים, בלי תלות בספק"],
     ["Readiness / Liveness", "רֵדִינֶס / לַייבְנֶס", "\"מוכן לקבל תנועה\" מול \"התהליך חי\" — שתי בדיקות שונות"],
   ],
   passTest: `<ul class="check">
@@ -60,6 +70,8 @@ ${copyStep("24-production")}
 <li>להסביר Idempotency-Key — ולמה "SELECT ואז INSERT" לא מונע כפילויות.</li>
 <li>להשוות fixed window, sliding window ו־token bucket, ולהחזיר 429 עם Retry-After נכון.</li>
 <li>לכבות שרת בלי לחתוך בקשות.</li>
+<li>להסביר מה מודדים ב־RED, למה p95 ולא ממוצע, ולמה userId לא נכנס ל־label.</li>
+<li>להסביר איך traceparent מחבר spans בין שירותים.</li>
 <li>פרויקט 2: PR2-PROD ו־PR2-PROD-DB עוברים.</li>
 <li><code>npm run check P24</code>: 80% מ־E06–E19, ולפחות שני תרגילי תיקון.</li>
 </ul>`,

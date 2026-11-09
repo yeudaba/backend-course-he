@@ -1,0 +1,836 @@
+@@ P25.7-E01 | 1 | Mongo או Postgres? | 10 | שיעור 1
+@task
+<p>לכל מערכת: MongoDB, PostgreSQL, או "שניהם יעבדו"? נמק במשפט.</p>
+<ol>
+<li>מערכת הנהלת חשבונות: חשבוניות, תשלומים, יתרות, ודוחות לרואה החשבון.</li>
+<li>קטלוג של חנות מוצרי חשמל: למקרר יש נפח ודירוג אנרגיה, לטלוויזיה גודל מסך ורזולוציה, ללפטופ מעבד וזיכרון.</li>
+<li>שמירת "טיוטה" של טופס ארוך שהמשתמש ממלא בכמה שלבים.</li>
+<li>רשת חברתית: מי עוקב אחרי מי, והצעות "חברים של חברים".</li>
+<li>ה־tasks-api של פרויקט 2.</li>
+</ol>
+@hint1
+<p>שאל: האם הנתונים נקראים כ"אובייקט שלם"? כמה קשרים יש, והאם השאילתות עליהם ידועות מראש? כמה חשובה עקביות בין כמה רשומות?</p>
+@hint2
+<p>וזכור ש־Postgres עם <code>jsonb</code> יודע לשמור מבנה גמיש בתוך עמודה אחת.</p>
+@solution
+<ol>
+<li><strong>PostgreSQL.</strong> כסף: טרנזקציות על כמה טבלאות, מפתחות זרים, ודוחות עם JOIN ו־GROUP BY שלא ידועים מראש.</li>
+<li><strong>Mongo מתאים מאוד</strong> — כל מוצר הוא מסמך עם מאפיינים משלו. (Postgres עם עמודת <code>jsonb</code> ל־specs — גם עובד.)</li>
+<li><strong>שניהם.</strong> מסמך אחד שנכתב ונקרא בשלמותו — Mongo טבעי; ב־Postgres — שורה עם <code>jsonb</code>.</li>
+<li><strong>לא זה ולא זה במיוחד</strong> — "חברים של חברים" הוא שאילתת גרף. Postgres עם recursive CTE מסתדר בהתחלה; בקנה מידה — מסד גרפים. Mongo עם מערך followers שגדל לנצח — המלכודת משיעור 3.</li>
+<li><strong>שניהם יעבדו</strong> — משימות של משתמש הן מסמכים פשוטים. בחרנו Postgres כדי ללמוד SQL ו־Prisma, וזה בסדר גמור.</li>
+</ol>
+@mistakes
+<ul><li>"Mongo כי הוא מהיר יותר" / "Mongo כי אין schema" — בלי שיקול של דפוסי גישה ועקביות. זה מה שמראיין מחכה לשמוע שלא תגיד.</li></ul>
+
+@@ P25.7-E02 | 1 | embed או reference? | 15 | שיעור 3
+@task
+<p>לכל זוג — embed (בתוך המסמך) או reference (מזהה)? למה?</p>
+<ol>
+<li>כתובות משלוח של לקוח (בדרך כלל 1–3).</li>
+<li>הזמנות של לקוח.</li>
+<li>המוצר בתוך פריט הזמנה.</li>
+<li>תגובות לפוסט בבלוג — פוסט רגיל מקבל 5, פוסט ויראלי 40,000.</li>
+<li>הקטגוריה של מוצר (שם, תיאור, תמונה), כשיש 12 קטגוריות ואלפי מוצרים.</li>
+</ol>
+@hint1
+<p>שלוש שאלות: נקרא תמיד ביחד עם ההורה? יש לכמות גבול טבעי? משתנה לבד, או משותף לרבים?</p>
+@hint2
+<p>לפעמים התשובה היא "reference — ועותק של שדה או שניים".</p>
+@solution
+<ol>
+<li><strong>embed</strong> — מעט, שייכות רק ללקוח, נקראות עם הפרופיל.</li>
+<li><strong>reference</strong> — אין גבול. collection <code>orders</code> עם <code>customerId</code> ואינדקס <code>{ customerId: 1, createdAt: -1 }</code>.</li>
+<li><strong>reference + עותק</strong> — <code>productId</code>, ועותק של <code>name</code> ו־<code>price</code> בזמן הקנייה (שיעור 3, סעיף 3).</li>
+<li><strong>reference</strong> — collection <code>comments</code> עם <code>postId</code>. מערך מוטמע יעבוד לרוב הפוסטים ויישבר בדיוק בפוסט שכולם קוראים. ואפשר להטמיע את 3 האחרונות לתצוגה מהירה ("subset pattern").</li>
+<li><strong>reference + עותק של השם</strong> — הקטגוריה היא ישות עם דף משלה. במוצר: <code>categoryId</code> ו־<code>categoryName</code> לתצוגה. שינוי שם של קטגוריה (נדיר) — <code>updateMany</code>.</li>
+</ol>
+@mistakes
+<ul><li>להטמיע הכול "כי ככה Mongo" — ואז לקוח עם 3,000 הזמנות בתוך מסמך אחד.</li><li>להפריד הכול "כמו בטבלאות" — ואז כל דף צריך חמישה $lookup.</li></ul>
+
+@@ P25.7-E03 | 1 | מה תחזיר השאילתה? | 10 | שיעור 2
+@task
+<p>על נתוני הדוגמה (<code>files/seed.mjs</code>): מה יחזירו (רשימת <code>_id</code>)? נסה בראש, ואז הרץ ב־mongosh (<code>use shop</code>).</p>
+<ol>
+<li><code>db.products.find({ tags: "single-origin" })</code></li>
+<li><code>db.products.find({ price: { $gte: 50, $lt: 90 }, stock: { $gt: 0 } })</code></li>
+<li><code>db.products.find({ "reviews.by": "c1", "reviews.rating": 2 })</code></li>
+<li><code>db.products.find({ reviews: { $elemMatch: { by: "c2", rating: { $gte: 4 } } } })</code></li>
+<li><code>db.orders.find({ status: { $nin: ["delivered", "cancelled"] }, customerId: "c3" })</code></li>
+</ol>
+@hint1
+<p>מחירים ומלאי: p1 62/40, p2 55/0, p3 48/120, p4 50/15, p5 89/12, p6 249/5, p7 199/0, p8 35/60.</p>
+@hint2
+<p>שאלה 3: שני התנאים — על אותו דירוג, או אולי על שני דירוגים שונים?</p>
+@solution
+<ol>
+<li><code>p1</code>, <code>p2</code>.</li>
+<li><code>p1</code> (62), <code>p4</code> (50, הגבול כלול ב־<code>$gte</code>), <code>p5</code> (89 &lt; 90). p2 (55) — מלאי 0.</li>
+<li><code>p6</code> — c1 נתן 2. וזה במקרה אותו דירוג; אבל השאילתה לא דורשת את זה.</li>
+<li><code>p3</code> (c2 נתן 5), <code>p8</code> (c2 נתן 4). ב־p2, c2 נתן 3 — לא.</li>
+<li><code>o6</code> (paid), <code>o9</code> (pending).</li>
+</ol>
+@mistakes
+<ul><li>בשאלה 3 — לחשוב ששני התנאים חלים על אותו דירוג. כאן זה יצא נכון במקרה; ב־E03 של שיעור 2 ראית מקרה שלא.</li></ul>
+
+@@ P25.7-E04 | 1 | לקרוא explain | 10 | שיעור 4
+@task
+<p>שאילתה: <code>orders.find({ customerId: "c42", status: "paid" }).sort({ createdAt: -1 })</code> על 2 מיליון הזמנות. קיבלת מ־explain:</p>
+<pre class="mono" dir="ltr">winningPlan: SORT ← FETCH (filter: status) ← IXSCAN { customerId: 1 }
+nReturned: 12 · totalKeysExamined: 3,800 · totalDocsExamined: 3,800</pre>
+<ol><li>מה האינדקס עשה, ומה לא?</li><li>איזה אינדקס היית בונה, ולמה בסדר הזה?</li><li>מה ישתנה ב־explain אחריו?</li></ol>
+@hint1
+<p>12 חזרו, 3,800 נבדקו. ו־SORT בתוכנית = מיון בזיכרון.</p>
+@hint2
+<p>ESR: שני שדות של שוויון, ואחריהם שדה המיון.</p>
+@solution
+<ol>
+<li>האינדקס מצא את 3,800 ההזמנות של c42; את הסינון לפי status ואת המיון Mongo עשה אחר כך — קרא 3,800 מסמכים כדי להחזיר 12, ומיין בזיכרון.</li>
+<li><code>{ customerId: 1, status: 1, createdAt: -1 }</code>. שני שדות השוויון קודם (הסדר ביניהם פחות חשוב), ואחריהם שדה המיון — כך הרשומות באינדקס כבר ממוינות בתוך כל צירוף.</li>
+<li>אין SORT בתוכנית, ו־totalKeysExamined / totalDocsExamined ≈ 12.</li>
+</ol>
+@mistakes
+<ul><li><code>{ createdAt: -1, customerId: 1 }</code> — שדה המיון ראשון: Mongo עובר על כל ההזמנות לפי זמן ומסנן תוך כדי.</li></ul>
+
+@@ P25.7-E05 | 1 | מ־SQL ל־Mongo | 15 | שיעור 2
+@task
+<p>תרגם (על הנתונים של היחידה):</p>
+<ol>
+<li><code>SELECT name, price FROM products WHERE category = 'gear' AND stock &gt; 0 ORDER BY price DESC LIMIT 2</code></li>
+<li><code>UPDATE products SET price = price * 1.1 WHERE category = 'beans'</code></li>
+<li><code>DELETE FROM orders WHERE status = 'cancelled' AND created_at &lt; '2026-10-20'</code></li>
+<li><code>SELECT customer_id, COUNT(*) FROM orders GROUP BY customer_id HAVING COUNT(*) &gt;= 3</code></li>
+</ol>
+@hint1
+<p>לעדכון 2: יש אופרטור שמכפיל (<code>$mul</code>).</p>
+@hint2
+<p>HAVING הוא <code>$match</code> אחרי <code>$group</code>.</p>
+@solution
+<ol>
+<li><code>db.products.find({ category: "gear", stock: { $gt: 0 } }, { projection: { _id: 0, name: 1, price: 1 } }).sort({ price: -1 }).limit(2)</code></li>
+<li><code>db.products.updateMany({ category: "beans" }, { $mul: { price: 1.1 } })</code> — ושים לב: 62 × 1.1 = 68.2 (Double). מחירים מדויקים — Decimal128, או אגורות במספר שלם.</li>
+<li><code>db.orders.deleteMany({ status: "cancelled", createdAt: { $lt: new Date("2026-10-20T00:00:00+03:00") } })</code> — Date, לא מחרוזת, ועם אזור זמן.</li>
+<li><code>db.orders.aggregate([{ $group: { _id: "$customerId", n: { $sum: 1 } } }, { $match: { n: { $gte: 3 } } }])</code> ← c1 (4), c2 (3 — כולל ההזמנה שבוטלה), c3 (3). ל־c4 אין הזמנות, ולכן הוא לא מופיע בכלל (בניגוד ל־LEFT JOIN).</li>
+</ol>
+@mistakes
+<ul><li><code>updateOne</code> במקום <code>updateMany</code> — רק המסמך הראשון מתעדכן.</li><li>להשוות <code>createdAt</code> למחרוזת: Date ומחרוזת הם טיפוסים שונים ב־BSON, ו־<code>$lt</code> ביניהם לא מחזיר כלום.</li></ul>
+
+@@ P25.7-E06 | 2 | חיפוש מוצרים 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>P25.7-E06.ts</code> כתוב <code>findProducts(db, { category, maxPrice, inStock, tag })</code>:</p>
+<ul><li>כל פילטר — רק אם הגיע: <code>category</code> שווה; <code>maxPrice</code> — מחיר קטן או שווה; <code>inStock: true</code> — מלאי גדול מ־0 (<code>false</code> או חסר — בלי סינון); <code>tag</code> — המוצר מכיל את התגית.</li><li>מחזיר רק <code>_id</code>, <code>name</code>, <code>price</code>, ממוין לפי מחיר (ובשוויון — לפי <code>_id</code>).</li></ul>
+@hint1
+<p>בונים אובייקט <code>filter</code> ומוסיפים לו שדות רק כשהפרמטר הגיע.</p>
+@hint2
+<p><code>{ tags: tag }</code> על שדה שהוא מערך = "המערך מכיל". projection: <code>{ name: 1, price: 1 }</code> (<code>_id</code> נכלל אוטומטית).</p>
+@solution
+```ts save=solutions/P25.7-E06.ts
+// P25.7-E06
+import type { Db } from "mongodb";
+
+// בונים את ה־filter רק מהשדות שהגיעו: undefined לא נכנס, אחרת הוא היה מחפש "שדה שערכו null"
+export async function findProducts(db: Db, { category, maxPrice, inStock, tag }: { category?: string; maxPrice?: number; inStock?: boolean; tag?: string } = {}) {
+  const filter: Record<string, unknown> = {};
+  if (category !== undefined) filter.category = category;
+  if (maxPrice !== undefined) filter.price = { $lte: maxPrice };
+  if (inStock) filter.stock = { $gt: 0 };
+  if (tag !== undefined) filter.tags = tag; // על מערך: "המערך מכיל את הערך"
+  return db
+    .collection("products")
+    .find(filter, { projection: { _id: 1, name: 1, price: 1 } })
+    .sort({ price: 1, _id: 1 }) // שובר שוויון — סדר יציב
+    .toArray();
+}
+```
+@mistakes
+<ul><li><code>filter.category = category</code> גם כשהוא <code>undefined</code> — ה־driver שולח <code>null</code>, ו־Mongo מחפש מסמכים שבהם השדה null או חסר.</li><li>מיון בלי שובר שוויון — סדר של מוצרים באותו מחיר לא מובטח.</li></ul>
+
+@@ P25.7-E07 | 2 | לקוח חדש, אימייל ייחודי 🤖 | 15 | שיעור 1
+@task
+<p>בקובץ <code>P25.7-E07.ts</code>:</p>
+<ul><li><code>setupCustomers(db)</code> — אינדקס ייחודי על <code>email</code> ב־<code>customers</code>.</li><li><code>createCustomer(db, { name, email, city })</code> — מוסיף לקוח עם <code>createdAt</code> (Date), אימייל בלי רווחים ובאותיות קטנות, ומחזיר את ה־<code>insertedId</code> (ObjectId שנוצר).</li><li>אימייל שכבר קיים ← <code>DuplicateEmailError</code>. שגיאות אחרות — הלאה.</li></ul>
+@hint1
+<p><code>createIndex({ email: 1 }, { unique: true })</code>. ההפרה מגיעה כ־<code>MongoServerError</code> עם <code>code === 11000</code>.</p>
+@hint2
+<p>try/catch סביב <code>insertOne</code>: אם 11000 — <code>throw new DuplicateEmailError(...)</code>, אחרת <code>throw err</code>.</p>
+@solution
+```ts save=solutions/P25.7-E07.ts
+// P25.7-E07
+import { MongoServerError, type Db } from "mongodb";
+
+export class DuplicateEmailError extends Error {}
+
+export async function setupCustomers(db: Db) {
+  // ה־UNIQUE של Mongo: אינדקס ייחודי. בלעדיו — שני לקוחות עם אותו אימייל יישמרו בשקט
+  await db.collection("customers").createIndex({ email: 1 }, { unique: true });
+}
+
+export async function createCustomer(db: Db, { name, email, city }: { name: string; email: string; city: string }) {
+  try {
+    const { insertedId } = await db.collection("customers").insertOne({ name, email: email.trim().toLowerCase(), city, createdAt: new Date() });
+    return insertedId; // לא נתנו _id ← Mongo יוצר ObjectId
+  } catch (err) {
+    if (err instanceof MongoServerError && err.code === 11000) throw new DuplicateEmailError(`האימייל ${email} כבר רשום`);
+    throw err;
+  }
+}
+```
+@mistakes
+<ul><li>לבדוק "האם קיים" עם <code>findOne</code> ואז להכניס — שני רישומים במקביל עוברים את הבדיקה (המרוץ מפרק 18). רק האינדקס הייחודי מבטיח.</li><li>לבלוע כל שגיאה ולזרוק DuplicateEmailError — גם "המסד נפל" ייראה כמו "האימייל תפוס".</li></ul>
+
+@@ P25.7-E08 | 2 | הוספה למלאי 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>P25.7-E08.ts</code> כתוב <code>restock(db, productId, qty)</code>: מוסיף <code>qty</code> למלאי ומחזיר את המלאי <strong>אחרי</strong> ההוספה; מוצר לא קיים ← <code>null</code>; <code>qty</code> שאינו שלם חיובי ← <code>RangeError</code>. הבודק מריץ 20 הוספות במקביל.</p>
+@hint1
+<p><code>findOneAndUpdate</code> עם <code>$inc</code> — שינוי ושליפה בפקודה אחת.</p>
+@hint2
+<p><code>{ returnDocument: "after" }</code> — אחרת חוזר המסמך <em>לפני</em> העדכון.</p>
+@solution
+```ts save=solutions/P25.7-E08.ts
+// P25.7-E08
+import type { Db } from "mongodb";
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+  tags: string[];
+}
+
+export async function restock(db: Db, productId: string, qty: number) {
+  if (!Number.isInteger(qty) || qty <= 0) throw new RangeError("qty חייב להיות מספר שלם חיובי");
+  // $inc אטומי בשרת — לא "קרא, חבר, כתוב" (שני מחסנאים במקביל היו דורסים זה את זה)
+  const doc = await db.collection<Product>("products").findOneAndUpdate(
+    { _id: productId },
+    { $inc: { stock: qty } },
+    { returnDocument: "after", projection: { stock: 1 } }
+  );
+  return doc ? doc.stock : null;
+}
+```
+<p>המוצרים של היחידה מוגדרים כ־<code>interface Product</code>, ו־<code>db.collection&lt;Product&gt;</code> — כך TypeScript יודע ש־<code>_id</code> הוא מחרוזת ו־<code>stock</code> מספר (שיעור 5).</p>
+@mistakes
+<ul><li><code>findOne</code>, חיבור ב־JS, <code>$set</code> — שתי הוספות במקביל ואחת הולכת לאיבוד.</li></ul>
+
+@@ P25.7-E09 | 2 | תגיות: $addToSet ו־$pull 🤖 | 10 | שיעור 2
+@task
+<p>בקובץ <code>P25.7-E09.ts</code> כתוב <code>addTag(db, productId, tag)</code> ו־<code>removeTag(...)</code>. תגית — בלי רווחים בקצוות ובאותיות קטנות; <code>addTag</code> לא מוסיף כפילות. שתיהן מחזירות <code>true</code> אם המוצר קיים, <code>false</code> אם לא.</p>
+@hint1
+<p><code>$addToSet</code> מוסיף רק אם הערך לא במערך. <code>$pull</code> מסיר כל מופע.</p>
+@hint2
+<p>"המוצר קיים" — <code>matchedCount === 1</code>, לא <code>modifiedCount</code> (תגית שכבר קיימת: התאים, לא השתנה).</p>
+@solution
+```ts save=solutions/P25.7-E09.ts
+// P25.7-E09
+import type { Db } from "mongodb";
+
+// collection עם טיפוס: TypeScript יודע ש־tags הוא מערך של מחרוזות, ובודק את $addToSet ו־$pull
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+  tags: string[];
+}
+
+const norm = (t: string) => t.trim().toLowerCase();
+
+// $addToSet — מוסיף רק אם לא קיים. $push היה מוסיף כפילות
+export async function addTag(db: Db, productId: string, tag: string) {
+  const r = await db.collection<Product>("products").updateOne({ _id: productId }, { $addToSet: { tags: norm(tag) } });
+  return r.matchedCount === 1;
+}
+
+export async function removeTag(db: Db, productId: string, tag: string) {
+  const r = await db.collection<Product>("products").updateOne({ _id: productId }, { $pull: { tags: norm(tag) } });
+  return r.matchedCount === 1;
+}
+```
+@mistakes
+<ul><li><code>$push</code> במקום <code>$addToSet</code> — "organic" פעמיים.</li><li><code>modifiedCount</code> כאינדיקציה לקיום — addTag של תגית קיימת יחזיר false.</li></ul>
+
+@@ P25.7-E10 | 2 | עמוד של מוצרים 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.7-E10.ts</code> כתוב <code>productsPage(db, { page = 1, pageSize = 3, category })</code> ← <code>{ items, total, totalPages }</code>: ממוין לפי שם (ו־<code>_id</code>), רק <code>name</code> ו־<code>price</code> (ו־<code>_id</code>), <code>total</code> — כמה מסמכים מתאימים לפילטר. <code>page</code> שלם ≥ 1, <code>pageSize</code> שלם 1–50, אחרת <code>RangeError</code>.</p>
+@hint1
+<p><code>skip((page - 1) * pageSize).limit(pageSize)</code>, ו־<code>countDocuments(filter)</code>.</p>
+@hint2
+<p>שתי השאילתות לא תלויות זו בזו — <code>Promise.all</code>.</p>
+@solution
+```ts save=solutions/P25.7-E10.ts
+// P25.7-E10
+import type { Db } from "mongodb";
+
+export async function productsPage(db: Db, { page = 1, pageSize = 3, category }: { page?: number; pageSize?: number; category?: string } = {}) {
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) throw new RangeError("page/pageSize לא תקינים");
+  const filter = category === undefined ? {} : { category };
+  const col = db.collection("products");
+  // שתי שאילתות במקביל: העמוד עצמו, והספירה (באותו filter!)
+  const [items, total] = await Promise.all([
+    col.find(filter, { projection: { name: 1, price: 1 } }).sort({ name: 1, _id: 1 }).skip((page - 1) * pageSize).limit(pageSize).toArray(),
+    col.countDocuments(filter),
+  ]);
+  return { items, total, totalPages: Math.ceil(total / pageSize) };
+}
+```
+@mistakes
+<ul><li><code>countDocuments()</code> בלי הפילטר — total של כל הקטלוג בעמוד של קטגוריה.</li><li><code>estimatedDocumentCount</code> — מהיר, אבל מתעלם מפילטר.</li></ul>
+
+@@ P25.7-E11 | 2 | ההזמנות של לקוח 🤖 | 10 | שיעור 1
+@task
+<p>בקובץ <code>P25.7-E11.ts</code> כתוב <code>customerOrders(db, customerId, { status })</code>: ההזמנות של הלקוח מהחדשה לישנה, בלי <code>items</code> ובלי <code>customerId</code>. <code>status</code> (מערך, לא חובה) — רק הזמנות באחד מהסטטוסים.</p>
+@hint1
+<p>projection של "הכול חוץ מ־": <code>{ items: 0, customerId: 0 }</code>.</p>
+@hint2
+<p><code>{ status: { $in: status } }</code> — ורק אם המערך הגיע ולא ריק.</p>
+@solution
+```ts save=solutions/P25.7-E11.ts
+// P25.7-E11
+import type { Db } from "mongodb";
+
+export async function customerOrders(db: Db, customerId: string, { status }: { status?: string[] } = {}) {
+  const filter: Record<string, unknown> = { customerId };
+  if (status?.length) filter.status = { $in: status };
+  return db
+    .collection("orders")
+    // בלי items — ברשימה מציגים סיכום; הפרטים בדף ההזמנה
+    .find(filter, { projection: { items: 0, customerId: 0 } })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+```
+@mistakes
+<ul><li>לערבב 1 ו־0 באותו projection (<code>{ total: 1, items: 0 }</code>) — Mongo זורק שגיאה (חוץ מ־<code>_id: 0</code>).</li></ul>
+
+@@ P25.7-E12 | 2 | אינדקסים 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>P25.7-E12.ts</code> כתוב <code>createIndexes(db)</code> שיוצר (ואפשר להריץ שוב בלי שגיאה):</p>
+<ul><li>ב־<code>orders</code>: <code>customer_recent</code> — לשאילתה "ההזמנות של לקוח, מהחדשה". הבודק בודק ב־explain שאין מיון בזיכרון ושנבדקו רק 4 מסמכים.</li><li>ב־<code>products</code>: <code>category_price</code> — "מוצרים בקטגוריה, לפי מחיר".</li><li>ב־<code>sessions</code>: <code>sessions_ttl</code> — מוחק session ברגע ש־<code>expiresAt</code> עבר.</li></ul>
+@hint1
+<p>ESR: equality קודם, sort אחריו. <code>createIndex(keys, { name })</code>.</p>
+@hint2
+<p>TTL: <code>{ expiresAt: 1 }, { expireAfterSeconds: 0 }</code> — "0 שניות אחרי הזמן שבשדה".</p>
+@solution
+```ts save=solutions/P25.7-E12.ts
+// P25.7-E12
+import type { Db } from "mongodb";
+
+export async function createIndexes(db: Db) {
+  // ESR: Equality (customerId) ← Sort (createdAt) — מתאים ל"ההזמנות של לקוח, מהחדשה"
+  await db.collection("orders").createIndex({ customerId: 1, createdAt: -1 }, { name: "customer_recent" });
+  await db.collection("products").createIndex({ category: 1, price: 1 }, { name: "category_price" });
+  // TTL: Mongo מוחק לבד מסמכים שה־expiresAt שלהם עבר (תהליך רקע, בערך פעם בדקה)
+  await db.collection("sessions").createIndex({ expiresAt: 1 }, { name: "sessions_ttl", expireAfterSeconds: 0 });
+}
+```
+@mistakes
+<ul><li><code>{ createdAt: -1, customerId: 1 }</code> — עדיין IXSCAN, אבל על כל ההזמנות.</li><li>TTL על שדה שהוא מחרוזת — Mongo לא מוחק כלום (רק Date).</li></ul>
+
+@@ P25.7-E13 | 3 | שמירת מלאי בלי מרוץ 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.7-E13.ts</code> כתוב <code>reserveStock(db, productId, qty)</code>: אם יש לפחות <code>qty</code> במלאי — מוריד ומחזיר <code>true</code>; אחרת <code>false</code> ולא נוגע. <code>qty</code> לא תקין ← <code>RangeError</code>. הבודק: 40 בקשות במקביל על 15 יחידות.</p>
+@hint1
+<p>פקודה אחת — בלי <code>findOne</code> קודם.</p>
+@hint2
+<p><code>updateOne({ _id, stock: { $gte: qty } }, { $inc: { stock: -qty } })</code>, והתשובה — <code>modifiedCount === 1</code>.</p>
+@solution
+```ts save=solutions/P25.7-E13.ts
+// P25.7-E13
+import type { Db } from "mongodb";
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+  tags: string[];
+}
+
+// התנאי (stock >= qty) והעדכון — באותה פקודה. השרת מבצע אותם אטומית על המסמך,
+// כך ששתי בקשות במקביל לא יכולות שתיהן "לראות 1 במלאי" ולהוריד
+export async function reserveStock(db: Db, productId: string, qty: number) {
+  if (!Number.isInteger(qty) || qty <= 0) throw new RangeError("qty חייב להיות מספר שלם חיובי");
+  const r = await db.collection<Product>("products").updateOne({ _id: productId, stock: { $gte: qty } }, { $inc: { stock: -qty } });
+  return r.modifiedCount === 1;
+}
+```
+@mistakes
+<ul><li>"קרא ואז כתוב" — ראית בשיעור 2 מה קורה.</li><li><code>$inc</code> בלי התנאי ב־filter — המלאי יורד מתחת לאפס.</li></ul>
+
+@@ P25.7-E14 | 3 | מכירות לפי מוצר 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>P25.7-E14.ts</code> כתוב <code>salesByProduct(db)</code> — aggregation על <code>orders</code>, רק סטטוס <code>paid</code> או <code>delivered</code>, ← לכל מוצר <code>{ productId, name, units, revenue }</code>, ממוין לפי הכנסה (ובשוויון — <code>productId</code>). הכנסה — לפי המחיר שבהזמנה.</p>
+@hint1
+<p>$match ← $unwind ← $group ← $sort ← $project.</p>
+@hint2
+<p><code>revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } }</code>, ו־<code>name: { $first: "$items.name" }</code>.</p>
+@solution
+```ts save=solutions/P25.7-E14.ts
+// P25.7-E14
+import type { Db } from "mongodb";
+
+export async function salesByProduct(db: Db) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $in: ["paid", "delivered"] } } }, // קודם מסננים — פחות מסמכים לשלבים הבאים
+      { $unwind: "$items" }, // מסמך לכל פריט
+      { $group: { _id: "$items.productId", name: { $first: "$items.name" }, units: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } } } },
+      { $sort: { revenue: -1, _id: 1 } },
+      { $project: { _id: 0, productId: "$_id", name: 1, units: 1, revenue: 1 } },
+    ])
+    .toArray();
+}
+```
+@mistakes
+<ul><li>$match אחרי $group — כבר אין status.</li><li><code>$lookup</code> ל־products כדי לקחת מחיר — המחיר של היום, לא של ההזמנה.</li></ul>
+
+@@ P25.7-E15 | 3 | הלקוחות המובילים 🤖 | 20 | שיעור 4
+@task
+<p>בקובץ <code>P25.7-E15.ts</code> כתוב <code>topCustomers(db, n = 3)</code> ← <code>{ customerId, name, spent, orders }</code> — סכום ההזמנות ומספרן, בלי הזמנות שבוטלו, ממוין לפי <code>spent</code> (ובשוויון — <code>customerId</code>), <code>n</code> הראשונים, עם השם מ־<code>customers</code>.</p>
+@hint1
+<p>קיבוץ לפי <code>customerId</code>, ואז <code>$lookup</code> ל־customers.</p>
+@hint2
+<p><code>$limit</code> לפני ה־<code>$lookup</code>. ותוצאת <code>$lookup</code> היא מערך — <code>$unwind</code>.</p>
+@solution
+```ts save=solutions/P25.7-E15.ts
+// P25.7-E15
+import type { Db } from "mongodb";
+
+export async function topCustomers(db: Db, n = 3) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $ne: "cancelled" } } },
+      { $group: { _id: "$customerId", spent: { $sum: "$total" }, orders: { $sum: 1 } } },
+      { $sort: { spent: -1, _id: 1 } },
+      { $limit: n }, // לפני ה־$lookup: מצטרפים רק ל־n לקוחות, לא לכולם
+      { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "customer" } },
+      { $unwind: "$customer" },
+      { $project: { _id: 0, customerId: "$_id", name: "$customer.name", spent: 1, orders: 1 } },
+    ])
+    .toArray();
+}
+```
+@mistakes
+<ul><li>$lookup לפני ה־$group — מצרפים את הלקוח לכל הזמנה, ואז מקבצים.</li><li><code>name: "$customer.name"</code> בלי $unwind — מקבלים מערך של שם אחד.</li></ul>
+
+@@ P25.7-E16 | 3 | דירוגים עם תקציר 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>P25.7-E16.ts</code>:</p>
+<ul><li><code>addReview(db, productId, { by, rating })</code> — מוסיף <code>{ by, rating }</code> ל־<code>reviews</code> ומעדכן את <code>ratingCount</code> ו־<code>ratingSum</code>. לקוח שכבר דירג — <code>false</code> בלי שינוי; מוצר לא קיים — <code>false</code>. דירוג — שלם 1–5, אחרת <code>RangeError</code>.</li><li><code>averageRating(db, productId)</code> — ממוצע מעוגל לספרה אחת; 0 בלי דירוגים; <code>null</code> אם אין מוצר.</li></ul>
+<p>הבודק מריץ 10 דירוגים במקביל, ובודק שהתקציר תואם למערך.</p>
+@hint1
+<p>הכול ב־<code>updateOne</code> אחד: התנאי "עוד לא דירג" ב־filter, <code>$push</code> ו־<code>$inc</code> ב־update.</p>
+@hint2
+<p><code>"reviews.by": { $ne: by }</code> — "אין במערך דירוג של by".</p>
+@solution
+```ts save=solutions/P25.7-E16.ts
+// P25.7-E16
+import type { Db } from "mongodb";
+
+interface Review {
+  by: string;
+  rating: number;
+}
+interface Product {
+  _id: string;
+  reviews: Review[];
+  ratingCount: number;
+  ratingSum: number;
+}
+
+export async function addReview(db: Db, productId: string, { by, rating }: { by: string; rating: number }) {
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new RangeError("rating: 1 עד 5");
+  // פקודה אחת: התנאי "הלקוח עוד לא דירג", הוספת הדירוג, ועדכון הסיכום — הכול אטומי על המסמך.
+  // כך הממוצע (ratingSum / ratingCount) תמיד תואם למערך, גם בשתי בקשות במקביל
+  const r = await db.collection<Product>("products").updateOne(
+    { _id: productId, "reviews.by": { $ne: by } },
+    { $push: { reviews: { by, rating } }, $inc: { ratingCount: 1, ratingSum: rating } }
+  );
+  return r.modifiedCount === 1;
+}
+
+export async function averageRating(db: Db, productId: string) {
+  const p = await db.collection<Product>("products").findOne({ _id: productId }, { projection: { ratingCount: 1, ratingSum: 1 } });
+  if (!p) return null;
+  return p.ratingCount === 0 ? 0 : Math.round((p.ratingSum / p.ratingCount) * 10) / 10;
+}
+```
+@mistakes
+<ul><li>לחשב ממוצע מכל המערך בכל קריאה — עובד, ומאט ככל שיש יותר דירוגים.</li><li>$push בפקודה אחת ו־$inc בשנייה — בין שתיהן, התקציר לא תואם, ושגיאה באמצע משאירה אותו שגוי לתמיד.</li></ul>
+
+@@ P25.7-E17 | 3 | הזמנה בטרנזקציה 🤖 | 30 | שיעור 5
+@task
+<p>בקובץ <code>P25.7-E17.ts</code> כתוב <code>placeOrder(client, db, customerId, cart)</code>: <code>cart</code> — <code>[{ productId, qty }]</code>.</p>
+<ul><li>מוריד מלאי לכל פריט (רק אם יש מספיק), ויוצר הזמנה <code>pending</code> עם <code>items: [{ productId, name, price, qty }]</code> (שם ומחיר <strong>מהמסד</strong>), <code>total</code> ו־<code>createdAt</code>. מחזיר את ההזמנה עם ה־<code>_id</code> החדש.</li><li>פריט אחד בלי מלאי ← <code>OutOfStockError</code>, ו<strong>שום דבר</strong> לא השתנה. עגלה ריקה ← <code>RangeError</code>.</li></ul>
+@hint1
+<p><code>client.startSession()</code> ו־<code>session.withTransaction(async () =&gt; …)</code>. <code>endSession</code> ב־finally.</p>
+@hint2
+<p><code>findOneAndUpdate</code> עם התנאי מ־E13 ו־<code>{ session, returnDocument: "after" }</code> — מחזיר את name ו־price. null ← זורקים, ו־withTransaction מבטל.</p>
+@solution
+```ts save=solutions/P25.7-E17.ts
+// P25.7-E17
+import type { Db, MongoClient } from "mongodb";
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+}
+
+export class OutOfStockError extends Error {}
+
+// הזמנה = הורדת מלאי בכמה מוצרים + מסמך הזמנה. או הכול, או כלום — טרנזקציה
+export async function placeOrder(client: MongoClient, db: Db, customerId: string, cart: { productId: string; qty: number }[]) {
+  if (!cart.length) throw new RangeError("עגלה ריקה");
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const items = [];
+      for (const { productId, qty } of cart) {
+        // כל פעולה בתוך הטרנזקציה — עם { session }. בלי זה היא רצה מחוץ לטרנזקציה ולא מתבטלת
+        const p = await db.collection<Product>("products").findOneAndUpdate(
+          { _id: productId, stock: { $gte: qty } },
+          { $inc: { stock: -qty } },
+          { session, returnDocument: "after", projection: { name: 1, price: 1 } }
+        );
+        if (!p) throw new OutOfStockError(`אין מספיק ${productId}`); // זריקה ← withTransaction מבטל הכול
+        items.push({ productId, name: p.name, price: p.price, qty }); // מחיר מהמסד, לא מהלקוח
+      }
+      const order = { customerId, status: "pending", createdAt: new Date(), items, total: items.reduce((s, i) => s + i.price * i.qty, 0) };
+      const { insertedId } = await db.collection("orders").insertOne(order, { session });
+      return { _id: insertedId, ...order };
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+```
+@mistakes
+<ul><li>לשכוח <code>{ session }</code> בפעולה אחת — היא לא מתבטלת.</li><li>לקחת <code>price</code> מהעגלה — הלקוח קובע מחיר.</li><li>לתפוס את השגיאה בתוך ה־callback ולהחזיר null — withTransaction חושב שהכול הצליח ועושה commit.</li></ul>
+
+@@ P25.7-E18 | 3 | schema validation 🤖 | 20 | שיעור 3
+@task
+<p>בקובץ <code>P25.7-E18.ts</code> כתוב <code>createBooksCollection(db)</code> שיוצר collection <code>books</code> עם <code>$jsonSchema</code>:</p>
+<ul><li>חובה: <code>title</code> (מחרוזת לא ריקה), <code>price</code> (מספר ≥ 0), <code>stock</code> (מספר <strong>שלם</strong> ≥ 0), <code>format</code> (<code>paperback</code> / <code>hardcover</code> / <code>ebook</code>).</li><li>לא חובה: <code>tags</code> — מערך של מחרוזות.</li><li>שום שדה אחר (חוץ מ־<code>_id</code>).</li></ul>
+@hint1
+<p><code>db.createCollection("books", { validator: { $jsonSchema: { … } } })</code>. מספר שלם — <code>bsonType: "int"</code>; כל מספר — <code>["double", "int"]</code>.</p>
+@hint2
+<p><code>additionalProperties: false</code> חוסם גם את <code>_id</code> — צריך <code>properties: { _id: {} }</code>.</p>
+@solution
+```ts save=solutions/P25.7-E18.ts
+// P25.7-E18
+import type { Db } from "mongodb";
+
+// $jsonSchema: Mongo בודק כל insert ו־update. מסמך לא תקין ← שגיאה 121 (Document failed validation)
+export async function createBooksCollection(db: Db) {
+  await db.createCollection("books", {
+    validator: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["title", "price", "stock", "format"],
+        additionalProperties: false,
+        properties: {
+          _id: {},
+          title: { bsonType: "string", minLength: 1 },
+          price: { bsonType: ["double", "int"], minimum: 0 },
+          stock: { bsonType: "int", minimum: 0 },
+          format: { enum: ["paperback", "hardcover", "ebook"] },
+          tags: { bsonType: "array", items: { bsonType: "string" } },
+        },
+      },
+    },
+    validationAction: "error",
+  });
+}
+```
+@mistakes
+<ul><li><code>bsonType: "number"</code> ל־stock — מקבל גם 1.5.</li><li>לשכוח את <code>_id</code> ב־properties כשיש additionalProperties: false — אף מסמך לא נכנס.</li></ul>
+
+@@ P25.7-E19 | 3 | router של פתקים עם ObjectId 🤖 | 25 | שיעור 5
+@task
+<p>בקובץ <code>P25.7-E19.ts</code> כתוב <code>notesRouter(db)</code> — router של Express על collection <code>notes</code>:</p>
+<ul><li><code>POST /</code> עם <code>{ text }</code> (מחרוזת לא ריקה, נשמרת בלי רווחים בקצוות) ← <code>201 { id }</code> — ה־ObjectId כמחרוזת hex. אחרת 400.</li><li><code>GET /:id</code> ← <code>200 { id, text, createdAt }</code> (createdAt כ־ISO). מזהה שאינו 24 תווי hex ← 400. לא קיים ← 404.</li></ul>
+@hint1
+<p><code>insertedId.toHexString()</code>, ו־<code>new ObjectId(req.params.id)</code> לחיפוש.</p>
+@hint2
+<p><code>ObjectId.isValid("aaaaaaaaaaaa")</code> — true (12 תווים = 12 בתים). בדוק גם אורך 24.</p>
+@solution
+```ts save=solutions/P25.7-E19.ts
+// P25.7-E19
+import express from "express";
+import { ObjectId, type Db } from "mongodb";
+
+export function notesRouter(db: Db) {
+  const notes = db.collection("notes");
+  const router = express.Router();
+
+  router.post("/", async (req, res) => {
+    const text = req.body?.text;
+    if (typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text חובה" });
+    const { insertedId } = await notes.insertOne({ text: text.trim(), createdAt: new Date() });
+    res.status(201).json({ id: insertedId.toHexString() }); // ללקוח — מחרוזת, לא אובייקט
+  });
+
+  router.get("/:id", async (req, res) => {
+    // "abc" זה לא ObjectId: new ObjectId("abc") זורק. 400 — לא 500, ולא 404
+    if (!ObjectId.isValid(req.params.id) || req.params.id.length !== 24) return res.status(400).json({ error: "מזהה לא תקין" });
+    const note = await notes.findOne({ _id: new ObjectId(req.params.id) });
+    if (!note) return res.status(404).json({ error: "לא נמצא" });
+    res.json({ id: note._id.toHexString(), text: note.text, createdAt: note.createdAt.toISOString() });
+  });
+
+  return router;
+}
+```
+@mistakes
+<ul><li><code>findOne({ _id: req.params.id })</code> — מחפש מחרוזת, ולא מוצא אף פעם.</li><li><code>new ObjectId("abc")</code> בלי בדיקה — זורק, ו־Express מחזיר 500.</li></ul>
+
+@@ P25.7-E20 | 4 | חיפוש עם שלוש תקלות 🤖 | 15 | שיעור 5
+@task
+<p>בקובץ <code>P25.7-E20.ts</code> יש <code>searchProducts(db, req.query)</code> ל־<code>GET /products?q=&amp;category=</code>. היא עובדת בדפדפן — ויש בה שלוש תקלות. מצא ותקן. הדרישות: <code>q</code> ו־<code>category</code> — מחרוזות בלבד (ערך אחר ← <code>RangeError</code>); <code>q</code> מחפש חלק מהשם כ<em>טקסט</em>; לכל היותר 20 תוצאות.</p>
+@hint1
+<p>נסה: <code>{ category: { $ne: "merch" } }</code>, <code>{ q: "(" }</code>, ו־<code>{}</code> על קטלוג של 30 מוצרים.</p>
+@hint2
+<p>escaping ל־regex: <code>s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;")</code>.</p>
+@solution
+```ts save=solutions/P25.7-E20.ts
+// P25.7-E20
+import type { Db } from "mongodb";
+
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// חיפוש מוצרים לפי ה־query string: ?q=&category=
+export async function searchProducts(db: Db, query: Record<string, unknown>) {
+  const filter: Record<string, unknown> = {};
+  // תקלה 1: ב־Express, ?category[$ne]=x הופך לאובייקט { $ne: "x" } — NoSQL injection. רק מחרוזות
+  for (const k of ["q", "category"]) {
+    if (query[k] !== undefined && typeof query[k] !== "string") throw new RangeError(`${k} חייב להיות מחרוזת`);
+  }
+  if (query.category) filter.category = query.category;
+  if (typeof query.q === "string" && query.q.trim()) {
+    // תקלה 2: הטקסט של המשתמש הוא טקסט, לא regex: "(" שובר, ו־".*" מחזיר הכול
+    filter.name = { $regex: escapeRegex(query.q.trim()), $options: "i" };
+  }
+  // תקלה 3: בלי limit — "חיפוש ריק" מחזיר את כל הקטלוג
+  return db.collection("products").find(filter, { projection: { name: 1, price: 1 } }).sort({ name: 1 }).limit(20).toArray();
+}
+```
+@mistakes
+<ul><li>להמיר ל־<code>String(query.category)</code> — <code>"[object Object]"</code> לא מסוכן, אבל מסתיר באג אצל הלקוח. עדיף 400.</li></ul>
+
+@@ P25.7-E21 | 4 | עדכון פרופיל עם שלוש תקלות 🤖 | 15 | שיעור 2
+@task
+<p>בקובץ <code>P25.7-E21.ts</code> יש <code>updateProfile(db, customerId, body)</code> ל־<code>PATCH /me</code>. מצא ותקן שלוש תקלות. הדרישות: רק <code>name</code> ו־<code>city</code> (מחרוזות) מתעדכנים; שאר השדות במסמך נשארים; בלי שדות לעדכון ← <code>RangeError</code>; מחזיר את המסמך <em>אחרי</em> העדכון, או <code>null</code> אם אין לקוח.</p>
+@hint1
+<p>מה קורה ל־email אחרי <code>replaceOne(..., { name: "x" })</code>? ומה קורה עם <code>{ role: "admin" }</code>?</p>
+@hint2
+<p>והשורה השנייה: האם העדכון כבר קרה כשה־<code>findOne</code> רץ? (שים לב גם ל־<code>as unknown as Customer</code> — מישהו השתיק את TypeScript, והוא צדק.)</p>
+@solution
+```ts save=solutions/P25.7-E21.ts
+// P25.7-E21
+import type { Db } from "mongodb";
+
+interface Customer {
+  _id: string;
+  name: string;
+  email: string;
+  city: string;
+  createdAt: Date;
+}
+
+const EDITABLE = ["name", "city"] as const;
+
+// PATCH /me: הלקוח מעדכן את הפרופיל שלו
+export async function updateProfile(db: Db, customerId: string, body: Record<string, unknown>) {
+  // תקלה 2: רק שדות מותרים. אחרת { role: "admin" } או { email } נכנסים כמו שהם (mass assignment)
+  const $set: Record<string, string> = {};
+  for (const k of EDITABLE) if (typeof body[k] === "string") $set[k] = (body[k] as string).trim();
+  if (Object.keys($set).length === 0) throw new RangeError("אין מה לעדכן");
+  // תקלה 1: $set ולא replaceOne — replaceOne מחליף את כל המסמך, והאימייל ותאריך ההרשמה נמחקים
+  // תקלה 3: await — אחרת מחזירים לפני שהעדכון קרה, ושגיאה הולכת לאיבוד
+  const doc = await db.collection<Customer>("customers").findOneAndUpdate({ _id: customerId }, { $set }, { returnDocument: "after" });
+  return doc;
+}
+```
+@mistakes
+<ul><li>לתקן ל־<code>$set: body</code> — ה־email לא נמחק, אבל עכשיו כל אחד יכול לשנות אותו (ולהוסיף <code>role</code>).</li></ul>
+
+@@ P25.7-E22 | 4 | aggregation עם שלוש תקלות 🤖 | 15 | שיעור 4
+@task
+<p>בקובץ <code>P25.7-E22.ts</code> יש <code>unitsByCategory(db)</code>: כמה יחידות נמכרו מכל קטגוריה, רק בהזמנות <code>paid</code> ו־<code>delivered</code>. התוצאה הנכונה: beans 13, gear 2, merch 2. מצא ותקן שלוש תקלות.</p>
+@hint1
+<p>הרץ את ה־pipeline שלב אחרי שלב (מחק את השלבים מהסוף) ותסתכל על המסמכים.</p>
+@hint2
+<p>אחרי $group יש רק <code>_id</code> והשדות שהגדרת. ו־<code>{ $sum: 1 }</code> סופר מסמכים, לא יחידות.</p>
+@solution
+```ts save=solutions/P25.7-E22.ts
+// P25.7-E22
+import type { Db } from "mongodb";
+
+// כמה יחידות נמכרו מכל קטגוריה (הזמנות ששולמו או נמסרו)
+export async function unitsByCategory(db: Db) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $in: ["paid", "delivered"] } } }, // תקלה 1: לסנן לפני ה־$group — אחריו כבר אין status
+      { $unwind: "$items" }, // תקלה 2: בלי $unwind, "$items.qty" הוא מערך, ו־$sum של מערך הוא 0
+      { $lookup: { from: "products", localField: "items.productId", foreignField: "_id", as: "product" } },
+      { $unwind: "$product" },
+      { $group: { _id: "$product.category", units: { $sum: "$items.qty" } } }, // תקלה 3: qty, לא 1 (1 סופר שורות)
+      { $sort: { units: -1, _id: 1 } },
+      { $project: { _id: 0, category: "$_id", units: 1 } },
+    ])
+    .toArray();
+}
+```
+@mistakes
+<ul><li>להוסיף <code>status: { $first: "$status" }</code> ל־$group ולסנן אחריו — מסנן לפי הסטטוס של הזמנה <em>אחת</em> בכל קבוצה.</li></ul>
+
+@@ P25.7-E23 | 4 | ביטול הזמנה עם שלוש תקלות 🤖 | 20 | שיעור 5
+@task
+<p>בקובץ <code>P25.7-E23.ts</code> יש <code>cancelOrder(client, db, orderId)</code>: הזמנה <code>pending</code> או <code>paid</code> ← <code>cancelled</code>, והכמויות חוזרות למלאי — הכול או כלום. מחזיר <code>true</code>, או <code>false</code> אם אי אפשר לבטל. מצא ותקן שלוש תקלות.</p>
+@hint1
+<p>שני ביטולים של אותה הזמנה במקביל: כמה פעמים חוזר המלאי? ואם עדכון המלאי של הפריט השני נכשל — מה קורה לראשון?</p>
+@hint2
+<p>ובלי קשר לכל זה: הזמנה של 1 יחידה, מלאי 5 — כמה במלאי אחרי הביטול?</p>
+@solution
+```ts save=solutions/P25.7-E23.ts
+// P25.7-E23
+import type { Db, MongoClient } from "mongodb";
+
+interface Order {
+  _id: string;
+  status: string;
+  items: { productId: string; qty: number }[];
+}
+interface Product {
+  _id: string;
+  stock: number;
+}
+
+// ביטול הזמנה: מחזירים את הכמויות למלאי ומסמנים cancelled — באותה טרנזקציה
+export async function cancelOrder(client: MongoClient, db: Db, orderId: string) {
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      // תקלה 1: התנאי על הסטטוס בתוך העדכון — כך שני ביטולים במקביל לא יחזירו מלאי פעמיים
+      const order = await db.collection<Order>("orders").findOneAndUpdate(
+        { _id: orderId, status: { $in: ["pending", "paid"] } },
+        { $set: { status: "cancelled", cancelledAt: new Date() } },
+        { session }
+      );
+      if (!order) return false;
+      for (const it of order.items) {
+        // תקלה 2: { session } — אחרת ההחזרה למלאי לא חלק מהטרנזקציה
+        // תקלה 3: $inc ולא $set: מחזירים את הכמות, לא דורסים את המלאי
+        await db.collection<Product>("products").updateOne({ _id: it.productId }, { $inc: { stock: it.qty } }, { session });
+      }
+      return true;
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+```
+@mistakes
+<ul><li>להעביר את ה־findOne לתוך הטרנזקציה בלי לשנות אותו — שתי טרנזקציות עדיין יכולות לקרוא "paid" (snapshot). התנאי צריך להיות בעדכון עצמו.</li></ul>
+
+@@ P25.7-E24 | 5 | אתגר: דשבורד בבקשה אחת 🤖 | 45 | שיעור 4
+@task
+<p>בקובץ <code>P25.7-E24.ts</code> כתוב <code>dashboard(db, from, to)</code> — הזמנות עם <code>from ≤ createdAt &lt; to</code>, ב־aggregate <strong>אחד</strong> ← <code>{ byDay, byStatus, topProducts }</code>:</p>
+<ul><li><code>byDay</code>: <code>[{ day: "2026-10-25", revenue, orders }]</code> לפי <strong>יום בשעון ישראל</strong>, ממוין, בלי הזמנות שבוטלו.</li><li><code>byStatus</code>: <code>{ delivered: 2, pending: 2 }</code> — כל הסטטוסים, כולל cancelled.</li><li><code>topProducts</code>: 3 המוצרים עם הכי הרבה יחידות (ובשוויון — <code>productId</code>), בלי ביטולים: <code>[{ productId, units }]</code>.</li></ul>
+@hint1
+<p><code>$facet: { byDay: [...], byStatus: [...], topProducts: [...] }</code> — שלושה pipelines על אותם מסמכים.</p>
+@hint2
+<p><code>$dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone: "Asia/Jerusalem" }</code>. ו־byStatus — המרה לאובייקט ב־JS אחרי השאילתה.</p>
+@solution
+```ts save=solutions/P25.7-E24.ts
+// P25.7-E24
+import type { Db } from "mongodb";
+
+// דשבורד של טווח תאריכים — בבקשה אחת: הכנסות לפי יום (בשעון ישראל), ספירה לפי סטטוס, ו־3 המוצרים המובילים
+export async function dashboard(db: Db, from: Date, to: Date) {
+  const [result] = await db
+    .collection("orders")
+    .aggregate([
+      { $match: { createdAt: { $gte: from, $lt: to } } },
+      {
+        $facet: {
+          byDay: [
+            { $match: { status: { $ne: "cancelled" } } },
+            // היום לפי ישראל, לא לפי UTC: הזמנה ב־22:10Z ב־1.11 היא 2.11 בישראל (פרק 24)
+            { $group: { _id: { $dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone: "Asia/Jerusalem" } }, revenue: { $sum: "$total" }, orders: { $sum: 1 } } },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, day: "$_id", revenue: 1, orders: 1 } },
+          ],
+          byStatus: [{ $group: { _id: "$status", n: { $sum: 1 } } }, { $sort: { _id: 1 } }],
+          topProducts: [
+            { $match: { status: { $ne: "cancelled" } } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", units: { $sum: "$items.qty" } } },
+            { $sort: { units: -1, _id: 1 } },
+            { $limit: 3 },
+            { $project: { _id: 0, productId: "$_id", units: 1 } },
+          ],
+        },
+      },
+    ])
+    .toArray();
+  return {
+    byDay: result.byDay,
+    byStatus: Object.fromEntries(result.byStatus.map((s: { _id: string; n: number }) => [s._id, s.n])),
+    topProducts: result.topProducts,
+  };
+}
+```
+@mistakes
+<ul><li>קיבוץ לפי יום ב־UTC — o6 (21:55Z ב־21.10) נספרת ב־21.10, אבל בישראל זה כבר 22.10.</li><li>שלוש שאילתות נפרדות — עובד, אבל שלוש סריקות של אותו טווח.</li></ul>
+
+@@ P25.7-E25 | 5 | אתגר: מעבר מ־PostgreSQL 🤖 | 60 | שיעור 5
+@task
+<p>חנות ישנה שמרה הזמנות ב־PostgreSQL (<code>files/pg-orders.sql</code>: <code>products</code>, <code>orders</code>, <code>order_items</code>). בקובץ <code>P25.7-E25.ts</code> כתוב <code>migrateOrders(pool, db)</code> שמעביר כל הזמנה למסמך אחד ב־<code>orders</code> של Mongo:</p>
+<ul><li><code>_id: "o101"</code>, <code>customerId: "c1"</code>, <code>status</code>, <code>createdAt</code> (Date), <code>items: [{ productId: "p1", name, price, qty }]</code> לפי סדר השורות, ו־<code>total</code>. <code>price</code> — המחיר מהשורה (<code>unit_price</code>), כמספר.</li><li>מחזיר <code>{ migrated }</code>. אפשר להריץ שוב: אין כפילויות, ושינויים ב־Postgres מתעדכנים.</li></ul>
+@hint1
+<p>שאילתה אחת עם <code>json_agg(json_build_object(...) ORDER BY i.id)</code> ו־<code>GROUP BY o.id</code> — הזמנה לשורה, עם הפריטים כמערך.</p>
+@hint2
+<p>idempotent: <code>replaceOne({ _id }, doc, { upsert: true })</code>, וכולם ב־<code>bulkWrite</code> אחד.</p>
+@solution
+```ts save=solutions/P25.7-E25.ts
+// P25.7-E25
+import type { Db } from "mongodb";
+import type pg from "pg";
+
+// מעבר מ־PostgreSQL ל־MongoDB: הזמנה + השורות שלה (order_items) ← מסמך אחד עם מערך items.
+// אפשר להריץ שוב ושוב (idempotent): upsert לפי ה־id המקורי
+export async function migrateOrders(pool: pg.Pool, db: Db) {
+  const { rows } = await pool.query(`
+    SELECT o.id, o.customer_id, o.status, o.created_at,
+           json_agg(json_build_object('productId', i.product_id, 'name', p.name, 'price', i.unit_price, 'qty', i.quantity) ORDER BY i.id) AS items
+    FROM orders o
+    JOIN order_items i ON i.order_id = o.id
+    JOIN products p ON p.id = i.product_id
+    GROUP BY o.id
+    ORDER BY o.id`);
+  if (rows.length === 0) return { migrated: 0 };
+  const ops = rows.map((r) => {
+    const items = r.items.map((i: { productId: number; name: string; price: string | number; qty: number }) => ({ productId: `p${i.productId}`, name: i.name, price: Number(i.price), qty: i.qty }));
+    const doc = {
+      customerId: `c${r.customer_id}`,
+      status: r.status,
+      createdAt: r.created_at, // timestamptz ← Date (pg ממיר לבד) ← BSON Date
+      items,
+      total: Math.round(items.reduce((s: number, i: { price: number; qty: number }) => s + i.price * i.qty, 0) * 100) / 100,
+    };
+    return { replaceOne: { filter: { _id: `o${r.id}` }, replacement: doc, upsert: true } } as const;
+  });
+  // bulkWrite: פקודה אחת לשרת במקום אלף
+  await db.collection<{ _id: string }>("orders").bulkWrite(ops, { ordered: false });
+  return { migrated: rows.length };
+}
+```
+@mistakes
+<ul><li><code>insertMany</code> — הרצה שנייה נכשלת על <code>_id</code> כפול (או, בלי _id קבוע — כפילויות).</li><li><code>numeric</code> מ־pg מגיע כמחרוזת ("60.50") — בלי <code>Number()</code> נשמר מחרוזת, ו־<code>$sum</code> מתעלם ממנה.</li><li>שאילתה לכל הזמנה בלולאה (N+1, פרק 18).</li></ul>

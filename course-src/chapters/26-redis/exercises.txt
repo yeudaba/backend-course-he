@@ -809,3 +809,212 @@ export async function take(redis: Redis, key: string, { capacity, refillPerSecon
 <p>למה לא <code>MULTI</code>? כי ב־MULTI אי אפשר להחליט באמצע לפי ערך שנקרא — כל הפקודות נשלחות מראש. Lua רץ <em>בתוך</em> Redis, בבת אחת. זו גם הדרך שבה BullMQ עצמו עובד: רוב הלוגיקה שלו היא סקריפטים של Lua.</p>
 @mistakes
 <ul><li>סקריפט Lua ארוך או עם לולאות על הרבה מפתחות — Redis עושה דבר אחד בכל רגע; בזמן שהסקריפט רץ, כל השאר מחכים.</li></ul>
+
+@@ P26-E26 | 1 | polling, SSE או WebSocket? | 10 | שיעור 6
+@task
+<p>מה היית בוחר לכל מקרה, ולמה?</p>
+<ol>
+<li>דף "סטטוס הזמנה" בחנות הקפה: התקבלה ← בהכנה ← נשלחה. 3–4 עדכונים בשעה.</li>
+<li>צ'אט בין לקוח לנציג שירות.</li>
+<li>דוח מכירות חודשי שמתעדכן פעם בלילה.</li>
+<li>לוח "פעילות בזמן אמת" במשרד: כל הזמנה חדשה קופצת על המסך.</li>
+<li>משחק דפדפן מרובה משתתפים: מיקום של כל שחקן, 20 פעמים בשנייה, לשני הכיוונים.</li>
+</ol>
+@hint1
+<p>שתי שאלות: מי מדבר (רק השרת, או גם הלקוח)? וכמה מהר זה צריך להגיע?</p>
+@hint2
+<p>SSE — שרת ← לקוח, HTTP רגיל, עם התחברות מחדש ו־Last-Event-ID מובנים. WebSocket — שני הכיוונים, הודעות קטנות ותכופות.</p>
+@solution
+<ol>
+<li><strong>SSE</strong> — רק השרת מעדכן, ומעט. אפשר גם polling כל 30 שניות, אבל SSE מגיע מיד ולא מעמיס בקשות ריקות. ההתחברות מחדש וה־Last-Event-ID חינם.</li>
+<li><strong>WebSocket</strong> — שני הצדדים כותבים, הרבה הודעות קטנות. (SSE + <code>POST</code> לכל הודעה עובד גם — פשוט פחות טבעי.)</li>
+<li><strong>שום דבר</strong> — טעינה רגילה של הדף. אין "זמן אמת" במשהו שמשתנה פעם ביום.</li>
+<li><strong>SSE</strong> — שרת ← מסכים. ואם יש כמה שרתים — Redis pub/sub מאחור (E30).</li>
+<li><strong>WebSocket</strong> — שני כיוונים, תדירות גבוהה, וחשוב שלא יהיה overhead של HTTP לכל הודעה.</li>
+</ol>
+@mistakes
+<ul><li>WebSocket לכל דבר "כי הוא זמן אמת" — יותר קוד (התחברות מחדש, heartbeat, אימות) בשביל משהו ש־SSE נותן מובנה.</li></ul>
+
+@@ P26-E27 | 2 | הודעת SSE 🤖 | 10 | שיעור 6
+@task
+<p>בקובץ <code>P26-E27.ts</code> כתוב <code>formatEvent({ data, event, id, retry })</code> שמחזירה הודעה אחת בפורמט של SSE:</p>
+<ul><li>שדות בסדר: <code>id</code>, <code>event</code>, <code>retry</code> (רק אם הוגדרו — גם <code>id: 0</code>), ואז <code>data</code>.</li><li><code>data</code> שאינו מחרוזת ← JSON.</li><li>ירידת שורה בתוך data (<code>\n</code>, <code>\r\n</code> או <code>\r</code>) ← שורת <code>data:</code> נפרדת לכל שורה.</li><li>ההודעה מסתיימת בשורה ריקה.</li></ul>
+@hint1
+<p>כל שדה הוא <code>"name: value\n"</code>, וההודעה מסתיימת ב־<code>"\n"</code> נוסף.</p>
+@hint2
+<p><code>text.split(/\r\n|\r|\n/)</code>, ולכל שורה — <code>`data: ${line}\n`</code>.</p>
+@solution
+```ts save=solutions/P26-E27.ts
+// P26-E27
+// הודעה אחת בפורמט של Server-Sent Events: שורות "שדה: ערך", ושורה ריקה בסוף
+export function formatEvent({ data, event, id, retry }: { data: unknown; event?: string; id?: string | number; retry?: number }): string {
+  let out = "";
+  if (id !== undefined) out += `id: ${id}\n`;
+  if (event !== undefined) out += `event: ${event}\n`;
+  if (retry !== undefined) out += `retry: ${retry}\n`;
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  // ירידת שורה בתוך data הייתה מסיימת את השדה — לכן כל שורה מקבלת data: משלה, והדפדפן מחבר אותן עם \n
+  for (const line of text.split(/\r\n|\r|\n/)) out += `data: ${line}\n`;
+  return out + "\n"; // שורה ריקה = סוף ההודעה
+}
+```
+@mistakes
+<ul><li><code>if (id)</code> במקום <code>id !== undefined</code> — <code>id: 0</code> נעלם.</li><li>לשלוח data עם ירידת שורה כמו שהיא — הדפדפן חושב שהשורה השנייה היא שדה לא מוכר, ומשמיט אותה.</li></ul>
+
+@@ P26-E28 | 3 | רכזת SSE עם Last-Event-ID 🤖 | 25 | שיעור 6
+@task
+<p>בקובץ <code>P26-E28.ts</code> כתוב <code>eventHub({ bufferSize = 100 })</code> ← <code>{ handler, publish, size }</code>:</p>
+<ul><li><code>handler</code> — route של Express (<code>GET /events</code>): status 200, <code>Content-Type: text/event-stream</code>, <code>Cache-Control: no-cache</code>, והחיבור נשאר פתוח.</li><li><code>publish(event, data)</code> — נותן id עולה (1, 2, 3…), שולח לכל המחוברים <code>id</code>, <code>event</code> ו־<code>data</code> (JSON), ומחזיר את ה־id.</li><li>שומר את <code>bufferSize</code> האירועים האחרונים. לקוח שמתחבר עם <code>Last-Event-ID: n</code> מקבל קודם את כל מה שבמאגר ואחרי n. בלי ה־header — רק אירועים חדשים.</li><li>לקוח שהתנתק — יוצא מהרשימה (<code>size()</code> יורד).</li></ul>
+@hint1
+<p><code>res.writeHead(200, {...})</code> ו־<code>res.flushHeaders()</code> — כדי שהלקוח יקבל את ה־headers מיד, לפני האירוע הראשון. <code>Set&lt;Response&gt;</code> של המחוברים.</p>
+@hint2
+<p><code>req.on("close", () =&gt; clients.delete(res))</code>. ו־<code>Number(req.get("last-event-id"))</code> — <code>NaN</code> כשאין header.</p>
+@solution
+```ts save=solutions/P26-E28.ts
+// P26-E28
+// "רכזת" של SSE: כל לקוח מחובר מקבל כל אירוע, עם id עולה — ומי שהתנתק וחזר מקבל את מה שפספס
+import type { Request, Response } from "express";
+
+const format = (id: number, event: string, data: unknown) => `id: ${id}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+export function eventHub({ bufferSize = 100 }: { bufferSize?: number } = {}) {
+  const clients = new Set<Response>();
+  const buffer: { id: number; text: string }[] = []; // האירועים האחרונים — בשביל Last-Event-ID
+  let lastId = 0;
+
+  function handler(req: Request, res: Response) {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no", // שלא יחזיק את ההודעות ב־proxy (nginx)
+    });
+    res.flushHeaders();
+    // הדפדפן שולח Last-Event-ID לבד כשהוא מתחבר מחדש
+    const since = Number(req.get("last-event-id"));
+    if (Number.isInteger(since)) for (const e of buffer) if (e.id > since) res.write(e.text);
+    clients.add(res);
+    req.on("close", () => clients.delete(res)); // אחרת: דליפה, וכתיבה לחיבור סגור
+  }
+
+  function publish(event: string, data: unknown) {
+    const text = format(++lastId, event, data);
+    buffer.push({ id: lastId, text });
+    if (buffer.length > bufferSize) buffer.shift();
+    for (const res of clients) res.write(text);
+    return lastId;
+  }
+
+  return { handler, publish, size: () => clients.size };
+}
+```
+@mistakes
+<ul><li>לשכוח את <code>req.on("close")</code> — כל רענון של הדף משאיר חיבור "מת" ברשימה. אחרי יום: אלפי <code>res.write</code> לחיבורים סגורים, וזיכרון שרק עולה.</li><li>לשמור את כל האירועים לנצח בשביל Last-Event-ID — דליפה מסוג אחר. מאגר מוגבל, ומי שפספס יותר מזה — טוען את הדף מחדש.</li></ul>
+
+@@ P26-E29 | 3 | חדרי צ'אט ב־WebSocket 🤖 | 30 | שיעור 6
+@task
+<p>בקובץ <code>P26-E29.ts</code> כתוב <code>createChatServer(server, { verifyToken })</code> שמחבר WebSocket (החבילה <code>ws</code>) לשרת HTTP קיים, בכתובת <code>/chat?token=…</code>:</p>
+<ul>
+<li><strong>אימות לפני שהחיבור נפתח</strong>: <code>verifyToken(token)</code> מחזיר שם משתמש או <code>null</code>. <code>null</code> (או נתיב אחר) ← <code>401</code> והחיבור נסגר.</li>
+<li><code>{"type":"join","room":"orders"}</code> ← <code>{"type":"joined","room":"orders"}</code>. join לחדר אחר ← יוצאים מהקודם.</li>
+<li><code>{"type":"say","text":"…"}</code> ← לכל מי שבחדר (כולל השולח): <code>{"type":"message","room","from","text"}</code>. <code>from</code> — המשתמש מה־token, לא מה שהלקוח כתב.</li>
+<li>JSON שבור, say לפני join, סוג לא מוכר ← <code>{"type":"error","error":"…"}</code>, והחיבור נשאר פתוח.</li>
+<li>מחזיר <code>{ close }</code> שסוגר את כל החיבורים.</li>
+</ul>
+@hint1
+<p><code>new WebSocketServer({ noServer: true })</code>, ו־<code>server.on("upgrade", (req, socket, head) =&gt; …)</code>. שם בודקים את ה־token, ואם תקין — <code>wss.handleUpgrade(req, socket, head, (ws) =&gt; …)</code>.</p>
+<p>לבדוק בעצמך: ב־Node 24 יש <code>WebSocket</code> גלובלי (כמו בדפדפן) — <code>new WebSocket("ws://localhost:3000/chat?token=…")</code>.</p>
+@hint2
+<p>דחייה לפני ה־upgrade: <code>socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n")</code>. חדרים: <code>Map&lt;string, Set&lt;WebSocket&gt;&gt;</code>, ו־<code>ws.on("close")</code> מוציא מהחדר.</p>
+@solution
+```ts save=solutions/P26-E29.ts
+// P26-E29
+// חדרי צ'אט ב־WebSocket: אימות בזמן ה־upgrade, הצטרפות לחדר, ושידור לחברי החדר בלבד
+import type { Server } from "node:http";
+import { WebSocketServer, WebSocket } from "ws";
+
+export function createChatServer(server: Server, { verifyToken }: { verifyToken: (token: string) => string | null }) {
+  const wss = new WebSocketServer({ noServer: true });
+  const rooms = new Map<string, Set<WebSocket>>();
+  const send = (ws: WebSocket, msg: object) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
+
+  // האימות קורה לפני שהחיבור נפתח: בלי token תקין — 401 ו־socket סגור. אחרי upgrade כבר אין status codes
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url ?? "/", "http://x");
+    const user = url.pathname === "/chat" ? verifyToken(url.searchParams.get("token") ?? "") : null;
+    if (!user) {
+      socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      let room: string | null = null;
+      const leave = () => { if (room) rooms.get(room)?.delete(ws); room = null; };
+      ws.on("message", (raw) => {
+        let msg: { type?: string; room?: unknown; text?: unknown };
+        try { msg = JSON.parse(String(raw)); } catch { return send(ws, { type: "error", error: "invalid json" }); }
+        if (msg.type === "join" && typeof msg.room === "string" && msg.room) {
+          leave();
+          room = msg.room;
+          if (!rooms.has(room)) rooms.set(room, new Set());
+          rooms.get(room)!.add(ws);
+          return send(ws, { type: "joined", room });
+        }
+        if (msg.type === "say" && typeof msg.text === "string") {
+          if (!room) return send(ws, { type: "error", error: "join a room first" });
+          // השולח (user) נקבע בשרת לפי ה־token — לא לפי מה שהלקוח כותב בהודעה
+          for (const peer of rooms.get(room) ?? []) send(peer, { type: "message", room, from: user, text: msg.text });
+          return;
+        }
+        send(ws, { type: "error", error: "unknown message" });
+      });
+      ws.on("close", leave);
+    });
+  });
+
+  return { close: () => new Promise<void>((resolve) => { for (const ws of wss.clients) ws.terminate(); wss.close(() => resolve()); }) };
+}
+```
+@mistakes
+<ul><li>לאמת אחרי שהחיבור נפתח ("שלח token בהודעה הראשונה") — בינתיים כל אחד מחזיק חיבור פתוח בשרת. ואם שוכחים לבדוק בהודעה אחת — פרצה.</li><li><code>from: msg.from</code> — כל אחד יכול להתחזות לכל אחד.</li><li>לזרוק על JSON שבור — חריגה ב־handler של <code>message</code> מפילה את כל התהליך.</li></ul>
+
+@@ P26-E30 | 3 | fan-out בין שרתים עם Redis 🤖 | 25 | שיעור 6
+@task
+<p>שלושה שרתים מאחורי load balancer, ולכל אחד לקוחות SSE משלו. ההזמנה של דנה עודכנה בשרת A — אבל הדפדפן שלה מחובר ל־C. בקובץ <code>P26-E30.ts</code> כתוב <code>createRelay({ pub, sub, channel })</code> (async) ← <code>{ publish, subscribe, close }</code>:</p>
+<ul><li><code>publish(data)</code> — שולח לכל השרתים (כולל זה) דרך Redis, כ־JSON.</li><li><code>subscribe(listener)</code> — מאזין מקומי (למשל: לקוח SSE). מחזיר פונקציה שמסירה אותו.</li><li>כל מאזין, בכל שרת, מקבל כל הודעה <strong>פעם אחת</strong>.</li><li>מנוי <strong>אחד</strong> ב־Redis לכל relay — לא אחד לכל מאזין. הודעות מערוצים אחרים על אותו חיבור — לא נכנסות.</li><li><code>close()</code> — מבטל את המנוי.</li></ul>
+@hint1
+<p><code>await sub.subscribe(channel)</code> פעם אחת, ו־<code>sub.on("message", (ch, message) =&gt; …)</code> שמפיץ ל־<code>Set</code> של מאזינים.</p>
+@hint2
+<p>"פעם אחת": אל תקרא למאזינים המקומיים ישירות ב־<code>publish</code> — ההודעה חוזרת מ־Redis גם לשרת ששלח.</p>
+@solution
+```ts save=solutions/P26-E30.ts
+// P26-E30
+// כמה שרתים, לקוחות מחוברים לכל אחד: אירוע שקרה בשרת אחד צריך להגיע ללקוחות של כולם — דרך Redis pub/sub
+import type { Redis } from "ioredis";
+
+export async function createRelay({ pub, sub, channel }: { pub: Redis; sub: Redis; channel: string }) {
+  const listeners = new Set<(data: unknown) => void>();
+  // מנוי אחד לשרת, לא אחד לכל לקוח. החיבור sub נפרד: חיבור במצב SUBSCRIBE לא מריץ פקודות אחרות
+  await sub.subscribe(channel);
+  const onMessage = (ch: string, message: string) => {
+    if (ch !== channel) return; // אותו חיבור יכול להיות מנוי לערוצים אחרים
+    const data = JSON.parse(message);
+    for (const l of listeners) l(data);
+  };
+  sub.on("message", onMessage);
+
+  return {
+    // לא שולחים ישירות למאזינים המקומיים: ההודעה תחזור מ־Redis גם לשרת הזה — אחרת כל אחד יקבל פעמיים
+    publish: async (data: unknown) => { await pub.publish(channel, JSON.stringify(data)); },
+    subscribe(listener: (data: unknown) => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    async close() {
+      sub.off("message", onMessage);
+      await sub.unsubscribe(channel);
+    },
+  };
+}
+```
+@mistakes
+<ul><li><code>publish</code> שגם שולח מקומית וגם ל־Redis — הלקוחות של השרת השולח מקבלים כל הודעה פעמיים.</li><li><code>subscribe</code> ב־Redis לכל לקוח SSE — אלף לקוחות = אלף מנויים, ואלף קריאות ל־JSON.parse לכל הודעה.</li><li>pub/sub לא שומר כלום: שרת שהיה למטה ברגע ה־publish — פספס. לכן ל־SSE יש Last-Event-ID, ולדברים שאסור לפספס — תור (BullMQ, שיעור 4) או Redis Streams.</li></ul>
