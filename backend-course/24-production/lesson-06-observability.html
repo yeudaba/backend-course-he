@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observability: מדדים, אחוזונים ו־tracing — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ שיעור 6</div>
+  <h1>שיעור 6 — Observability: מדדים, אחוזונים ו־tracing</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>שלושה סוגי עדויות על שרת שרץ: לוגים, מדדים (metrics) ו־traces — ומה כל אחד עונה.</li>
+      <li>Prometheus: endpoint של <code>/metrics</code>, counter, gauge ו־histogram.</li>
+      <li>למה ממוצע משקר, ומה זה p95.</li>
+      <li>labels ו־cardinality: הטעות שמפילה את מערכת הניטור.</li>
+      <li>Tracing: trace, span ו־<code>traceparent</code> — בקשה אחת שעוברת בכמה שירותים.</li>
+      <li>OpenTelemetry בפרויקט אמיתי, והתראות על סימפטומים.</li>
+    </ul>
+  </div>
+
+  <h2>1. שלוש שאלות, שלושה כלים</h2>
+  <p>בשיעור 1 בנית לוגים מובנים עם requestId. הם עונים על "<strong>מה קרה</strong> בבקשה הזו?". אבל שתי שאלות אחרות הם לא עונים עליהן טוב:</p>
+  <div class="table-wrap"><table>
+    <tr><th>כלי</th><th>עונה על</th><th>דוגמה</th><th>עלות</th></tr>
+    <tr><td><strong>לוגים</strong></td><td>מה קרה באירוע מסוים</td><td>"בקשה <code>a1b2</code> נכשלה עם ECONNRESET"</td><td>שורה לכל אירוע — הרבה נתונים</td></tr>
+    <tr><td><strong>מדדים (metrics)</strong></td><td>כמה, באיזה קצב, מה המגמה</td><td>"5% שגיאות ב־5 הדקות האחרונות; p95 קפץ ל־2 שניות"</td><td>מספרים מצטברים — זול, גם במיליון בקשות</td></tr>
+    <tr><td><strong>traces</strong></td><td>איפה הזמן הלך, בין שירותים</td><td>"מתוך 1.8 שניות, 1.6 חיכו לשירות התשלומים"</td><td>בדרך כלל דוגמים רק חלק מהבקשות</td></tr>
+  </table></div>
+  <p>ביחד קוראים לזה <strong>observability</strong> — היכולת להבין מה קורה בתוך מערכת רק ממה שהיא מוציאה החוצה. הסדר בפועל: <strong>מדד</strong> מתריע ("שגיאות עלו"), <strong>trace</strong> מראה איפה ("השירות של התשלומים"), ו<strong>לוג</strong> מספר למה ("timeout אחרי 30 שניות"). ה־traceId שתבנה בסעיף 5 הוא החוט שמחבר ביניהם.</p>
+
+  <h2>2. מדדים ו־Prometheus</h2>
+  <p><strong>Prometheus</strong> הוא הכלי הנפוץ לאיסוף מדדים (וגם הפורמט שלו הפך לסטנדרט). הוא עובד ב־<strong>pull</strong>: השרת שלך חושף <code>GET /metrics</code>, ו־Prometheus קורא אותו כל 15 שניות (scrape) ושומר את הערכים לאורך זמן. <strong>Grafana</strong> מציגה אותם בגרפים. השרת רק מחזיק מונים בזיכרון — לא שולח כלום ולא שומר היסטוריה.</p>
+  <p>שלושה סוגים שתשתמש בהם:</p>
+  <ul>
+    <li><strong>counter</strong> — רק עולה: בקשות, שגיאות, הזמנות. את הקצב ("לשנייה", "בדקה האחרונה") מחשב Prometheus, לא הקוד שלך.</li>
+    <li><strong>gauge</strong> — עולה ויורד: חיבורים פתוחים, עבודות שמחכות בתור, זיכרון.</li>
+    <li><strong>histogram</strong> — התפלגות של ערכים: זמני תגובה, גודל בקשות. נשמר כמונים ל"דליים" (buckets).</li>
+  </ul>
+  <p>ככה נראה <code>/metrics</code> של שרת עם counter אחד ו־histogram אחד (זה הפלט של הפתרון של E27, אחרי שלוש בקשות):</p>
+<span class="file-label">GET /metrics</span>
+<pre><code class="lang-text"># HELP http_requests_total HTTP requests
+# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/tasks/:id",status="200"} 2
+http_requests_total{method="POST",route="/tasks",status="201"} 1
+# HELP http_request_duration_seconds Request duration
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{route="/tasks/:id",le="0.05"} 1
+http_request_duration_seconds_bucket{route="/tasks/:id",le="0.1"} 2
+http_request_duration_seconds_bucket{route="/tasks/:id",le="0.5"} 3
+http_request_duration_seconds_bucket{route="/tasks/:id",le="+Inf"} 3
+http_request_duration_seconds_sum{route="/tasks/:id"} 0.382
+http_request_duration_seconds_count{route="/tasks/:id"} 3</code></pre>
+  <p>מה רואים: כל שורה היא <em>סדרה</em> — שם, <strong>labels</strong> בסוגריים מסולסלים, וערך. ב־histogram, <code>le</code> הוא "less or equal": <code>le="0.1"} 2</code> אומר "2 בקשות לקחו 0.1 שניות או פחות" — <strong>כולל</strong> זו שכבר נספרה ב־<code>le="0.05"</code>. הדליים מצטברים, ו־<code>+Inf</code> הוא כל הבקשות. וזמנים — תמיד ב<strong>שניות</strong>; זו מוסכמה שכל ה־dashboards המוכנים מניחים.</p>
+
+  <h2>3. למה ממוצע משקר</h2>
+  <p>"זמן התגובה הממוצע הוא 157ms" נשמע טוב. הנה 100 בקשות אמיתיות־למחצה: רובן מהירות, וכמה נתקעו מאחורי שאילתה איטית:</p>
+<pre><code class="lang-ts">// 94 בקשות מהירות (30–49ms) ו־6 שחיכו לשאילתה איטית (1.5–2.5 שניות)
+const ms = [
+  ...Array.from({ length: 94 }, (_, i) =&gt; 30 + (i * 7) % 20),
+  1500, 1700, 1900, 2100, 2300, 2500,
+].sort((a, b) =&gt; a - b);
+
+// אחוזון p: הערך שאחוז p מהבקשות מהירות ממנו או שוות לו (nearest rank)
+const percentile = (p: number) =&gt; ms[Math.ceil((p / 100) * ms.length) - 1];
+const avg = ms.reduce((a, b) =&gt; a + b, 0) / ms.length;
+
+console.log(`avg ${avg.toFixed(0)}ms`);
+for (const p of [50, 90, 95, 99]) console.log(`p${p}  ${percentile(p)}ms`);</code></pre>
+<pre class="terminal">avg 157ms
+p50  40ms
+p90  48ms
+p95  1500ms
+p99  2300ms</pre>
+  <p>הממוצע (157ms) לא מתאר <strong>אף</strong> בקשה: הרוב מהירות פי 4 ממנו, והאיטיות — פי 10. <strong>p95</strong> אומר: "95% מהמשתמשים קיבלו תשובה תוך X". ו־p95 של 1.5 שניות אומר שאחד מכל 20 משתמשים מחכה — וזה אולי הלקוח הכי חשוב שלך, עם הכי הרבה נתונים. לכן מודדים זמנים ב־histogram, ו־Prometheus מחשב ממנו אחוזונים: <code>histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))</code>.</p>
+  <div class="box tip">
+    <span class="box-title">💡 RED — שלושה מדדים לכל שירות</span>
+    <p><strong>R</strong>ate (כמה בקשות בשנייה), <strong>E</strong>rrors (כמה מהן נכשלו), <strong>D</strong>uration (p50/p95/p99). שני המדדים מסעיף 2 — counter עם <code>status</code> ו־histogram של זמנים — נותנים את שלושתם. זה ה־dashboard הראשון שכל צוות בונה, ו־E28 בונה אותו.</p>
+  </div>
+
+  <h2>4. labels ו־cardinality</h2>
+  <p>כל צירוף שונה של ערכי labels הוא סדרה נפרדת, ש־Prometheus שומר בזיכרון ובדיסק. 5 methods × 20 routes × 8 statuses = 800 סדרות — כלום. עכשיו מישהו כותב <code>route: req.originalUrl</code>: כל <code>/tasks/1</code>, <code>/tasks/2</code>… וכל <code>?page=3</code> הוא סדרה חדשה. אחרי שבוע — מיליוני סדרות, ו־Prometheus נופל. לזה קוראים <strong>high cardinality</strong>, וזו הטעות הנפוצה ביותר במדדים.</p>
+  <ul>
+    <li>route — <strong>התבנית</strong> (<code>/tasks/:id</code>), אף פעם לא הכתובת. בקשה שלא התאימה לאף route (404) ← <code>"unmatched"</code> — אחרת סורק שמנסה אלף כתובות יוצר אלף סדרות.</li>
+    <li>אף פעם לא userId, email, requestId או traceId כ־label. "מה עשה משתמש X" — שאלה ללוגים.</li>
+    <li>כלל אצבע: ל־label יש עד כמה עשרות ערכים, מקבוצה שאתה יודע מראש.</li>
+  </ul>
+
+  <h2>5. Tracing: בקשה אחת, כמה שירותים</h2>
+  <p>בפרויקט 3 בקשת הזמנה עוברת ב־API, במסד, ב־Redis ובשירות תשלומים. היא לקחה 1.8 שניות — איפה? <strong>trace</strong> הוא הסיפור של בקשה אחת, מקצה לקצה. הוא בנוי מ־<strong>spans</strong>: כל span הוא פעולה אחת עם התחלה, משך ו<strong>הורה</strong>. כל ה־spans של אותה בקשה חולקים <strong>traceId</strong> אחד.</p>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="trace של הזמנה: span ראשי של API, ומתחתיו spans של מסד, Redis ושירות תשלומים לאורך ציר זמן">
+      <g class="mono" direction="ltr" style="font-size:12px">
+        <text x="20" y="44">api</text><text x="20" y="84">api</text><text x="20" y="124">api</text><text x="20" y="164">payments</text><text x="20" y="204">payments</text>
+      </g>
+      <g style="stroke-width:1.5">
+        <rect x="110" y="28" width="580" height="24" rx="4" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="125" y="68" width="40" height="24" rx="4" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="170" y="108" width="505" height="24" rx="4" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="185" y="148" width="470" height="24" rx="4" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="200" y="188" width="440" height="24" rx="4" style="fill:var(--red-soft);stroke:var(--red)"/>
+      </g>
+      <g class="mono" direction="ltr" style="font-size:11px">
+        <text x="118" y="45">POST /orders · 1.8s</text>
+        <text x="170" y="85">SELECT stock · 40ms</text>
+        <text x="178" y="125">HTTP POST payments/charge · 1.6s</text>
+        <text x="193" y="165">POST /charge · 1.57s</text>
+        <text x="208" y="205">call bank API · 1.5s ← here</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: trace אחד, חמישה spans, שני שירותים. כל span "תלוי" מתחת להורה שלו. במבט אחד: הזמן הלך לבנק, לא למסד.</figcaption>
+  </figure>
+  <p>איך השירות של התשלומים יודע שהוא חלק מאותו trace? הבקשה היוצאת נושאת header בתקן <strong>W3C Trace Context</strong>:</p>
+<pre><code class="lang-text">traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+             │  │                                │                └ flags: 01 = sampled (נשמר)
+             │  │                                └ ה־span של השולח (16 hex) — יהיה ההורה בצד השני
+             │  └ traceId (32 hex) — זהה לכל אורך הבקשה
+             └ גרסה</code></pre>
+  <p>השירות שמקבל: לוקח את ה־traceId, יוצר span <strong>חדש</strong> שההורה שלו הוא ה־span שהגיע, וכשהוא קורא לשירות הבא — שולח <code>traceparent</code> עם ה־span <em>שלו</em>. כך נבנה העץ. ואיך הקוד שקורא ל־<code>fetch</code> עמוק בתוך service יודע מה ה־span הנוכחי? <code>AsyncLocalStorage</code> — בדיוק כמו ה־requestId בשיעור 1 (E29). וכשכותבים את ה־traceId לכל שורת לוג, אפשר לעבור מ־trace איטי ישר ללוגים שלו.</p>
+
+  <h2>6. בפרויקט אמיתי: OpenTelemetry</h2>
+  <p>בתרגילים כתבת registry ו־tracing ביד, כדי לראות מה קורה בפנים. בעבודה משתמשים ב־<strong>OpenTelemetry</strong> (OTel) — תקן פתוח וספריות שמייצרות traces ומדדים <em>אוטומטית</em>: span לכל בקשת HTTP נכנסת ויוצאת, לכל שאילתה ב־pg ו־Prisma, לכל פקודת Redis — בלי לגעת בקוד. הם נשלחים (בפרוטוקול OTLP) ל־<strong>Collector</strong>, ומשם ל־Jaeger, Grafana Tempo, Datadog או כל ספק אחר. הקוד שלך לא תלוי בספק.</p>
+<span class="file-label">instrumentation.js</span>
+<pre><code class="lang-js">const { NodeSDK } = require("@opentelemetry/sdk-node");
+const { OTLPTraceExporter } = require("@opentelemetry/exporter-trace-otlp-proto");
+const { getNodeAutoInstrumentations } = require("@opentelemetry/auto-instrumentations-node");
+
+const sdk = new NodeSDK({
+  serviceName: "tasks-api",
+  traceExporter: new OTLPTraceExporter(), // לכתובת שב־OTEL_EXPORTER_OTLP_ENDPOINT
+  instrumentations: [getNodeAutoInstrumentations()], // http, express, pg, ioredis, ועוד
+});
+sdk.start();
+process.on("SIGTERM", () =&gt; sdk.shutdown()); // לשלוח את מה שנשאר לפני שהתהליך נסגר (שיעור 4)</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node --require ./instrumentation.js dist/main.js</pre>
+  <p>שני דברים חשובים: הקובץ חייב לרוץ <strong>לפני</strong> כל import אחר (לכן <code>--require</code>), כי הוא "עוטף" את <code>http</code>, <code>express</code> ו־<code>pg</code> ברגע שהם נטענים. וזה עובד הכי פשוט בפרויקט CommonJS — כמו פרויקט ה־Nest שלך. ה־SDK עוד מסומן "experimental" ומשתנה בין גרסאות: נעוץ גרסה (<code>package-lock.json</code>), ובדוק את התיעוד הרשמי כשאתה משדרג.</p>
+  <div class="box tip">
+    <span class="box-title">💡 ומה עם <code>@nestjs/observe</code>?</span>
+    <p>זוכר את השאלה ב־<code>nest new</code> (פרק 20)? <code>@nestjs/observe</code> הוא שירות מנוהל שמחבר את כל זה בשבילך — בתשלום אחרי מכסה חינמית. עכשיו אתה יודע מה הוא עושה מאחורי הקלעים, ויכול להחליט אם צריך אותו או ש־OTel עם Grafana מספיק.</p>
+  </div>
+
+  <h2>7. התראות: על סימפטומים, לא על סיבות</h2>
+  <p>מדדים בלי התראות הם גרפים שאף אחד לא מסתכל עליהם. הכלל: מתריעים על מה ש<strong>המשתמש מרגיש</strong> — שיעור שגיאות מעל 2% במשך 5 דקות, p95 מעל שנייה — ולא על "CPU ב־80%". CPU גבוה כשהכול מהיר זה בסדר, ו־CPU נמוך לא עוזר כשהמסד נפל. צוותים מגדירים את זה כ־<strong>SLO</strong> ("99.5% מהבקשות מצליחות ב־30 יום"), ומתריעים כשקצב "שריפת" התקציב מהיר מדי.</p>
+  <p><strong>בפרויקט 2 (רשות):</strong> הוסף ל־tasks-api את ה־middleware מ־E28 עם <code>prom-client</code> (<code>new client.Registry()</code>, ו־<code>collectDefaultMetrics({ register })</code> בשביל זיכרון ו־event loop), חשוף <code>GET /metrics</code>, והוסף שורה ל־README: "Observability: RED metrics ב־/metrics".</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P24-E26">E26</a> · <a href="exercises.html#P24-E27">E27</a> · <a href="exercises.html#P24-E28">E28</a> · <a href="exercises.html#P24-E29">E29</a> · <a href="exercises.html#P24-E30">E30</a></p>
+  </div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"השירות איטי — איך תמצא למה?" ו"איך תדע שמשהו נשבר לפני שהלקוחות יתקשרו?" הן שאלות ראיון נפוצות, ותשובה טובה עוברת בדיוק בשיעור הזה: מדדי RED עם p95 ולא ממוצע, התראה על שיעור שגיאות, trace שמראה באיזה שירות הזמן הלך, וקפיצה מה־traceId ללוגים. ומשפט אחד על cardinality ("route כתבנית, אף פעם לא userId כ־label") מראה שעבדת עם זה באמת.</p>
+  </div>
+
+<div class="pager"><a href="lesson-05-project.html"><small>הקודם</small>שיעור 5 — פרויקט 2, שלב ז׳: מוכן לפרודקשן</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>
