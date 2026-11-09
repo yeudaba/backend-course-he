@@ -1,0 +1,319 @@
+# events-platform ב־Kubernetes (namespace events). הסודות (MYSQL_URL, API_KEYS) — ב־Secret שנוצר מחוץ ל־Git
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: events
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: events-config
+  namespace: events
+data:
+  KAFKA_BROKERS: kafka.events.svc.cluster.local:9092
+  EVENTS_TOPIC: events
+  LAKE_DIR: /lake
+  PORT: "3000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest
+  namespace: events
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ingest
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ingest
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: ingest
+          image: ghcr.io/noa-cohen/events-platform:1.0.0
+          args: ["node", "src/main-ingest.ts"]
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: events-config
+          env:
+            - name: API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: api-keys
+            - name: MYSQL_URL
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: mysql-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingest
+  namespace: events
+spec:
+  selector:
+    app: ingest
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingest
+  namespace: events
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingest
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# ה־processor: בלי Service (אף אחד לא שולח אליו בקשות). עד 6 עותקים — כמספר ה־partitions
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor
+  namespace: events
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: processor
+  template:
+    metadata:
+      labels:
+        app: processor
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: processor
+          image: ghcr.io/noa-cohen/events-platform:1.0.0
+          args: ["node", "src/main-processor.ts"]
+          envFrom:
+            - configMapRef:
+                name: events-config
+          env:
+            - name: API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: api-keys
+            - name: MYSQL_URL
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: mysql-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: export
+  namespace: events
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid # ריצה אחת בכל רגע — שתיים במקביל היו כותבות אותו watermark
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: export
+              image: ghcr.io/noa-cohen/events-platform:1.0.0
+              args: ["node", "src/main-export.ts"]
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  memory: 1Gi
+              envFrom:
+                - configMapRef:
+                    name: events-config
+              env:
+                - name: API_KEYS
+                  valueFrom:
+                    secretKeyRef:
+                      name: events-secrets
+                      key: api-keys
+                - name: MYSQL_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: events-secrets
+                      key: mysql-url
+              volumeMounts:
+                - name: lake
+                  mountPath: /lake
+          volumes:
+            - name: lake
+              persistentVolumeClaim:
+                claimName: lake
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: query
+  namespace: events
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: query
+  template:
+    metadata:
+      labels:
+        app: query
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: query
+          image: ghcr.io/noa-cohen/events-platform:1.0.0
+          args: ["node", "src/main-query.ts"]
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: events-config
+          env:
+            - name: API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: api-keys
+            - name: MYSQL_URL
+              valueFrom:
+                secretKeyRef:
+                  name: events-secrets
+                  key: mysql-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+          volumeMounts:
+            - name: lake
+              mountPath: /lake
+              readOnly: true
+      volumes:
+        - name: lake
+          persistentVolumeClaim:
+            claimName: lake
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: query
+  namespace: events
+spec:
+  selector:
+    app: query
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lake
+  namespace: events
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: events
+  namespace: events
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - events.noa-cohen.dev
+      secretName: events-tls
+  rules:
+    - host: events.noa-cohen.dev
+      http:
+        paths:
+          - path: /v1/events
+            pathType: Prefix
+            backend:
+              service:
+                name: ingest
+                port:
+                  name: http
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: query
+                port:
+                  name: http

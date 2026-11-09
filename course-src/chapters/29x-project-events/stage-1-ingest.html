@@ -1,0 +1,32 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>שירות HTTP קטן ומהיר: אימות לפי API key, ולידציה לכל אירוע, ו־Kafka.</li>
+      <li>202 — ומתי בדיוק מותר להחזיר אותו.</li>
+      <li>batch שחלקו תקין: מקבלים את התקינים, ומדווחים על השאר.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדרישות</h2>
+  <ul>
+    <li><code>POST /v1/events</code>, header <code>x-api-key</code> ← tenant (מילון <code>apiKeys</code>). בלי key או key לא מוכר: 401 <code>INVALID_API_KEY</code>.</li>
+    <li>גוף: <code>{ events: [...] }</code>. לא JSON ← 400 <code>INVALID_JSON</code>; מערך ריק או חסר ← 400 <code>INVALID_BATCH</code>; יותר מ־<code>maxBatch</code> ← 400 <code>BATCH_TOO_LARGE</code>; גוף מעל 1MB ← 413 — בלי לקרוא את כולו לזיכרון.</li>
+    <li>לכל אירוע: <code>eventId</code> (UUID), <code>name</code> (<code>[a-z][a-z0-9_]{0,39}</code>), <code>userId</code> (1–64), <code>ts</code> (ISO, לא יותר מ־5 דקות בעתיד, לא ישן מ־7 ימים), <code>props</code> (אובייקט, עד 2KB ב־JSON, לא חובה). אירוע לא תקין — נכנס ל־<code>rejected</code> עם <code>index</code> ו־<code>reason</code>; השאר — ממשיכים.</li>
+    <li>התקינים ← <strong>send אחד</strong> ל־Kafka (לא אחד לכל אירוע), key <code>tenant:userId</code>, ערך לפי החוזה. ורק <strong>אחרי</strong> שה־send הצליח — 202 <code>{ accepted, rejected }</code>.</li>
+    <li>Kafka לא זמין ← 503. <code>GET /health</code> ← 200 (בלי key).</li>
+  </ul>
+
+  <h2>2. החלטות</h2>
+  <ul>
+    <li><strong>למה 202 ולא 201?</strong> 202 = "התקבל לעיבוד". האירוע עוד לא במסד, ואולי לא יהיה שם עוד שנייה — וזה בסדר, כל עוד הוא ב־Kafka.</li>
+    <li><strong>למה לחכות ל־send?</strong> כי 202 הוא הבטחה. החזרת 202 ואז Kafka נפל — אירוע "שהתקבל" אבד, והלקוח לא ישלח אותו שוב. ה־producer — idempotent (יחידה 26.5).</li>
+    <li><strong>ו־503 בכישלון:</strong> הלקוח ישלח שוב את כל ה־batch. חלק כבר אולי הגיע ל־Kafka? בגלל זה <code>eventId</code> — שלב 2 יזרוק כפילויות.</li>
+    <li><strong>זמן מהשרת:</strong> <code>receivedAt</code> הוא שלך; <code>ts</code> של הלקוח — אולי שעון לא מכוון, לכן גבולות. ו־<code>now</code> מוזרק — לבדיקות.</li>
+  </ul>
+  <p>אין כאן framework: <code>http.createServer</code> מספיק לשני נתיבים, וכל מילישנייה בשירות קליטה נחשבת. (Express או Fastify — גם בסדר, אם הבודק עובר.)</p>
+
+  <div class="box practice">
+    <span class="box-title">🤖 הבודק</span>
+    <pre class="terminal"><span class="prompt">% </span>npm run check PR4-INGEST -- --dir ~/dev/events-platform</pre>
+    <p>מעלה את השרת שלך עם producer אמיתי ו־topic חדש, שולח batches (תקינים, חלקיים, גדולים, לא JSON), וקורא מה הגיע ל־Kafka. ובנוסף — producer מדומה ש"מאשר" אחרי 200ms (202 לא לפני), ו־producer שנופל (503).</p>
+  </div>

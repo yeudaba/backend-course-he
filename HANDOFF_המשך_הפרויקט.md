@@ -348,7 +348,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ## 7. מה נשאר לעשות
 
-### 7.0 הרחבה לפי מודעת דרושים — חצאי־פרקים ופרויקט 4 (בבנייה)
+### 7.0 הרחבה לפי מודעת דרושים — חצאי־פרקים ופרויקט 4 (נבנו)
 יהודה הראה מודעת Backend Developer (Node.js, MySQL, AWS+K8s, Jenkins/Argo CD, SQS/Kafka/RabbitMQ, agentic AI, Redis/ElastiCache, BigQuery/Snowflake/Databricks, נפחי נתונים ותעבורה גבוהה). **החלטות שלו (8.11.2026):** לא חטיבה חדשה — לשלב בסדר הלימוד, כ**חצאי־פרקים** (כמו 15.5, כדי שמזהי תרגילים קיימים לא ישתנו), ו**פרויקט 4 חדש** שמחבר את הנושאים.
 | יחידה | slug (מיון לפי שם התיקייה) | אחרי | בודקים מול |
 |---|---|---|---|
@@ -365,10 +365,11 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - **מצב 26.5:** בנוי ומאומת (`--verify 26w`). קונטיינרים: `course-rabbit` (rabbitmq:4-alpine) על **5673**, `course-kafka` (apache/kafka:4.1.0, KRaft, advertised `localhost:9095`) על **9095**; SQS דרך LocalStack. `build.mjs` מעביר `COURSE_RABBIT_URL`/`COURSE_KAFKA_BROKERS` לבדיקות ו־`RABBIT_URL`/`KAFKA_BROKERS` לבלוקי run. לקוחות: `amqplib` 2.2.0 (עם טיפוסים; 2.3.0 יצא ביום הבנייה — לא נבחר), ו־**`@platformatic/kafka`** 2.15 (KafkaJS נבדק ועובד מול Kafka 4.1, אבל לא עודכן מאז 2023 ומדפיס TimeoutNegativeWarning ב־Node 24 — מוזכר בשיעור כמה שתפגוש בקוד קיים). `root/tools/mq.mjs`: `rabbitSandbox(t)` (שמות ייחודיים לתורים/exchanges, `depth`, `drain`), `kafkaSandbox(t)` (topic ייחודי, producer **idempotent**, `readAll`, `committed`), `waitFor`, ו־`deadline(promise, ms, msg)` — נכשל עם הסבר ו־`process.exit(1)` אחרי 300ms, כי consumer תקוע של הלומד משאיר את התהליך חי.
 - **מצב 28.5:** בנוי ומאומת (`--verify 28w`). בלי קונטיינרים חדשים: DuckDB רץ בתוך Node (`@duckdb/node-api` **1.5.6-r.2** — 2.0.0-r.1 היה בן שבועיים וגרסה ראשית חדשה, לא נבחר). `files/orders.parquet` (60,000 הזמנות, אוקטובר 2026) נוצר דטרמיניסטית מ־`files/make-orders.mjs`. `tests/_duck.mjs`: `duck(t)` ← view בשם `orders` על הקובץ, `fileRows`/`expectedRows` לתרגילי SQL. בלוקי run של DuckDB מייצרים נתונים עם `range()` (הם רצים בתיקייה זמנית, בלי גישה ל־files). בדיקות זמן (E08, E14, E23, E24) הורצו 3 פעמים ברצף — יציבות.
 - **מצב 29.5:** בנוי ומאומת (`--verify 29w`). בלי קונטיינרים: `tests/_claude.mjs` (עותק של פרק 29 — SDK אמיתי עם fetch מדומה), `tests/_mcp.mjs` (שרת MCP של הלומד + client ב־`InMemoryTransport`). `@modelcontextprotocol/sdk` **1.32.2** (`registerTool`; `tool()` מסומן deprecated). `files/store.ts` — חנות בזיכרון, משותפת לתרגילים. נבדק מול ה־skill של claude-api: Opus 5.5 ($4/$20, cache read $0.20), אין `tool_choice` מאולץ, `fallbacks: "default"` + beta `server-side-fallback-2026-07-01`, היסטוריה append-only (preserved thinking — עריכה של תורות קודמים נכשלת בחשבונות מ־31.8.2026), context editing/compaction בצד השרת. E25 מייבא את `evaluateTrajectory` מ־E13 של הלומד (כתוב בתרגיל).
+- **מצב פרויקט 4 (`29x-project-events`, label "פרויקט 4", num "P4"):** בנוי ומאומת (`--verify 29x`). פתרון לדוגמה: `solutions/events-platform` — TypeScript שרץ ישירות ב־Node 24 (בלי build; `tsc --noEmit` נקי עם ה־tsconfig שבפרויקט), `src/{ingest,processor,export,query,assistant,time,config,main-*}.ts`, `migrations/001_init.sql`, `k8s/platform.yaml`, `.github/workflows/ci.yml`, `compose.yaml`, ו־`test/e2e.test.ts` (HTTP ← Kafka ← MySQL ← Parquet ← query API — עבר מול הקונטיינרים). בודקים: PR4-INGEST, PR4-PROCESS, PR4-EXPORT, PR4-QUERY, PR4-DEPLOY, PR4-AGENT (רשות). `tests/_events.mjs`: `eventsDb(t)` מריץ את ה־migrations של הלומד על database חדש, pool עם `dateStrings: true` (חלק מהחוזה); `loadP`/`fileP` ← `events-platform/...` (עם `--dir`). הבודק של PR4-DEPLOY מצא באג אמיתי בפתרון (CronJob בלי limits) — תוקן.
 
 ### 7.1 מצב: הקורס הושלם
 כל 30 הפרקים (0–30, כולל 15.5 ו־15w), ושלושת הפרויקטים (כולל שלב 5 של פרויקט 3) — בנויים ומאומתים. מה אפשר להמשיך, אם יהודה יבקש:
-- **פרויקט 4 (רשות, אפיון 10.4)** — "עיבוד מסמכים עם AI". לא נבנה. פרק 29 מכסה את היסודות; אפשר לבנות כיחידה `29p-project-docs` בסגנון של 25p (בודק קופסה שחורה עם fetch מדומה של ה־SDK).
+- **פרויקט 4** — נבנה כ"מערכת אירועים ואנליטיקה" (7.0). פרויקט ה־AI הרשותי מהאפיון (10.4, "עיבוד מסמכים עם AI") לא נבנה — יחידה 29.5 ושלב 5 של פרויקט 4 מכסים את רוב מה שהוא היה מלמד.
 - **משוב מהלומד** — יהודה עובר על הפרקים; תיקונים לפי מה שהוא נתקע בו.
 - **בדיקה ויזואלית תקופתית** (סעיף 7.3) ועדכון מחירים/מודלים בפרק 29 כשהם משתנים.
 נקודות מפרק 30:
@@ -404,7 +405,7 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 ### 7.2 שאר הקורס (לפי האפיון, סעיף 8)
 
-כל הפרקים במפת האפיון (סעיף 8) נבנו. נשאר רק פרויקט 4 הרשותי (ראה 7.1).
+כל הפרקים במפת האפיון (סעיף 8) נבנו, וגם ההרחבה לפי המודעה (7.0): 19.5, 25.5, 26.5, 28.5, 29.5 ופרויקט 4.
 
 ### 7.3 בסוף
 - אימות מלא: `node course-src/build.mjs --verify` — הכול ירוק. **בוצע ב־8.11.2026 אחרי פרק 30:** 35 יחידות, 605 דוגמאות קוד הורצו, כל הבודקים עברו על הפתרונות ונכשלו על קובצי ההתחלה (exit 0, Node 24, בענן). האימות מצא שני דפים בפרק 25 שלא נבנו מחדש אחרי --fill — תוקן.

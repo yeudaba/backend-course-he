@@ -1,0 +1,120 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>הדרישות, והחלטות הארכיטקטורה — ולמה.</li>
+      <li>החוזה: המודולים שהבודק טוען, ההודעה ב־Kafka, הסכמה ב־MySQL, וה־API.</li>
+      <li>סדר העבודה, ומה "גמור" אומר.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדרישות</h2>
+  <ul>
+    <li><strong>קליטה:</strong> לקוחות שולחים אירועים ב־batches (עד 500), מזוהים ב־API key. בשיא — אלפי אירועים בשנייה. הקליטה חייבת להיות מהירה וזמינה גם כשהמסד איטי.</li>
+    <li><strong>נכונות:</strong> לקוחות שולחים שוב אחרי timeout (retry) — אירוע עם אותו <code>eventId</code> נספר פעם אחת. ושום אירוע שקיבל 202 לא הולך לאיבוד.</li>
+    <li><strong>אנליטיקה:</strong> אירועים ומשתמשים פעילים לכל יום (שעון ישראל), ומשפכי המרה ("מכל מי שצפה, כמה הוסיפו לעגלה, וכמה קנו").</li>
+    <li><strong>הפרדה:</strong> לקוח רואה רק את הנתונים שלו — גם דרך ה־cache.</li>
+  </ul>
+
+  <h2>2. הארכיטקטורה</h2>
+  <figure>
+    <svg viewBox="0 0 720 270" role="img" aria-label="ingest מקבל HTTP ושולח ל־Kafka; processor צורך ל־MySQL; export מעתיק ל־lake; query API קורא מ־MySQL ומה־lake">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="610" y="30" width="100" height="50" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+        <rect x="460" y="30" width="120" height="50" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="310" y="30" width="120" height="50" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="160" y="30" width="120" height="50" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="10" y="30" width="120" height="50" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="10" y="190" width="120" height="50" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="160" y="190" width="120" height="50" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="390" y="190" width="150" height="50" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="610" y="190" width="100" height="50" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M606 55 H 584" marker-end="url(#ar)"/><path d="M456 55 H 434" marker-end="url(#ar)"/><path d="M306 55 H 284" marker-end="url(#ar)"/><path d="M156 55 H 134" marker-end="url(#ar)"/>
+        <path d="M70 84 V 186" marker-end="url(#ar)"/>
+        <path d="M134 215 H 156" marker-end="url(#ar)"/>
+        <path d="M284 215 H 386" marker-end="url(#ar)"/>
+        <path d="M100 84 C 200 130, 380 130, 440 186" marker-end="url(#ar)" style="stroke-dasharray:5 4"/>
+        <path d="M544 215 H 606" marker-end="url(#ar)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="660" y="59">clients</text><text x="520" y="59">ingest</text><text x="370" y="59">Kafka</text><text x="220" y="59">processor</text><text x="70" y="59">MySQL</text>
+        <text x="70" y="219">export</text><text x="220" y="212">lake</text><text x="220" y="228" style="font-size:10px">Parquet</text><text x="465" y="212">query API</text><text x="465" y="228" style="font-size:10px">+ DuckDB</text><text x="660" y="219">dashboard</text>
+      </g>
+      <g text-anchor="middle" style="font-size:10px" direction="rtl">
+        <text x="595" y="100">POST /v1/events ← 202</text>
+        <text x="445" y="100">key = tenant:user</text>
+        <text x="295" y="100">commit אחרי המסד</text>
+        <text x="40" y="140">CronJob</text>
+        <text x="500" y="150">stats/daily (OLTP)</text>
+        <text x="335" y="235">funnel (OLAP)</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: ארבעה רכיבים, image אחד. כל חץ הוא החלטה: קליטה בלי מסד (Kafka סופג שיאים), עיבוד אידמפוטנטי, וקריאה מהמקום שמתאים לשאלה.</figcaption>
+  </figure>
+  <div class="table-wrap"><table>
+    <tr><th>החלטה</th><th>למה</th><th>ביחידה</th></tr>
+    <tr><td>ingest כותב ל־Kafka, לא למסד</td><td>מהיר וזמין גם כשהמסד עמוס; Kafka סופג שיאים, ו־replay אפשרי</td><td>26.5</td></tr>
+    <tr><td>key = <code>tenant:user</code></td><td>סדר לכל משתמש (משפכים תלויים בסדר), ופיזור בין partitions</td><td>26.5</td></tr>
+    <tr><td><code>UNIQUE (tenant_id, event_id)</code> + <code>INSERT IGNORE</code></td><td>at-least-once ← השפעה פעם אחת</td><td>19.5, 26.5</td></tr>
+    <tr><td>אגרגציות באותה טרנזקציה עם האירוע</td><td>קריסה לא משאירה ספירה בלי אירוע (או להפך)</td><td>18, 26.5</td></tr>
+    <tr><td>סטטיסטיקה יומית מטבלאות מסוכמות</td><td>שאילתה של שורות בודדות, עדכנית</td><td>28.5</td></tr>
+    <tr><td>משפכים מ־Parquet + DuckDB</td><td>סריקה של הרבה אירועים — עמודתי, ולא על המסד של הקליטה</td><td>28.5</td></tr>
+  </table></div>
+
+  <h2>3. החוזה</h2>
+  <p>הבודקים טוענים את הקוד שלך לפי השמות האלה. בתוך כל מודול — המימוש שלך.</p>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>export</th><th>שלב</th></tr>
+    <tr><td><code>src/ingest.ts</code></td><td><code>createIngestServer({ producer, topic, apiKeys, maxBatch = 500, now? }): http.Server</code></td><td>1</td></tr>
+    <tr><td><code>src/processor.ts</code></td><td><code>runProcessor({ brokers, topic, groupId, pool, max }): Promise&lt;{ processed, inserted, duplicates, invalid }&gt;</code></td><td>2</td></tr>
+    <tr><td><code>src/export.ts</code></td><td><code>exportToLake({ pool, conn, lakeDir, pageSize? }): Promise&lt;{ exported, file }&gt;</code></td><td>3</td></tr>
+    <tr><td><code>src/query.ts</code></td><td><code>createQueryServer({ pool, lakeDir, apiKeys, cacheTtlMs?, now? }): Promise&lt;http.Server&gt;</code></td><td>3</td></tr>
+    <tr><td><code>src/assistant.ts</code></td><td><code>createAnalyticsAssistant({ client, query, now?, maxSteps? })</code> ← <code>{ ask(question) }</code></td><td>5</td></tr>
+    <tr><td><code>migrations/*.sql</code></td><td>הסכמה — רצה לפי סדר שמות הקבצים</td><td>0</td></tr>
+  </table></div>
+  <p><code>pool</code> הוא pool של <code>mysql2/promise</code> עם <code>dateStrings: true</code>; <code>producer</code> — <code>Producer</code> של <code>@platformatic/kafka</code> עם serializers של מחרוזות (ה־checker יוצר אותם ומעביר לך — וכך גם ה־<code>main-*.ts</code> שלך).</p>
+  <h3>ההודעה ב־Kafka</h3>
+```json
+{ "tenantId": "acme", "eventId": "7d1e…", "name": "add_to_cart", "userId": "u42",
+  "ts": "2026-11-05T10:00:00.000Z", "props": { "productId": 3 }, "receivedAt": "2026-11-05T10:00:01.120Z" }
+```
+  <p>key: <code>acme:u42</code>. <code>tenantId</code> בא מה־API key — לעולם לא מגוף הבקשה.</p>
+  <h3>הסכמה ב־MySQL</h3>
+  <p>השמות והטיפוסים — חוזה (הבודקים של שלב 3 כותבים ישירות לטבלאות). אינדקסים ואילוצים נוספים — שלך.</p>
+```sql
+CREATE TABLE events (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id VARCHAR(40) NOT NULL, event_id CHAR(36) NOT NULL,
+  name VARCHAR(40) NOT NULL, user_id VARCHAR(64) NOT NULL,
+  ts DATETIME(3) NOT NULL,            -- UTC
+  day DATE NOT NULL,                  -- היום בשעון ישראל
+  props JSON NULL, received_at DATETIME(3) NOT NULL,
+  UNIQUE KEY (tenant_id, event_id)
+);
+CREATE TABLE daily_counts (tenant_id VARCHAR(40), day DATE, name VARCHAR(40), events INT UNSIGNED NOT NULL,
+  PRIMARY KEY (tenant_id, day, name));
+CREATE TABLE user_days (tenant_id VARCHAR(40), day DATE, user_id VARCHAR(64),
+  PRIMARY KEY (tenant_id, day, user_id));
+```
+  <h3>ה־API</h3>
+  <div class="table-wrap"><table>
+    <tr><th>בקשה</th><th>תשובה</th></tr>
+    <tr><td><code>POST /v1/events</code> + <code>x-api-key</code>, גוף <code>{ events: [...] }</code></td><td>202 <code>{ accepted, rejected: [{ index, reason }] }</code> · 400 · 401 · 413 · 503</td></tr>
+    <tr><td><code>GET /v1/stats/daily?from&amp;to[&amp;name]</code></td><td><code>{ from, to, name, days: [{ day, events, users }] }</code></td></tr>
+    <tr><td><code>GET /v1/funnel?steps=a,b,c&amp;from&amp;to</code></td><td><code>{ from, to, steps: [{ name, users }] }</code></td></tr>
+  </table></div>
+  <p>שגיאות: <code>{ error: { code, message? } }</code>, כמו בפרויקט 3.</p>
+
+  <h2>4. סדר העבודה</h2>
+  <ol>
+    <li>repo, <code>package.json</code>, ו־<code>migrations/001_init.sql</code> — הרץ אותו ידנית על MySQL ובדוק.</li>
+    <li>שלב 1 עד PR4-INGEST ירוק; commit. שלב 2 עד PR4-PROCESS; commit. וכן הלאה — כל שלב עובד לפני הבא.</li>
+    <li>בכל שלב: בדיקות משלך (<code>node --test</code>) — הבודק של הקורס הוא "קבלה", לא תחליף.</li>
+  </ol>
+
+  <div class="box tip">
+    <span class="box-title">💡 בראיון</span>
+    <p>הפרויקט הזה הוא תשובה מוכנה ל"ספר על מערכת שתכננת": התרשים, שלוש החלטות מהטבלה, ומה היית משנה ב־100x נפח (ClickHouse/BigQuery במקום DuckDB, Kafka מנוהל, partitions ב־lake לפי יום). שמור את הסיבות — בשלב 4 הן נכנסות ל־README.</p>
+  </div>

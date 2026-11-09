@@ -1,0 +1,34 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>image אחד, ארבעה תהליכים: <code>main-ingest</code>, <code>main-processor</code>, <code>main-export</code>, <code>main-query</code>.</li>
+      <li>Kubernetes: Deployments, Services, HPA, CronJob, Ingress, Secret מחוץ ל־Git.</li>
+      <li>CI, ו־README שמראיין קורא.</li>
+    </ul>
+  </div>
+
+  <h2>1. נקודות כניסה</h2>
+  <p>כל רכיב — קובץ קטן ב־<code>src/main-*.ts</code>: קורא הגדרות מה־env (zod — נכשלים מהר על הגדרה חסרה, פרק 25), בונה את החיבורים, ומריץ. <code>SIGTERM</code> ← סגירה מסודרת (פרק 24): ingest מפסיק לקבל ומחכה לבקשות פתוחות; processor מסיים את ההודעה הנוכחית. אותו image לכולם — רק הפקודה שונה (<code>args</code> ב־Kubernetes).</p>
+
+  <h2>2. Kubernetes</h2>
+  <div class="table-wrap"><table>
+    <tr><th>רכיב</th><th>אובייקט</th><th>שימו לב</th></tr>
+    <tr><td>ingest</td><td>Deployment + Service + HPA</td><td>probes על <code>/health</code>; HPA לפי CPU — שיאים של קליטה</td></tr>
+    <tr><td>processor</td><td>Deployment, <strong>בלי Service</strong></td><td>אף אחד לא שולח אליו בקשות; replicas עד מספר ה־partitions</td></tr>
+    <tr><td>export</td><td>CronJob</td><td><code>concurrencyPolicy: Forbid</code> — לא שני ייצואים שכותבים watermark במקביל</td></tr>
+    <tr><td>query</td><td>Deployment + Service</td><td>קורא את ה־lake (volume, או S3 ביחידה 25.5)</td></tr>
+    <tr><td>כולם</td><td>ConfigMap, Secret (מחוץ ל־Git), Ingress עם TLS</td><td>image עם גרסה, limits לזיכרון, לא root</td></tr>
+  </table></div>
+  <p>זה E24 מיחידה 25.5 — בקנה מידה של מערכת. ומי שרוצה: Helm chart עם values לכל סביבה, ו־Argo CD Application (יחידה 25.5, שיעור 4) — לא נבדק, אבל שווה שורה ב־README.</p>
+
+  <h2>3. CI ו־README</h2>
+  <ul>
+    <li><strong>CI</strong> — GitHub Actions (פרק 25) או Jenkinsfile (יחידה 25.5): <code>npm ci</code>, typecheck ובדיקות (עם MySQL ו־Kafka כ־services), ו־<code>docker build</code>.</li>
+    <li><strong>README</strong>: מה המערכת עושה (פסקה), התרשים, הטבלה של ההחלטות משלב 0 ("למה Kafka", "איפה כל אירוע נספר פעם אחת", "למה משפך מ־Parquet"), איך מריצים מקומית (<code>docker compose up</code>), ומה היית משנה ב־100x נפח.</li>
+  </ul>
+
+  <div class="box practice">
+    <span class="box-title">🤖 הבודק</span>
+    <pre class="terminal"><span class="prompt">% </span>npm run check PR4-DEPLOY -- --dir ~/dev/events-platform</pre>
+    <p>קורא את ה־Dockerfile, את <code>k8s/*.yaml</code> ואת ה־CI — בלי cluster ובלי docker: ארבעה רכיבים באותו image עם גרסה, סודות מ־Secret, probes, Services (ובלי Service ל־processor), HPA, CronJob עם Forbid, Ingress עם TLS.</p>
+  </div>

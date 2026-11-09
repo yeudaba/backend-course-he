@@ -1,0 +1,23 @@
+  <div class="box warn">
+    <span class="box-title">🔒 אחרי שסיימת</span>
+    <p>הפתרון לדוגמה נמצא ב־<code>29x-project-events/solutions/events-platform</code>. קרא אותו אחרי שכל הבודקים שלך ירוקים — ההשוואה מלמדת הרבה יותר מאשר להעתיק.</p>
+  </div>
+
+  <h2>מה יש בפתרון</h2>
+  <div class="table-wrap"><table>
+    <tr><th>קובץ</th><th>שורות שכדאי לקרוא</th></tr>
+    <tr><td><code>src/ingest.ts</code></td><td><code>readBody</code> עם תקרה (413 בלי לקרוא הכול לזיכרון); send אחד ל־batch; 202 אחרי האישור</td></tr>
+    <tr><td><code>src/processor.ts</code></td><td>טרנזקציה לכל הודעה; <code>affectedRows === 1</code> ← אגרגציות; <code>m.commit()</code> אחרי <code>conn.commit()</code></td></tr>
+    <tr><td><code>src/export.ts</code></td><td>watermark לפי <code>id</code>; קובץ ואז state, עם rename</td></tr>
+    <tr><td><code>src/query.ts</code></td><td>CTE לכל שלב במשפך, עם פרמטרים; ה־tenant חלק ממפתח ה־cache</td></tr>
+    <tr><td><code>k8s/platform.yaml</code></td><td>image אחד, <code>args</code> לכל רכיב; processor בלי Service; CronJob עם Forbid</td></tr>
+    <tr><td><code>test/e2e.test.ts</code></td><td>אירועים מ־HTTP עד תשובה של ה־query API — מול MySQL ו־Kafka אמיתיים</td></tr>
+  </table></div>
+
+  <h2>החלטות, ומה היה משתנה בקנה מידה אחר</h2>
+  <ul>
+    <li><strong>טרנזקציה לכל הודעה</strong> פשוטה ונכונה, ועולה round trip לכל אירוע. ב־10,000 אירועים בשנייה: batch של הודעות לטרנזקציה (INSERT מרובה), commit ל־Kafka על ה־offset האחרון ב־batch. הנכונות לא משתנה — <code>INSERT IGNORE</code> עדיין מגן מכפילויות.</li>
+    <li><strong>DuckDB על קבצים מקומיים</strong> מתאים לעשרות מיליוני אירועים. מעבר לזה: lake ב־S3 עם partitions לפי יום (<code>day=…/</code>, יחידה 28.5 E16), ו־ClickHouse, BigQuery או Snowflake במקום DuckDB — אותו SQL כמעט.</li>
+    <li><strong>הפרדה בין tenants</strong> היא בכל שאילתה (<code>WHERE tenant_id = ?</code>) ובמפתח ה־cache. בחברה עם לקוחות גדולים: database או topic לכל לקוח גדול.</li>
+    <li><strong>מה חסר בכוונה:</strong> dead letter topic להודעות פגומות (כאן רק נספרות), rate limit לכל API key (פרק 24/26), ו־retention ל־events במסד (מוחקים אחרי 90 יום — ה־lake נשאר).</li>
+  </ul>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 2: ה־processor — פעם אחת בדיוק — פרויקט 4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 4</a> ‹ שיעור 3</div>
+  <h1>שיעור 3 — שלב 2: ה־processor — פעם אחת בדיוק</h1>
+  <p class="subtitle">⏱ ~300 דקות · 🤖 PR4-PROCESS</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>consumer group שקורא מ־Kafka וכותב ל־MySQL.</li>
+      <li>"פעם אחת בדיוק" בהשפעה: UNIQUE, INSERT IGNORE, ואגרגציות באותה טרנזקציה.</li>
+      <li>ימים בשעון ישראל, משתמשים פעילים — וקריסה באמצע.</li>
+    </ul>
+  </div>
+
+  <h2>1. הדרישות</h2>
+  <ul>
+    <li><code>runProcessor({ brokers, topic, groupId, pool, max })</code>: ממשיך מה־commit של ה־group (group חדש — מההתחלה), מעבד <code>max</code> הודעות, וחוזר עם <code>{ processed, inserted, duplicates, invalid }</code>.</li>
+    <li>לכל הודעה, בטרנזקציה אחת: האירוע ל־<code>events</code> (<code>ts</code> ב־UTC, <code>day</code> בשעון ישראל); אם הוא חדש — <code>daily_counts</code> +1 ו־<code>user_days</code>. אם הוא כבר קיים (אותו tenant ו־eventId) — כלום.</li>
+    <li>commit ל־Kafka — רק אחרי COMMIT במסד. כישלון במסד ← rollback, בלי commit, והשגיאה עולה.</li>
+    <li>הודעה פגומה (לא JSON, חסרים שדות) — לא תתקן את עצמה: סופרים ב־<code>invalid</code>, מדלגים (commit), וממשיכים.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="הודעה מ־Kafka; טרנזקציה: INSERT IGNORE ל־events, ואם נוסף — daily_counts ו־user_days; COMMIT; ואז commit ל־Kafka">
+      <defs><marker id="pr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <rect x="170" y="20" width="400" height="140" rx="12" style="fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4"/>
+      <g style="stroke-width:2">
+        <rect x="600" y="65" width="110" height="50" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="400" y="60" width="150" height="60" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="190" y="40" width="170" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="190" y="100" width="170" height="40" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="20" y="65" width="120" height="50" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M596 90 H 554" marker-end="url(#pr)"/>
+        <path d="M396 80 L 364 64" marker-end="url(#pr)"/><path d="M396 100 L 364 116" marker-end="url(#pr)"/>
+        <path d="M166 90 H 144" marker-end="url(#pr)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="655" y="88">Kafka</text><text x="655" y="104">message</text>
+        <text x="475" y="86">INSERT IGNORE</text><text x="475" y="102">events</text>
+        <text x="275" y="64">daily_counts +1</text><text x="275" y="124">user_days (IGNORE)</text>
+        <text x="80" y="88">commit</text><text x="80" y="104">offset</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="370" y="180">טרנזקציה אחת. כפילות ← affectedRows = 0 ← בלי אגרגציות. קריסה בכל נקודה ← ההודעה תגיע שוב, והתוצאה זהה</text>
+        <text x="385" y="40">רק אם נוסף</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: הצינור של כל הודעה. אותו דפוס כמו E15 ו־E25 ביחידה 26.5 — כאן עם MySQL ו־<code>INSERT IGNORE</code>.</figcaption>
+  </figure>
+
+  <h2>2. החלטות</h2>
+  <ul>
+    <li><strong>למה לא לספור "כמה הודעות עיבדנו"?</strong> כי Kafka יביא את אותה הודעה שוב אחרי קריסה, ו־ingest אולי שלח אותה פעמיים. מה שנספר — שורות שבאמת נוספו.</li>
+    <li><strong>user_days ולא COUNT DISTINCT:</strong> "משתמשים פעילים" עם <code>COUNT(DISTINCT user_id)</code> על <code>events</code> נהיה איטי עם הנפח; טבלה עם מפתח (tenant, day, user) ו־<code>INSERT IGNORE</code> עונה ב־COUNT פשוט — ומתעדכנת באותה טרנזקציה.</li>
+    <li><strong>יום — בקליטה, לא בשאילתה:</strong> <code>day</code> מחושב פעם אחת (Intl, Asia/Jerusalem) ונשמר. כל השאילתות אחר כך — בלי אזורי זמן.</li>
+    <li><strong>כמה processors?</strong> עד מספר ה־partitions; כל אחד מחזיק pool קטן — זכור את <code>max_connections</code> (יחידה 28.5, E09).</li>
+  </ul>
+
+  <div class="box practice">
+    <span class="box-title">🤖 הבודק</span>
+    <pre class="terminal"><span class="prompt">% </span>npm run check PR4-PROCESS -- --dir ~/dev/events-platform</pre>
+    <p>database חדש עם ה־migrations שלך, topic עם אירועים (כולל כפילות, הודעה פגומה, ואירוע ב־00:30 בלילה שעון ישראל), ובודק את הטבלאות. ואז — מפיל את המסד באמצע (ה־COMMIT השלישי נכשל) ומריץ שוב: כל אירוע חייב להיספר פעם אחת.</p>
+  </div>
+
+<div class="pager"><a href="stage-1-ingest.html"><small>הקודם</small>שיעור 2 — שלב 1: שירות הקליטה</a><a href="stage-3-analytics.html"><small>הבא</small>שיעור 4 — שלב 3: lake ו־API שאילתות</a></div>
+</main>
+</body>
+</html>

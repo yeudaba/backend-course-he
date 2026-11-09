@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>שלב 3: lake ו־API שאילתות — פרויקט 4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרויקט 4</a> ‹ שיעור 4</div>
+  <h1>שיעור 4 — שלב 3: lake ו־API שאילתות</h1>
+  <p class="subtitle">⏱ ~300 דקות · 🤖 PR4-EXPORT, PR4-QUERY</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשלב הזה</span>
+    <ul>
+      <li>ייצוא מצטבר מ־MySQL ל־lake של Parquet.</li>
+      <li>API שאילתות: סטטיסטיקה יומית מ־MySQL, משפכים מ־DuckDB.</li>
+      <li>הפרדה בין לקוחות — גם ב־cache.</li>
+    </ul>
+  </div>
+
+  <h2>1. הייצוא</h2>
+  <ul>
+    <li><code>exportToLake({ pool, conn, lakeDir, pageSize })</code>: כל האירועים עם <code>id</code> גדול מה־watermark (ב־<code>lakeDir/_state.json</code>), בעמודים, לקובץ חדש <code>part-00001.parquet</code>, <code>part-00002…</code>. בלי חדשים — בלי קובץ (<code>{ exported: 0, file: null }</code>).</li>
+    <li>עמודות ב־Parquet (לפחות): <code>tenant_id, event_id, name, user_id, ts</code> (UTC) <code>, day</code>. ה־watermark נכתב רק אחרי שהקובץ קיים.</li>
+  </ul>
+  <p>כאן, בניגוד ל־E25 ביחידה 28.5, אירועים <strong>לא משתנים</strong> — אז <code>id</code> עולה מספיק כ־watermark, ואין "גרסה אחרונה" לחשב. (עם CronJob ו־<code>concurrencyPolicy: Forbid</code> — שלב 4 — אין שני ייצואים במקביל.)</p>
+
+  <h2>2. ה־API</h2>
+  <ul>
+    <li><code>GET /v1/stats/daily?from&amp;to[&amp;name]</code> ← לכל יום שיש בו נתונים: <code>events</code> (סכום מ־<code>daily_counts</code>, אולי רק של <code>name</code>) ו־<code>users</code> (מ־<code>user_days</code>).</li>
+    <li><code>GET /v1/funnel?steps=view,add_to_cart,purchase&amp;from&amp;to</code> ← לכל שלב, כמה משתמשים עשו אותו <strong>אחרי</strong> הפעם הראשונה שעשו את השלב הקודם (בטווח). 2 עד 5 שלבים. אין lake ← אפסים.</li>
+    <li>API key ← tenant (אחרת 401). <code>from</code>/<code>to</code> — תאריכים תקינים, טווח 0–92 ימים; שמות אירועים — כמו בקליטה; אחרת 400.</li>
+    <li>cache עם TTL, header <code>X-Cache: HIT|MISS</code>, ו־<code>now</code> מוזרק.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="משפך: u1 צפה, הוסיף וקנה; u2 הוסיף לפני שצפה — לא נספר בשלב 2; u3 צפה בלבד; u4 צפה והוסיף. תוצאה 4, 2, 1">
+      <g style="stroke-width:2">
+        <rect x="470" y="30" width="230" height="40" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="530" y="80" width="170" height="40" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="590" y="130" width="110" height="40" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="585" y="55">page_view: 4</text><text x="615" y="105">add_to_cart: 2</text><text x="645" y="155">purchase: 1</text>
+      </g>
+      <g style="font-size:11px" class="mono" direction="ltr">
+        <text x="20" y="50">u1: view 08:00 → cart 08:05 → buy 08:10   ✓ ✓ ✓</text>
+        <text x="20" y="80">u2: cart 09:00 → view 09:05                ✓ ✗ (cart before view)</text>
+        <text x="20" y="110">u3: view                                   ✓</text>
+        <text x="20" y="140">u4: view 11:00 → cart 11:30                ✓ ✓</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: הנתונים של הבודק. "אחרי" חשוב: u2 הוסיף לעגלה לפני שצפה (אולי מקישור ישיר) — ולא נחשב "צפה ← הוסיף". שלב לכל CTE ב־SQL: מי עשה שלב i אחרי הזמן שבו עשה את שלב i−1.</figcaption>
+  </figure>
+  <p>למה שתי מערכות? סטטיסטיקה יומית היא כמה שורות מטבלה מסוכמת — MySQL עונה במילי־שניות, ועדכני מיד. משפך סורק את כל האירועים של כל המשתמשים בטווח — זה בדיוק מה ש־OLAP עמודתי טוב בו, והמסד של הקליטה לא צריך לשאת את זה (יחידה 28.5). המחיר: המשפך עדכני רק עד הייצוא האחרון (עד 15 דקות). כתוב את זה ב־README — זו החלטה, לא באג.</p>
+
+  <div class="box practice">
+    <span class="box-title">🤖 הבודקים</span>
+    <pre class="terminal"><span class="prompt">% </span>npm run check PR4-EXPORT -- --dir ~/dev/events-platform
+<span class="prompt">% </span>npm run check PR4-QUERY -- --dir ~/dev/events-platform</pre>
+    <p>PR4-EXPORT כותב אירועים ישירות ל־<code>events</code>, מריץ את הייצוא שלך פעמיים, וקורא את הקבצים עם DuckDB. PR4-QUERY ממלא את הטבלאות ו־lake לפי החוזה, ובודק תשובות, הפרדה בין tenants, 400, ו־cache — כולל ששאלה זהה של לקוח אחר לא מקבלת את התשובה מה־cache.</p>
+  </div>
+
+<div class="pager"><a href="stage-2-process.html"><small>הקודם</small>שיעור 3 — שלב 2: ה־processor — פעם אחת בדיוק</a><a href="stage-4-deploy.html"><small>הבא</small>שיעור 5 — שלב 4: Docker, Kubernetes, CI ו־README</a></div>
+</main>
+</body>
+</html>
