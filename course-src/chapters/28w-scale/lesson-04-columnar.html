@@ -1,0 +1,101 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>OLTP מול OLAP: שני סוגי עבודה, שני סוגי מסדים.</li>
+      <li>אחסון עמודתי ו־Parquet: למה שאילתה אנליטית קוראת פי 20 פחות.</li>
+      <li>DuckDB: מנוע אנליטי בתוך Node.</li>
+      <li>מחסני נתונים — BigQuery, Snowflake, Databricks: partitions, עלות, והערכות.</li>
+    </ul>
+  </div>
+
+  <h2>1. שני סוגי עבודה</h2>
+  <p>PostgreSQL ו־MySQL בנויים ל־<strong>OLTP</strong> — הרבה פעולות קטנות: "שלוף את הזמנה 4821", "הוסף לעגלה", "הורד מלאי" — עם טרנזקציות ואינדקסים. שאלה כמו "הכנסה לפי קטגוריה וחודש, שלוש שנים אחורה" היא <strong>OLAP</strong>: קוראת מיליוני שורות, אבל רק 3–4 עמודות מתוך 30. על המסד של האפליקציה היא גם איטית וגם מאטה את הלקוחות שקונים באותו רגע (E02).</p>
+
+  <h2>2. שורות מול עמודות</h2>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="אחסון שורות: כל שורה ברצף. אחסון עמודות: כל עמודה ברצף; שאילתה על category קוראת רק את העמודה שלה">
+      <g text-anchor="middle" style="font-size:14px;font-weight:700" direction="rtl"><text x="540" y="24">לפי שורות (PostgreSQL, CSV)</text><text x="180" y="24">לפי עמודות (Parquet, BigQuery)</text></g>
+      <g style="stroke-width:2">
+        <rect x="390" y="40" width="300" height="34" rx="5" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="390" y="80" width="300" height="34" rx="5" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="390" y="120" width="300" height="34" rx="5" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="30" y="40" width="300" height="34" rx="5" style="fill:var(--surface);stroke:var(--border)"/>
+        <rect x="30" y="80" width="300" height="34" rx="5" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="30" y="120" width="300" height="34" rx="5" style="fill:var(--surface);stroke:var(--border)"/>
+        <rect x="30" y="160" width="300" height="34" rx="5" style="fill:var(--surface);stroke:var(--border)"/>
+      </g>
+      <g class="mono" style="font-size:11px" direction="ltr">
+        <text x="400" y="62">1 | Dana | beans | 89.90 | IL | 2026-10-01…</text>
+        <text x="400" y="102">2 | Yossi | brewing | 129.00 | US | …</text>
+        <text x="400" y="142">3 | Noa | beans | 54.90 | IL | …</text>
+        <text x="40" y="62">id:       1 2 3 4 5 6 …</text>
+        <text x="40" y="102">category: beans brewing beans …</text>
+        <text x="40" y="142">price:    89.90 129.00 54.90 …</text>
+        <text x="40" y="182">country:  IL US IL IL DE …</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="540" y="178">GROUP BY category ← קוראים את כל השורות, כל העמודות</text>
+        <text x="180" y="215">GROUP BY category ← קוראים רק את העמודה הירוקה</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: באחסון עמודתי, כל עמודה שמורה ברצף. שאילתה קוראת רק את העמודות שהיא צריכה — וערכים דומים זה ליד זה נדחסים מצוין (עמודה עם 5 קטגוריות שחוזרות מיליון פעמים כמעט לא תופסת מקום).</figcaption>
+  </figure>
+  <p><strong>Parquet</strong> הוא פורמט הקבצים העמודתי הסטנדרטי: בינארי, דחוס, עם סכמה, ועם סטטיסטיקות (min/max) לכל קבוצת שורות — כך שמנוע יכול לדלג על חלקים שלא מתאימים ל־WHERE בלי לקרוא אותם. E04 מראה את ההבדל בגודל ובקריאה מול CSV.</p>
+
+  <h2>3. DuckDB</h2>
+  <p>DuckDB הוא "SQLite לאנליטיקה": ספרייה שרצה <em>בתוך</em> התהליך שלך, בלי שרת, ומריצה SQL עמודתי ומקבילי על Parquet, CSV, JSON — גם ישירות מ־S3. מ־Node:</p>
+```ts
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const db = await DuckDBInstance.create(":memory:");
+const conn = await db.connect();
+const r = await conn.runAndReadAll(
+  `SELECT category, round(sum(quantity * price_cents) / 100.0, 2) AS revenue
+   FROM read_parquet('files/orders.parquet')
+   WHERE country = $1
+   GROUP BY category ORDER BY revenue DESC`,
+  ["IL"],
+);
+console.log(r.getRowObjects());
+```
+  <p>שימו לב ל־<code>$1</code> — פרמטרים, כמו ב־pg (פרק 16). ו־DuckDB מדבר SQL כמעט זהה ל־PostgreSQL — window functions, CTE, <code>QUALIFY</code> (E15, E22, E25).</p>
+
+  <h2>4. מחסני נתונים</h2>
+  <p>כשהנתונים גדלים לטרה־בייטים, אותן שאילתות רצות על <strong>מחסן נתונים</strong> — BigQuery (Google), Snowflake, Databricks (Spark ו־Delta Lake), Redshift (AWS). כולם עמודתיים, ושלושה רעיונות משותפים להם:</p>
+  <ul>
+    <li><strong>הפרדה בין אחסון לחישוב:</strong> הנתונים יושבים בזול (S3 / GCS), וכוח חישוב עולה רק בזמן שאילתה.</li>
+    <li><strong>משלמים לפי סריקה</strong> (ב־BigQuery on-demand — לפי בתים; ב־Snowflake — לפי זמן של warehouse). <code>SELECT *</code> על טבלה של 2TB עולה כסף אמיתי — גם עם <code>LIMIT 10</code> (E05, E17).</li>
+    <li><strong>partitions ו־clustering:</strong> טבלה מחולקת לפי יום — שאילתה עם <code>WHERE day = …</code> קוראת חלק אחד מ־365. בדיוק כמו התיקיות <code>day=…</code> שתיצור ב־E16.</li>
+  </ul>
+  <p>ועוד כלי אחד שחוזר בכולם — <strong>הערכות</strong>. "כמה משתמשים ייחודיים?" על מיליארד שורות — ספירה מדויקת דורשת לזכור כל משתמש; <code>APPROX_COUNT_DISTINCT</code> (HyperLogLog, E18) מעריך בזיכרון זעיר. הרצה אמיתית ב־DuckDB, על 5 מיליון צפיות:</p>
+```ts run
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const db = await DuckDBInstance.create(":memory:");
+const c = await db.connect();
+await c.run(`CREATE TABLE views AS SELECT range AS id, hash(range) % 1000000 AS user_id FROM range(5000000)`);
+const r = await c.runAndReadAll(`
+  SELECT count(*)::BIGINT AS views,
+         count(DISTINCT user_id)::BIGINT AS exact_users,
+         approx_count_distinct(user_id)::BIGINT AS approx_users
+  FROM views`);
+const row = r.getRowObjectsJson()[0];
+console.log(row);
+console.log("error:", ((Number(row.approx_users) / Number(row.exact_users) - 1) * 100).toFixed(1) + "%");
+c.closeSync();
+```
+```out
+{ views: '5000000', exact_users: '993393', approx_users: '962761' }
+error: -3.1%
+```
+  <p>הערכה, לא תשובה: כאן כמה אחוזים מתחת. ובבדיקות שהרצנו בזמן כתיבת היחידה, על מזהים רציפים (1, 2, 3…) הסטייה של DuckDB הגיעה לכ־12% — תלוי בהתפלגות ובמימוש. לדשבורד "כמה צפו השבוע" זה בסדר; לחיוב לקוחות — לעולם לא. לפני שמשתמשים בהערכה, בודקים אותה מול ספירה מדויקת על מדגם מהנתונים האמיתיים.</p>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>מודעה שמזכירה "BigQuery/Snowflake/Databricks" לא מצפה שג׳וניור Backend ינהל מחסן נתונים. היא מצפה שתבין למה הדוח לא רץ על המסד של האפליקציה, תכתוב SQL אנליטי (window functions, אגרגציות), תדע ש־<code>SELECT *</code> עולה כסף, ותבנה את הצינור שמעביר נתונים מהשירות שלך למחסן (שיעור 5). DuckDB על הלפטופ שלך מלמד את כל זה בלי חשבון ענן.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28.5-E02">E02</a> · <a href="exercises.html#P28.5-E04">E04</a> · <a href="exercises.html#P28.5-E05">E05</a> · <a href="exercises.html#P28.5-E15">E15</a> · <a href="exercises.html#P28.5-E16">E16</a> · <a href="exercises.html#P28.5-E17">E17</a> · <a href="exercises.html#P28.5-E18">E18</a> · <a href="exercises.html#P28.5-E22">E22</a></p>
+  </div>

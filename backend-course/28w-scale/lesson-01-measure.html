@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>למדוד: percentiles, histograms ובדיקת עומס — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ שיעור 1</div>
+  <h1>שיעור 1 — למדוד: percentiles, histograms ובדיקת עומס</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה ממוצע זמן תגובה מטעה, ומה מודדים במקומו.</li>
+      <li>SLO: יעד שאפשר למדוד ולהתחייב עליו.</li>
+      <li>histograms: איך מערכות ניטור שומרות מיליוני מדידות — ומאחדות בין שרתים.</li>
+      <li>בדיקת עומס, וחוק Little: כמה שרתים צריך לשיא.</li>
+    </ul>
+  </div>
+
+  <h2>1. הממוצע משקר</h2>
+  <p>זמני תגובה של שרת אמיתי הם לא "פעמון". רוב הבקשות מהירות, ומעט מאוד איטיות מאוד — GC, שאילתה בלי אינדקס, cold cache, רשת. ממוצע מערבב את שתי האוכלוסיות ומסתיר את שתיהן:</p>
+<pre><code class="lang-ts">// 1,000 בקשות: רובן ~40ms, וזנב של בקשות איטיות
+const samples: number[] = [];
+for (let i = 0; i &lt; 1000; i++) samples.push(i % 50 === 0 ? 2500 + (i % 7) * 100 : 35 + (i % 11));
+
+const sorted = [...samples].sort((a, b) =&gt; a - b);
+const pct = (p: number) =&gt; sorted[Math.ceil((p / 100) * sorted.length) - 1];
+const mean = samples.reduce((a, b) =&gt; a + b, 0) / samples.length;
+
+console.log("mean:", mean.toFixed(1), "ms");
+console.log("p50: ", pct(50), "ms");
+console.log("p95: ", pct(95), "ms");
+console.log("p99: ", pct(99), "ms");
+console.log("max: ", sorted.at(-1), "ms");</code></pre>
+<pre class="terminal">mean: 94.9 ms
+p50:  40 ms
+p95:  45 ms
+p99:  2800 ms
+max:  3100 ms</pre>
+  <p>הממוצע (95ms) לא מתאר אף בקשה אמיתית: הוא יותר מכפול מהמקרה הרגיל (40ms), ופחות מעשירית מה־p99 (2.8 שניות). ה־<strong>p50</strong> (חציון) מספר מה רוב המשתמשים חווים; ה־<strong>p95/p99</strong> — מה חווה "הזנב". והזנב חשוב יותר ממה שנראה: דף שעושה 30 קריאות ל־API נתקל בבקשה מה־2% האיטיים בכמעט חצי מהצפיות (E01).</p>
+  <figure>
+    <svg viewBox="0 0 720 220" role="img" aria-label="התפלגות זמני תגובה עם זנב ארוך: p50 בגבעה, הממוצע מימין לה, p99 רחוק בזנב">
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M40 180 H 700"/></g>
+      <path d="M50 180 C 70 180, 80 40, 110 40 C 140 40, 150 170, 200 176 C 300 178, 400 178, 700 179 L 700 180 L 50 180 Z" style="fill:var(--accent-soft);stroke:var(--accent);stroke-width:2"/>
+      <g style="stroke-width:2;fill:none">
+        <path d="M110 30 V 180" style="stroke:var(--green);stroke-dasharray:5 4"/>
+        <path d="M190 30 V 180" style="stroke:var(--amber);stroke-dasharray:5 4"/>
+        <path d="M620 30 V 180" style="stroke:var(--red);stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:12px" direction="ltr">
+        <text x="110" y="22">p50</text><text x="190" y="22">mean</text><text x="620" y="22">p99</text>
+        <text x="110" y="200">40ms</text><text x="190" y="200">95ms</text><text x="620" y="200">2.8s</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl"><text x="420" y="160">הזנב: מעט בקשות, הרבה זמן</text></g>
+    </svg>
+    <figcaption>איור 1: התפלגות עם זנב ארוך (המספרים מההרצה למעלה). הממוצע נמשך ימינה ע״י הזנב, ונוחת במקום שאין בו כמעט בקשות.</figcaption>
+  </figure>
+
+  <h2>2. SLO</h2>
+  <p>SLO (Service Level Objective) הוא יעד מדיד: <em>"99% מבקשות ה־checkout מסתיימות תוך 500ms, בחלון של 30 יום"</em>, או <em>"99.9% מהבקשות לא מחזירות 5xx"</em>. שלושה דברים הופכים אותו לשימושי: הוא מנוסח ב־percentile (לא ממוצע), יש לו חלון זמן, וה־0.1% שנשאר הוא <strong>error budget</strong> — כמה מותר להיכשל לפני שעוצרים פיצ׳רים ומתקנים יציבות. כשמודעה אומרת "high traffic", בראיון ישאלו "איך היית מגדיר SLO לשירות הזה?".</p>
+
+  <h2>3. histograms</h2>
+  <p>שרת עם 2,000 בקשות בשנייה מייצר 7 מיליון מדידות בשעה. לשמור את כולן כדי לחשב p99 — לא מעשי. מערכות ניטור (Prometheus, Datadog, CloudWatch) שומרות <strong>histogram</strong>: דליים של טווחי זמן, ובכל דלי מונה. p99 מחושב מהדליים, בשגיאה קטנה וידועה (E07).</p>
+  <p>והיתרון הגדול — <strong>הם מתאחדים</strong>. 10 שרתים: מחברים את המונים של כל דלי, ומחשבים p99 של כל המערכת. מה ש<strong>אי אפשר</strong> לעשות: לחשב p99 בכל שרת ולמצע — שרת מהיר ושרת עמוס נותנים "ממוצע p99" שלא מתאר אף בקשה (E21).</p>
+
+  <h2>4. בדיקת עומס וחוק Little</h2>
+  <p>בדיקת עומס שולחת הרבה בקשות במקביל ומודדת throughput (בקשות בשנייה) ו־latency. היא עונה על שאלות כמו "כמה בקשות שרת אחד מחזיק לפני שה־p99 מתפוצץ?". הכלי הפשוט ב־Node:</p>
+<pre><code class="lang-bash">npx autocannon -c 50 -d 20 http://localhost:3000/products</code></pre>
+  <p>50 חיבורים במקביל, 20 שניות. E08 בונה גרסה קטנה של זה, כדי לראות מה קורה בפנים. וכלל חשוב: מריצים מול סביבה שדומה לפרודקשן, עם נתונים בגודל אמיתי — מסד עם 100 שורות לא אומר כלום על מסד עם 10 מיליון.</p>
+  <p>ואז, לתכנון: <strong>חוק Little</strong> — מספר הבקשות שנמצאות "בתוך" המערכת בממוצע = קצב ההגעה × זמן השהייה. 2,000 בקשות בשנייה × 150ms = <strong>300 בקשות בו־זמנית</strong>. אם instance אחד מחזיק טוב 50 בו־זמנית, ומשאירים 30% מרווח — צריך 9 instances בשיא. ו־9 instances עם pool של 20 חיבורים = 180 חיבורים למסד, כשה־<code>max_connections</code> הוא 100 — וזו תקלה שתקרה בדיוק בשיא (E09).</p>
+
+  <div class="box tip">
+    <span class="box-title">💡 latency עולה לפני שהשרת "מלא"</span>
+    <p>כשניצולת השרת מתקרבת ל־100%, זמן ההמתנה בתור גדל בצורה לא לינארית — בשרת שעובד ב־90%, בקשה ממוצעת כבר מחכה פי כמה מבשרת שעובד ב־50%. לכן מתכננים עם מרווח (headroom), ו־autoscaling מוגדר להתחיל ב־60–70% CPU — לא ב־95%.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28.5-E01">E01</a> · <a href="exercises.html#P28.5-E06">E06</a> · <a href="exercises.html#P28.5-E07">E07</a> · <a href="exercises.html#P28.5-E08">E08</a> · <a href="exercises.html#P28.5-E09">E09</a> · <a href="exercises.html#P28.5-E21">E21</a></p>
+  </div>
+
+<div class="pager"><a href="index.html"><small>הקודם</small>פתיחת יחידה 28.5</a><a href="lesson-02-event-loop.html"><small>הבא</small>שיעור 2 — Node.js תחת עומס: event loop, thread pool ו־workers</a></div>
+</main>
+</body>
+</html>

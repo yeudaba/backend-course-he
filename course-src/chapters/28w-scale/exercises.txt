@@ -1,0 +1,1025 @@
+@@ P28.5-E01 | 1 | ממוצע, p50, p99 | 15 | שיעור 1
+@task
+<p>endpoint של חיפוש. ב־1,000 בקשות: 980 לקחו 40ms, ו־20 לקחו 3 שניות (חיפוש בלי אינדקס על מילה נדירה).</p>
+<ol><li>חשב ממוצע, p50 ו־p99.</li><li>ה־SLO: "99% מהבקשות מתחת ל־500ms". עומדים בו?</li><li>דף אחד באתר שולח 30 בקשות כאלה במקביל ומחכה לכולן. באיזה אחוז מהצפיות בדף לפחות בקשה אחת איטית?</li><li>למה "ממוצע זמן תגובה" בדשבורד מטעה, כמעט תמיד?</li></ol>
+@hint1
+<p>p99 = הערך ש־99% מהבקשות מהירות ממנו (או שוות לו). כאן — בקשה מספר 990 בסדר עולה.</p>
+@hint2
+<p>הסיכוי שכל 30 מהירות: 0.98^30.</p>
+@solution
+<ol><li>ממוצע: (980×40 + 20×3000) / 1000 = <strong>99.2ms</strong>. p50: <strong>40ms</strong>. p99: הבקשה ה־990 — <strong>3000ms</strong> (980 הראשונות מהירות).</li><li><strong>לא.</strong> 2% מהבקשות מעל 500ms — p99 הוא 3 שניות. והממוצע (99ms) נראה מצוין.</li><li>1 − 0.98^30 ≈ <strong>45%</strong>. כמעט חצי מהצפיות בדף איטיות, למרות ש"רק 2%" מהבקשות איטיות. זו הסיבה שאתרים גדולים מודדים p99 ו־p99.9 — המשתמש פוגש את הזנב הרבה יותר ממה שנדמה.</li><li>ממוצע מערבב שתי אוכלוסיות ומסתיר את שתיהן: הוא גבוה מדי למקרה הרגיל ונמוך מדי לזנב. percentiles (p50 — החוויה הרגילה, p95/p99 — הזנב) מספרים את הסיפור; ו־max — את המקרה הגרוע (לפעמים GC או cold start).</li></ol>
+
+@@ P28.5-E02 | 1 | OLTP או OLAP? | 15 | שיעור 4
+@task
+<p>לכל שאלה — האם להריץ אותה על PostgreSQL של האפליקציה (OLTP), או על מחסן נתונים עמודתי (OLAP — BigQuery, Snowflake, Databricks, או DuckDB מעל Parquet), ולמה:</p>
+<ol><li>"מה הסטטוס של הזמנה 4821?" — בדף "ההזמנות שלי".</li><li>"הכנסה לפי קטגוריה וחודש, בשלוש השנים האחרונות" — דוח שבועי להנהלה.</li><li>"הוסף מוצר לעגלה."</li><li>"כמה משתמשים ייחודיים צפו בכל מוצר בחודש האחרון?" — 2 מיליארד שורות של צפיות.</li><li>"האם יש מספיק מלאי למוצר 17?" — בזמן checkout.</li></ol>
+@hint1
+<p>OLTP: הרבה פעולות קטנות על שורות בודדות, עם טרנזקציות. OLAP: מעט שאילתות שסורקות מיליונים — אבל רק כמה עמודות.</p>
+@hint2
+<p>שאלה "על מצב ברגע זה, שמשפיע על פעולה של משתמש" — איפה הנתון הכי עדכני?</p>
+@solution
+<ol><li><strong>OLTP.</strong> שורה אחת לפי מפתח, ב־1ms, והנתון חייב להיות עדכני.</li><li><strong>OLAP.</strong> סורק את כל ההזמנות אבל רק 3–4 עמודות. ב־PostgreSQL של האפליקציה זה גם איטי וגם מאט את הלקוחות שקונים באותו רגע.</li><li><strong>OLTP.</strong> כתיבה קטנה עם טרנזקציה — מחסני נתונים לא בנויים לזה (ומשלמים בהם לפי סריקה, לא לפי כתיבה).</li><li><strong>OLAP</strong>, ועם <code>APPROX_COUNT_DISTINCT</code> (HyperLogLog, E18) — ספירה מדויקת של ייחודיים על 2 מיליארד שורות יקרה מאוד, והערכה של כמה אחוזים מספיקה לדוח (שיעור 4 מראה כמה היא סוטה בפועל).</li><li><strong>OLTP</strong> — ובתוך הטרנזקציה של ה־checkout (פרק 18). מחסן נתונים מתעדכן בדרך כלל באיחור של דקות־שעות (ETL).</li></ol>
+<p>הדפוס הנפוץ: האפליקציה כותבת ל־OLTP; תהליך (ETL/CDC) מעתיק למחסן; דוחות ואנליטיקה רצים שם. E25 בונה גרסה קטנה של זה.</p>
+
+@@ P28.5-E03 | 1 | מי חוסם את ה־event loop? | 15 | שיעור 2
+@task
+<p>timer של 10ms, ומיד אחריו — שלוש גרסאות של אותה עבודה: hash של סיסמה עם <code>pbkdf2Sync</code>, אותו hash עם <code>pbkdf2</code> (callback), ולולאת חישוב. בכל אחת: ה־timer ירוץ <em>בזמן</em> העבודה, או רק <em>אחרי</em> שתסתיים? נחש, ואז הרץ:</p>
+@hint1
+<p>ה־event loop הוא thread אחד. timer יכול לרוץ רק כשה־JavaScript הנוכחי מסתיים.</p>
+@hint2
+<p>pbkdf2 עם callback רץ ב־thread pool של libuv — לא ב־thread של JavaScript.</p>
+@solution
+```ts run
+import { pbkdf2, pbkdf2Sync } from "node:crypto";
+
+// מתזמנים timer של 10ms, ומיד מתחילים עבודה. השאלה: ה־timer רץ בזמן העבודה, או רק אחריה?
+function measure(label: string, work: (done: () => void) => void) {
+  return new Promise<void>((resolve) => {
+    let timerAt = 0;
+    let doneAt = 0;
+    const report = () => {
+      if (!timerAt || !doneAt) return;
+      console.log(`${label.padEnd(16)} ${timerAt < doneAt ? "timer fired while the work was running" : "timer waited until the work finished"}`);
+      resolve();
+    };
+    setTimeout(() => ((timerAt = performance.now()), report()), 10);
+    work(() => ((doneAt = performance.now()), report()));
+  });
+}
+
+await measure("pbkdf2Sync", (done) => {
+  pbkdf2Sync("pw", "salt", 1_000_000, 32, "sha256");
+  done();
+});
+await measure("pbkdf2 (async)", (done) => pbkdf2("pw", "salt", 1_000_000, 32, "sha256", () => done()));
+await measure("busy loop", (done) => {
+  let x = 0;
+  for (let i = 0; i < 300_000_000; i++) x += i;
+  done();
+});
+```
+```out
+pbkdf2Sync       timer waited until the work finished
+pbkdf2 (async)   timer fired while the work was running
+busy loop        timer waited until the work finished
+```
+<p><code>pbkdf2Sync</code> ולולאת החישוב תופסים את ה־thread היחיד של JavaScript — שום timer, שום בקשת HTTP ושום health check לא ייענו עד שיסתיימו. ב־API עם 100 משתמשים, התחברות אחת "מקפיאה" את כולם. <code>pbkdf2</code> האסינכרוני עושה בדיוק את אותה עבודה — ב־thread אחר. עבודת CPU של JavaScript עצמו (הלולאה) — מעבירים ל־worker thread (E13).</p>
+
+@@ P28.5-E04 | 1 | שורות מול עמודות | 15 | שיעור 4
+@task
+<p>טבלת אירועים: מיליון שורות, 6 עמודות. שומרים אותה כ־CSV וכ־Parquet, ושואלים "כמה אירועים לכל סוג". נחש: פי כמה Parquet קטן? ומה DuckDB קורא מכל קובץ? הרץ:</p>
+@hint1
+<p>CSV שומר שורה אחרי שורה, כטקסט. Parquet שומר עמודה אחרי עמודה, בינארי ודחוס.</p>
+@hint2
+<p>עמודה עם 5 ערכים שחוזרים מיליון פעמים — כמה מקום היא צריכה, אם שומרים אותה ביחד?</p>
+@solution
+```ts run
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "e04-"));
+const db = await DuckDBInstance.create(":memory:");
+const c = await db.connect();
+await c.run(`CREATE TABLE events AS
+  SELECT range AS id,
+         ['view', 'click', 'add_to_cart', 'checkout', 'purchase'][1 + range % 5] AS type,
+         1 + (range * 7919) % 50000 AS user_id,
+         '/products/' || (range % 300) AS path,
+         TIMESTAMP '2026-10-01' + to_seconds(range * 3) AS ts,
+         (range * 31) % 1000 AS duration_ms
+  FROM range(1000000)`);
+await c.run(`COPY events TO '${dir}/events.csv' (HEADER)`);
+await c.run(`COPY events TO '${dir}/events.parquet' (FORMAT parquet)`);
+const mb = (f: string) => (fs.statSync(path.join(dir, f)).size / 1e6).toFixed(1) + " MB";
+console.log("csv:    ", mb("events.csv"));
+console.log("parquet:", mb("events.parquet"));
+
+const r = await c.runAndReadAll(`SELECT type, count(*)::INTEGER AS n FROM '${dir}/events.parquet' GROUP BY type ORDER BY type`);
+console.log(r.getRowObjects().map((x) => `${x.type}=${x.n}`).join(" "));
+c.closeSync();
+fs.rmSync(dir, { recursive: true });
+```
+```out
+csv:     58.4 MB
+parquet: 14.6 MB
+add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000
+```
+<p>הקובץ קטן פי כמה, ועוד יותר חשוב — מה נקרא: לשאילתה על <code>type</code>, DuckDB קורא מה־Parquet <strong>רק את העמודה type</strong> (ועמודה עם 5 ערכים שונים נדחסת כמעט לאפס — dictionary encoding). מה־CSV הוא חייב לקרוא ולפרש את כל הקובץ, כל העמודות, כטקסט. כך בדיוק עובדים BigQuery, Snowflake ו־Databricks — ולכן שם משלמים לפי <em>עמודות שנסרקו</em> (E05, E17).</p>
+
+@@ P28.5-E05 | 1 | כמה עולה שאילתה? | 15 | שיעור 4
+@task
+<p>במחסן נתונים עמודתי (כמו BigQuery במצב on-demand) משלמים לפי בתים שנסרקו. טבלה <code>events</code>: 2TB, 20 עמודות, מחולקת (partitioned) לפי יום — שנה של נתונים. עמודת <code>user_id</code> תופסת כ־5% מהגודל. כמה בתים תסרוק כל שאילתה, בערך?</p>
+<ol><li><code>SELECT * FROM events LIMIT 10</code></li><li><code>SELECT user_id FROM events</code></li><li><code>SELECT user_id FROM events WHERE day = '2026-11-01'</code></li><li><code>SELECT user_id FROM events WHERE DATE(ts) = '2026-11-01'</code> — כש־<code>day</code> היא עמודת ה־partition, ו־<code>ts</code> עמודה אחרת.</li></ol>
+@hint1
+<p>LIMIT מקטין את מה שמוחזר — לא את מה שנסרק.</p>
+@hint2
+<p>partition pruning עובד רק כשה־WHERE על עמודת ה־partition עצמה, בצורה שהמנוע מזהה.</p>
+@solution
+<ol><li><strong>2TB.</strong> כל העמודות, כל השורות — ה־LIMIT מופעל אחרי הסריקה. (בקונסולה של BigQuery יש "preview" חינמי בדיוק בשביל זה.)</li><li><strong>~100GB</strong> — עמודה אחת, כל השנה.</li><li><strong>~270MB</strong> — עמודה אחת, יום אחד (100GB / 365).</li><li><strong>~100GB</strong> — המנוע לא יודע שיום ב־<code>ts</code> שווה ל־<code>day</code>, אז אין pruning. אותה תוצאה, פי 365 בעלות.</li></ol>
+<p>כללי אצבע: לא <code>SELECT *</code>; תמיד WHERE על עמודת ה־partition; ו־clustering (מיון לפי עמודה שמסננים עליה הרבה, כמו <code>customer_id</code>) מקטין עוד. E17 מחשב את זה בקוד.</p>
+
+@@ P28.5-E06 | 2 | percentiles 🤖 | 15 | שיעור 1
+@task
+<p>ב־<code>28w-scale/starter/P28.5-E06.ts</code>:</p>
+<ul><li><code>percentile(sorted, p)</code> — nearest-rank: האיבר במקום <code>ceil(p/100 × n)</code> (ספירה מ־1) במערך ממוין. מערך ריק, או p מחוץ ל־(0, 100] — שגיאה.</li><li><code>summarize(samples)</code> ← <code>{ count, min, max, mean, p50, p95, p99 }</code> (mean מעוגל ל־2 ספרות). בלי לשנות את המערך שקיבלה.</li></ul>
+@hint1
+<p><code>[...samples].sort((a, b) =&gt; a - b)</code> — עותק, ומיון מספרי.</p>
+@hint2
+<p>p99 של 100 דגימות = האיבר ה־99 = אינדקס 98.</p>
+@solution
+```ts save=solutions/P28.5-E06.ts
+// P28.5-E06: percentiles — לא ממוצע
+export function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) throw new Error("אין דגימות");
+  if (!(p > 0 && p <= 100)) throw new Error("p בין 0 (לא כולל) ל־100");
+  const rank = Math.ceil((p / 100) * sorted.length); // nearest-rank: 1..n
+  return sorted[rank - 1];
+}
+
+export interface Summary {
+  count: number;
+  min: number;
+  max: number;
+  mean: number;
+  p50: number;
+  p95: number;
+  p99: number;
+}
+
+export function summarize(samples: number[]): Summary {
+  const s = [...samples].sort((a, b) => a - b); // עותק, ומיון מספרי
+  const mean = s.reduce((a, b) => a + b, 0) / s.length;
+  return {
+    count: s.length,
+    min: s[0],
+    max: s[s.length - 1],
+    mean: Math.round(mean * 100) / 100,
+    p50: percentile(s, 50),
+    p95: percentile(s, 95),
+    p99: percentile(s, 99),
+  };
+}
+```
+@mistakes
+<ul><li><code>samples.sort()</code> בלי פונקציה — ממיין כמחרוזות: <code>[100, 9, 25]</code> ← <code>[100, 25, 9]</code>. וגם משנה את המערך של מי שקרא לך.</li></ul>
+
+@@ P28.5-E07 | 2 | histogram שמתאחד 🤖 | 25 | שיעור 1
+@task
+<p>לשמור כל זמן תגובה — מיליוני מספרים בשעה, לכל שרת. מה שכלי ניטור (Prometheus, Datadog) עושים: <strong>histogram</strong> — דליים, ובכל אחד מונה. ב־<code>P28.5-E07.ts</code>, דליים לוגריתמיים: הגבול העליון של דלי i הוא <code>1.1^i</code> ms (דלי 0 — עד 1ms):</p>
+<ul><li><code>record(h, ms)</code> — מוסיף 1 לדלי הנכון (הקטן ביותר שהגבול שלו ≥ ms). ערך שלילי או NaN — שגיאה.</li><li><code>merge(...hs)</code> — histogram חדש, סכום של כולם (בלי לשנות אותם).</li><li><code>histPercentile(h, p)</code> — הגבול העליון של הדלי שבו המצטבר מגיע ל־<code>ceil(p/100 × total)</code> (מעוגל ל־2 ספרות).</li></ul>
+@hint1
+<p>הדלי של ms &gt; 1: <code>Math.ceil(Math.log(ms) / Math.log(1.1))</code>. (חשבון בנקודה צפה: <code>Math.log(1.1 ** 5) / Math.log(1.1)</code> יכול לצאת 5.0000000001 — הורד epsilon קטן לפני ceil.)</p>
+@hint2
+<p>שגיאה מקסימלית: 10% — כי כל דלי רחב ב־10% מהקודם.</p>
+@solution
+```ts save=solutions/P28.5-E07.ts
+// P28.5-E07: histogram שאפשר לאחד בין שרתים
+// דליים לוגריתמיים: הגבול העליון של דלי i הוא 1.1^i מילישניות — שגיאה של עד 10%, בכל טווח
+const GROWTH = 1.1;
+
+export interface Histogram {
+  counts: number[];
+  total: number;
+}
+
+export const createHistogram = (): Histogram => ({ counts: [], total: 0 });
+
+export const bucketOf = (ms: number): number => (ms <= 1 ? 0 : Math.ceil(Math.log(ms) / Math.log(GROWTH) - 1e-9));
+export const upperBound = (i: number): number => GROWTH ** i;
+
+export function record(h: Histogram, ms: number): void {
+  if (!(ms >= 0)) throw new Error(`זמן לא תקין: ${ms}`);
+  const i = bucketOf(ms);
+  h.counts[i] = (h.counts[i] ?? 0) + 1;
+  h.total++;
+}
+
+export function merge(...hs: Histogram[]): Histogram {
+  const out = createHistogram();
+  for (const h of hs) {
+    h.counts.forEach((c, i) => {
+      if (c) out.counts[i] = (out.counts[i] ?? 0) + c;
+    });
+    out.total += h.total;
+  }
+  return out;
+}
+
+export function histPercentile(h: Histogram, p: number): number {
+  if (h.total === 0) throw new Error("histogram ריק");
+  const rank = Math.ceil((p / 100) * h.total);
+  let seen = 0;
+  for (let i = 0; i < h.counts.length; i++) {
+    seen += h.counts[i] ?? 0;
+    if (seen >= rank) return Math.round(upperBound(i) * 100) / 100;
+  }
+  throw new Error("לא אמור לקרות");
+}
+```
+<p>למה זה חשוב: <strong>אי אפשר לחשב ממוצע של p99</strong>. שרת אחד מהיר (p99 = 20ms) ושרת אחד עמוס (p99 = 1000ms) — הממוצע 510ms לא מתאר אף אחד, וגם לא את p99 של המערכת. histograms מתאחדים בחיבור פשוט, ומהאיחוד מחשבים percentile אמיתי. (E21 — הבאג הזה בפועל.)</p>
+
+@@ P28.5-E08 | 2 | מחולל עומס 🤖 | 25 | שיעור 1
+@task
+<p>ב־<code>P28.5-E08.ts</code>: <code>runLoad(request, { concurrency, total })</code> — מריץ <code>total</code> קריאות ל־<code>request</code>, כך שבכל רגע בדיוק <code>concurrency</code> בתהליך (או פחות, בסוף). שגיאה נספרת ולא עוצרת. מחזיר <code>{ total, errors, durationMs, rps, latency: { p50, p95, p99, max } }</code> (כולם מעוגלים לספרה אחת).</p>
+@hint1
+<p><code>concurrency</code> "עובדים": כל אחד בלולאה — לוקח את הבקשה הבאה, מחכה לה, וחוזר. <code>Promise.all</code> עליהם.</p>
+@hint2
+<p><code>performance.now()</code> לפני ואחרי כל בקשה.</p>
+@solution
+```ts save=solutions/P28.5-E08.ts
+// P28.5-E08: מחולל עומס קטן — concurrency קבוע, ו־percentiles של זמני תגובה
+import { performance } from "node:perf_hooks";
+
+export interface LoadResult {
+  total: number;
+  errors: number;
+  durationMs: number;
+  rps: number;
+  latency: { p50: number; p95: number; p99: number; max: number };
+}
+
+const pct = (s: number[], p: number) => s[Math.max(0, Math.ceil((p / 100) * s.length) - 1)];
+
+export async function runLoad(request: () => Promise<unknown>, { concurrency, total }: { concurrency: number; total: number }): Promise<LoadResult> {
+  const latencies: number[] = [];
+  let errors = 0;
+  let next = 0;
+  const started = performance.now();
+  // concurrency "עובדים", כל אחד שולח בקשה, מחכה לתשובה, ושולח את הבאה — כמו concurrency משתמשים
+  async function worker() {
+    while (next < total) {
+      next++;
+      const t0 = performance.now();
+      try {
+        await request();
+      } catch {
+        errors++;
+      }
+      latencies.push(performance.now() - t0);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, total) }, worker));
+  const durationMs = performance.now() - started;
+  latencies.sort((a, b) => a - b);
+  const r = (x: number) => Math.round(x * 10) / 10;
+  return {
+    total,
+    errors,
+    durationMs: r(durationMs),
+    rps: r((total / durationMs) * 1000),
+    latency: { p50: r(pct(latencies, 50)), p95: r(pct(latencies, 95)), p99: r(pct(latencies, 99)), max: r(latencies.at(-1)!) },
+  };
+}
+```
+<p>זה "closed model" — כמו N משתמשים שכל אחד מחכה לתשובה לפני הבקשה הבאה. כלים אמיתיים: <strong>autocannon</strong> (Node), <strong>k6</strong>, <strong>wrk</strong>. ושימו לב: ב־closed model, שרת שמאט גם מאט את הבדיקה — מספר הבקשות יורד, וזה מסתיר את הבעיה. כלים כמו k6 מציעים גם "open model": קצב הגעה קבוע, לא משנה כמה השרת איטי.</p>
+```bash
+npx autocannon -c 50 -d 20 http://localhost:3000/products   # 50 חיבורים, 20 שניות
+```
+
+@@ P28.5-E09 | 2 | חוק Little ותכנון קיבולת 🤖 | 15 | שיעור 1
+@task
+<p>ב־<code>P28.5-E09.ts</code>:</p>
+<ul><li><code>inFlight(rps, latencyMs)</code> — כמה בקשות בתהליך בממוצע: <code>rps × latency</code> (בשניות).</li><li><code>instancesNeeded({ peakRps, latencyMs, perInstance, headroom = 0.3, min = 2 })</code> — כל instance מחזיק <code>perInstance</code> בקשות במקביל, אבל מתכננים ל־<code>(1 − headroom)</code> מזה. לפחות <code>min</code>. headroom מחוץ ל־[0, 1) — שגיאה.</li><li><code>checkDbConnections({ instances, poolPerInstance, maxConnections, reserved = 10 })</code> ← <code>{ needed, available, ok, maxPoolPerInstance }</code>.</li></ul>
+@hint1
+<p>2,000 rps × 0.15s = 300 בקשות בו־זמנית.</p>
+@hint2
+<p><code>Math.ceil</code> — חצי instance לא קיים.</p>
+@solution
+```ts save=solutions/P28.5-E09.ts
+// P28.5-E09: תכנון קיבולת עם חוק Little
+// L = λ × W : כמה בקשות "בתוך המערכת" בממוצע = קצב הגעה × זמן שהייה
+export const inFlight = (rps: number, latencyMs: number): number => (rps * latencyMs) / 1000;
+
+export function instancesNeeded({ peakRps, latencyMs, perInstance, headroom = 0.3, min = 2 }: { peakRps: number; latencyMs: number; perInstance: number; headroom?: number; min?: number }): number {
+  if (!(headroom >= 0 && headroom < 1)) throw new Error("headroom בין 0 ל־1");
+  const usable = perInstance * (1 - headroom); // לא מתכננים ל־100% — שם ה־latency מתפוצץ
+  return Math.max(min, Math.ceil(inFlight(peakRps, latencyMs) / usable));
+}
+
+// כמה חיבורים למסד כל instance מחזיק, ואם כולם יחד חורגים מה־max_connections
+export function checkDbConnections({ instances, poolPerInstance, maxConnections, reserved = 10 }: { instances: number; poolPerInstance: number; maxConnections: number; reserved?: number }) {
+  const needed = instances * poolPerInstance;
+  const available = maxConnections - reserved; // לאדמין, migrations, monitoring
+  return { needed, available, ok: needed <= available, maxPoolPerInstance: Math.floor(available / instances) };
+}
+```
+<p>השורה האחרונה היא תקלה אמיתית ונפוצה: autoscaling מוסיף instances ← כל אחד פותח pool של 20 ← PostgreSQL מגיע ל־<code>max_connections</code> ← <code>too many clients</code>, דווקא בשיא. הפתרונות: pool קטן לכל instance, ו־connection pooler (PgBouncer, RDS Proxy) באמצע.</p>
+
+@@ P28.5-E10 | 2 | פירוק NDJSON בזרם 🤖 | 25 | שיעור 3
+@task
+<p>NDJSON — אובייקט JSON בכל שורה — הוא הפורמט הנפוץ ללוגים, exports ואירועים. ב־<code>P28.5-E10.ts</code>: <code>ndjsonParser()</code> — Transform שמקבל בתים ופולט אובייקטים, ועובד גם כש־chunk נחתך באמצע שורה <strong>ובאמצע תו</strong> (עברית: 2 בתים לאות). שורות ריקות — מדלג; <code>\r\n</code> — תקין; שורה אחרונה בלי <code>\n</code> — נפלטת; JSON פגום ← שגיאה עם מספר השורה.</p>
+@hint1
+<p><code>StringDecoder</code> שומר בתים של תו שלא נגמר עד ה־chunk הבא. <code>chunk.toString()</code> — לא.</p>
+@hint2
+<p>buffer של טקסט: מוסיפים, מפצלים ב־<code>\n</code>, והחלק האחרון חוזר ל־buffer. ב־<code>flush</code> — מה שנשאר.</p>
+@solution
+```ts save=solutions/P28.5-E10.ts
+// P28.5-E10: Transform שמפרק NDJSON לאובייקטים — גם כש־chunk נחתך באמצע שורה, ובאמצע תו
+import { Transform, type TransformCallback } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
+
+export function ndjsonParser(): Transform {
+  const decoder = new StringDecoder("utf8"); // מחזיק בתים של תו שנחתך עד שה־chunk הבא משלים אותו
+  let buffer = "";
+  let lineNo = 0;
+  function pushLine(this: Transform, line: string): Error | null {
+    lineNo++;
+    if (line.trim() === "") return null;
+    try {
+      this.push(JSON.parse(line));
+      return null;
+    } catch {
+      return new Error(`שורה ${lineNo}: JSON לא תקין`);
+    }
+  }
+  return new Transform({
+    readableObjectMode: true,
+    transform(chunk: Buffer, _enc, cb: TransformCallback) {
+      buffer += decoder.write(chunk);
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!; // השורה האחרונה אולי עוד לא הסתיימה
+      for (const l of lines) {
+        const err = pushLine.call(this, l.replace(/\r$/, ""));
+        if (err) return cb(err);
+      }
+      cb();
+    },
+    flush(cb: TransformCallback) {
+      buffer += decoder.end();
+      cb(pushLine.call(this, buffer.replace(/\r$/, "")) ?? undefined); // שורה אחרונה בלי \n
+    },
+  });
+}
+```
+@mistakes
+<ul><li><code>chunk.toString().split("\n")</code> לכל chunk — עובד בבדיקה עם קובץ קטן (chunk אחד), ונשבר בפרודקשן על קובץ של 1GB: שורות חתוכות, ו־<code>�</code> במקום אותיות (E20).</li></ul>
+
+@@ P28.5-E11 | 2 | אגרגציה על קובץ ענק 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P28.5-E11.ts</code>: <code>dailyRevenue(input)</code> — קורא NDJSON של הזמנות (<code>{ createdAt, quantity, priceCents, status? }</code>) שורה אחרי שורה, ומחזיר לכל יום <strong>בשעון ישראל</strong> <code>{ orders, revenueCents }</code>. הזמנות מבוטלות לא נספרות. הבודק שולח 300,000 שורות בחתיכות.</p>
+@hint1
+<p><code>for await (const line of createInterface({ input, crlfDelay: Infinity }))</code>.</p>
+@hint2
+<p>יום בשעון ישראל: <code>new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" })</code> ← <code>"2026-10-31"</code> (פרק 24).</p>
+@solution
+```ts save=solutions/P28.5-E11.ts
+// P28.5-E11: אגרגציה על קובץ ענק — שורה אחרי שורה, בזיכרון קבוע
+import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
+
+export interface DayTotals {
+  orders: number;
+  revenueCents: number;
+}
+
+const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" });
+export const israelDay = (iso: string) => dayFmt.format(new Date(iso)); // "2026-10-31"
+
+export async function dailyRevenue(input: Readable): Promise<Record<string, DayTotals>> {
+  const totals: Record<string, DayTotals> = {};
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    const o = JSON.parse(line) as { createdAt: string; quantity: number; priceCents: number; status?: string };
+    if (o.status === "cancelled") continue;
+    const day = israelDay(o.createdAt);
+    const t = (totals[day] ??= { orders: 0, revenueCents: 0 });
+    t.orders++;
+    t.revenueCents += o.quantity * o.priceCents;
+  }
+  return totals;
+}
+```
+<p>הזיכרון כאן קבוע: שורה אחת בכל רגע, ומפה של ~30 ימים. אותו קוד יעבוד על 300 אלף שורות ועל 300 מיליון. ההפך — <code>(await fs.readFile(f, "utf8")).split("\n")</code> — טוען את כל הקובץ לזיכרון (ומחרוזת ב־V8 מוגבלת בכל מקרה לכחצי מיליארד תווים).</p>
+
+@@ P28.5-E12 | 2 | הכנסה מרוכזת 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P28.5-E12.ts</code>: <code>bulkInsertViews(pool, rows, { batchSize = 5000 })</code> מכניסה צפיות לטבלה <code>page_views</code> (<code>files/views.sql</code>) — שאילתה אחת לכל batch, עם <code>unnest</code> של ארבעה מערכים; id שכבר קיים — מדלגים. מחזירה כמה נכנסו בפועל.</p>
+@hint1
+<p><code>INSERT … SELECT * FROM unnest($1::text[], $2::int[], $3::text[], $4::timestamptz[]) ON CONFLICT (id) DO NOTHING</code>.</p>
+@hint2
+<p><code>rowCount</code> — כמה שורות נכנסו (בלי אלה שדולגו).</p>
+@solution
+```ts save=solutions/P28.5-E12.ts
+// P28.5-E12: הכנסה של הרבה שורות — מעט round trips, עם unnest
+import type { Pool } from "pg";
+
+export interface PageView {
+  id: string;
+  userId: number;
+  path: string;
+  at: string;
+}
+
+export async function bulkInsertViews(pool: Pool, rows: PageView[], { batchSize = 5000 } = {}): Promise<number> {
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const b = rows.slice(i, i + batchSize);
+    // ארבעה מערכים — ארבעה פרמטרים, לא 4 × 5000 (ל־PostgreSQL יש תקרה של 65,535 פרמטרים בשאילתה)
+    const res = await pool.query(
+      `INSERT INTO page_views (id, user_id, path, viewed_at)
+       SELECT * FROM unnest($1::text[], $2::int[], $3::text[], $4::timestamptz[])
+       ON CONFLICT (id) DO NOTHING`,
+      [b.map((r) => r.id), b.map((r) => r.userId), b.map((r) => r.path), b.map((r) => r.at)],
+    );
+    inserted += res.rowCount ?? 0;
+  }
+  return inserted;
+}
+```
+<p>למה לא <code>VALUES ($1,$2,$3,$4), ($5,…)</code>? אפשר — אבל 5,000 שורות × 4 = 20,000 פרמטרים, ו־PostgreSQL מגביל ל־65,535 בשאילתה. עם unnest — תמיד 4. ולמיליוני שורות: <code>COPY … FROM STDIN</code> (החבילה <code>pg-copy-streams</code>), המהיר מכולם.</p>
+
+@@ P28.5-E13 | 3 | worker threads 🤖 | 25 | שיעור 2
+@task
+<p>ב־<code>P28.5-E13.ts</code>: <code>countPrimesParallel(limit, { threads, chunks })</code> — סופרת ראשוניים מתחת ל־limit, כשהעבודה מחולקת ל־<code>chunks</code> טווחים, ו־<code>threads</code> workers לוקחים טווח אחרי טווח. הקוד של ה־worker (<code>WORKER_CODE</code>) מוכן: מקבל <code>[from, to]</code> ומחזיר מספר. בסוף — לסגור את כל ה־workers. הבודק מוודא שה־event loop ממשיך לרוץ בזמן החישוב.</p>
+@hint1
+<p><code>new Worker(WORKER_CODE, { eval: true })</code>, <code>worker.postMessage([from, to])</code>, <code>worker.on("message", …)</code>.</p>
+@hint2
+<p>תור משותף של טווחים: כל worker שמסיים — מקבל את הבא. Promise לכל worker שמסתיים כשהתור ריק.</p>
+@solution
+```ts save=solutions/P28.5-E13.ts
+// P28.5-E13: עבודת CPU ב־worker threads — כדי שה־event loop ימשיך לענות
+import { Worker } from "node:worker_threads";
+
+// הקוד שרץ בכל worker (מוכן): מקבל [from, to] ומחזיר כמה ראשוניים יש בטווח
+export const WORKER_CODE = `
+const { parentPort } = require("node:worker_threads");
+parentPort.on("message", ([from, to]) => {
+  let count = 0;
+  for (let n = Math.max(2, from); n < to; n++) {
+    let prime = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
+    if (prime) count++;
+  }
+  parentPort.postMessage(count);
+});`;
+
+export async function countPrimesParallel(limit: number, { threads = 4, chunks = 16 } = {}): Promise<number> {
+  const size = Math.ceil(limit / chunks);
+  const ranges: [number, number][] = Array.from({ length: chunks }, (_, i) => [i * size, Math.min(limit, (i + 1) * size)]);
+  let next = 0;
+  let total = 0;
+  const workers = Array.from({ length: Math.min(threads, ranges.length) }, () => new Worker(WORKER_CODE, { eval: true }));
+  try {
+    // כל worker לוקח את הטווח הבא כשהוא מסיים — כך אף אחד לא יושב בטל
+    await Promise.all(
+      workers.map(
+        (w) =>
+          new Promise<void>((resolve, reject) => {
+            const giveNext = () => {
+              if (next >= ranges.length) return resolve();
+              w.postMessage(ranges[next++]);
+            };
+            w.on("message", (count: number) => {
+              total += count;
+              giveNext();
+            });
+            w.on("error", reject);
+            giveNext();
+          }),
+      ),
+    );
+  } finally {
+    await Promise.all(workers.map((w) => w.terminate()));
+  }
+  return total;
+}
+```
+<p>worker threads הם לא "async": כל worker הוא thread נוסף עם V8 משלו (כ־10MB זיכרון, ועשרות ms לעלות). לכן — pool קבוע, לא worker לכל בקשה (בפרודקשן: <code>piscina</code>). ולעבודה ש־Node כבר מריץ ב־thread pool (crypto, zlib, fs) — מספיקה הגרסה האסינכרונית (E03, E23).</p>
+
+@@ P28.5-E14 | 3 | מוניטור ל־event loop 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P28.5-E14.ts</code>: <code>startLagMonitor({ thresholdMs, intervalMs, onLag })</code> — מודד את העיכוב של ה־event loop עם <code>monitorEventLoopDelay</code>; כל <code>intervalMs</code>: אם ה־max בחלון ≥ threshold — <code>onLag({ p99Ms, maxMs })</code>, ומאפס. מחזירה <code>stop()</code>. ה־timer לא משאיר את התהליך חי.</p>
+@hint1
+<p>ה־histogram מודד בננו־שניות: <code>h.max / 1e6</code>.</p>
+@hint2
+<p><code>timer.unref()</code>.</p>
+@solution
+```ts save=solutions/P28.5-E14.ts
+// P28.5-E14: מוניטור ל־event loop — מתריע כשמשהו חוסם
+import { monitorEventLoopDelay } from "node:perf_hooks";
+
+export interface LagReport {
+  p99Ms: number;
+  maxMs: number;
+}
+
+export function startLagMonitor({ thresholdMs, intervalMs = 1000, onLag }: { thresholdMs: number; intervalMs?: number; onLag: (r: LagReport) => void }): () => void {
+  const h = monitorEventLoopDelay({ resolution: 10 });
+  h.enable();
+  const timer = setInterval(() => {
+    const report = { p99Ms: Math.round(h.percentile(99) / 1e6), maxMs: Math.round(h.max / 1e6) }; // ננו־שניות ← מילי
+    h.reset(); // כל חלון נמדד בנפרד
+    if (report.maxMs >= thresholdMs) onLag(report);
+  }, intervalMs);
+  timer.unref(); // מוניטור לא אמור להשאיר את התהליך חי
+  return () => {
+    clearInterval(timer);
+    h.disable();
+  };
+}
+```
+<p>בפרודקשן מייצאים את זה כמדד (<code>nodejs_eventloop_lag_seconds</code> ב־prom-client) ומתריעים עליו: p99 lag של 200ms אומר שכל בקשה בשרת הזה מחכה עד 200ms — לפני שהקוד שלה בכלל התחיל.</p>
+
+@@ P28.5-E15 | 3 | SQL אנליטי ב־DuckDB 🤖 | 20 | שיעור 4
+@task
+<p>ב־<code>P28.5-E15.sql</code>, על <code>orders</code> (60,000 הזמנות מ־<code>files/orders.parquet</code>): לכל קטגוריה — <code>category</code>, <code>orders</code> (כמה הזמנות), <code>units</code> (סכום כמויות), <code>revenue</code> (בשקלים, 2 ספרות), ו־<code>share_pct</code> (אחוז מכלל ההכנסות, ספרה אחת) — מההכנסה הגבוהה לנמוכה. (המחירים ב־<code>price_cents</code>, ליחידה.)</p>
+<p>(הבודק מריץ את הקובץ ב־DuckDB, עם <code>orders</code> כ־view על קובץ ה־Parquet. לנסות שאילתות בעצמך — סקריפט node קטן עם <code>@duckdb/node-api</code>, כמו בשיעור 4.)</p>
+@hint1
+<p>הכנסה של שורה: <code>quantity * price_cents</code>.</p>
+@hint2
+<p>אחוז מהסך הכולל — window function על האגרגציה: <code>sum(sum(x)) OVER ()</code>.</p>
+@solution
+```sql save=solutions/P28.5-E15.sql
+-- P28.5-E15: דוח קטגוריות על 60,000 הזמנות (orders = files/orders.parquet)
+SELECT
+  category,
+  count(*) AS orders,
+  sum(quantity) AS units,
+  round(sum(quantity * price_cents) / 100.0, 2) AS revenue,
+  round(100.0 * sum(quantity * price_cents) / sum(sum(quantity * price_cents)) OVER (), 1) AS share_pct
+FROM orders
+GROUP BY category
+ORDER BY revenue DESC;
+```
+
+@@ P28.5-E16 | 3 | Parquet מחולק לפי יום 🤖 | 20 | שיעור 4
+@task
+<p>ב־<code>P28.5-E16.ts</code>:</p>
+<ul><li><code>exportByDay(conn, sourceParquet, outDir)</code> — מעתיקה את כל ההזמנות ל־<code>outDir</code>, מחולקות לתיקייה לכל יום <strong>בשעון ישראל</strong>: <code>day=2026-10-01/…parquet</code> (hive partitioning).</li><li><code>ordersPerDay(conn, outDir)</code> — קוראת את כל החלקים ומחזירה מספר הזמנות לכל יום: <code>{ "2026-10-01": …, "2026-10-02": …, … }</code>.</li></ul>
+@hint1
+<p><code>COPY (SELECT …, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day FROM read_parquet(…)) TO 'dir' (FORMAT parquet, PARTITION_BY (day))</code>.</p>
+@hint2
+<p>קריאה: <code>read_parquet('dir/**/*.parquet', hive_partitioning = true)</code> — עמודת <code>day</code> חוזרת מתוך שמות התיקיות.</p>
+@solution
+```ts save=solutions/P28.5-E16.ts
+// P28.5-E16: ייצוא ל־Parquet מחולק לפי יום — כך שאילתה על יום אחד קוראת קובץ אחד
+import type { DuckDBConnection } from "@duckdb/node-api";
+
+const q = (s: string) => `'${s.replaceAll("'", "''")}'`; // מחרוזת SQL בטוחה (נתיבים)
+
+export async function exportByDay(conn: DuckDBConnection, sourceParquet: string, outDir: string): Promise<void> {
+  await conn.run(`
+    COPY (
+      SELECT *, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day
+      FROM read_parquet(${q(sourceParquet)})
+    ) TO ${q(outDir)} (FORMAT parquet, PARTITION_BY (day), OVERWRITE_OR_IGNORE)`);
+}
+
+export async function ordersPerDay(conn: DuckDBConnection, outDir: string): Promise<Record<string, number>> {
+  const r = await conn.runAndReadAll(`
+    SELECT day::VARCHAR AS day, count(*)::INTEGER AS n
+    FROM read_parquet(${q(outDir + "/**/*.parquet")}, hive_partitioning = true)
+    GROUP BY day ORDER BY day`);
+  return Object.fromEntries(r.getRowObjects().map((x) => [String(x.day), Number(x.n)]));
+}
+```
+<p>זו בדיוק הצורה של data lake על S3 (יחידה 25.5): <code>s3://lake/orders/day=2026-10-01/part-0.parquet</code>. שאילתה עם <code>WHERE day = '2026-10-15'</code> קוראת תיקייה אחת מתוך 32 — partition pruning, כמו ב־BigQuery (E05).</p>
+
+@@ P28.5-E17 | 3 | הערכת עלות סריקה 🤖 | 20 | שיעור 4
+@task
+<p>ב־<code>P28.5-E17.ts</code>: <code>estimateScan(table, query, { pricePerTiB = 6.25 })</code> ← <code>{ bytes, costUsd }</code>. עמודתי: נסרקות רק העמודות שבשאילתה (<code>"*"</code> = כולן; עמודה לא קיימת — שגיאה). partition pruning: אם הטבלה מחולקת (<code>partitionedBy</code> + <code>days</code>) והשאילתה מסננת <code>days</code> — רק החלק הזה. LIMIT לא משנה כלום. bytes מעוגל לשלם; עלות — ל־2 ספרות (1TiB = 2<sup>40</sup> בתים).</p>
+@hint1
+<p><code>rows × (days/totalDays) × Σ bytes של העמודות</code>.</p>
+@hint2
+<p>טבלה בלי partitions + <code>days</code> בשאילתה ← אין pruning.</p>
+@solution
+```ts save=solutions/P28.5-E17.ts
+// P28.5-E17: כמה בתים שאילתה סורקת במחסן נתונים עמודתי — וכמה זה עולה
+export interface TableStats {
+  rows: number;
+  columns: Record<string, number>; // ממוצע בתים לערך, לכל עמודה
+  partitionedBy?: string; // עמודת תאריך
+  days?: number; // כמה ימים יש בטבלה (פרטישן לכל יום)
+}
+
+export interface QueryShape {
+  columns: string[] | "*";
+  days?: number; // WHERE על עמודת ה־partition: כמה ימים נבחרו
+  limit?: number; // לא משנה את הסריקה!
+}
+
+const TiB = 2 ** 40;
+
+export function estimateScan(t: TableStats, q: QueryShape, { pricePerTiB = 6.25 } = {}) {
+  const cols = q.columns === "*" ? Object.keys(t.columns) : q.columns;
+  for (const c of cols) if (!(c in t.columns)) throw new Error(`עמודה לא קיימת: ${c}`);
+  const bytesPerRow = cols.reduce((s, c) => s + t.columns[c], 0); // עמודתי: רק העמודות שנבחרו
+  const fraction = t.partitionedBy && t.days && q.days !== undefined ? Math.min(1, q.days / t.days) : 1; // partition pruning
+  const bytes = Math.round(t.rows * fraction * bytesPerRow);
+  return { bytes, costUsd: Math.round((bytes / TiB) * pricePerTiB * 100) / 100 };
+}
+```
+<p>(המחיר כאן — פרמטר. מחירים של שירותי ענן משתנים; בעבודה — מהדף הרשמי, ובדרך כלל דרך "dry run" שמחזיר את מספר הבתים לפני שמריצים.)</p>
+
+@@ P28.5-E18 | 3 | HyperLogLog 🤖 | 30 | שיעור 4
+@task
+<p>"כמה משתמשים ייחודיים?" על מיליארד צפיות — Set של מיליוני מחרוזות לא נכנס בזיכרון, ובטח לא ב־Redis לכל מוצר. HyperLogLog מעריך את המספר בטעות של ~1.6%, ב־4KB. ב־<code>P28.5-E18.ts</code> (hash32 מוכן), עם <code>m = 2^p</code> רגיסטרים:</p>
+<ul><li><code>add(h, value)</code> — hash של 32 ביט; p הביטים העליונים בוחרים רגיסטר; ברגיסטר נשמר המקסימום של <code>ρ</code> — המיקום של ה־1 הראשון בשאר הביטים (משמאל, מ־1; כולם אפס ← <code>32 − p + 1</code>).</li><li><code>count(h)</code> — <code>E = α·m² / Σ 2^(−M[j])</code>, עם <code>α = 0.7213 / (1 + 1.079/m)</code>; ואם <code>E ≤ 2.5m</code> ויש רגיסטרים ריקים (V) — <code>m · ln(m/V)</code> (linear counting). מעוגל.</li><li><code>mergeHLL(a, b)</code> — מקסימום לכל רגיסטר.</li></ul>
+@hint1
+<p><code>idx = x &gt;&gt;&gt; (32 − p)</code>; <code>w = (x &lt;&lt; p) &gt;&gt;&gt; 0</code>; <code>ρ = Math.clz32(w) + 1</code>.</p>
+@hint2
+<p>האינטואיציה: אם ראית hash שמתחיל ב־10 אפסים, כנראה ראית בסביבות 2<sup>10</sup> ערכים שונים. m רגיסטרים — m ניסויים, וממוצע הרמוני שלהם.</p>
+@solution
+```ts save=solutions/P28.5-E18.ts
+// P28.5-E18: HyperLogLog — כמה ערכים שונים, ב־4KB זיכרון
+import { createHash } from "node:crypto";
+
+export interface HLL {
+  p: number;
+  registers: Uint8Array;
+}
+
+export const createHLL = (p = 12): HLL => ({ p, registers: new Uint8Array(1 << p) });
+
+export const hash32 = (value: string | number): number => createHash("sha1").update(String(value)).digest().readUInt32BE(0);
+
+export function add(h: HLL, value: string | number): void {
+  const x = hash32(value);
+  const idx = x >>> (32 - h.p); // p הביטים העליונים ← איזה רגיסטר
+  const w = (x << h.p) >>> 0; // השאר
+  const rho = w === 0 ? 32 - h.p + 1 : Math.clz32(w) + 1; // מיקום ה־1 הראשון
+  if (rho > h.registers[idx]) h.registers[idx] = rho;
+}
+
+export function count(h: HLL): number {
+  const m = h.registers.length;
+  let sum = 0;
+  let zeros = 0;
+  for (const r of h.registers) {
+    sum += 2 ** -r;
+    if (r === 0) zeros++;
+  }
+  const alpha = 0.7213 / (1 + 1.079 / m);
+  const e = (alpha * m * m) / sum;
+  if (e <= 2.5 * m && zeros > 0) return Math.round(m * Math.log(m / zeros)); // מעט ערכים: linear counting
+  return Math.round(e);
+}
+
+export function mergeHLL(a: HLL, b: HLL): HLL {
+  if (a.p !== b.p) throw new Error("p שונה");
+  const out = createHLL(a.p);
+  for (let i = 0; i < out.registers.length; i++) out.registers[i] = Math.max(a.registers[i], b.registers[i]);
+  return out;
+}
+```
+<p>זה מה שמאחורי <code>PFADD</code>/<code>PFCOUNT</code> ב־Redis, <code>APPROX_COUNT_DISTINCT</code> ב־BigQuery ו־<code>approx_count_distinct</code> ב־DuckDB ו־Spark. ו־merge הוא הקסם: HLL לכל יום ← איחוד ← ייחודיים לחודש, בלי לספור מחדש.</p>
+
+@@ P28.5-E19 | 3 | reservoir sampling 🤖 | 15 | שיעור 3
+@task
+<p>"תן לי 1,000 שורות אקראיות מהלוג של היום" — והלוג הוא זרם של מיליונים שלא יודעים את אורכו. ב־<code>P28.5-E19.ts</code>: <code>reservoirSample(items, k, random?)</code> — עובר פעם אחת (גם על async iterable), ומחזיר k פריטים כך שלכל פריט אותו סיכוי. פחות מ־k ← כולם. k לא חיובי שלם ← שגיאה.</p>
+@hint1
+<p>k הראשונים נכנסים. הפריט ה־n (n &gt; k): מגרילים j בין 0 ל־n−1; אם j &lt; k — מחליף את sample[j].</p>
+@hint2
+<p><code>for await (const x of items)</code> עובד גם על iterable רגיל.</p>
+@solution
+```ts save=solutions/P28.5-E19.ts
+// P28.5-E19: reservoir sampling — דגימה אחידה מזרם שלא יודעים את אורכו
+export async function reservoirSample<T>(items: Iterable<T> | AsyncIterable<T>, k: number, random: () => number = Math.random): Promise<T[]> {
+  if (!Number.isInteger(k) || k < 1) throw new Error("k חייב להיות שלם חיובי");
+  const sample: T[] = [];
+  let seen = 0;
+  for await (const item of items) {
+    seen++;
+    if (sample.length < k) sample.push(item);
+    else {
+      const j = Math.floor(random() * seen); // 0..seen-1
+      if (j < k) sample[j] = item; // הסיכוי של הפריט ה־n להיכנס: k/n
+    }
+  }
+  return sample;
+}
+```
+
+@@ P28.5-E20 | 4 | ייבוא שעובד רק בבדיקות — שלוש תקלות 🤖 | 20 | שיעור 3
+@task
+<p>ב־<code>P28.5-E20.ts</code>: הייבוא עבר את כל הבדיקות (קובץ של 20 שורות). בפרודקשן, על קובץ של 2GB: חלק מהשורות נכשלות ב־JSON.parse, בשמות של ערים מופיע <code>�</code>, השורה האחרונה של כל קובץ חסרה — והמסד קורס תחת אלפי INSERT במקביל. מצא ותקן.</p>
+@hint1
+<p>קובץ קטן מגיע כ־chunk אחד. קובץ גדול — בחתיכות של 64KB, שלא מתחשבות בשורות או בתווים.</p>
+@hint2
+<p><code>onEvent(…)</code> בלי <code>await</code> — כמה רצים במקביל?</p>
+@solution
+```ts save=solutions/P28.5-E20.ts
+// P28.5-E20: ייבוא אירועים מ־NDJSON — אחרי התיקון
+import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
+
+export async function importEvents(input: Readable, onEvent: (e: any) => Promise<void>): Promise<number> {
+  let count = 0;
+  // תיקון 1+2: readline מחבר שורות שנחתכו בין chunks (וגם תו עברי שנחתך), ומחזיר גם שורה אחרונה בלי \n
+  for await (const line of createInterface({ input, crlfDelay: Infinity })) {
+    if (!line.trim()) continue;
+    await onEvent(JSON.parse(line)); // תיקון 3: מחכים — backpressure, ושגיאה עולה למעלה
+    count++;
+  }
+  return count;
+}
+```
+
+@@ P28.5-E21 | 4 | דשבורד latency — שלוש תקלות 🤖 | 15 | שיעור 1
+@task
+<p>ב־<code>P28.5-E21.ts</code>: הדשבורד מציג p99 של 1,005ms, אבל רק שרת אחד מתוך שניים איטי ורוב הבקשות מהירות. בבדיקה ידנית על מערך קטן — ה־p99 הוא בכלל לא הערך הנכון, ולפעמים ה־p50 גדול מה־p99. מצא ותקן.</p>
+@hint1
+<p><code>[100, 9, 25].sort()</code>?</p>
+@hint2
+<p>אפשר לחשב ממוצע של percentiles?</p>
+@solution
+```ts save=solutions/P28.5-E21.ts
+// P28.5-E21: דוח latency מכמה שרתים — אחרי התיקון
+export function latencyReport(perInstance: number[][]): { count: number; p50: number; p99: number } {
+  // תיקון 3: percentile של כל הדגימות יחד — לא ממוצע של ה־p99 של כל שרת
+  const all = perInstance.flat();
+  all.sort((a, b) => a - b); // תיקון 1: מיון מספרי (ברירת המחדל ממיינת כמחרוזות: 100 < 9)
+  // תיקון 2: nearest-rank — ceil(p × n), ואינדקס מ־0
+  const at = (p: number) => all[Math.ceil((p / 100) * all.length) - 1];
+  return { count: all.length, p50: at(50), p99: at(99) };
+}
+```
+
+@@ P28.5-E22 | 4 | דוח יומי — שלוש תקלות 🤖 | 15 | שיעור 4
+@task
+<p>ב־<code>P28.5-E22.sql</code>: דוח "לקוחות פעילים והכנסה לכל יום" להזמנות מישראל. צוות השיווק מתלונן: הזמנות של אחרי חצות מופיעות ביום הקודם; "לקוחות פעילים" גבוה מדי (לקוח עם 3 הזמנות נספר 3 פעמים); וההכנסה נמוכה מהדוח של הנהלת החשבונות. מצא ותקן.</p>
+@hint1
+<p><code>created_at::DATE</code> — באיזה אזור זמן?</p>
+@hint2
+<p><code>price_cents</code> הוא מחיר ליחידה.</p>
+@solution
+```sql save=solutions/P28.5-E22.sql
+-- P28.5-E22: לקוחות פעילים והכנסה לכל יום (בשעון ישראל) — אחרי התיקון
+SELECT
+  strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day, -- תיקון 1: יום בישראל, לא UTC
+  count(DISTINCT customer_id) AS active_customers,                      -- תיקון 2: לקוחות שונים, לא הזמנות
+  round(sum(quantity * price_cents) / 100.0, 2) AS revenue               -- תיקון 3: כמות × מחיר
+FROM orders
+WHERE country = 'IL'
+GROUP BY day
+ORDER BY day
+LIMIT 10;
+```
+
+@@ P28.5-E23 | 4 | שרת שנתקע — שלוש תקלות 🤖 | 20 | שיעור 2
+@task
+<p>ב־<code>P28.5-E23.ts</code>: כשמישהו מתחבר, מייצא דוח או קורא ל־<code>/slow</code> — כל השרת מפסיק לענות, כולל <code>/health</code> (ו־Kubernetes מתחיל להפעיל אותו מחדש). מצא ותקן שלוש תקלות, בלי לשנות מה כל endpoint מחזיר.</p>
+@hint1
+<p>כל פונקציה שנגמרת ב־<code>Sync</code> רצה על ה־event loop.</p>
+@hint2
+<p><code>import { setTimeout as sleep } from "node:timers/promises"</code>.</p>
+@solution
+```ts save=solutions/P28.5-E23.ts
+// P28.5-E23: שרת שה־event loop שלו פנוי — אחרי התיקון
+import http from "node:http";
+import { pbkdf2 } from "node:crypto";
+import { gzip } from "node:zlib";
+import { promisify } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const pbkdf2Async = promisify(pbkdf2);
+const gzipAsync = promisify(gzip);
+const SALT = "coffee-salt";
+const EXPORT = Buffer.from(JSON.stringify(Array.from({ length: 200_000 }, (_, i) => ({ id: i, name: `order-${i}`, total: i % 997 }))));
+
+export function createServer(): http.Server {
+  return http.createServer(async (req, res) => {
+    try {
+      if (req.url === "/health") return void res.end("ok");
+      if (req.url === "/login") {
+        // תיקון 1: pbkdf2 האסינכרוני רץ ב־thread pool של libuv, לא על ה־event loop
+        const hash = await pbkdf2Async("secret-password", SALT, 200_000, 32, "sha256");
+        return void res.end(hash.toString("hex").slice(0, 8));
+      }
+      if (req.url === "/export") {
+        const body = await gzipAsync(EXPORT); // תיקון 2: גם gzip — ב־thread pool
+        res.setHeader("content-encoding", "gzip");
+        return void res.end(body);
+      }
+      if (req.url === "/slow") {
+        await sleep(300); // תיקון 3: המתנה שלא חוסמת (במקום while על Date.now)
+        return void res.end("done");
+      }
+      res.statusCode = 404;
+      res.end();
+    } catch {
+      res.statusCode = 500;
+      res.end();
+    }
+  });
+}
+```
+<p>איך מוצאים את זה בפרודקשן: מוניטור lag (E14) מראה שה־event loop נחסם; ואז <code>node --cpu-prof</code> (או <code>clinic flame</code>) — פרופיל שמראה באיזו פונקציה ה־CPU בילה. <code>pbkdf2Sync</code> בראש ה־flame graph — וזהו.</p>
+
+@@ P28.5-E24 | 5 | אתגר: API אנליטיקה תחת עומס 🤖 | 60 | שיעור 5
+@task
+<p>ב־<code>P28.5-E24.ts</code>: <code>createAnalyticsServer({ parquetPath, cacheTtlMs, cacheSize, now })</code> מחזירה <code>http.Server</code> (הבודק קורא ל־<code>listen</code>):</p>
+<ul><li><code>GET /revenue?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code> ← <code>{ from, to, days: [{ day, orders, revenue }], total: { orders, revenue } }</code> — ימים בשעון ישראל, כולל שני הקצוות; revenue בשקלים (2 ספרות). תאריך לא תקין, from אחרי to, או טווח של יותר מ־92 ימים ← 400.</li><li><code>GET /top-products?day=…&amp;limit=…</code> ← <code>[{ product, units, revenue }]</code>, מההכנסה הגבוהה; limit 1–20, ברירת מחדל 5.</li><li>cache: LRU של <code>cacheSize</code> תשובות ל־<code>cacheTtlMs</code>, עם header <code>X-Cache: HIT</code>/<code>MISS</code>. ה־<code>now</code> מוזרק — הבודק מזיז אותו.</li><li>תחת עומס (300 בקשות, 10 במקביל) — p95 מתחת ל־50ms.</li></ul>
+@hint1
+<p>DuckDB בתוך התהליך: בעלייה — <code>CREATE TABLE orders AS SELECT *, &lt;day בישראל&gt; AS day FROM read_parquet($1)</code>. מחשבים את היום פעם אחת, לא בכל שאילתה.</p>
+@hint2
+<p>פרמטרים (<code>$1</code>, <code>$2</code>) — לא שרשור של ה־query string ל־SQL. LRU פשוט: <code>Map</code> שומר סדר הכנסה; מחיקה והכנסה מחדש = "הכי חדש".</p>
+@solution
+```ts save=solutions/P28.5-E24.ts
+// P28.5-E24: API אנליטיקה מעל Parquet — DuckDB בתוך התהליך, cache, ו־p95 נמוך תחת עומס
+import http from "node:http";
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (s: string | null): s is string => !!s && DAY.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+const daysBetween = (a: string, b: string) => (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000;
+
+class TtlLru<V> {
+  private map = new Map<string, { value: V; expires: number }>();
+  private max: number;
+  private ttlMs: number;
+  private now: () => number;
+  constructor(max: number, ttlMs: number, now: () => number) {
+    this.max = max;
+    this.ttlMs = ttlMs;
+    this.now = now;
+  }
+  get(k: string): V | undefined {
+    const e = this.map.get(k);
+    if (!e) return undefined;
+    if (e.expires <= this.now()) {
+      this.map.delete(k);
+      return undefined;
+    }
+    this.map.delete(k); // LRU: הכי חדש בסוף
+    this.map.set(k, e);
+    return e.value;
+  }
+  set(k: string, value: V) {
+    this.map.delete(k);
+    this.map.set(k, { value, expires: this.now() + this.ttlMs });
+    if (this.map.size > this.max) this.map.delete(this.map.keys().next().value!);
+  }
+}
+
+export async function createAnalyticsServer({ parquetPath, cacheTtlMs = 60_000, cacheSize = 100, now = Date.now }: { parquetPath: string; cacheTtlMs?: number; cacheSize?: number; now?: () => number }): Promise<http.Server> {
+  const db = await DuckDBInstance.create(":memory:");
+  const conn = await db.connect();
+  // טוענים פעם אחת לזיכרון, עם עמודת יום מחושבת (שעון ישראל) — כל שאילתה אחר כך מהירה
+  await conn.run(
+    `CREATE TABLE orders AS SELECT *, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day FROM read_parquet($1)`,
+    [parquetPath],
+  );
+  const cache = new TtlLru<string>(cacheSize, cacheTtlMs, now);
+
+  async function revenue(from: string, to: string) {
+    const r = await conn.runAndReadAll(
+      `SELECT day, count(*)::INTEGER AS orders, round(sum(quantity * price_cents) / 100.0, 2)::DOUBLE AS revenue
+       FROM orders WHERE day BETWEEN $1 AND $2 GROUP BY day ORDER BY day`,
+      [from, to],
+    );
+    const days = r.getRowObjects().map((x) => ({ day: String(x.day), orders: Number(x.orders), revenue: Number(x.revenue) }));
+    const total = { orders: days.reduce((s, d) => s + d.orders, 0), revenue: Math.round(days.reduce((s, d) => s + d.revenue * 100, 0)) / 100 };
+    return { from, to, days, total };
+  }
+  async function topProducts(day: string, limit: number) {
+    const r = await conn.runAndReadAll(
+      `SELECT product, sum(quantity)::INTEGER AS units, round(sum(quantity * price_cents) / 100.0, 2)::DOUBLE AS revenue
+       FROM orders WHERE day = $1 GROUP BY product ORDER BY revenue DESC, product LIMIT $2`,
+      [day, limit],
+    );
+    return r.getRowObjects().map((x) => ({ product: String(x.product), units: Number(x.units), revenue: Number(x.revenue) }));
+  }
+
+  const send = (res: http.ServerResponse, status: number, body: unknown, cacheState?: string) => {
+    res.statusCode = status;
+    res.setHeader("content-type", "application/json");
+    if (cacheState) res.setHeader("x-cache", cacheState);
+    res.end(typeof body === "string" ? body : JSON.stringify(body));
+  };
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://x");
+    try {
+      if (url.pathname === "/health") return send(res, 200, { ok: true });
+      let key: string;
+      let compute: () => Promise<unknown>;
+      if (url.pathname === "/revenue") {
+        const from = url.searchParams.get("from");
+        const to = url.searchParams.get("to");
+        if (!isDay(from) || !isDay(to)) return send(res, 400, { error: "from ו־to בפורמט YYYY-MM-DD" });
+        if (daysBetween(from, to) < 0) return send(res, 400, { error: "from אחרי to" });
+        if (daysBetween(from, to) > 92) return send(res, 400, { error: "עד 92 ימים" });
+        key = `revenue:${from}:${to}`;
+        compute = () => revenue(from, to);
+      } else if (url.pathname === "/top-products") {
+        const day = url.searchParams.get("day");
+        const limit = Number(url.searchParams.get("limit") ?? 5);
+        if (!isDay(day)) return send(res, 400, { error: "day בפורמט YYYY-MM-DD" });
+        if (!Number.isInteger(limit) || limit < 1 || limit > 20) return send(res, 400, { error: "limit בין 1 ל־20" });
+        key = `top:${day}:${limit}`;
+        compute = () => topProducts(day, limit);
+      } else return send(res, 404, { error: "not found" });
+
+      const hit = cache.get(key);
+      if (hit !== undefined) return send(res, 200, hit, "HIT");
+      const body = JSON.stringify(await compute());
+      cache.set(key, body);
+      send(res, 200, body, "MISS");
+    } catch {
+      send(res, 500, { error: "internal" });
+    }
+  });
+  server.on("close", () => {
+    conn.closeSync();
+    db.closeSync();
+  });
+  return server;
+}
+```
+<p>הארכיטקטורה הזו — Parquet (על S3) + DuckDB בתוך שירות — נפוצה יותר ויותר לדשבורדים פנימיים: בלי cluster של מחסן נתונים, ושאילתות של מילי־שניות על מיליוני שורות. כשהנתונים גדלים לטרה־בייטים — אותן שאילתות עוברות ל־BigQuery/Snowflake כמעט בלי שינוי.</p>
+
+@@ P28.5-E25 | 5 | אתגר: data lake מצטבר 🤖 | 60 | שיעור 5
+@task
+<p>הזמנות ב־PostgreSQL (<code>files/lake.sql</code>) משתנות כל הזמן — מתבטלות, מתעדכנות. ב־<code>P28.5-E25.ts</code>:</p>
+<ul><li><code>syncOrders({ pool, conn, lakeDir, pageSize })</code> — מעתיקה ל־<code>lakeDir</code> רק שורות ששונו מאז הסנכרון הקודם, לקובץ חדש <code>part-00001.parquet</code>, <code>part-00002.parquet</code>… (append-only — לא נוגעים בקבצים קיימים). ה"עד איפה הגעתי" (watermark) נשמר ב־<code>lakeDir/_state.json</code>, ונכתב רק אחרי שהקובץ קיים. אין שינויים ← אין קובץ, <code>{ exported: 0, file: null }</code>.</li><li><code>lakeReport(conn, lakeDir)</code> — הזמנות והכנסה לכל יום (שעון ישראל, לפי <code>created_at</code>), לפי <strong>הגרסה האחרונה</strong> של כל הזמנה, בלי מבוטלות — זהה למה ש־PostgreSQL אומר.</li></ul>
+@hint1
+<p>watermark על <code>(updated_at, id)</code> ולא רק <code>updated_at</code>: עשרים שורות עם אותו <code>updated_at</code> בעמודים של 3 — <code>WHERE (updated_at, id) &gt; ($1, $2) ORDER BY updated_at, id</code>. ו־<code>updated_at::text</code> שומר מיקרו־שניות, שה־<code>Date</code> של JavaScript מאבד.</p>
+<p>כתיבה: טבלה זמנית ב־DuckDB, <code>conn.createAppender</code>, ו־<code>COPY batch TO 'file' (FORMAT parquet)</code>.</p>
+@hint2
+<p>הגרסה האחרונה: <code>QUALIFY row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1</code>.</p>
+@solution
+```ts save=solutions/P28.5-E25.ts
+// P28.5-E25: סנכרון מצטבר מ־PostgreSQL ל־data lake (קובצי Parquet), ודוח שמתעלם מגרסאות ישנות
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { Pool } from "pg";
+import type { DuckDBConnection } from "@duckdb/node-api";
+
+interface State {
+  seq: number;
+  updatedAt: string | null; // ה־watermark: (updated_at, id) של השורה האחרונה שיוצאה
+  id: number;
+}
+
+const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
+
+async function readState(dir: string): Promise<State> {
+  try {
+    return JSON.parse(await fs.readFile(path.join(dir, "_state.json"), "utf8"));
+  } catch {
+    return { seq: 0, updatedAt: null, id: 0 };
+  }
+}
+
+export async function syncOrders({ pool, conn, lakeDir, pageSize = 1000 }: { pool: Pool; conn: DuckDBConnection; lakeDir: string; pageSize?: number }): Promise<{ exported: number; file: string | null }> {
+  await fs.mkdir(lakeDir, { recursive: true });
+  const state = await readState(lakeDir);
+  const rows: any[] = [];
+  let cursor = { updatedAt: state.updatedAt, id: state.id };
+  for (;;) {
+    // keyset על (updated_at, id): שורות עם אותו updated_at לא הולכות לאיבוד בין עמודים
+    const { rows: page } = await pool.query(
+      `SELECT id, customer_id, total_cents, status, created_at, updated_at, updated_at::text AS updated_at_text
+       FROM orders
+       WHERE $1::timestamptz IS NULL OR (updated_at, id) > ($1::timestamptz, $2::int)
+       ORDER BY updated_at, id LIMIT $3`,
+      [cursor.updatedAt, cursor.id, pageSize],
+    );
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    const last = page.at(-1);
+    cursor = { updatedAt: last.updated_at_text, id: last.id };
+  }
+  if (rows.length === 0) return { exported: 0, file: null }; // אין חדש ← אין קובץ ריק
+
+  await conn.run(`CREATE OR REPLACE TEMP TABLE batch (id INTEGER, customer_id INTEGER, total_cents INTEGER, status VARCHAR, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)`);
+  const app = await conn.createAppender("batch");
+  for (const r of rows) {
+    app.appendInteger(r.id);
+    app.appendInteger(r.customer_id);
+    app.appendInteger(r.total_cents);
+    app.appendVarchar(r.status);
+    app.appendVarchar(r.created_at.toISOString());
+    app.appendVarchar(r.updated_at_text);
+    app.endRow();
+  }
+  app.closeSync();
+  const seq = state.seq + 1;
+  const file = path.join(lakeDir, `part-${String(seq).padStart(5, "0")}.parquet`);
+  await conn.run(`COPY batch TO ${q(file)} (FORMAT parquet)`);
+  // ה־state נכתב רק אחרי שהקובץ קיים; ובכתיבה אטומית (קובץ זמני ← rename)
+  const last = rows.at(-1);
+  const tmp = path.join(lakeDir, "_state.json.tmp");
+  await fs.writeFile(tmp, JSON.stringify({ seq, updatedAt: last.updated_at_text, id: last.id }));
+  await fs.rename(tmp, path.join(lakeDir, "_state.json"));
+  return { exported: rows.length, file };
+}
+
+export async function lakeReport(conn: DuckDBConnection, lakeDir: string) {
+  const r = await conn.runAndReadAll(`
+    WITH latest AS (
+      SELECT * FROM read_parquet(${q(path.join(lakeDir, "part-*.parquet"))})
+      QUALIFY row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1 -- הגרסה האחרונה של כל הזמנה
+    )
+    SELECT strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day,
+           count(*)::INTEGER AS orders, (sum(total_cents) / 100.0)::DOUBLE AS revenue
+    FROM latest WHERE status <> 'cancelled'
+    GROUP BY day ORDER BY day`);
+  return r.getRowObjects().map((x) => ({ day: String(x.day), orders: Number(x.orders), revenue: Number(x.revenue) }));
+}
+```
+<p>זה ETL מצטבר "אמיתי" בקטן: Fivetran, Airbyte ו־Debezium עושים את אותו דבר (Debezium — מה־WAL, בלי לשאול את הטבלה). ו־"append-only + גרסה אחרונה בקריאה" הוא הבסיס של פורמטים כמו Delta Lake (Databricks) ו־Apache Iceberg — שמוסיפים מעל Parquet טרנזקציות ו־time travel.</p>

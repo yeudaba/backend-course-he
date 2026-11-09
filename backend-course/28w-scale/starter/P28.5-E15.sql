@@ -1,0 +1,2 @@
+-- P28.5-E15: לכל קטגוריה — orders, units, revenue (בשקלים, 2 ספרות), share_pct (אחוז מסך ההכנסות, ספרה אחת)
+-- הטבלה: orders (files/orders.parquet)

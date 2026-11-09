@@ -1,0 +1,65 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>למה "לקרוא הכול לזיכרון" נשבר — ומה זה זיכרון קבוע.</li>
+      <li>streams: chunks, <code>pipeline</code>, ו־backpressure.</li>
+      <li>NDJSON, ושני הבאגים הקלאסיים של chunks.</li>
+      <li>לכתוב הרבה שורות למסד — ולדגום מזרם.</li>
+    </ul>
+  </div>
+
+  <h2>1. זיכרון קבוע</h2>
+  <p>export של הזמנות, לוג של יום, קובץ של לקוח — 5GB. <code>await fs.readFile(file, "utf8")</code> ינסה לטעון את כולו לזיכרון: התהליך יקרוס (ומחרוזת ב־V8 מוגבלת לכחצי מיליארד תווים בכל מקרה). הדרך הנכונה: <strong>stream</strong> — הקובץ מגיע ב־chunks של 64KB, מעבדים כל אחד וממשיכים. הזיכרון תלוי בגודל ה־chunk ובמה ששומרים (סכומים, מונים) — לא בגודל הקובץ. אותו קוד עובד על 5MB ועל 5TB.</p>
+
+  <h2>2. pipeline ו־backpressure</h2>
+  <p>stream שקורא מהר (דיסק) וכותב לאט (מסד) — מה קורה לנתונים שבאמצע? בלי מנגנון, הם מצטברים בזיכרון עד קריסה. <strong>backpressure</strong>: כשהצרכן לא עומד בקצב, היצרן עוצר. <code>pipeline</code> מחבר streams עם backpressure וטיפול בשגיאות מובנים:</p>
+```ts
+import { createReadStream, createWriteStream } from "node:fs";
+import { createGzip } from "node:zlib";
+import { pipeline } from "node:stream/promises";
+
+// קורא, דוחס וכותב — בזיכרון קבוע, ושגיאה בכל שלב סוגרת את כולם
+await pipeline(createReadStream("orders.ndjson"), createGzip(), createWriteStream("orders.ndjson.gz"));
+```
+  <p>וב־<code>for await</code> על stream, backpressure מגיע בחינם — <em>אם מחכים</em>: הלולאה לא מבקשת chunk חדש לפני שה־<code>await</code> בתוכה הסתיים. <code>onEvent(e)</code> בלי <code>await</code> מבטל את זה: הקריאה רצה במלוא המהירות, ואלפי INSERT יוצאים במקביל (E20).</p>
+  <figure>
+    <svg viewBox="0 0 720 170" role="img" aria-label="קובץ נקרא ב־chunks; שורה וחצי תו עברי נחתכים בגבול; parser שומר את השארית ל־chunk הבא">
+      <g style="stroke-width:2">
+        <rect x="380" y="40" width="320" height="50" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="40" y="40" width="320" height="50" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g class="mono" style="font-size:12px" direction="ltr">
+        <text x="392" y="70">{"id":1,"city":"חיפה"}\n{"id":2,"ci</text>
+        <text x="52" y="70">ty":"באר שבע"}\n{"id":3,...</text>
+      </g>
+      <g style="stroke:var(--red);stroke-width:3"><path d="M370 30 V 100"/></g>
+      <g text-anchor="middle" style="font-size:12px" direction="rtl">
+        <text x="540" y="28">chunk 1</text><text x="200" y="28">chunk 2</text>
+        <text x="370" y="122">גבול ה־chunk: באמצע שורה — ולפעמים באמצע אות (עברית = 2 בתים)</text>
+        <text x="370" y="150">הפתרון: buffer לשארית השורה + StringDecoder לשארית התו (או readline, שעושה את שניהם)</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: chunks לא יודעים על שורות ועל תווים. <code>chunk.toString().split("\n")</code> עובד בבדיקה עם קובץ קטן (chunk אחד), ונשבר בפרודקשן — שורות חתוכות, ו־<code>�</code> במקום אותיות (E10, E20).</figcaption>
+  </figure>
+
+  <h2>3. NDJSON</h2>
+  <p>JSON רגיל — מערך אחד גדול — חייב להיקרא כולו לפני שאפשר לפרש אותו. <strong>NDJSON</strong> (או JSON Lines): אובייקט בכל שורה. אפשר לקרוא שורה, לפרש, ולהמשיך; אפשר להוסיף לסוף הקובץ; אפשר לפצל אותו בכל שורה. זה הפורמט של exports מ־BigQuery, של לוגים מובנים (פרק 24), ושל הרבה APIs של streaming. הדרך הקלה לקרוא אותו בזרם:</p>
+```ts
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
+
+for await (const line of createInterface({ input: createReadStream("orders.ndjson"), crlfDelay: Infinity })) {
+  if (!line) continue;
+  const order = JSON.parse(line);
+  // … אגרגציה בזיכרון קבוע (E11)
+}
+```
+
+  <h2>4. לכתוב הרבה, ולדגום</h2>
+  <p>הצד השני — לכתוב מיליון שורות למסד. INSERT לכל שורה = מיליון round trips; גם ב־1ms כל אחד, זה רבע שעה. במקום: <strong>batch</strong> — אלפי שורות בשאילתה אחת עם <code>unnest</code> של מערכים (E12), או <code>COPY</code> — הפקודה של PostgreSQL לטעינה מרוכזת, המהירה מכולן. ו־<code>ON CONFLICT DO NOTHING</code> הופך את הטעינה לאידמפוטנטית: אפשר להריץ שוב קובץ שנכשל באמצע.</p>
+  <p>ולפעמים לא צריך את כל הנתונים: "1,000 שורות אקראיות מהלוג, לבדיקה" — <strong>reservoir sampling</strong> בוחר k פריטים אחידים מזרם באורך לא ידוע, במעבר אחד ובזיכרון של k (E19).</p>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28.5-E10">E10</a> · <a href="exercises.html#P28.5-E11">E11</a> · <a href="exercises.html#P28.5-E12">E12</a> · <a href="exercises.html#P28.5-E19">E19</a> · <a href="exercises.html#P28.5-E20">E20</a></p>
+  </div>

@@ -1,0 +1,69 @@
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>thread אחד ל־JavaScript: מה זה אומר כשיש 1,000 משתמשים.</li>
+      <li>מה חוסם: פונקציות <code>Sync</code>, לולאות חישוב, JSON ענק, regex גרוע.</li>
+      <li>thread pool של libuv מול worker threads — מתי כל אחד.</li>
+      <li>למצוא את החוסם: lag monitor ו־CPU profile.</li>
+    </ul>
+  </div>
+
+  <h2>1. thread אחד</h2>
+  <p>בפרק 10 למדת שה־event loop מריץ callbacks אחד אחרי השני. בשרת זה אומר: כל בקשה שמגיעה, כל תשובה מהמסד וכל timer — מחכים בתור אחד, ל־thread אחד. כל עוד הקוד שלך רק <em>מחכה</em> (למסד, לרשת, לדיסק), זה מצוין — אלפי בקשות "ממתינות" במקביל, בלי thread לכל אחת. אבל ברגע שקוד <strong>עובד</strong> — מחשב, מצפין, דוחס — הוא תופס את ה־thread, וכל השאר מחכים:</p>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="ציר זמן של ה־event loop: בקשות קצרות מתחלפות, ואז pbkdf2Sync של 250ms חוסם, וכל הבקשות ו־health check מחכות">
+      <defs><marker id="el" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none"><path d="M700 80 H 20" marker-end="url(#el)"/></g>
+      <g style="stroke-width:2">
+        <rect x="640" y="62" width="40" height="36" rx="5" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="590" y="62" width="40" height="36" rx="5" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="300" y="62" width="280" height="36" rx="5" style="fill:var(--red-soft);stroke:var(--red)"/>
+        <rect x="250" y="62" width="40" height="36" rx="5" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="200" y="62" width="40" height="36" rx="5" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="150" y="62" width="40" height="36" rx="5" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+      </g>
+      <g text-anchor="middle" class="mono" style="font-size:11px" direction="ltr">
+        <text x="660" y="85">req</text><text x="610" y="85">req</text><text x="440" y="85">pbkdf2Sync — 250ms</text><text x="270" y="85">req</text><text x="220" y="85">req</text><text x="170" y="85">/health</text>
+      </g>
+      <g style="stroke:var(--amber);stroke-width:2;fill:none"><path d="M570 130 H 175" marker-end="url(#el)" style="stroke-dasharray:5 4"/></g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="380" y="150">health check הגיע כאן — ונענה רק כאן, 300ms אחר כך</text>
+        <text x="360" y="40">ה־event loop: thread אחד</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: עבודה סינכרונית של 250ms לא מאטה רק את הבקשה שלה — היא עוצרת את כל השרת. ב־Kubernetes, liveness probe שנכשל כך יגרום להפעלה מחדש באמצע עומס (E23).</figcaption>
+  </figure>
+  <p>מה חוסם, בפועל: <code>crypto.pbkdf2Sync</code>/<code>scryptSync</code>/<code>bcrypt</code> סינכרוני; <code>zlib.gzipSync</code>; <code>fs.readFileSync</code> על קובץ גדול; <code>JSON.parse</code>/<code>stringify</code> של עשרות מגה; מיון של מיליון איברים; regex עם backtracking קטסטרופלי על קלט של משתמש (ReDoS); ולולאות חישוב (E03).</p>
+
+  <h2>2. thread pool מול worker threads</h2>
+  <p>ל־Node יש שני מקומות להריץ עבודה מחוץ ל־thread הראשי:</p>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>thread pool של libuv</th><th>worker threads</th></tr>
+    <tr><td>מה רץ שם</td><td>עבודה ש־Node עצמו מספק: <code>crypto.pbkdf2</code>, <code>scrypt</code>, <code>zlib.gzip</code>, <code>fs.*</code>, <code>dns.lookup</code></td><td>JavaScript <em>שלך</em> — כל חישוב</td></tr>
+    <tr><td>איך משתמשים</td><td>פשוט קוראים לגרסה האסינכרונית (callback / promise)</td><td><code>new Worker(…)</code> + הודעות</td></tr>
+    <tr><td>גודל</td><td>4 threads כברירת מחדל (<code>UV_THREADPOOL_SIZE</code>)</td><td>כמה שיוצרים — כל אחד עם V8 משלו</td></tr>
+  </table></div>
+  <p>הכלל: אם יש גרסה אסינכרונית — משתמשים בה, ונגמר (E23). אם העבודה היא JavaScript שלך — מעבירים ל־worker, ומחזיקים <strong>pool</strong> קבוע של workers (worker חדש לכל בקשה עולה עשרות מילי־שניות ו־~10MB). ואם יש הרבה עבודת CPU — אולי היא בכלל לא שייכת ל־API: תור (יחידה 26.5) ו־worker נפרד.</p>
+
+  <h2>3. למצוא את החוסם</h2>
+  <p>בפרודקשן לא רואים "pbkdf2Sync" — רואים p99 שקופץ, ו־health checks שנכשלים. שני כלים:</p>
+  <ol>
+    <li><strong>מדד lag:</strong> <code>monitorEventLoopDelay</code> מ־<code>perf_hooks</code> מודד כמה timers מאחרים. p99 lag של 200ms = כל בקשה בשרת עלולה לחכות 200ms לפני שהקוד שלה בכלל התחיל. מייצאים כמדד, ומתריעים (E14).</li>
+    <li><strong>CPU profile:</strong> מריצים את השרת תחת עומס עם פרופיילר, ורואים באילו פונקציות ה־CPU בילה:</li>
+  </ol>
+```bash
+node --cpu-prof dist/main.js        # בסוף הריצה נוצר קובץ .cpuprofile
+# פותחים ב־Chrome DevTools ← Performance ← Load profile, ורואים flame graph
+npx clinic flame -- node dist/main.js   # או: clinic בונה flame graph אוטומטית תחת עומס
+```
+  <p>ב־flame graph, הרוחב הוא זמן CPU. פונקציה רחבה בראש — היא החשודה. בתקלה של E23 תראה את <code>pbkdf2Sync</code> תופס חצי מהרוחב.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ גם async יכול להעמיס</span>
+    <p>הגרסה האסינכרונית משחררת את ה־event loop, אבל ה־thread pool קטן: 100 התחברויות במקביל עם <code>pbkdf2</code> ← 4 רצות, 96 בתור. ה־API נשאר זמין (health עונה), אבל התחברות לוקחת שניות. מגבילים concurrency (rate limit על login — פרק 24), ובודקים בבדיקת עומס.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28.5-E03">E03</a> · <a href="exercises.html#P28.5-E13">E13</a> · <a href="exercises.html#P28.5-E14">E14</a> · <a href="exercises.html#P28.5-E23">E23</a></p>
+  </div>

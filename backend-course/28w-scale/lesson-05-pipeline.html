@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מ־PostgreSQL ל־data lake ובחזרה ל־API — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ שיעור 5</div>
+  <h1>שיעור 5 — מ־PostgreSQL ל־data lake ובחזרה ל־API</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>ETL ו־ELT: איך נתונים עוברים מהאפליקציה למקום שבו מנתחים אותם.</li>
+      <li>data lake: Parquet על S3, מחולק, append-only.</li>
+      <li>סנכרון מצטבר: watermark, keyset, ו"הגרסה האחרונה" בקריאה.</li>
+      <li>ובחזרה לאפליקציה: API אנליטי עם cache, שעומד ב־SLO.</li>
+    </ul>
+  </div>
+
+  <h2>1. מהמסד לאנליטיקה</h2>
+  <p>השיעור הקודם אמר "הדוחות רצים במחסן, לא על המסד של האפליקציה". אבל הנתונים נוצרים במסד של האפליקציה. מה שמחבר — <strong>צינור נתונים</strong>:</p>
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="PostgreSQL של האפליקציה, sync מצטבר כותב קובצי Parquet ל־lake, DuckDB או מחסן נתונים קורא, ו־API אנליטי עם cache מגיש לדשבורד">
+      <defs><marker id="pp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="580" y="60" width="130" height="64" rx="10" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="420" y="70" width="120" height="44" rx="10" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="250" y="50" width="130" height="84" rx="10" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+        <rect x="90" y="60" width="120" height="64" rx="10" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="10" y="140" width="70" height="44" rx="10" style="fill:var(--surface);stroke:var(--svg-stroke)"/>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M576 92 H 544" marker-end="url(#pp)"/>
+        <path d="M416 92 H 384" marker-end="url(#pp)"/>
+        <path d="M246 92 H 214" marker-end="url(#pp)"/>
+        <path d="M110 128 L 60 136" marker-end="url(#pp)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px;font-weight:700">
+        <text x="645" y="88">PostgreSQL</text><text x="480" y="97">sync</text><text x="315" y="80">data lake</text><text x="150" y="88">API</text><text x="45" y="167" direction="rtl">דשבורד</text>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="645" y="108">של האפליקציה</text>
+        <text x="480" y="140">מה שהשתנה מאז הפעם הקודמת</text>
+        <text x="315" y="100" class="mono" direction="ltr" style="font-size:10px">part-00001.parquet</text>
+        <text x="315" y="116" class="mono" direction="ltr" style="font-size:10px">part-00002.parquet…</text>
+        <text x="150" y="108">DuckDB + cache</text>
+      </g>
+    </svg>
+    <figcaption>איור 1: הצינור של E25 ו־E24, בקטן. בחברה גדולה: Debezium או Fivetran במקום ה־sync, S3 במקום תיקייה, ו־BigQuery/Snowflake/Databricks במקום DuckDB — אותה צורה.</figcaption>
+  </figure>
+  <p><strong>ETL</strong> (Extract, Transform, Load) מעבד את הנתונים בדרך; <strong>ELT</strong> — הגישה הנפוצה היום — מעתיק אותם כמו שהם, ומעבד בתוך המחסן עם SQL (dbt הוא הכלי הנפוץ לזה). בשני המקרים, השאלה הקשה היא לא "איך מעתיקים", אלא "איך מעתיקים <em>רק את מה שהשתנה</em>, בלי לאבד ובלי לספור פעמיים".</p>
+
+  <h2>2. סנכרון מצטבר</h2>
+  <p>להעתיק את כל טבלת ההזמנות כל שעה — עובד עד שיש 50 מיליון הזמנות. במקום: <strong>watermark</strong> — "עד איפה הגעתי" — ובכל ריצה רק השורות שהשתנו אחריו:</p>
+<pre><code class="lang-sql">SELECT … FROM orders
+WHERE (updated_at, id) &gt; ($1, $2)   -- ה־watermark מהריצה הקודמת
+ORDER BY updated_at, id
+LIMIT 1000</code></pre>
+  <p>שלושה פרטים שעושים את ההבדל (E25):</p>
+  <ul>
+    <li><strong><code>(updated_at, id)</code> ולא רק <code>updated_at</code>:</strong> UPDATE אחד על 20 שורות נותן לכולן אותו <code>updated_at</code>. אם העמוד נחתך באמצע, <code>WHERE updated_at &gt; $1</code> מדלג על השאר. זו בדיוק pagination עם cursor מפרק 18 — עם מפתח מורכב.</li>
+    <li><strong>ה־watermark נשמר אחרי שהנתונים נכתבו</strong> — ובכתיבה אטומית (קובץ זמני ← rename). נפילה באמצע ← הריצה הבאה מעתיקה שוב את אותן שורות. כפילות — לא אובדן.</li>
+    <li><strong>מחיקות</strong> לא מופיעות ב־<code>updated_at</code>. לכן מבטלים ולא מוחקים (soft delete, <code>status = 'cancelled'</code>), או משתמשים ב־CDC שקורא את ה־WAL ורואה גם מחיקות.</li>
+  </ul>
+
+  <h2>3. append-only, והגרסה האחרונה</h2>
+  <p>הזמנה 5 בוטלה אחרי שכבר יוצאה. לא משנים את הקובץ הישן — מוסיפים קובץ חדש עם הגרסה המעודכנת. ה־lake הוא <strong>append-only</strong>: קל, בטוח, ואפשר תמיד לבנות מחדש. את "המצב הנוכחי" מחשבים בקריאה:</p>
+<pre><code class="lang-sql">SELECT * FROM read_parquet('lake/part-*.parquet')
+QUALIFY row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1</code></pre>
+  <p>זה הרעיון שמאחורי Delta Lake (Databricks) ו־Apache Iceberg: קבצי Parquet שלא משתנים, ושכבת metadata שאומרת מה הגרסה העדכנית — עם טרנזקציות, ו"time travel" לכל נקודה בעבר.</p>
+
+  <h2>4. ובחזרה ל־API</h2>
+  <p>הדשבורד צריך תשובות מהירות. E24 בונה API אנליטי מעל Parquet, עם שלוש החלטות ביצועים:</p>
+  <ol>
+    <li><strong>לחשב מראש מה שאפשר:</strong> בעלייה, טוענים את הנתונים לזיכרון של DuckDB עם עמודת "יום בשעון ישראל" מחושבת — במקום לחשב אזור זמן ל־60,000 שורות בכל בקשה.</li>
+    <li><strong>cache עם TTL:</strong> דשבורד שמתרענן כל דקה אצל 50 אנשים שואל את אותן שאלות. LRU עם TTL, ו־<code>X-Cache</code> כדי לראות מה קורה. (ובמערכת עם כמה instances — Redis, פרק 26.)</li>
+    <li><strong>למדוד:</strong> הבודק של E24 מריץ 300 בקשות, 10 במקביל, ודורש p95 מתחת ל־50ms — SLO אמיתי, ובדיקת עומס אמיתית (שיעור 1).</li>
+  </ol>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>"ספר על פעם ששיפרת ביצועים" — שאלה כמעט קבועה. התשובה הטובה מתחילה במדידה ("ה־p95 היה 800ms; בדיקת עומס הראתה שהוא קופץ ב־30 משתמשים"), ממשיכה בממצא ("פרופיל הראה שה־event loop חסום ב־X" / "השאילתה סרקה את כל הטבלה"), ונגמרת במספר ("p95 של 40ms, ובדיקת עומס ב־CI כדי שזה לא יחזור"). היחידה הזו נותנת לך את כל החלקים.</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ עכשיו בדף התרגילים</span>
+    <p>פתור: <a href="exercises.html#P28.5-E24">E24</a> · <a href="exercises.html#P28.5-E25">E25</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-04-columnar.html"><small>הקודם</small>שיעור 4 — עמודות: Parquet, DuckDB ומחסני נתונים</a><a href="exercises.html"><small>הבא</small>✍️ דף התרגילים של הפרק</a></div>
+</main>
+</body>
+</html>
