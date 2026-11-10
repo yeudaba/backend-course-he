@@ -13,6 +13,207 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28-system-design/solutions/</code>.</p></div>
+<div class="ex typed" id="P28-E26">
+    <h3>P28-E26 · quorum: כמה העתקים צריכים להסכים 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>quorumWrite</code>: לולאה, ‏<code>continue</code> על העתק שלא זמין, ומונה <code>acks</code>. ‏<code>quorumRead</code>: ‏<code>replicas.filter((x) =&gt; x.up).slice(0, r)</code> ← ההעתקים שנקראו. אם יש פחות מ־<code>r</code>, זורקים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החדש ביותר: <code>answered.reduce((best, x) =&gt; (x.version &gt; best.version ? x : best))</code> (פרק 6). אחר כך עוד לולאה על <code>answered</code>: מי שהגרסה שלו נמוכה מקבל את הערך והגרסה של החדש. אלה אובייקטים, ולכן השינוי נשמר במערך המקורי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E26 — quorum: כמה העתקים צריכים להסכים
+export type Replica = { up: boolean; version: number; value: string | null };
+
+export function isStrong(n: number, r: number, w: number): boolean {
+  return r + w &gt; n;
+}
+
+export function quorumWrite(replicas: Replica[], w: number, value: string, version: number): boolean {
+  let acks = 0;
+  for (const replica of replicas) {
+    if (!replica.up) continue;
+    replica.version = version;
+    replica.value = value;
+    acks++;
+  }
+  return acks &gt;= w;
+}
+
+export function quorumRead(replicas: Replica[], r: number): { value: string | null; version: number; repaired: number } {
+  const answered = replicas.filter((rep) =&gt; rep.up).slice(0, r);
+  if (answered.length &lt; r) throw new Error(`רק ${answered.length} העתקים זמינים, צריך ${r}`);
+  const newest = answered.reduce((best, rep) =&gt; (rep.version &gt; best.version ? rep : best));
+  let repaired = 0;
+  for (const rep of answered) {
+    if (rep.version &lt; newest.version) {
+      rep.version = newest.version;
+      rep.value = newest.value;
+      repaired++;
+    }
+  }
+  return { value: newest.value, version: newest.version, repaired };
+}
+
+const replicas: Replica[] = [
+  { up: true, version: 0, value: null },
+  { up: true, version: 0, value: null },
+  { up: true, version: 0, value: null },
+];
+console.log("N=3, R=2, W=2 strong?", isStrong(3, 2, 2), "· R=1, W=1?", isStrong(3, 1, 1));
+replicas[2].up = false;
+console.log("write v1:", quorumWrite(replicas, 2, "address: Haifa", 1));
+replicas[2].up = true;
+replicas[0].up = false;
+console.log("read:", quorumRead(replicas, 2));
+console.log(replicas.map((r) =&gt; `${r.version}:${r.value}`));</code></pre>
+<pre class="terminal">N=3, R=2, W=2 strong? true · R=1, W=1? false
+write v1: true
+read: { value: 'address: Haifa', version: 1, repaired: 1 }
+[ '1:address: Haifa', '1:address: Haifa', '1:address: Haifa' ]</pre>
+<p>התרחיש: הכתיבה הגיעה רק להעתקים 0 ו־1, כי 2 היה למטה. אחר כך 2 חזר, ו־0 נפל. הקריאה עם R=2 שאלה את 1 ואת 2. ל־1 יש את הגרסה החדשה, ולכן היא מנצחת. זו החפיפה ש־<code>R + W &gt; N</code> מבטיחה. בדרך, העתק 2 קיבל את הגרסה (<code>repaired: 1</code>), כך שההעתקים מתכנסים בלי תהליך נפרד.</p>
+<p>הבדיקה האחרונה בבודק עוברת על כל הצירופים: כתיבה בלי העתק אחד, וקריאה בלי העתק אחר. הקריאה תמיד מוצאת את <code>v1</code>. עם <code>R = W = 1</code> זה לא נכון: הכתיבה יכולה להגיע רק להעתק 0, והקריאה רק להעתק 1. זה ה־trade-off של שיעור 4. ‏<code>R=1, W=1</code> מהיר וזמין מאוד, אבל eventually consistent.</p>
+<p>מה הסימולציה מפשטת? ‏<code>version</code> כאן הוא מספר שהכותב בוחר. במערכת אמיתית שני כותבים יכולים לבחור אותה גרסה, ואז צריך חותמת זמן עם מזהה צומת, או vector clock. וכתיבה "שנכשלה" (פחות מ־W) שנשארה בחלק מההעתקים יכולה להופיע בקריאה מאוחרת. זו הסיבה ש־Cassandra ממליצה לנסות שוב כתיבה שנכשלה עם אותו ערך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא מכל ההעתקים ולבחור את החדש — "עובד", אבל זה R=N: כל העתק שנופל מפיל את הקריאה.</li><li>לבחור את הערך הנפוץ ביותר במקום את הגרסה הגבוהה — שני העתקים ישנים "מנצחים" העתק אחד חדש.</li><li>read repair גם להעתקים שלא נקראו — הקורא לא יודע מה יש בהם.</li><li><code>quorumWrite</code> שעוצרת אחרי <code>w</code> אישורים — שאר ההעתקים נשארים ישנים, והחפיפה נשענת על מזל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P28-E27">
+    <h3>P28-E27 · בדיקות ל־GET /health 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר חוסכת הרבה רעש: <code>const check = (name, over = {}) =&gt; ({ name, ok: true, critical: false, latencyMs: 10, ...over })</code>. כל בדיקה מציינת רק את מה שמעניין אותה: <code>check("db", { critical: true, ok: false })</code>. ב־TypeScript: ‏<code>over: Partial&lt;Check&gt;</code>, ו־<code>import { overallHealth, type Check }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חפש את המקרים שבהם שני כללים מתנגשים: בדיקה קריטית שנכשלה <em>וגם</em> לא קריטית שנכשלה, בדיקה קריטית איטית שעברה, ובדיקה קריטית שנכשלה וגם איטית. לגבול: בדיוק 1000 ← לא איטי, ‏1001 ← איטי. ולפרמטר: קריאה עם <code>slowMs</code> אחר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { overallHealth, type Check } from "./P28-E27.ts";
+
+const check = (name: string, over: Partial&lt;Check&gt; = {}): Check =&gt; ({ name, ok: true, critical: false, latencyMs: 10, ...over });
+
+test("הכול תקין ← up, ובלי בדיקות ← up", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true }), check("mail")]), { status: "up", failing: [], slow: [] });
+  assert.deepEqual(overallHealth([]), { status: "up", failing: [], slow: [] });
+});
+
+test("בדיקה קריטית שנכשלה ← down, גם כשיש גם לא קריטית שנכשלה", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true, ok: false }), check("mail")]), { status: "down", failing: ["db"], slow: [] });
+  assert.deepEqual(overallHealth([check("mail", { ok: false }), check("db", { critical: true, ok: false })]), { status: "down", failing: ["mail", "db"], slow: [] });
+});
+
+test("בדיקה לא קריטית שנכשלה ← degraded", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true }), check("mail", { ok: false })]), { status: "degraded", failing: ["mail"], slow: [] });
+});
+
+test("איטיות: מעל slowMs ← degraded; בדיוק slowMs — עוד לא", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true, latencyMs: 1001 })]), { status: "degraded", failing: [], slow: ["db"] });
+  assert.equal(overallHealth([check("db", { critical: true, latencyMs: 1000 })]).status, "up");
+  assert.deepEqual(overallHealth([check("a", { latencyMs: 300 }), check("b", { latencyMs: 600 })], 500), { status: "degraded", failing: [], slow: ["b"] });
+  assert.deepEqual(overallHealth([check("db", { critical: true, ok: false, latencyMs: 5000 })]), { status: "down", failing: ["db"], slow: ["db"] });
+});</code></pre>
+<p>‏<code>failing: ["mail", "db"]</code>, בסדר שבו הבדיקות הגיעו (ולא לפי ABC), תופס מימוש שממיין. והבדיקה הקריטית שנכשלה וגם איטית (5000ms) תופסת מימוש ששם ב־<code>slow</code> רק בדיקות שעברו.</p>
+<p>הבאגים המסוכנים כאן הם בסדר העדיפויות. מימוש שקובע <code>"down"</code> ואחר כך דורס ל־<code>"degraded"</code> מחזיר 200 כשהמסד למטה, וה־load balancer ממשיך לשלוח תעבורה לשרת שלא יכול לענות. ומימוש שמחזיר <code>"down"</code> על כל כישלון מוציא את כל השרתים מה־load balancer כששירות המיילים מתעכב. זו תקלה שמערכת שלמה נפלה בגללה, ולא רק "באג בבריאות".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק כל כלל לבד — באגים בסדר העדיפויות עוברים.</li><li>לבנות כל בדיקה עם כל ארבעת השדות — קשה לראות מה הבדיקה בודקת. פונקציית עזר עם ברירות מחדל ו־<code>...over</code> מראה רק את מה שחשוב.</li><li><code>assert.ok(result.status !== "up")</code> — עובר גם על <code>"down"</code> כשציפית ל־<code>"degraded"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P28-E28">
+    <h3>P28-E28 · hedged request: בקשה שנייה אם הראשונה מתעכבת 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>return new Promise((resolve, reject) =&gt; { ... })</code>, ובתוכו משתנים משותפים: <code>settled</code>, ‏<code>started</code>, ‏<code>failures</code>, ‏<code>timer</code>. פונקציה פנימית <code>start()</code> מעלה את <code>started</code> וקוראת ל־<code>fn(started).then(onValue, onError)</code>. בכל אחת מהן, השורה הראשונה היא <code>if (settled) return;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>onError</code>: אם <code>started === 1</code>, זו הראשונה, והשנייה עוד לא יצאה ← <code>clearTimeout(timer); start();</code>. אחרת, אם <code>failures === 2</code> ← <code>settled = true; reject(err)</code>. הטיימר: ‏<code>setTimeout(() =&gt; { if (!settled &amp;&amp; started === 1) start(); }, delayMs)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E28 — hedged request: בקשה שנייה אם הראשונה מתעכבת
+export function hedged&lt;T&gt;(fn: (attempt: number) =&gt; Promise&lt;T&gt;, delayMs: number): Promise&lt;T&gt; {
+  return new Promise&lt;T&gt;((resolve, reject) =&gt; {
+    let settled = false;
+    let failures = 0;
+    let started = 0;
+    let timer: ReturnType&lt;typeof setTimeout&gt; | undefined;
+
+    const start = () =&gt; {
+      started++;
+      fn(started).then(
+        (value) =&gt; {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) =&gt; {
+          if (settled) return;
+          failures++;
+          if (started === 1) {
+            clearTimeout(timer);
+            start(); // הראשונה נכשלה לפני שהשנייה התחילה — מתחילים אותה מיד
+          } else if (failures === 2) {
+            settled = true;
+            reject(err);
+          }
+        },
+      );
+    };
+
+    start();
+    timer = setTimeout(() =&gt; {
+      if (!settled &amp;&amp; started === 1) start();
+    }, delayMs);
+  });
+}
+
+async function demo() {
+  const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+  const t0 = Date.now();
+  const slowFirst = await hedged(async (attempt) =&gt; {
+    await sleep(attempt === 1 ? 300 : 40);
+    return `תשובה מניסיון ${attempt}`;
+  }, 50);
+  console.log(slowFirst, "· לפני שהראשונה סיימה?", Date.now() - t0 &lt; 300);
+  const fastFirst = await hedged(async (attempt) =&gt; `תשובה מניסיון ${attempt}`, 50);
+  console.log(fastFirst);
+  try {
+    await hedged(async (attempt) =&gt; {
+      throw new Error(`נכשל ${attempt}`);
+    }, 50);
+  } catch (err) {
+    console.log((err as Error).message);
+  }
+}
+demo();</code></pre>
+<pre class="terminal">תשובה מניסיון 2 · לפני שהראשונה סיימה? true
+תשובה מניסיון 1
+נכשל 2</pre>
+<p>שורה 1: הניסיון הראשון "תקוע" ל־300ms, השני יצא אחרי 50ms וענה תוך 40ms. התשובה חזרה בערך אחרי 90ms. שורה 2: הראשון מהיר, ולכן השני לא יצא בכלל. שורה 3: שניהם נכשלו. השני נכשל אחרון, כי הוא התחיל מיד אחרי הכישלון של הראשון.</p>
+<p>‏<code>settled</code> הוא הלב: ‏<code>resolve</code> ו־<code>reject</code> של Promise מתעלמים ממילא מקריאה שנייה, אבל בלי הדגל, כישלון מאוחר היה מתחיל ניסיון שלישי, או סופר כישלונות לא נכון. ‏<code>.then(onValue, onError)</code> עם שתי פונקציות, ולא <code>.then().catch()</code>: כך שגיאה בתוך <code>onValue</code> לא נתפסת כ"כישלון של <code>fn</code>".</p>
+<p>מתי לא להשתמש בזה? רק על פעולות שבטוח לשלוח פעמיים: קריאות (<code>GET</code>), או פעולות idempotent עם מפתח (פרק 24). והמחיר: עוד עומס על השרתים. לכן <code>delayMs</code> נבחר לפי p95. כך רק 5% מהבקשות שולחות עותק שני.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.race([fn(1), delay.then(() =&gt; fn(2))])</code> — ‏<code>race</code> מחזיר גם את ה<em>כישלון</em> הראשון. ‏<code>fn(1)</code> שנכשלה מהר מפילה הכול, למרות ש־<code>fn(2)</code> הייתה מצליחה.</li><li>לא לבטל את הטיימר — אחרי הצלחה מהירה, ‏<code>fn(2)</code> יוצאת בכל זאת (עומס כפול על כל בקשה).</li><li>‏reject בכישלון הראשון כש־<code>fn(2)</code> עוד רצה.</li><li>לחכות ל־<code>delayMs</code> גם אחרי שהראשונה נכשלה — זמן המתנה מיותר בדיוק כשמשהו לא בסדר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P28-E01">
     <h3>P28-E01 · דרישות לפני ציור <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

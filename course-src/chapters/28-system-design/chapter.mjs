@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ה׳ — ראיונות והרחבות",
   checker: true,
   time: "3–4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24. אין התקנות חדשות — כל התרגילים רצים בזיכרון, עם שעון ו־random מוזרקים.</p>
 ${copyStep("28-system-design")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm run check P28-E06</code> ← הבודק רץ ונכשל על קובץ ההתחלה.</p>
