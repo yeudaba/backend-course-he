@@ -14,9 +14,17 @@ export function source(testUrl, file) {
   return fs.readFileSync(p, "utf8");
 }
 
-// הקוד בלי הערות (// ו־/* */) — כדי שהבדיקות לא יספרו מילים שכתבת בהערה
+// מחרוזות (קבוצה 1) או הערות (// ו־/* */)
+const TOKENS = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
+
+// הקוד בלי הערות — כדי שהבדיקות לא יספרו מילים שכתבת בהערה
 export function code(src) {
-  return src.replace(/("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (all, str) => str ?? "");
+  return src.replace(TOKENS, (all, str) => str ?? "");
+}
+
+// איפה בקובץ יש הערות (כדי שהחלפת ערך לא תיגע בהערה שבראש הקובץ)
+function commentRanges(src) {
+  return [...src.matchAll(TOKENS)].filter((m) => m[1] === undefined).map((m) => [m.index, m.index + m[0].length]);
 }
 
 // כל המחרוזות שכתבת בקוד (בתוך "...", '...' או `...`, בלי הביטויים שבתוך ${...})
@@ -31,8 +39,10 @@ export function run(testUrl, file, { changes = [], input = "" } = {}) {
   let src = source(testUrl, file);
   for (const [find, replace, what] of changes) {
     const re = find instanceof RegExp ? find : new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    if (!re.test(src)) throw new Error(`הבודק מחפש בקוד שלך ${what ?? find} כדי להריץ אותו עם ערך אחר — ולא מצא. בדוק שכתבת אותו בדיוק כמו בתרגיל.`);
-    src = src.replace(re, replace);
+    const comments = commentRanges(src);
+    const m = [...src.matchAll(new RegExp(re.source, re.flags.replace("g", "") + "g"))].find((x) => !comments.some(([a, b]) => x.index >= a && x.index < b));
+    if (!m) throw new Error(`הבודק מחפש בקוד שלך ${what ?? find} כדי להריץ אותו עם ערך אחר — ולא מצא. בדוק שכתבת אותו בדיוק כמו בתרגיל.`);
+    src = src.slice(0, m.index) + m[0].replace(re, replace) + src.slice(m.index + m[0].length);
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-"));
   const f = path.join(dir, path.basename(file));
