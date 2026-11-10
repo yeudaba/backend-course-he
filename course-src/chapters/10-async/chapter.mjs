@@ -7,7 +7,7 @@ export default {
   part: "חטיבה א׳ — יסודות JavaScript",
   checker: true,
   time: "4–5 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, הבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
 ${copyStep("10-async")}

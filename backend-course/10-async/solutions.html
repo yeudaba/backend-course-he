@@ -13,6 +13,138 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>10-async/solutions/</code>.</p></div>
+<div class="ex typed" id="P10-E26">
+    <h3>P10-E26 · חיבור אסינכרוני עם callback 🤖 <span class="tag type warmup">🔥 חימום</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל הקוד של הפונקציה נכנס לתוך <code>setTimeout(() =&gt; { ... }, 10)</code>. כך גם השגיאה וגם התוצאה מגיעות אחרי ההמתנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־setTimeout: <code>if (typeof a !== "number" || typeof b !== "number") { callback(new TypeError(...)); return; }</code>, ואחריו <code>callback(null, a + b);</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E26: חיבור אסינכרוני עם callback
+function addLater(a, b, callback) {
+  setTimeout(() =&gt; {
+    if (typeof a !== "number" || typeof b !== "number") {
+      callback(new TypeError("a ו־b חייבים להיות מספרים"));
+      return;
+    }
+    callback(null, a + b);
+  }, 10);
+}
+
+addLater(2, 3, (err, sum) =&gt; console.log(err, sum));
+addLater(2, "3", (err) =&gt; console.log(err.message));
+console.log("קודם אני");
+
+module.exports = { addLater };</code></pre>
+<pre class="terminal">קודם אני
+null 5
+a ו־b חייבים להיות מספרים</pre>
+<p><code>"קודם אני"</code> מודפס ראשון, כי שתי הקריאות ל־<code>addLater</code> רק <strong>רושמות</strong> טיימר וחוזרות מיד (שיעור 1). ה־callbacks רצים אחר כך, מתוך ה־event loop.</p>
+<p>למה גם השגיאה מחכה? כי פונקציה שלפעמים קוראת ל־callback מיד ולפעמים אחר כך מבלבלת את מי שמשתמש בה: הקוד שאחרי הקריאה רץ פעם לפני ה־callback ופעם אחריו. הכלל ב־Node: callback תמיד אסינכרוני.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקת הטיפוסים <strong>לפני</strong> ה־<code>setTimeout</code>, עם <code>callback(err)</code> מיד — השגיאה מגיעה בסנכרון. הבודק תופס את זה.</li><li>לשכוח <code>return</code> אחרי ה־callback של השגיאה — ה־callback נקרא פעמיים, פעם עם שגיאה ופעם עם <code>"23"</code>.</li><li><code>return a + b</code> מתוך ה־setTimeout — הערך הולך לאיבוד. מי שקרא ל־<code>addLater</code> כבר לא מחכה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E27">
+    <h3>P10-E27 · סכום הזמנה במקביל 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה שלבים: <code>items.map(({ sku }) =&gt; getPrice(sku))</code> (מערך של Promises) ← <code>await Promise.all(...)</code> (מערך של מחירים, באותו סדר) ← <code>reduce</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>reduce</code> הפרמטר השלישי הוא האינדקס: <code>prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E27: סכום הזמנה במקביל
+async function orderTotal(items, getPrice) {
+  const prices = await Promise.all(items.map(({ sku }) =&gt; getPrice(sku)));
+  return prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0);
+}
+
+const catalog = { A: 10, B: 25 };
+const getPrice = (sku) =&gt; new Promise((resolve) =&gt; setTimeout(() =&gt; resolve(catalog[sku]), 50));
+
+const start = Date.now();
+orderTotal([{ sku: "A", qty: 3 }, { sku: "B", qty: 2 }], getPrice).then((total) =&gt; {
+  console.log(total, Date.now() - start &lt; 90 ? "במקביל" : "אחד אחרי השני");
+});
+
+module.exports = { orderTotal };</code></pre>
+<pre class="terminal">80 במקביל</pre>
+<p><code>Promise.all</code> שומר על הסדר: המחיר במקום <code>i</code> שייך לפריט במקום <code>i</code>, גם אם התשובות הגיעו בסדר אחר. בזכות זה אפשר לחבר בין <code>prices[i]</code> ל־<code>items[i].qty</code>.</p>
+<p>והשגיאה? אם Promise אחד נכשל, <code>Promise.all</code> נכשל איתו, ו־<code>await</code> זורק אותה הלאה. לא צריך <code>try/catch</code> — מי שקרא ל־<code>orderTotal</code> יחליט מה לעשות. (כשרוצים תוצאות חלקיות, משתמשים ב־<code>Promise.allSettled</code>, כמו ב־P10-E17.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>for (const item of items) { total += (await getPrice(item.sku)) * item.qty; }</code> — עובד, אבל אחד אחרי השני: 250ms במקום 50. הבודק תופס את זה.</li><li><code>items.map(async ...)</code> ואז <code>reduce</code> בלי <code>await Promise.all</code> — מחברים Promises ולא מספרים, ויוצא <code>"0[object Promise]..."</code>.</li><li><code>try { ... } catch { return 0; }</code> — שגיאה בשליפת מחיר הופכת להזמנה בחינם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E28">
+    <h3>P10-E28 · כל העמודים 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה עמודים יהיו? לא יודעים מראש — רק מתי לעצור. זה <code>while</code>. משתנים: <code>all = []</code>, ‏<code>page = 1</code>, ‏<code>count = 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>while (page !== null) { if (count === maxPages) throw ...; const { items, next } = await getPage(page); all.push(...items); page = next; count++; }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E28: כל העמודים
+async function fetchAll(getPage, maxPages = 100) {
+  const all = [];
+  let page = 1;
+  let count = 0;
+  while (page !== null) {
+    if (count === maxPages) {
+      throw new Error("יותר מדי עמודים");
+    }
+    const { items, next } = await getPage(page);
+    all.push(...items);
+    page = next;
+    count++;
+  }
+  return all;
+}
+
+const pages = {
+  1: { items: ["a", "b"], next: 2 },
+  2: { items: ["c"], next: 3 },
+  3: { items: [], next: null },
+};
+const getPage = async (n) =&gt; {
+  console.log(`מביא עמוד ${n}`);
+  return pages[n];
+};
+
+fetchAll(getPage).then((all) =&gt; console.log(all));
+
+module.exports = { fetchAll };</code></pre>
+<pre class="terminal">מביא עמוד 1
+מביא עמוד 2
+מביא עמוד 3
+[ 'a', 'b', 'c' ]</pre>
+<p>כאן <code>await</code> בתוך לולאה הוא <strong>הכרחי</strong>, בניגוד ל־P10-E27: את מספר העמוד הבא יודעים רק אחרי שהתשובה הנוכחית הגיעה, ולכן אי אפשר לבקש את כל העמודים במקביל.</p>
+<p><code>all.push(...items)</code> פורש את הפריטים אחד אחד לתוך המערך. <code>all.push(items)</code> (בלי שלוש הנקודות) היה מכניס מערך שלם כפריט אחד. ובדיקת <code>maxPages</code> קורית <strong>לפני</strong> הבקשה, כך שלעולם לא יוצאות יותר מ־<code>maxPages</code> בקשות. זה אותו "guard נגד לולאה אינסופית" כמו ב־P04-E25.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>all.push(items)</code> — יוצא <code>[["a", "b"], ["c"], []]</code>.</li><li><code>while (next)</code> בלי <code>await</code> — <code>getPage(page)</code> מחזירה Promise, ול־Promise אין שדה <code>next</code>.</li><li>לבדוק את <code>maxPages</code> אחרי הבקשה — יוצאת בקשה אחת יותר מהמותר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P10-E01">
     <h3>P10-E01 · מה קודם? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
