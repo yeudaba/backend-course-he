@@ -10,7 +10,7 @@ export default {
   prismaProjects: ["solutions/tasks-api"],
   nestProjects: ["solutions/tasks-api"],
   time: "4 מפגשים",
-  expectedExercises: 30, // 25 + חמישה של שיעור 6 (observability)
+  expectedExercises: 33, // 25 + חמישה של שיעור 6 (observability) + שלושה של תרגול כתיבה
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, PostgreSQL (מפרק 16), Docker Desktop (מפרק 23), ופרויקט 2 בשלב ו׳.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום. כל מה שבפרק — מובנה ב־Node: <code>node:crypto</code>, <code>node:async_hooks</code>, <code>Intl</code> ו־<code>performance</code>. (בעבודה תפגוש ספריות כמו pino ל־logging — אחרי הפרק תדע בדיוק מה הן עושות בשבילך.)</p>
 <p>(רשות) <code>jq</code> — לקרוא לוגים של JSON בטרמינל: <code>brew install jq</code>. ב־macOS חדש הוא כבר מותקן — בדוק עם <code>jq --version</code>.</p>

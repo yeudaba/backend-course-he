@@ -13,6 +13,218 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>24-production/solutions/</code>.</p></div>
+<div class="ex typed" id="P24-E31">
+    <h3>P24-E31 · דוח latency מלוגים של JSON 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id")</code>. ‏<code>(?=\/|$)</code> אומר "ואחרי הספרות בא <code>/</code> או סוף" — בלי זה, <code>/v2beta</code> או <code>/123abc</code> היו נפגעים. ב־<code>routeReport</code>: ‏<code>try { entry = JSON.parse(line) } catch { skipped++; continue; }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Map&lt;string, { ms: number[]; errors: number }&gt;</code>, ואחר כך <code>[...map].map(([route, s]) =&gt; ...)</code>. לאחוזון: <code>const sorted = [...s.ms].sort((a, b) =&gt; a - b); sorted[Math.ceil(sorted.length * 0.95) - 1]</code>. ‏<code>sort()</code> בלי פונקציה ממיין מספרים כטקסט (‏<code>100</code> לפני <code>9</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E31 — דוח latency מלוגים של JSON
+export type RouteStats = { route: string; count: number; errorPct: number; p95: number };
+
+export function routeOf(method: string, path: string): string {
+  const clean = path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id");
+  return `${method.toUpperCase()} ${clean}`;
+}
+
+function p95(sorted: number[]): number {
+  return sorted[Math.ceil(sorted.length * 0.95) - 1];
+}
+
+export function routeReport(lines: string[]): { routes: RouteStats[]; skipped: number } {
+  const byRoute = new Map&lt;string, { ms: number[]; errors: number }&gt;();
+  let skipped = 0;
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (entry?.msg !== "request" || typeof entry.ms !== "number") {
+      skipped++;
+      continue;
+    }
+    const route = routeOf(entry.method, entry.path);
+    const stats = byRoute.get(route) ?? { ms: [], errors: 0 };
+    stats.ms.push(entry.ms);
+    if (entry.status &gt;= 500) stats.errors++;
+    byRoute.set(route, stats);
+  }
+
+  const routes = [...byRoute].map(([route, { ms, errors }]) =&gt; ({
+    route,
+    count: ms.length,
+    errorPct: Math.round((errors / ms.length) * 1000) / 10,
+    p95: p95([...ms].sort((a, b) =&gt; a - b)),
+  }));
+  routes.sort((a, b) =&gt; b.p95 - a.p95 || a.route.localeCompare(b.route));
+  return { routes, skipped };
+}
+
+const lines = [
+  '{"level":"info","msg":"server started","port":3000}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks","status":200,"ms":12}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17","status":200,"ms":8}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/4?fields=title","status":404,"ms":5}',
+  '{"level":"error","msg":"request","method":"POST","path":"/tasks","status":500,"ms":340}',
+  '{"level":"info","msg":"request","method":"post","path":"/tasks","status":201,"ms":45}',
+  "Error: connect ECONNREFUSED 127.0.0.1:5432",
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17/comments","status":200,"ms":30}',
+];
+const { routes, skipped } = routeReport(lines);
+console.table(routes);
+console.log("skipped:", skipped);</code></pre>
+<pre class="terminal">┌─────────┬───────────────────────────┬───────┬──────────┬─────┐
+│ (index) │ route                     │ count │ errorPct │ p95 │
+├─────────┼───────────────────────────┼───────┼──────────┼─────┤
+│ 0       │ 'POST /tasks'             │ 2     │ 50       │ 340 │
+│ 1       │ 'GET /tasks/:id/comments' │ 1     │ 0        │ 30  │
+│ 2       │ 'GET /tasks'              │ 1     │ 0        │ 12  │
+│ 3       │ 'GET /tasks/:id'          │ 2     │ 0        │ 8   │
+└─────────┴───────────────────────────┴───────┴──────────┴─────┘
+skipped: 2</pre>
+<p><code>POST /tasks</code> בראש הדוח, עם 50% שגיאות ו־p95 של 340ms. זו בדיוק השאלה הראשונה בתקלה: "איזה route, ומאז מתי". ‏<code>post</code> באותיות קטנות נספר יחד עם <code>POST</code>, ו־<code>/tasks/4?fields=title</code> יחד עם <code>/tasks/17</code>.</p>
+<p>למה לנרמל את הנתיב? בלי זה, כל משימה היא "route" משלה: אלף שורות בדוח, ובכל אחת בקשה אחת. זו אותה בעיה כמו label עם cardinality גבוה ב־Prometheus (שיעור 6). לכן ב־Express משתמשים ב־<code>req.route.path</code>, ולא ב־<code>req.path</code>.</p>
+<p>שורות שלא הצלחנו לקרוא לא נעלמות בשקט: ‏<code>skipped</code> מדווח עליהן. אם הוא פתאום קופץ, משהו כותב ללוג בפורמט אחר. במקרה הזה זו שגיאה מ־<code>console.error</code> שעקפה את ה־logger.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ממוצע במקום אחוזון — בקשה אחת של 340ms "נבלעת" בממוצע, ובדיוק היא זו שהמשתמש מרגיש.</li><li><code>.sort()</code> בלי פונקציית השוואה — <code>[100, 9, 12]</code> נשאר בסדר הזה.</li><li><code>Math.round(0.95 * n)</code> במקום <code>Math.ceil(...) - 1</code> — עם 2 ערכים זה האינדקס 2, שלא קיים, וה־p95 יוצא <code>undefined</code>.</li><li><code>/\d+/g</code> בלי עוגנים — <code>/v2/users</code> הופך ל־<code>/v:id/users</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E32">
+    <h3>P24-E32 · בדיקות ל־Retry-After 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קבע "עכשיו" קבוע אחד: <code>const NOW = new Date("2026-10-21T07:27:00Z")</code>. אז דקה אחרי זה, <code>"Wed, 21 Oct 2026 07:28:00 GMT"</code>, צריך לתת בדיוק <code>60_000</code>. בדיקה שקוראת לפונקציה <em>בלי</em> <code>now</code> תלויה בשעה שבה היא רצה — אל תעשה את זה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לקלט לא תקין: טבלה ולולאה (‏P22-E17), ובהודעה <code>JSON.stringify(bad)</code> כדי לראות מה נכשל. חשוב על מה ש־<code>Number()</code> ו־<code>Date.parse()</code> "מקבלים בטעות": ‏<code>Number("")</code> הוא 0, ו־<code>Date.parse("1.5")</code> הוא תאריך בשנת 2001.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E32 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseRetryAfter } from "./P24-E32.ts";
+
+const NOW = new Date("2026-10-21T07:27:00Z");
+
+test("מספר שניות ← מילישניות", () =&gt; {
+  assert.equal(parseRetryAfter("120", NOW), 120_000);
+  assert.equal(parseRetryAfter("1", NOW), 1000);
+  assert.equal(parseRetryAfter("0", NOW), 0);
+  assert.equal(parseRetryAfter("  30 ", NOW), 30_000);
+});
+
+test("תאריך HTTP ← כמה זמן עד אליו, לפי now", () =&gt; {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:28:00 GMT", NOW), 60_000);
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 08:27:00 GMT", NOW), 3_600_000);
+});
+
+test("תאריך שעבר ← 0", () =&gt; {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:00:00 GMT", NOW), 0);
+});
+
+test("אין header, או header לא תקין ← null", () =&gt; {
+  for (const bad of [undefined, "", "   ", "-5", "1.5", "5s", "abc", "2026-10-21", "tomorrow"]) {
+    assert.equal(parseRetryAfter(bad, NOW), null, JSON.stringify(bad));
+  }
+});</code></pre>
+<p>כל בדיקה כאן סוגרת באג אחד או יותר. ‏<code>"0"</code> תופס regex שדורש ספרה ראשונה שאינה 0. ‏<code>"  30 "</code> תופס מימוש בלי <code>trim</code>. התאריך שעבר תופס מימוש בלי <code>Math.max</code>. ו־<code>NOW</code> קבוע תופס מימוש שמתעלם מ־<code>now</code> וקורא ל־<code>Date.now()</code>: אצלו התשובה היא 0, כי 21 באוקטובר כבר עבר.</p>
+<p>הקלטים הכי חשובים הם אלה שנראים "כמעט תקינים": ‏<code>""</code>, ‏<code>"1.5"</code>, ‏<code>"2026-10-21"</code>. מימוש עם <code>Number(v)</code> מחזיר על <code>""</code> אפס, כלומר "נסה מיד". מימוש עם <code>Date.parse</code> בלבד מקבל את <code>"1.5"</code> כתאריך. בשני המקרים לקוח שמכבד את ה־header היה מציף את השרת שביקש ממנו לחכות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את הדוגמה מהמשימה (<code>"120"</code>) — רוב הבאגים כאן הם בקלט הלא תקין ובגבולות.</li><li><code>assert.ok(parseRetryAfter("abc") == null)</code> — עובר גם על <code>undefined</code>. ‏<code>assert.equal(..., null)</code> מדויק.</li><li>להשוות תאריכים בלי <code>now</code> קבוע — הבדיקה עוברת היום ונכשלת מחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E33">
+    <h3>P24-E33 · התראה על שיעור שגיאות 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה <code>#events: { at: number; error: boolean }[]</code>. הבקשות נכנסות לפי סדר הזמן, ולכן הישנות תמיד בהתחלה: <code>while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קרא ל־<code>#prune()</code> בתחילת שני ה־getters. ‏<code>shouldAlert</code> משתמש בהם: <code>this.count &gt;= ... &amp;&amp; this.errorRate &gt;= ...</code>. לבדיקת <code>threshold</code>: ‏<code>!(t &gt; 0 &amp;&amp; t &lt;= 1)</code> תופס גם <code>NaN</code>, ו־<code>t &lt;= 0 || t &gt; 1</code> לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E33 — התראה על שיעור שגיאות בחלון זמן
+type Options = { windowMs: number; threshold: number; minRequests: number };
+
+export class ErrorRateAlarm {
+  #events: { at: number; error: boolean }[] = [];
+  #options: Options;
+  #now: () =&gt; number;
+
+  constructor(options: Options, now: () =&gt; number = () =&gt; Date.now()) {
+    if (!(options.threshold &gt; 0 &amp;&amp; options.threshold &lt;= 1)) throw new RangeError("threshold חייב להיות בין 0 ל־1");
+    this.#options = options;
+    this.#now = now;
+  }
+
+  #prune(): void {
+    const from = this.#now() - this.#options.windowMs;
+    while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();
+  }
+
+  record(status: number): void {
+    this.#events.push({ at: this.#now(), error: status &gt;= 500 });
+  }
+
+  get count(): number {
+    this.#prune();
+    return this.#events.length;
+  }
+
+  get errorRate(): number {
+    this.#prune();
+    if (this.#events.length === 0) return 0;
+    const errors = this.#events.filter((e) =&gt; e.error).length;
+    return errors / this.#events.length;
+  }
+
+  shouldAlert(): boolean {
+    return this.count &gt;= this.#options.minRequests &amp;&amp; this.errorRate &gt;= this.#options.threshold;
+  }
+}
+
+let now = 0;
+const alarm = new ErrorRateAlarm({ windowMs: 60_000, threshold: 0.1, minRequests: 20 }, () =&gt; now);
+for (let i = 0; i &lt; 18; i++) alarm.record(200);
+alarm.record(500);
+alarm.record(503);
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
+now = 30_000;
+alarm.record(200);
+console.log(alarm.count, alarm.errorRate.toFixed(3), alarm.shouldAlert());
+now = 60_000;
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());</code></pre>
+<pre class="terminal">20 0.1 true
+21 0.095 false
+1 0 false</pre>
+<p>שורה 1: עשרים בקשות, שתיים מהן שגיאות. 10% בדיוק, ויש התראה. שורה 2: בקשה תקינה נוספת מורידה את השיעור ל־9.5%. שורה 3: אחרי דקה כל עשרים הבקשות הראשונות יוצאות מהחלון, ונשארה רק אחת. ‏<code>minRequests</code> מונע התראה על בקשה אחת.</p>
+<p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code>rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P24-E01">
     <h3>P24-E01 · מה כותבים ללוג, ובאיזו רמה? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

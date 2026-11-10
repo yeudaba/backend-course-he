@@ -1499,3 +1499,222 @@ export function renderHistogram({ name, labels, buckets, values }: { name: strin
 <ol><li><strong>דליים לא מצטברים</strong> — כל ערך נספר רק בדלי הראשון שמתאים. <code>histogram_quantile</code> מניח מצטבר, ולכן מחשב אחוזונים שגויים — בלי שום שגיאה.</li><li><strong>אין escaping</strong> — <code>route="a"b"</code> הוא שורה לא חוקית, ו־Prometheus דוחה את כל ה־scrape (כל המדדים, לא רק זה).</li><li><strong>חסר <code>le="+Inf"</code></strong> — בלעדיו אין דלי ש"תופס הכול", וערכים מעל הדלי האחרון נעלמים מהחישוב.</li></ol>
 @mistakes
 <ul><li>לתקן את המצטבר רק ל־<code>+Inf</code> — כל הדליים צריכים להיות מצטברים.</li></ul>
+
+@@ P24-E31 | 3 | דוח latency מלוגים של JSON 🤖 | 25 | שיעור 6
+@type scratch
+@task
+<p>הלוגים של השרת הם שורות JSON (שיעור 1). לפני שיש Prometheus, אפשר להוציא מהם דוח: איזה route איטי, ואיפה יש שגיאות. כתוב מקובץ ריק וייצא:</p>
+<ul><li><code>routeOf(method, path): string</code> — המתודה באותיות גדולות, רווח, והנתיב בלי query string. כל קטע בנתיב שהוא רק ספרות הופך ל־<code>:id</code>: ‏<code>("get", "/tasks/17/comments?x=1")</code> ← <code>"GET /tasks/:id/comments"</code>. כך <code>/tasks/17</code> ו־<code>/tasks/4</code> נספרים יחד.</li><li><code>routeReport(lines: string[]): { routes, skipped }</code>. שורה נספרת רק אם היא JSON תקין, ‏<code>msg</code> שלה הוא <code>"request"</code>, ו־<code>ms</code> הוא מספר. כל שורה אחרת (טקסט חופשי, ‏<code>"server started"</code>) מוסיפה 1 ל־<code>skipped</code>.</li><li>ב־<code>routes</code> שורה לכל route: ‏<code>{ route, count, errorPct, p95 }</code>. ‏<code>errorPct</code> — אחוז הבקשות עם <code>status</code> ‏500 ומעלה, מעוגל לספרה אחת אחרי הנקודה (‏<code>33.3</code>). ‏<code>p95</code> — אחוזון 95 בשיטת nearest-rank (שיעור 6): ממיינים, ולוקחים את האיבר במקום <code>Math.ceil(0.95 × n)</code> (מ־1).</li><li>מיון: <code>p95</code> מהגבוה לנמוך, ובתיקו לפי <code>route</code> בסדר אלפביתי.</li></ul>
+<p>📄 כותבים בקובץ <code>24-production/starter/P24-E31.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 24-production/starter/P24-E31.ts
+% npm run check P24-E31
+```
+@hint1
+<p><code>path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id")</code>. ‏<code>(?=\/|$)</code> אומר "ואחרי הספרות בא <code>/</code> או סוף" — בלי זה, <code>/v2beta</code> או <code>/123abc</code> היו נפגעים. ב־<code>routeReport</code>: ‏<code>try { entry = JSON.parse(line) } catch { skipped++; continue; }</code>.</p>
+@hint2
+<p><code>Map&lt;string, { ms: number[]; errors: number }&gt;</code>, ואחר כך <code>[...map].map(([route, s]) =&gt; ...)</code>. לאחוזון: <code>const sorted = [...s.ms].sort((a, b) =&gt; a - b); sorted[Math.ceil(sorted.length * 0.95) - 1]</code>. ‏<code>sort()</code> בלי פונקציה ממיין מספרים כטקסט (‏<code>100</code> לפני <code>9</code>).</p>
+@solution
+```ts run save=solutions/P24-E31.ts
+// P24-E31 — דוח latency מלוגים של JSON
+export type RouteStats = { route: string; count: number; errorPct: number; p95: number };
+
+export function routeOf(method: string, path: string): string {
+  const clean = path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id");
+  return `${method.toUpperCase()} ${clean}`;
+}
+
+function p95(sorted: number[]): number {
+  return sorted[Math.ceil(sorted.length * 0.95) - 1];
+}
+
+export function routeReport(lines: string[]): { routes: RouteStats[]; skipped: number } {
+  const byRoute = new Map<string, { ms: number[]; errors: number }>();
+  let skipped = 0;
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (entry?.msg !== "request" || typeof entry.ms !== "number") {
+      skipped++;
+      continue;
+    }
+    const route = routeOf(entry.method, entry.path);
+    const stats = byRoute.get(route) ?? { ms: [], errors: 0 };
+    stats.ms.push(entry.ms);
+    if (entry.status >= 500) stats.errors++;
+    byRoute.set(route, stats);
+  }
+
+  const routes = [...byRoute].map(([route, { ms, errors }]) => ({
+    route,
+    count: ms.length,
+    errorPct: Math.round((errors / ms.length) * 1000) / 10,
+    p95: p95([...ms].sort((a, b) => a - b)),
+  }));
+  routes.sort((a, b) => b.p95 - a.p95 || a.route.localeCompare(b.route));
+  return { routes, skipped };
+}
+
+const lines = [
+  '{"level":"info","msg":"server started","port":3000}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks","status":200,"ms":12}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17","status":200,"ms":8}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/4?fields=title","status":404,"ms":5}',
+  '{"level":"error","msg":"request","method":"POST","path":"/tasks","status":500,"ms":340}',
+  '{"level":"info","msg":"request","method":"post","path":"/tasks","status":201,"ms":45}',
+  "Error: connect ECONNREFUSED 127.0.0.1:5432",
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17/comments","status":200,"ms":30}',
+];
+const { routes, skipped } = routeReport(lines);
+console.table(routes);
+console.log("skipped:", skipped);
+```
+```out
+┌─────────┬───────────────────────────┬───────┬──────────┬─────┐
+│ (index) │ route                     │ count │ errorPct │ p95 │
+├─────────┼───────────────────────────┼───────┼──────────┼─────┤
+│ 0       │ 'POST /tasks'             │ 2     │ 50       │ 340 │
+│ 1       │ 'GET /tasks/:id/comments' │ 1     │ 0        │ 30  │
+│ 2       │ 'GET /tasks'              │ 1     │ 0        │ 12  │
+│ 3       │ 'GET /tasks/:id'          │ 2     │ 0        │ 8   │
+└─────────┴───────────────────────────┴───────┴──────────┴─────┘
+skipped: 2
+```
+<p><code>POST /tasks</code> בראש הדוח, עם 50% שגיאות ו־p95 של 340ms. זו בדיוק השאלה הראשונה בתקלה: "איזה route, ומאז מתי". ‏<code>post</code> באותיות קטנות נספר יחד עם <code>POST</code>, ו־<code>/tasks/4?fields=title</code> יחד עם <code>/tasks/17</code>.</p>
+<p>למה לנרמל את הנתיב? בלי זה, כל משימה היא "route" משלה: אלף שורות בדוח, ובכל אחת בקשה אחת. זו אותה בעיה כמו label עם cardinality גבוה ב־Prometheus (שיעור 6). לכן ב־Express משתמשים ב־<code>req.route.path</code>, ולא ב־<code>req.path</code>.</p>
+<p>שורות שלא הצלחנו לקרוא לא נעלמות בשקט: ‏<code>skipped</code> מדווח עליהן. אם הוא פתאום קופץ, משהו כותב ללוג בפורמט אחר. במקרה הזה זו שגיאה מ־<code>console.error</code> שעקפה את ה־logger.</p>
+@mistakes
+<ul><li>ממוצע במקום אחוזון — בקשה אחת של 340ms "נבלעת" בממוצע, ובדיוק היא זו שהמשתמש מרגיש.</li><li><code>.sort()</code> בלי פונקציית השוואה — <code>[100, 9, 12]</code> נשאר בסדר הזה.</li><li><code>Math.round(0.95 * n)</code> במקום <code>Math.ceil(...) - 1</code> — עם 2 ערכים זה האינדקס 2, שלא קיים, וה־p95 יוצא <code>undefined</code>.</li><li><code>/\d+/g</code> בלי עוגנים — <code>/v2/users</code> הופך ל־<code>/v:id/users</code>.</li></ul>
+
+@@ P24-E32 | 3 | בדיקות ל־Retry-After 🤖 | 25 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על כתיבת בדיקות (פרק 22): <code>node:test</code>, ‏<code>assert</code>, גבולות, טבלת מקרים, ושעון שמוזרק כפרמטר.</strong> כששרת מחזיר 429 (שיעור 4) או 503, הוא שולח <code>Retry-After</code>: מספר שניות (<code>120</code>), או תאריך HTTP (<code>Wed, 21 Oct 2026 07:28:00 GMT</code>). ב־<code>24-production/starter/P24-E32.ts</code> יש <code>parseRetryAfter(value, now)</code>, שמחזירה כמה מילישניות לחכות:</p>
+<ul><li>ספרות בלבד (אפשר רווחים מסביב) ← שניות × 1000. גם <code>"0"</code> תקין.</li><li>תאריך HTTP ← הזמן עד אליו, לפי <code>now</code>. תאריך שכבר עבר ← <code>0</code>.</li><li><code>undefined</code>, או כל דבר אחר (<code>""</code>, ‏<code>"-5"</code>, ‏<code>"1.5"</code>, ‏<code>"5s"</code>, ‏<code>"2026-10-21"</code>) ← <code>null</code>.</li></ul>
+<p>כתוב בדיקות ב־<code>P24-E32.spec.ts</code>, מקובץ ריק (גם ה־imports). הבודק מריץ אותן על הקוד התקין, על שני מימושים תקינים אחרים, ועל 9 גרסאות עם באג. כל באג צריך לגרום לפחות לבדיקה אחת להיכשל. את <code>P24-E32.ts</code> עצמו לא משנים.</p>
+```term
+% node --test 24-production/starter/P24-E32.spec.ts
+% npm run check P24-E32
+```
+@hint1
+<p>קבע "עכשיו" קבוע אחד: <code>const NOW = new Date("2026-10-21T07:27:00Z")</code>. אז דקה אחרי זה, <code>"Wed, 21 Oct 2026 07:28:00 GMT"</code>, צריך לתת בדיוק <code>60_000</code>. בדיקה שקוראת לפונקציה <em>בלי</em> <code>now</code> תלויה בשעה שבה היא רצה — אל תעשה את זה.</p>
+@hint2
+<p>לקלט לא תקין: טבלה ולולאה (‏P22-E17), ובהודעה <code>JSON.stringify(bad)</code> כדי לראות מה נכשל. חשוב על מה ש־<code>Number()</code> ו־<code>Date.parse()</code> "מקבלים בטעות": ‏<code>Number("")</code> הוא 0, ו־<code>Date.parse("1.5")</code> הוא תאריך בשנת 2001.</p>
+@solution
+```ts save=solutions/P24-E32.spec.ts
+// P24-E32 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseRetryAfter } from "./P24-E32.ts";
+
+const NOW = new Date("2026-10-21T07:27:00Z");
+
+test("מספר שניות ← מילישניות", () => {
+  assert.equal(parseRetryAfter("120", NOW), 120_000);
+  assert.equal(parseRetryAfter("1", NOW), 1000);
+  assert.equal(parseRetryAfter("0", NOW), 0);
+  assert.equal(parseRetryAfter("  30 ", NOW), 30_000);
+});
+
+test("תאריך HTTP ← כמה זמן עד אליו, לפי now", () => {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:28:00 GMT", NOW), 60_000);
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 08:27:00 GMT", NOW), 3_600_000);
+});
+
+test("תאריך שעבר ← 0", () => {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:00:00 GMT", NOW), 0);
+});
+
+test("אין header, או header לא תקין ← null", () => {
+  for (const bad of [undefined, "", "   ", "-5", "1.5", "5s", "abc", "2026-10-21", "tomorrow"]) {
+    assert.equal(parseRetryAfter(bad, NOW), null, JSON.stringify(bad));
+  }
+});
+```
+<p>כל בדיקה כאן סוגרת באג אחד או יותר. ‏<code>"0"</code> תופס regex שדורש ספרה ראשונה שאינה 0. ‏<code>"  30 "</code> תופס מימוש בלי <code>trim</code>. התאריך שעבר תופס מימוש בלי <code>Math.max</code>. ו־<code>NOW</code> קבוע תופס מימוש שמתעלם מ־<code>now</code> וקורא ל־<code>Date.now()</code>: אצלו התשובה היא 0, כי 21 באוקטובר כבר עבר.</p>
+<p>הקלטים הכי חשובים הם אלה שנראים "כמעט תקינים": ‏<code>""</code>, ‏<code>"1.5"</code>, ‏<code>"2026-10-21"</code>. מימוש עם <code>Number(v)</code> מחזיר על <code>""</code> אפס, כלומר "נסה מיד". מימוש עם <code>Date.parse</code> בלבד מקבל את <code>"1.5"</code> כתאריך. בשני המקרים לקוח שמכבד את ה־header היה מציף את השרת שביקש ממנו לחכות.</p>
+@mistakes
+<ul><li>לבדוק רק את הדוגמה מהמשימה (<code>"120"</code>) — רוב הבאגים כאן הם בקלט הלא תקין ובגבולות.</li><li><code>assert.ok(parseRetryAfter("abc") == null)</code> — עובר גם על <code>undefined</code>. ‏<code>assert.equal(..., null)</code> מדויק.</li><li>להשוות תאריכים בלי <code>now</code> קבוע — הבדיקה עוברת היום ונכשלת מחר.</li></ul>
+
+@@ P24-E33 | 2 | התראה על שיעור שגיאות 🤖 | 20 | שיעור 6
+@type review
+@task
+<p><strong>🔁 חזרה על <code>class</code> עם שדות ומתודות פרטיים ו־getter (פרק 12), לולאת <code>while</code> (פרק 4) ושעון מוזרק (‏P21-E28)</strong>. התראה "יותר מ־10% שגיאות" צריכה חלון זמן ומינימום בקשות: שתי שגיאות מתוך שלוש בקשות בלילה הן לא תקלה. כתוב וייצא <code>class ErrorRateAlarm</code>:</p>
+<ul><li><code>constructor({ windowMs, threshold, minRequests }, now = () =&gt; Date.now())</code>. ‏<code>threshold</code> הוא שבר: גדול מ־0 ועד 1 כולל. אחרת ← <code>RangeError</code>.</li><li><code>record(status)</code> — רושם בקשה בזמן <code>now()</code>. שגיאה = <code>status &gt;= 500</code>.</li><li>getter ‏<code>count</code> ו־getter ‏<code>errorRate</code> (‏0 כשאין בקשות) — רק על בקשות מהחלון: זמן גדול מ־<code>now() - windowMs</code>. בקשה בדיוק בגבול כבר לא בחלון.</li><li><code>shouldAlert()</code> — ‏<code>count &gt;= minRequests</code> וגם <code>errorRate &gt;= threshold</code>.</li><li>בקשות ישנות נמחקות מהזיכרון (לא רק לא נספרות), במתודה פרטית <code>#prune()</code> עם <code>while</code>. כל השדות פרטיים.</li></ul>
+<p>📄 כותבים בקובץ <code>24-production/starter/P24-E33.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 24-production/starter/P24-E33.ts
+% npm run check P24-E33
+```
+@hint1
+<p>שדה <code>#events: { at: number; error: boolean }[]</code>. הבקשות נכנסות לפי סדר הזמן, ולכן הישנות תמיד בהתחלה: <code>while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();</code>.</p>
+@hint2
+<p>קרא ל־<code>#prune()</code> בתחילת שני ה־getters. ‏<code>shouldAlert</code> משתמש בהם: <code>this.count &gt;= ... &amp;&amp; this.errorRate &gt;= ...</code>. לבדיקת <code>threshold</code>: ‏<code>!(t &gt; 0 &amp;&amp; t &lt;= 1)</code> תופס גם <code>NaN</code>, ו־<code>t &lt;= 0 || t &gt; 1</code> לא.</p>
+@solution
+```ts run save=solutions/P24-E33.ts
+// P24-E33 — התראה על שיעור שגיאות בחלון זמן
+type Options = { windowMs: number; threshold: number; minRequests: number };
+
+export class ErrorRateAlarm {
+  #events: { at: number; error: boolean }[] = [];
+  #options: Options;
+  #now: () => number;
+
+  constructor(options: Options, now: () => number = () => Date.now()) {
+    if (!(options.threshold > 0 && options.threshold <= 1)) throw new RangeError("threshold חייב להיות בין 0 ל־1");
+    this.#options = options;
+    this.#now = now;
+  }
+
+  #prune(): void {
+    const from = this.#now() - this.#options.windowMs;
+    while (this.#events.length > 0 && this.#events[0].at <= from) this.#events.shift();
+  }
+
+  record(status: number): void {
+    this.#events.push({ at: this.#now(), error: status >= 500 });
+  }
+
+  get count(): number {
+    this.#prune();
+    return this.#events.length;
+  }
+
+  get errorRate(): number {
+    this.#prune();
+    if (this.#events.length === 0) return 0;
+    const errors = this.#events.filter((e) => e.error).length;
+    return errors / this.#events.length;
+  }
+
+  shouldAlert(): boolean {
+    return this.count >= this.#options.minRequests && this.errorRate >= this.#options.threshold;
+  }
+}
+
+let now = 0;
+const alarm = new ErrorRateAlarm({ windowMs: 60_000, threshold: 0.1, minRequests: 20 }, () => now);
+for (let i = 0; i < 18; i++) alarm.record(200);
+alarm.record(500);
+alarm.record(503);
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
+now = 30_000;
+alarm.record(200);
+console.log(alarm.count, alarm.errorRate.toFixed(3), alarm.shouldAlert());
+now = 60_000;
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
+```
+```out
+20 0.1 true
+21 0.095 false
+1 0 false
+```
+<p>שורה 1: עשרים בקשות, שתיים מהן שגיאות. 10% בדיוק, ויש התראה. שורה 2: בקשה תקינה נוספת מורידה את השיעור ל־9.5%. שורה 3: אחרי דקה כל עשרים הבקשות הראשונות יוצאות מהחלון, ונשארה רק אחת. ‏<code>minRequests</code> מונע התראה על בקשה אחת.</p>
+<p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code>rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
+@mistakes
+<ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
