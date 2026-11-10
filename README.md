@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **1004** | **798** | **706** |
+| **42** | **196** | **1046** | **840** | **740** |
 
 ## מה שונה כאן
 
@@ -273,15 +273,15 @@
 | [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 28 | 24 | ✔ |
 | [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 28 | 25 | ✔ |
 | [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 28 | 24 | ✔ |
-| [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 25 | 21 | ✔ |
-| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 30 | 26 | ✔ |
-| [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 25 | 22 | ✔ |
+| [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 28 | 24 | ✔ |
+| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 33 | 29 | ✔ |
+| [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 28 | 25 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
-| [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 25 | 20 | ✔ |
-| [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 25 | 20 | ✔ |
-| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 30 | 25 | ✔ |
-| [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 25 | 20 | ✔ |
-| [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 25 | 20 | ✔ |
+| [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 28 | 23 | ✔ |
+| [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 28 | 23 | ✔ |
+| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 33 | 28 | ✔ |
+| [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 28 | 23 | ✔ |
+| [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 28 | 23 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -390,13 +390,13 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 25 | 20 | ✔ |
-| [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 25 | 20 | ✔ |
-| [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 25 | 20 | ✔ |
-| [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 25 | 20 | ✔ |
-| [יחידה 29.5](backend-course/29w-agents/index.html) | סוכני AI בפרודקשן | 5 | 25 | 20 | ✔ |
+| [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 28 | 23 | ✔ |
+| [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 28 | 23 | ✔ |
+| [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 28 | 23 | ✔ |
+| [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 28 | 23 | ✔ |
+| [יחידה 29.5](backend-course/29w-agents/index.html) | סוכני AI בפרודקשן | 5 | 28 | 23 | ✔ |
 | [פרויקט 4](backend-course/29x-project-events/index.html) | מערכת אירועים ואנליטיקה | 7 | — | 6 | ✔ |
-| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 6 | 30 | 24 | ✔ |
+| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 6 | 33 | 27 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>

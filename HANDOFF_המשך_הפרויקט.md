@@ -467,7 +467,26 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
     - פרק 20: E26 ✍️ מודול סימניות מקובץ ריק, E27 🔁 slug — regex ב־slugify וב־SlugPipe, E28 🔁 סיכום לקוח משני repositories (tokens + Promise.all + reduce באגורות).
     - פרק 21: E26 ✍️ JWT ביד עם node:crypto (זהה ל־jsonwebtoken, ‏timingSafeEqual), E27 🔁 פירוק header של Authorization (switch + regex + union), E28 🔁 רשימת חסימה לטוקנים (class + Map + שעון מוזרק).
     - פרק 22: E26 ✍️ בדיקות ל־pagination (מוטציות), E27 🔁 מטמון LRU (Map + class + generics), E28 🔁 memoizeAsync עם שעון מוזרק (closure + Map + Promise).
-- **הבא בתור:** פרק 23 והלאה, לפי הסדר (23, 24, 25…). בפרקים 24, 26, 30 המזהים E31–E33. לפרקי TS העתק את `tests/_ts.mjs` מפרק 21 (עם הטיפוסים של Node).
+- **בוצע — פרקים 23–30 (בלי 25p ו־29x), סבב 4:** בכל יחידה E26–E28 ו־`expectedExercises: 28`; בפרקים 24, 26, 30 — ‏E31–E33 ו־`expectedExercises: 33`. קובצי התחלה ריקים, קישורים מקופסת התרגול של השיעור המתאים, ו־`tests/_ts.mjs` (מפרק 21) בכל יחידה.
+  - **"כתוב את הבדיקות" חוזר כל 2–3 יחידות** (‏`tools/mutation.mjs`, ‏`files/<id>/` עם `mutants.json`, והקוד הנבדק גם ב־`starter/` וב־`solutions/` של המקור): ‏P24-E32 (‏Retry-After, 9 מוטנטים), ‏P25.7-E27 (‏parseSort, 10 — כולל סדר מפתחות שרק `Object.entries` תופס), ‏P26.5-E27 (‏retry/dead-letter, 11), ‏P28-E27 (‏/health, 12), ‏P29-E27 (‏redactPII, 12), ‏P30-E32 (מספר זהות, 10).
+  - **נתונים חדשים:** ‏`26w-messaging/files/outbox-next.sql` (‏P26.5-E28), ‏`28w-scale/files/views-days.sql` (‏P28.5-E27, השעות 10–13 UTC כדי שהיום לא ישתנה באזורי זמן אחרים). ה־```out של SQL מולא עם `--fill`.
+  - **לקח — הדגמות שמתחברות לשירות:** קובץ הפתרון נטען גם בבודק, ולכן קוד הדגמה בסוף הקובץ רץ בכל בדיקה. ב־P26-E31 (‏Redis) ההדגמה עברה לקובץ `demo.mts` נפרד (פלט אמיתי ב־```term), והפתרון בלי `run`. ‏top-level `await` לא עובר `tsc` (הקובץ נחשב CommonJS) — הדגמות אסינכרוניות בתוך `async function demo() {...}; demo();`. ב־assemble, הדגמה שמתחברת ל־Redis צריכה `REDIS_URL=redis://localhost:6380`.
+  - **חדשים:**
+    - פרק 23: E26 ✍️ סבב גיבויים (bash), E27 🔁 קורא קובץ .env (indexOf/slice + regex), E28 🔁 כמה מקום תופסים ה־images (switch + reduce + toFixed).
+    - פרק 24: E31 ✍️ דוח latency מלוגים של JSON (Map + p95), E32 🔁 בדיקות ל־Retry-After, E33 🔁 התראה על שיעור שגיאות (class + while + שעון מוזרק).
+    - פרק 25: E26 ✍️ feature flags עם פריסה הדרגתית (sha256 ← דלי), E27 🔁 formatUptime (‏% + findIndex/slice/filter), E28 🔁 mapLimit (async + closure + while).
+    - יחידה 25.5: E26 ✍️ דוח לקוחות ב־MySQL (שני CTE + RANK + DATE_FORMAT), E27 🔁 INSERT מרובה שורות עם upsert (flatMap + regex לשמות), E28 🔁 שאילתה מ־PostgreSQL ל־MySQL (replace עם פונקציה).
+    - יחידה 25.7: E26 ✍️ חיפוש מוצרים מ־query string (פילטר Mongo + escape), E27 🔁 בדיקות ל־parseSort, E28 🔁 מה מסתתר ב־ObjectId (parseInt בבסיס 16 + padStart + Date.UTC).
+    - פרק 26: E31 ✍️ sessions ב־Redis (MULTI + EXPIRE NX/GT), E32 🔁 לקרוא את INFO (split(/\r?\n/) + fromEntries), E33 🔁 TypedEmitter (generics + keyof, בוחן טיפוסים).
+    - יחידה 26.3: E26 ✍️ label selector של Kubernetes (regex + union + switch), E27 🔁 חשבון S3 לפי מדרגות (לולאה עם מצטבר), E28 🔁 סיכום של kubectl get pods (טבלה לפי הכותרת, כמו P23-E28).
+    - יחידה 26.5: E26 ✍️ ReorderBuffer<T> (Map + while), E27 🔁 בדיקות ל־decide (retry/DLQ), E28 🔁 האירוע הבא לכל מפתח ב־outbox (SQL: ‏ROW_NUMBER + COUNT OVER).
+    - פרק 27: E26 🔥 הראשון שמופיע פעם אחת (Map, ‏O(n)), E27 🔁 מיזוג רשימות ממוינות (while עם שני אינדקסים), E28 🔁 דחיסת רצפים RLE (matchAll + repeat).
+    - פרק 28: E26 ✍️ quorum (R + W > N, read repair), E27 🔁 בדיקות ל־/health, E28 🔁 hedged request (new Promise + setTimeout).
+    - יחידה 28.5: E26 ✍️ Space-Saving TopK (זיכרון קבוע, ערבויות), E27 🔁 סיכום יומי של צפיות (SQL: ‏COUNT DISTINCT + ROW_NUMBER), E28 🔁 דוח של בדיקת עומס (padStart/padEnd + Intl).
+    - פרק 29: E26 ✍️ chunk + retrieve (‏RAG בלי embeddings, ‏\p{L}), E27 🔁 בדיקות ל־redactPII, E28 🔁 תבנית prompt (replace עם פונקציה + Object.hasOwn + <document>).
+    - יחידה 29.5: E26 ✍️ שומר לולאה לסוכן (stableKey רקורסיבי), E27 🔁 בודק JSON Schema קטן (union + רקורסיה + נתיבים), E28 🔁 trace כעץ טקסט (Map + רקורסיה + padEnd).
+    - פרק 30: E31 ✍️ מטלת בית: key-value עם טרנזקציות מקוננות, E32 🔁 בדיקות לבדיקת מספר זהות, E33 🔁 semver satisfies (23 מקרים שנבדקו מול חבילת semver).
+- **✔ המהלך הושלם:** תרגול הכתיבה קיים בכל 37 היחידות הממוספרות (1–30, ועוד 15.5, 25.5, 25.7, 26.3, 26.5, 28.5, 29.5). לא נכללו: פרק 0 והפרויקטים (08p, ‏15p, ‏25p, ‏29x). אפשר להמשיך (לא תוכנן): בודק לתרגילי התיקון E20–E23 בפרקים 1–4, ו"מסלול חזרה" מרוכז.
 
 ---
 
