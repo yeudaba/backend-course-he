@@ -10,7 +10,7 @@ export default {
   database: true, // E25 מעתיק מ־PostgreSQL ל־MySQL
   testTimeout: 120000,
   time: "3 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> PostgreSQL מפרק 16 (לתרגיל E25), ו־<strong>Docker Desktop</strong> מפרק 23 — כאן מריצים בו את MySQL בפקודה אחת.</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>
