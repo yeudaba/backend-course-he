@@ -1,0 +1,6 @@
+-- P28.5-E27: סיכום יומי של צפיות — חזרה על GROUP BY, COUNT(DISTINCT), CTE ו־ROW_NUMBER
+-- page_views(id, user_id, path, viewed_at). לכל יום (viewed_at::date):
+-- day, views (כמה צפיות), users (כמה משתמשים שונים), top_path (הנתיב הנצפה ביותר; בתיקו — לפי שם), top_path_views
+-- מיון: day
+--
+-- בדיקה:  npm run check P28.5-E27

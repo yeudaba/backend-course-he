@@ -10,7 +10,7 @@ export default {
   database: true, // E12, E25 — PostgreSQL
   testTimeout: 60000,
   time: "4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> PostgreSQL מפרק 16. בלי קונטיינרים חדשים.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>
