@@ -1,0 +1,8 @@
+-- P17-E26: הספרייה מ־P17-E01 — בקוד (מקובץ ריק)
+-- 1. חמש טבלאות: authors, books (isbn ייחודי), book_authors (רבים־לרבים, PK של הזוג, מחיקת ספר ← CASCADE),
+--    members (email ייחודי), loans (loaned_on ברירת מחדל היום, returned_on לא חובה ולא לפני loaned_on).
+--    אי אפשר למחוק מחבר עם ספרים, וגם לא ספר או חבר עם השאלות.
+-- 2. הנתונים — בדף התרגילים.
+-- 3. SELECT: ההשאלות הפתוחות — title, member, loaned_on — לפי loaned_on
+--
+-- בדיקה:  npm run check P17-E26
