@@ -49,7 +49,7 @@ export function run(testUrl, file, { changes = [], input = "" } = {}) {
   fs.writeFileSync(f, src);
   try {
     const r = spawnSync(process.execPath, [f], { encoding: "utf8", input, timeout: 10000 });
-    return { lines: r.stdout.replace(/\s+$/, "").split("\n").map((l) => l.replace(/\s+$/, "")), stdout: r.stdout, stderr: r.stderr, status: r.status };
+    return { lines: r.stdout.replace(/\s+$/, "").split("\n").map((l) => l.replace(/\s+$/, "")), stdout: r.stdout, stderr: r.stderr, status: r.status, signal: r.signal };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -57,6 +57,7 @@ export function run(testUrl, file, { changes = [], input = "" } = {}) {
 
 // הקובץ רץ בלי שגיאה
 export function ranOk(r) {
+  if (r.signal) assert.fail("הקובץ שלך רץ יותר מ־10 שניות ונעצר — אולי לולאה אינסופית? (בדוק שהתנאי של הלולאה נהיה false מתישהו)");
   if (r.status !== 0) {
     const err = r.stderr.split("\n").find((l) => /^\w*Error\b/.test(l)) ?? r.stderr.trim().split("\n")[0] ?? "";
     assert.fail(`הקובץ שלך נעצר עם שגיאה: ${err}`);

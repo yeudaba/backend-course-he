@@ -18,8 +18,8 @@ export default async function* reporter(source) {
       // הודעה שכתבנו בבדיקה (assert.ok(x, "...")) — מסבירה מה חסר טוב יותר מ־"קיבלנו false"
       const custom = cause && typeof cause === "object" && cause.generatedMessage === false && cause.message;
       if (custom) yield `      ${String(custom).split("\n")[0]}\n`;
-      if (custom && (cause.operator === "==" || cause.operator === "fail")) {
-        // assert.ok / assert.fail — אין מה להשוות מעבר להודעה
+      if (custom && ["==", "fail", "match", "doesNotMatch"].includes(cause.operator)) {
+        // assert.ok / fail / match — ההודעה מספיקה (בלי להדפיס את כל הקוד שלך כ"קיבלנו")
       } else if (cause && typeof cause === "object" && "expected" in cause && "actual" in cause) {
         yield `      קיבלנו: ${show(cause.actual)}\n      ציפינו: ${show(cause.expected)}\n`;
       } else if (cause && typeof cause === "object" && cause.message) {
