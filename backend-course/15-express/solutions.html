@@ -13,6 +13,259 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>15-express/solutions/</code>.</p></div>
+<div class="ex typed" id="P15-E26">
+    <h3>P15-E26 · API משימות — מקובץ ריק 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הסדר בקובץ: imports (<code>express</code>, ‏<code>z</code> מ־<code>zod</code>) ← <code>type Task</code> ← schema ← <code>createApp</code>. בתוך <code>createApp</code>: ‏<code>express.json()</code>, המערך ו־<code>nextId</code>, ארבעת ה־routes, ובסוף error handler עם 4 פרמטרים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>schema: <code>z.object({ title: z.string().trim().min(1).max(100), done: z.boolean().default(false) })</code>. אחרי <code>safeParse</code>: ‏<code>result.error.issues.map((i) =&gt; i.path.join("."))</code>, ו־<code>new Set</code> כדי שכל שם יופיע פעם אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E26: API משימות מאפס
+import express, { type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+
+type Task = { id: number; title: string; done: boolean };
+
+const newTaskSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  done: z.boolean().default(false),
+});
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const tasks: Task[] = [];
+  let nextId = 1;
+
+  const findTask = (id: string) =&gt; tasks.find((t) =&gt; t.id === Number(id));
+
+  app.get("/tasks", (req, res) =&gt; {
+    const { done } = req.query;
+    if (done === "true" || done === "false") {
+      res.json(tasks.filter((t) =&gt; t.done === (done === "true")));
+      return;
+    }
+    res.json(tasks);
+  });
+
+  app.get("/tasks/:id", (req, res) =&gt; {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    res.json(task);
+  });
+
+  app.post("/tasks", (req, res) =&gt; {
+    const result = newTaskSchema.safeParse(req.body);
+    if (!result.success) {
+      const fields = [...new Set(result.error.issues.map((i) =&gt; i.path.join(".")))];
+      res.status(400).json({ error: "קלט לא תקין", fields });
+      return;
+    }
+    const task = { id: nextId++, ...result.data };
+    tasks.push(task);
+    res.status(201).location(`/tasks/${task.id}`).json(task);
+  });
+
+  app.delete("/tasks/:id", (req, res) =&gt; {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    tasks.splice(tasks.indexOf(task), 1);
+    res.sendStatus(204);
+  });
+
+  app.use((err: { type?: string }, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "JSON לא תקין" });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}
+
+// הדגמה: מפעילים על פורט פנוי, שולחים כמה בקשות וסוגרים
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const post = (body: unknown) =&gt; fetch(`${base}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  const created = await post({ title: "  לקנות חלב " });
+  console.log(created.status, created.headers.get("location"), await created.json());
+  const bad = await post({ title: "", done: "yes" });
+  console.log(bad.status, await bad.json());
+  console.log((await fetch(`${base}/tasks?done=false`).then((r) =&gt; r.json())).length);
+  server.close();
+});</code></pre>
+<pre class="terminal">201 /tasks/1 { id: 1, title: 'לקנות חלב', done: false }
+400 { error: 'קלט לא תקין', fields: [ 'title', 'done' ] }
+1</pre>
+<p>שים לב איפה כל דבר נמצא. ה־schema מחוץ ל־<code>createApp</code>: הוא קבוע, ואין סיבה לבנות אותו מחדש. הנתונים (<code>tasks</code>, ‏<code>nextId</code>) בפנים, כדי שכל אפליקציה תתחיל נקייה, כמו ב־P15-E08.</p>
+<p><code>findTask</code> משרתת שני routes. ‏<code>Number("abc")</code> הוא <code>NaN</code>, ו־<code>NaN</code> לא שווה לאף id — אז גם id שאינו מספר מקבל 404, בלי בדיקה נפרדת.</p>
+<p><code>...result.data</code> ולא <code>...req.body</code>: אחרי Zod יש לנו את הערכים <em>אחרי</em> trim ועם ברירת המחדל של <code>done</code>. ושדה מיותר שהלקוח שלח (למשל <code>id: 999</code>) לא נכנס, כי <code>z.object</code> מסיר שדות שלא הוגדרו.</p>
+<p>ההדגמה בסוף הקובץ מפעילה את השרת על פורט 0 (מערכת ההפעלה בוחרת פורט פנוי), שולחת שלוש בקשות, וסוגרת אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>const task = { id: nextId++, ...req.body }</code> — עוקף את Zod: הכותרת לא עוברת trim, והלקוח יכול לקבוע לעצמו <code>id</code>.</li><li>מערך המשימות ברמת הקובץ — בדיקה אחת "מלכלכת" את הבאה.</li><li><code>req.query.done === true</code> — ב־query הכול מחרוזות, ובמקרה הזה זה <code>"true"</code>.</li><li>לשכוח <code>return</code> אחרי <code>res.status(404).json(...)</code> — הקוד ממשיך, ומגיעים ל־<code>Cannot set headers after they are sent</code> (P15-E21).</li><li>error handler עם 3 פרמטרים — Express לא מזהה אותו כ־error handler.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15-E27">
+    <h3>P15-E27 · סכמת הרשמה עם regex 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>username: <code>z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_]{2,15}$/, "...")</code>. האות הראשונה היא <code>[a-z]</code>, ואחריה עוד 2–15 תווים — כלומר 3–16 בסך הכול.</p>
+<p>password: אפשר לשרשר כמה <code>.regex()</code>, כל אחד עם הודעה משלו: <code>.regex(/[A-Z]/, "...")</code> ו־<code>.regex(/\d/, "...")</code>. כאן אין <code>^</code> ו־<code>$</code>: מספיק שהתו מופיע <em>איפשהו</em>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>phone בשלושה שלבים: <code>.transform((s) =&gt; s.replace(/[\s-]/g, ""))</code> (מנקים) ← <code>.pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "..."))</code> (בודקים את המחרוזת הנקייה) ← <code>.transform((s) =&gt; s.replace(/^\+972/, "0"))</code> (מאחדים צורה). ‏<code>pipe</code> מעביר את התוצאה של ה־transform לסכמה נוספת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E27: סכמת הרשמה עם regex
+import { z } from "zod";
+
+export const signupSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z][a-z0-9_]{2,15}$/, "שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"),
+  phone: z
+    .string()
+    .transform((s) =&gt; s.replace(/[\s-]/g, ""))
+    .pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "טלפון נייד ישראלי: 05XXXXXXXX"))
+    .transform((s) =&gt; s.replace(/^\+972/, "0")),
+  password: z
+    .string()
+    .min(8, "סיסמה: לפחות 8 תווים")
+    .regex(/[A-Z]/, "סיסמה: לפחות אות גדולה אחת")
+    .regex(/\d/, "סיסמה: לפחות ספרה אחת"),
+});
+
+export type Signup = z.infer&lt;typeof signupSchema&gt;;
+
+console.log(signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" }));
+const bad = signupSchema.safeParse({ username: "8dana", phone: "03-1234567", password: "secret" });
+if (!bad.success) {
+  for (const issue of bad.error.issues) console.log(issue.path.join("."), "—", issue.message);
+}</code></pre>
+<pre class="terminal">{ username: 'dana_88', phone: '0501234567', password: 'Secret123' }
+username — שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות
+phone — טלפון נייד ישראלי: 05XXXXXXXX
+password — סיסמה: לפחות 8 תווים
+password — סיסמה: לפחות אות גדולה אחת
+password — סיסמה: לפחות ספרה אחת</pre>
+<p>שני סוגים של regex כאן. ב־username ובטלפון יש <code>^...$</code>: <strong>כל</strong> המחרוזת חייבת להתאים. בסיסמה אין: שואלים רק אם יש <em>לפחות</em> תו אחד כזה. ‏<code>/[A-Z]/</code> בלי עוגנים הוא "יש אות גדולה איפשהו".</p>
+<p>בטלפון הסדר חשוב: קודם מנקים, אחר כך בודקים, ובסוף מאחדים לצורה אחת. כך במסד נשמר רק <code>0501234567</code>, ולא ארבע כתיבות שונות של אותו מספר. אחרת חיפוש לפי טלפון לא ימצא את המשתמש.</p>
+<p>בסיסמה Zod ממשיך לבדוק גם אחרי שבדיקה נכשלה, ולכן <code>"secret"</code> מקבל שלוש הודעות. המשתמש רואה את כל מה שחסר בבת אחת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>.regex(/[a-z0-9_]{3,16}/)</code> בלי <code>^</code> ו־<code>$</code> — ‏<code>"dana!!!"</code> עובר, כי <code>"dana"</code> נמצא בתוכה.</li><li><code>.toLowerCase()</code> אחרי <code>.regex()</code> — ‏<code>"Dana"</code> נכשל לפני שהומר.</li><li><code>/^(+972|0)5\d{8}$/</code> — ‏<code>+</code> הוא תו מיוחד ב־regex ("פעם אחת או יותר"). צריך <code>\+</code>.</li><li><code>s.replace("-", "")</code> עם מחרוזת — מחליף רק את המקף הראשון. ב־regex עם <code>g</code> מוחלפים כולם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15-E28">
+    <h3>P15-E28 · סכום עגלה 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קיבוץ: <code>const qtyBySku = new Map&lt;string, number&gt;()</code>, ובלולאה על <code>items</code>: ‏<code>qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty)</code>. ‏<code>Map</code> שומרת את סדר ההכנסה, ולכן הסדר נשמר מעצמו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לולאה שנייה, <code>for (const [sku, qty] of qtyBySku)</code>: מוצר חסר ← 404 ו־<code>return</code>. אחרת <code>lines.push(...)</code>. ובסוף: <code>lines.reduce((sum, line) =&gt; sum + line.subtotal, 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E28: סכום עגלה
+import express from "express";
+import { z } from "zod";
+
+export type Product = { name: string; price: number };
+
+const cartSchema = z.object({
+  items: z
+    .array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1).max(99) }))
+    .min(1),
+});
+
+export function createApp(catalog: Map&lt;string, Product&gt;) {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/cart/total", (req, res) =&gt; {
+    const result = cartSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: "קלט לא תקין" });
+      return;
+    }
+
+    // אותו sku פעמיים — מאחדים (Map שומרת על סדר ההופעה הראשונה)
+    const qtyBySku = new Map&lt;string, number&gt;();
+    for (const { sku, qty } of result.data.items) {
+      qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty);
+    }
+
+    const lines = [];
+    for (const [sku, qty] of qtyBySku) {
+      const product = catalog.get(sku);
+      if (!product) {
+        res.status(404).json({ error: `מוצר לא קיים: ${sku}` });
+        return;
+      }
+      lines.push({ sku, name: product.name, qty, subtotal: product.price * qty });
+    }
+
+    const total = lines.reduce((sum, line) =&gt; sum + line.subtotal, 0);
+    res.json({ lines, total });
+  });
+
+  return app;
+}
+
+const catalog = new Map&lt;string, Product&gt;([
+  ["PEN", { name: "עט", price: 450 }],
+  ["CUP", { name: "כוס", price: 1990 }],
+]);
+const server = createApp(catalog).listen(0, async () =&gt; {
+  const address = server.address();
+  const url = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/cart/total`;
+  const post = async (body: unknown) =&gt; {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    console.log(res.status, JSON.stringify(await res.json()));
+  };
+  await post({ items: [{ sku: "PEN", qty: 2 }, { sku: "CUP", qty: 1 }, { sku: "PEN", qty: 1 }] });
+  await post({ items: [{ sku: "BOOK", qty: 1 }] });
+  await post({ items: [] });
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"lines":[{"sku":"PEN","name":"עט","qty":3,"subtotal":1350},{"sku":"CUP","name":"כוס","qty":1,"subtotal":1990}],"total":3340}
+404 {"error":"מוצר לא קיים: BOOK"}
+400 {"error":"קלט לא תקין"}</pre>
+<p>למה <code>for...of</code> ולא <code>map</code> בלולאה השנייה? כי באמצע יכול להיות <code>return</code> עם 404. מתוך callback של <code>map</code>, ‏<code>return</code> יוצא רק מה־callback, לא מה־route.</p>
+<p>המחירים באגורות (פרק 2), ולכן הסכום מדויק. ב־<code>19.9 × 3</code> בשקלים היה יוצא <code>59.699999999999996</code>.</p>
+<p>הקטלוג נכנס כפרמטר ל־<code>createApp</code>, כמו repository מוזרק בפרק 12. כך הבודק נותן קטלוג משלו, ובפרק 19 תוכל להחליף אותו בשאילתה למסד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר שתי שורות ל־PEN — לא קיבצת לפי <code>sku</code>.</li><li><code>catalog[sku]</code> במקום <code>catalog.get(sku)</code> — ב־Map זה תמיד <code>undefined</code>, וכל מוצר "לא קיים".</li><li>לבדוק 404 בתוך <code>items.map(...)</code> ולהמשיך — שתי תשובות לאותה בקשה.</li><li><code>reduce</code> בלי ערך התחלתי <code>0</code> — הצובר מתחיל כאובייקט השורה הראשונה, ולא כמספר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E01">
     <h3>P15-E01 · איזה route יענה? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

@@ -1275,3 +1275,270 @@ export function createApp() {
 <p>זה בדיוק המנגנון של Stripe ושל רוב ספקי התשלומים. בפרויקט הדגל נבנה אותו מעל מסד נתונים — כי Map בזיכרון נמחק באתחול, ולא משותף בין שני עותקים של השרת.</p>
 @mistakes
 <ul><li>לשמור את התשובה רק בסוף, בלי מצב "running" — שתי בקשות שמגיעות באותו רגע ייצרו שתי הזמנות, בדיוק המצב שרצינו למנוע.</li></ul>
+
+@@ P15-E26 | 3 | API משימות — מקובץ ריק 🤖 | 30 | שיעור 3
+@type scratch
+@task
+<p>עד עכשיו השלמת אפליקציות שהשלד שלהן כבר היה כתוב. הפעם הקובץ ריק: את ה־imports, ה־schema, ה־routes וה־error handler כותבים לבד, מהשורה הראשונה.</p>
+<p>כתוב וייצא <code>createApp()</code> שמחזירה אפליקציית Express (בלי <code>listen</code> — הבודק מפעיל אותה). המשימות נשמרות בזיכרון: <code>{ id, title, done }</code>, ‏ids מ־1.</p>
+<ul><li><code>GET /tasks</code> ← כל המשימות. עם <code>?done=true</code> או <code>?done=false</code> — רק המתאימות. ערך אחר של <code>done</code> — כאילו לא נשלח.</li><li><code>GET /tasks/:id</code> ← המשימה, או 404 <code>{ "error": "המשימה לא נמצאה" }</code> (גם ל־id שאינו מספר).</li><li><code>POST /tasks</code> עם <code>{ title, done? }</code> ← 201, המשימה, ו־<code>Location: /tasks/&lt;id&gt;</code>. בודקים עם Zod: <code>title</code> מחרוזת, אחרי <code>trim</code> באורך 1–100 (ונשמרת אחרי trim). ‏<code>done</code> בוליאני, ברירת מחדל <code>false</code>.</li><li>קלט לא תקין ← 400 <code>{ "error": "קלט לא תקין", "fields": [...] }</code>. ב־<code>fields</code>: שמות השדות שנכשלו, כל שם פעם אחת (<code>["title", "done"]</code>).</li><li><code>DELETE /tasks/:id</code> ← 204, או 404 כמו למעלה.</li><li>JSON שבור ← 400 <code>{ "error": "JSON לא תקין" }</code>.</li><li>כל אפליקציה מתחילה עם רשימה ריקה משלה.</li></ul>
+<p>📄 כותבים בקובץ <code>15-express/starter/P15-E26.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P15-E26
+```
+<p>רוצה לנסות ביד? הוסף בסוף הקובץ <code>createApp().listen(3000)</code>, ושלח בקשות עם curl או עם REST Client (פרק 14). לפני הבדיקה — מחק את השורה.</p>
+@hint1
+<p>הסדר בקובץ: imports (<code>express</code>, ‏<code>z</code> מ־<code>zod</code>) ← <code>type Task</code> ← schema ← <code>createApp</code>. בתוך <code>createApp</code>: ‏<code>express.json()</code>, המערך ו־<code>nextId</code>, ארבעת ה־routes, ובסוף error handler עם 4 פרמטרים.</p>
+@hint2
+<p>schema: <code>z.object({ title: z.string().trim().min(1).max(100), done: z.boolean().default(false) })</code>. אחרי <code>safeParse</code>: ‏<code>result.error.issues.map((i) =&gt; i.path.join("."))</code>, ו־<code>new Set</code> כדי שכל שם יופיע פעם אחת.</p>
+@solution
+```ts run save=solutions/P15-E26.ts
+// P15-E26: API משימות מאפס
+import express, { type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+
+type Task = { id: number; title: string; done: boolean };
+
+const newTaskSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  done: z.boolean().default(false),
+});
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const tasks: Task[] = [];
+  let nextId = 1;
+
+  const findTask = (id: string) => tasks.find((t) => t.id === Number(id));
+
+  app.get("/tasks", (req, res) => {
+    const { done } = req.query;
+    if (done === "true" || done === "false") {
+      res.json(tasks.filter((t) => t.done === (done === "true")));
+      return;
+    }
+    res.json(tasks);
+  });
+
+  app.get("/tasks/:id", (req, res) => {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    res.json(task);
+  });
+
+  app.post("/tasks", (req, res) => {
+    const result = newTaskSchema.safeParse(req.body);
+    if (!result.success) {
+      const fields = [...new Set(result.error.issues.map((i) => i.path.join(".")))];
+      res.status(400).json({ error: "קלט לא תקין", fields });
+      return;
+    }
+    const task = { id: nextId++, ...result.data };
+    tasks.push(task);
+    res.status(201).location(`/tasks/${task.id}`).json(task);
+  });
+
+  app.delete("/tasks/:id", (req, res) => {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    tasks.splice(tasks.indexOf(task), 1);
+    res.sendStatus(204);
+  });
+
+  app.use((err: { type?: string }, req: Request, res: Response, next: NextFunction) => {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "JSON לא תקין" });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}
+
+// הדגמה: מפעילים על פורט פנוי, שולחים כמה בקשות וסוגרים
+const server = createApp().listen(0, async () => {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" && address ? address.port : 0}`;
+  const post = (body: unknown) => fetch(`${base}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  const created = await post({ title: "  לקנות חלב " });
+  console.log(created.status, created.headers.get("location"), await created.json());
+  const bad = await post({ title: "", done: "yes" });
+  console.log(bad.status, await bad.json());
+  console.log((await fetch(`${base}/tasks?done=false`).then((r) => r.json())).length);
+  server.close();
+});
+```
+```out
+201 /tasks/1 { id: 1, title: 'לקנות חלב', done: false }
+400 { error: 'קלט לא תקין', fields: [ 'title', 'done' ] }
+1
+```
+<p>שים לב איפה כל דבר נמצא. ה־schema מחוץ ל־<code>createApp</code>: הוא קבוע, ואין סיבה לבנות אותו מחדש. הנתונים (<code>tasks</code>, ‏<code>nextId</code>) בפנים, כדי שכל אפליקציה תתחיל נקייה, כמו ב־P15-E08.</p>
+<p><code>findTask</code> משרתת שני routes. ‏<code>Number("abc")</code> הוא <code>NaN</code>, ו־<code>NaN</code> לא שווה לאף id — אז גם id שאינו מספר מקבל 404, בלי בדיקה נפרדת.</p>
+<p><code>...result.data</code> ולא <code>...req.body</code>: אחרי Zod יש לנו את הערכים <em>אחרי</em> trim ועם ברירת המחדל של <code>done</code>. ושדה מיותר שהלקוח שלח (למשל <code>id: 999</code>) לא נכנס, כי <code>z.object</code> מסיר שדות שלא הוגדרו.</p>
+<p>ההדגמה בסוף הקובץ מפעילה את השרת על פורט 0 (מערכת ההפעלה בוחרת פורט פנוי), שולחת שלוש בקשות, וסוגרת אותו.</p>
+@mistakes
+<ul><li><code>const task = { id: nextId++, ...req.body }</code> — עוקף את Zod: הכותרת לא עוברת trim, והלקוח יכול לקבוע לעצמו <code>id</code>.</li><li>מערך המשימות ברמת הקובץ — בדיקה אחת "מלכלכת" את הבאה.</li><li><code>req.query.done === true</code> — ב־query הכול מחרוזות, ובמקרה הזה זה <code>"true"</code>.</li><li>לשכוח <code>return</code> אחרי <code>res.status(404).json(...)</code> — הקוד ממשיך, ומגיעים ל־<code>Cannot set headers after they are sent</code> (P15-E21).</li><li>error handler עם 3 פרמטרים — Express לא מזהה אותו כ־error handler.</li></ul>
+
+@@ P15-E27 | 3 | סכמת הרשמה עם regex 🤖 | 20 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על ביטויים רגולריים (P13-E26) ועל <code>replace</code> (פרק 2)</strong>, הפעם בתוך Zod. ‏<code>z.string().regex(re, message)</code> בודק שהמחרוזת מתאימה ל־regex. כתוב וייצא <code>signupSchema</code> ו־<code>type Signup</code> לטופס הרשמה:</p>
+<ul><li><code>username</code>: קודם <code>trim</code> והמרה לאותיות קטנות. אחר כך: 3–16 תווים, רק אותיות באנגלית, ספרות ו־<code>_</code>, ומתחיל באות. הודעה: <code>"שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"</code>.</li><li><code>phone</code>: טלפון נייד ישראלי. מסירים רווחים ומקפים, ואז מקבלים <code>05</code> ועוד 8 ספרות, או <code>+9725</code> ועוד 8 ספרות. התוצאה תמיד בצורה <code>0501234567</code> (‏<code>+972</code> הופך ל־<code>0</code>). הודעה: <code>"טלפון נייד ישראלי: 05XXXXXXXX"</code>.</li><li><code>password</code>: לפחות 8 תווים (<code>"סיסמה: לפחות 8 תווים"</code>), לפחות אות גדולה באנגלית (<code>"סיסמה: לפחות אות גדולה אחת"</code>) ולפחות ספרה (<code>"סיסמה: לפחות ספרה אחת"</code>).</li></ul>
+```ts
+signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" });
+// { username: "dana_88", phone: "0501234567", password: "Secret123" }
+```
+<p>📄 כותבים בקובץ <code>15-express/starter/P15-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 15-express/starter/P15-E27.ts
+% npm run check P15-E27
+```
+@hint1
+<p>username: <code>z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_]{2,15}$/, "...")</code>. האות הראשונה היא <code>[a-z]</code>, ואחריה עוד 2–15 תווים — כלומר 3–16 בסך הכול.</p>
+<p>password: אפשר לשרשר כמה <code>.regex()</code>, כל אחד עם הודעה משלו: <code>.regex(/[A-Z]/, "...")</code> ו־<code>.regex(/\d/, "...")</code>. כאן אין <code>^</code> ו־<code>$</code>: מספיק שהתו מופיע <em>איפשהו</em>.</p>
+@hint2
+<p>phone בשלושה שלבים: <code>.transform((s) =&gt; s.replace(/[\s-]/g, ""))</code> (מנקים) ← <code>.pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "..."))</code> (בודקים את המחרוזת הנקייה) ← <code>.transform((s) =&gt; s.replace(/^\+972/, "0"))</code> (מאחדים צורה). ‏<code>pipe</code> מעביר את התוצאה של ה־transform לסכמה נוספת.</p>
+@solution
+```ts run save=solutions/P15-E27.ts
+// P15-E27: סכמת הרשמה עם regex
+import { z } from "zod";
+
+export const signupSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z][a-z0-9_]{2,15}$/, "שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"),
+  phone: z
+    .string()
+    .transform((s) => s.replace(/[\s-]/g, ""))
+    .pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "טלפון נייד ישראלי: 05XXXXXXXX"))
+    .transform((s) => s.replace(/^\+972/, "0")),
+  password: z
+    .string()
+    .min(8, "סיסמה: לפחות 8 תווים")
+    .regex(/[A-Z]/, "סיסמה: לפחות אות גדולה אחת")
+    .regex(/\d/, "סיסמה: לפחות ספרה אחת"),
+});
+
+export type Signup = z.infer<typeof signupSchema>;
+
+console.log(signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" }));
+const bad = signupSchema.safeParse({ username: "8dana", phone: "03-1234567", password: "secret" });
+if (!bad.success) {
+  for (const issue of bad.error.issues) console.log(issue.path.join("."), "—", issue.message);
+}
+```
+```out
+{ username: 'dana_88', phone: '0501234567', password: 'Secret123' }
+username — שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות
+phone — טלפון נייד ישראלי: 05XXXXXXXX
+password — סיסמה: לפחות 8 תווים
+password — סיסמה: לפחות אות גדולה אחת
+password — סיסמה: לפחות ספרה אחת
+```
+<p>שני סוגים של regex כאן. ב־username ובטלפון יש <code>^...$</code>: <strong>כל</strong> המחרוזת חייבת להתאים. בסיסמה אין: שואלים רק אם יש <em>לפחות</em> תו אחד כזה. ‏<code>/[A-Z]/</code> בלי עוגנים הוא "יש אות גדולה איפשהו".</p>
+<p>בטלפון הסדר חשוב: קודם מנקים, אחר כך בודקים, ובסוף מאחדים לצורה אחת. כך במסד נשמר רק <code>0501234567</code>, ולא ארבע כתיבות שונות של אותו מספר. אחרת חיפוש לפי טלפון לא ימצא את המשתמש.</p>
+<p>בסיסמה Zod ממשיך לבדוק גם אחרי שבדיקה נכשלה, ולכן <code>"secret"</code> מקבל שלוש הודעות. המשתמש רואה את כל מה שחסר בבת אחת.</p>
+@mistakes
+<ul><li><code>.regex(/[a-z0-9_]{3,16}/)</code> בלי <code>^</code> ו־<code>$</code> — ‏<code>"dana!!!"</code> עובר, כי <code>"dana"</code> נמצא בתוכה.</li><li><code>.toLowerCase()</code> אחרי <code>.regex()</code> — ‏<code>"Dana"</code> נכשל לפני שהומר.</li><li><code>/^(+972|0)5\d{8}$/</code> — ‏<code>+</code> הוא תו מיוחד ב־regex ("פעם אחת או יותר"). צריך <code>\+</code>.</li><li><code>s.replace("-", "")</code> עם מחרוזת — מחליף רק את המקף הראשון. ב־regex עם <code>g</code> מוחלפים כולם.</li></ul>
+
+@@ P15-E28 | 3 | סכום עגלה 🤖 | 20 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Map</code> לקיבוץ (פרק 7) ועל <code>reduce</code> (פרק 6)</strong>, בתוך route של Express. כתוב וייצא <code>createApp(catalog)</code>. ‏<code>catalog</code> הוא <code>Map&lt;string, Product&gt;</code>, ו־<code>type Product = { name: string; price: number }</code> (מחיר באגורות). ייצא גם את <code>Product</code>.</p>
+<p>route אחד: <code>POST /cart/total</code> עם גוף <code>{ items: [{ sku, qty }] }</code>:</p>
+<ul><li>בדיקה עם Zod: ‏<code>items</code> מערך עם פריט אחד לפחות, ‏<code>sku</code> מחרוזת לא ריקה, ‏<code>qty</code> מספר שלם 1–99. אחרת 400 <code>{ "error": "קלט לא תקין" }</code>.</li><li>אותו <code>sku</code> כמה פעמים ← שורה אחת, עם סכום הכמויות. השורות לפי סדר ההופעה הראשונה.</li><li><code>sku</code> שאינו בקטלוג ← 404 <code>{ "error": "מוצר לא קיים: BOOK" }</code>.</li><li>תשובה 200: <code>{ lines: [{ sku, name, qty, subtotal }], total }</code>. ‏<code>subtotal</code> = מחיר × כמות. ‏<code>total</code> — סכום ה־subtotal, עם <code>reduce</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>15-express/starter/P15-E28.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P15-E28
+```
+@hint1
+<p>קיבוץ: <code>const qtyBySku = new Map&lt;string, number&gt;()</code>, ובלולאה על <code>items</code>: ‏<code>qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty)</code>. ‏<code>Map</code> שומרת את סדר ההכנסה, ולכן הסדר נשמר מעצמו.</p>
+@hint2
+<p>לולאה שנייה, <code>for (const [sku, qty] of qtyBySku)</code>: מוצר חסר ← 404 ו־<code>return</code>. אחרת <code>lines.push(...)</code>. ובסוף: <code>lines.reduce((sum, line) =&gt; sum + line.subtotal, 0)</code>.</p>
+@solution
+```ts run save=solutions/P15-E28.ts
+// P15-E28: סכום עגלה
+import express from "express";
+import { z } from "zod";
+
+export type Product = { name: string; price: number };
+
+const cartSchema = z.object({
+  items: z
+    .array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1).max(99) }))
+    .min(1),
+});
+
+export function createApp(catalog: Map<string, Product>) {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/cart/total", (req, res) => {
+    const result = cartSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: "קלט לא תקין" });
+      return;
+    }
+
+    // אותו sku פעמיים — מאחדים (Map שומרת על סדר ההופעה הראשונה)
+    const qtyBySku = new Map<string, number>();
+    for (const { sku, qty } of result.data.items) {
+      qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty);
+    }
+
+    const lines = [];
+    for (const [sku, qty] of qtyBySku) {
+      const product = catalog.get(sku);
+      if (!product) {
+        res.status(404).json({ error: `מוצר לא קיים: ${sku}` });
+        return;
+      }
+      lines.push({ sku, name: product.name, qty, subtotal: product.price * qty });
+    }
+
+    const total = lines.reduce((sum, line) => sum + line.subtotal, 0);
+    res.json({ lines, total });
+  });
+
+  return app;
+}
+
+const catalog = new Map<string, Product>([
+  ["PEN", { name: "עט", price: 450 }],
+  ["CUP", { name: "כוס", price: 1990 }],
+]);
+const server = createApp(catalog).listen(0, async () => {
+  const address = server.address();
+  const url = `http://localhost:${typeof address === "object" && address ? address.port : 0}/cart/total`;
+  const post = async (body: unknown) => {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    console.log(res.status, JSON.stringify(await res.json()));
+  };
+  await post({ items: [{ sku: "PEN", qty: 2 }, { sku: "CUP", qty: 1 }, { sku: "PEN", qty: 1 }] });
+  await post({ items: [{ sku: "BOOK", qty: 1 }] });
+  await post({ items: [] });
+  server.close();
+});
+```
+```out
+200 {"lines":[{"sku":"PEN","name":"עט","qty":3,"subtotal":1350},{"sku":"CUP","name":"כוס","qty":1,"subtotal":1990}],"total":3340}
+404 {"error":"מוצר לא קיים: BOOK"}
+400 {"error":"קלט לא תקין"}
+```
+<p>למה <code>for...of</code> ולא <code>map</code> בלולאה השנייה? כי באמצע יכול להיות <code>return</code> עם 404. מתוך callback של <code>map</code>, ‏<code>return</code> יוצא רק מה־callback, לא מה־route.</p>
+<p>המחירים באגורות (פרק 2), ולכן הסכום מדויק. ב־<code>19.9 × 3</code> בשקלים היה יוצא <code>59.699999999999996</code>.</p>
+<p>הקטלוג נכנס כפרמטר ל־<code>createApp</code>, כמו repository מוזרק בפרק 12. כך הבודק נותן קטלוג משלו, ובפרק 19 תוכל להחליף אותו בשאילתה למסד.</p>
+@mistakes
+<ul><li>להחזיר שתי שורות ל־PEN — לא קיבצת לפי <code>sku</code>.</li><li><code>catalog[sku]</code> במקום <code>catalog.get(sku)</code> — ב־Map זה תמיד <code>undefined</code>, וכל מוצר "לא קיים".</li><li>לבדוק 404 בתוך <code>items.map(...)</code> ולהמשיך — שתי תשובות לאותה בקשה.</li><li><code>reduce</code> בלי ערך התחלתי <code>0</code> — הצובר מתחיל כאובייקט השורה הראשונה, ולא כמספר.</li></ul>
