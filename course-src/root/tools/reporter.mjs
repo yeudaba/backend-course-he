@@ -15,7 +15,12 @@ export default async function* reporter(source) {
       const err = event.data.details?.error;
       const cause = err?.cause ?? err;
       yield `  ✖ ${event.data.name}\n`;
-      if (cause && typeof cause === "object" && "expected" in cause && "actual" in cause) {
+      // הודעה שכתבנו בבדיקה (assert.ok(x, "...")) — מסבירה מה חסר טוב יותר מ־"קיבלנו false"
+      const custom = cause && typeof cause === "object" && cause.generatedMessage === false && cause.message;
+      if (custom) yield `      ${String(custom).split("\n")[0]}\n`;
+      if (custom && (cause.operator === "==" || cause.operator === "fail")) {
+        // assert.ok / assert.fail — אין מה להשוות מעבר להודעה
+      } else if (cause && typeof cause === "object" && "expected" in cause && "actual" in cause) {
         yield `      קיבלנו: ${show(cause.actual)}\n      ציפינו: ${show(cause.expected)}\n`;
       } else if (cause && typeof cause === "object" && cause.message) {
         yield `      שגיאה: ${String(cause.message).split("\n")[0]}\n`;

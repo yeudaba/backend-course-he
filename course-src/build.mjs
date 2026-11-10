@@ -199,6 +199,9 @@ const pager = (prev, next) =>
 
 // ---------- תרגילים ----------
 const LEVELS = { 1: "הבנה", 2: "מודרך", 3: "עצמאי", 4: "תיקון תקלות ושילוב", 5: "אתגר · רשות" };
+// סוג תרגיל (אופציונלי, שורת "@type warmup" מיד אחרי הכותרת): תרגולי כתיבה שנוספו מ־E26 ואילך
+const TYPES = { warmup: "🔥 חימום", scratch: "✍️ מאפס", review: "🔁 חזרה" };
+const typeTag = (e) => (e.type ? `<span class="tag type ${e.type}">${TYPES[e.type]}</span>` : "");
 
 function parseExercises(text) {
   const list = [];
@@ -210,6 +213,12 @@ function parseExercises(text) {
       cur = { id: h[1], level: +h[2], title: h[3].trim(), minutes: +h[4], requires: h[5].trim(), task: "", hint1: "", hint2: "", solution: "", mistakes: "" };
       list.push(cur);
       field = "task";
+      continue;
+    }
+    const ty = line.match(/^@type\s+(\S+)\s*$/);
+    if (ty && cur) {
+      if (!TYPES[ty[1]]) problems.push(`${cur.id}: סוג תרגיל לא מוכר "${ty[1]}" (מותר: ${Object.keys(TYPES).join(", ")})`);
+      cur.type = ty[1];
       continue;
     }
     const f = line.match(/^@(task|hint1|hint2|solution|mistakes)\s*$/);
@@ -236,15 +245,24 @@ function exercisesPages(ch, exs, chapterHref) {
     </ul>
     <p>${tags}</p>
   </div>`;
-  const exHtml = exs
-    .map(
-      (e) => `<div class="ex" id="${e.id}">
+  // תרגילים עם @type מקובצים בבלוק "✍️ תרגול כתיבה" בראש הדף; תרגילים בלי סוג — כמו קודם, לפי הסדר
+  const typed = exs.filter((e) => e.type);
+  const plain = exs.filter((e) => !e.type);
+  const ordered = typed.length ? [...typed, ...plain] : exs;
+  const typedMinutes = typed.reduce((s, e) => s + e.minutes, 0);
+  const typedIntro = `  <h2>✍️ תרגול כתיבה</h2>
+  <div class="box tip">
+    <p>${typed.length} תרגילים קצרים (כ־${typedMinutes} דק׳) שבהם <strong>אתה כותב את כל הקוד</strong> — מקובץ שיש בו רק הערה עם המשימה. לכל אחד יש בודק: <code>npm run check ${typed[0]?.id ?? ""}</code>.</p>
+    <p>${Object.entries(TYPES).filter(([k]) => typed.some((e) => e.type === k)).map(([k, v]) => `<span class="tag type ${k}">${v}</span> ${{ warmup: "תרגיל קצר על נושא הפרק — 5–10 דקות", scratch: "בעיה במילים, אתה בוחר את המבנה", review: "תחביר מפרקים קודמים, כדי שהיד לא תשכח" }[k]}`).join("<br>")}</p>
+  </div>`;
+  const exCard = (e) => `<div class="ex${e.type ? " typed" : ""}" id="${e.id}">
     <h3>${e.id} · ${e.title}</h3>
-    <div class="ex-meta"><span class="tag l${e.level}">רמה ${e.level}</span><span class="tag">⏱ ${e.minutes} דק׳</span><span class="tag">ידע נדרש: ${e.requires}</span></div>
+    <div class="ex-meta">${typeTag(e)}<span class="tag l${e.level}">רמה ${e.level}</span><span class="tag">⏱ ${e.minutes} דק׳</span><span class="tag">ידע נדרש: ${e.requires}</span></div>
 ${renderFences(e.task, `${e.id} task`)}
-  </div>`
-    )
-    .join("\n");
+  </div>`;
+  const exHtml = typed.length
+    ? `${typedIntro}\n${typed.map(exCard).join("\n")}\n  <h2>📚 תרגילי הפרק</h2>\n${plain.map(exCard).join("\n")}`
+    : exs.map(exCard).join("\n");
   const exBody = `  <h1>✍️ ${lbl(ch)} — דף תרגילים</h1>
   <p class="subtitle">${exs.length} תרגילים · ⏱ סה״כ כ־${Math.round(total / 60 * 2) / 2} שעות · מומלץ לפצל לכמה מפגשים</p>
 ${intro}
@@ -253,11 +271,11 @@ ${exHtml}
   <div class="box tip">${renderFences(ch.passTest, "pass")}</div>
 ${pager({ href: "index.html", small: "חזרה", label: `פתיחת ${lbl(ch)}` }, { href: "solutions.html", small: "🔒 רק אחרי ניסיון", label: "דף הפתרונות" })}`;
 
-  const solHtml = exs
+  const solHtml = ordered
     .map((e) => {
       const d = (summary, content) => (content.trim() ? `<details><summary>${summary}</summary><div>\n${renderFences(content, `${e.id} ${summary}`)}\n</div></details>` : "");
-      return `<div class="ex" id="${e.id}">
-    <h3>${e.id} · ${e.title} <span class="tag l${e.level}">רמה ${e.level}</span></h3>
+      return `<div class="ex${e.type ? " typed" : ""}" id="${e.id}">
+    <h3>${e.id} · ${e.title} ${e.type ? typeTag(e) + " " : ""}<span class="tag l${e.level}">רמה ${e.level}</span></h3>
     ${d("💡 רמז 1", e.hint1)}
     ${d("💡 רמז 2", e.hint2)}
     ${d("✅ פתרון", e.solution)}
