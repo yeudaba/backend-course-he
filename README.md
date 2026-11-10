@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **947** | **741** | **660** |
+| **42** | **196** | **971** | **765** | **682** |
 
 ## מה שונה כאן
 
@@ -57,13 +57,13 @@
 | [פרק 2](backend-course/02-operators-strings/index.html) | פעולות ומחרוזות <sub>(רענון)</sub> | 4 | 28 | 18 | ✔ |
 | [פרק 3](backend-course/03-conditions/index.html) | תנאים <sub>(רענון)</sub> | 4 | 28 | 19 | ✔ |
 | [פרק 4](backend-course/04-loops/index.html) | לולאות <sub>(רענון)</sub> | 4 | 28 | 19 | ✔ |
-| [פרק 5](backend-course/05-functions/index.html) | פונקציות <sub>(רענון)</sub> | 4 | 25 | 20 | ✔ |
-| [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 25 | 20 | ✔ |
-| [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 25 | 20 | ✔ |
-| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 4 | 25 | 20 | ✔ |
+| [פרק 5](backend-course/05-functions/index.html) | פונקציות <sub>(רענון)</sub> | 4 | 28 | 23 | ✔ |
+| [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 28 | 23 | ✔ |
+| [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 28 | 23 | ✔ |
+| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 4 | 28 | 23 | ✔ |
 | [פרויקט 1](backend-course/08p-project-expenses/index.html) | מנהל הוצאות בשורת הפקודה | 6 | — | 3 | ✔ |
-| [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 25 | — | ✔ |
-| [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 25 | 20 | ✔ |
+| [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 28 | 3 | ✔ |
+| [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 28 | 23 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -160,8 +160,8 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 25 | 20 | ✔ |
-| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 25 | 20 | ✔ |
+| [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 28 | 23 | ✔ |
+| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 28 | 23 | ✔ |
 | [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 25 | 20 | ✔ |
 | [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 25 | 20 | ✔ |
 
