@@ -13,6 +13,140 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>07-objects/solutions/</code>.</p></div>
+<div class="ex typed" id="P07-E26">
+    <h3>P07-E26 · mapValues עם Object.fromEntries 🤖 <span class="tag type warmup">🔥 חימום</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה שלבים: <code>Object.entries(obj)</code> ← <code>.map(...)</code> ← <code>Object.fromEntries(...)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>map</code> מקבלים זוג ומחזירים זוג: <code>([key, value]) =&gt; [key, fn(value)]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P07-E26: mapValues
+function mapValues(obj, fn) {
+  return Object.fromEntries(Object.entries(obj).map(([key, value]) =&gt; [key, fn(value)]));
+}
+
+const prices = { keyboard: 100, mouse: 50 };
+console.log(mapValues(prices, (p) =&gt; p * 2));
+console.log(prices);
+
+module.exports = { mapValues };</code></pre>
+<pre class="terminal">{ keyboard: 200, mouse: 100 }
+{ keyboard: 100, mouse: 50 }</pre>
+<p>ה־<code>map</code> מקבל כל זוג ומפרק אותו מיד בפרמטר: <code>([key, value])</code>. זה destructuring של מערך, כמו ב־<code>for (const [item, qty] of Object.entries(stock))</code> משיעור 3. הוא מחזיר זוג חדש, ו־<code>fromEntries</code> מרכיב ממנו אובייקט חדש. בשום שלב לא נגענו ב־<code>obj</code>, ולכן הוא לא השתנה.</p>
+<p>את אותו דפוס אפשר להפעיל גם עם <code>filter</code> באמצע. למשל, כך מסירים שדות ריקים מ־query string: <code>Object.fromEntries(Object.entries(q).filter(([, v]) =&gt; v !== ""))</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>.map((pair) =&gt; fn(pair))</code> — <code>fn</code> מקבלת את כל הזוג (<code>["keyboard", 100]</code>), ולא את הערך.</li><li><code>.map(([k, v]) =&gt; ({ [k]: fn(v) }))</code> — יוצא מערך של אובייקטים קטנים, ו־<code>fromEntries</code> לא יודעת מה לעשות איתם.</li><li><code>for (const k in obj) obj[k] = fn(obj[k])</code> — עובד, אבל משנה את המקור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P07-E27">
+    <h3>P07-E27 · מלאי פרטי (closure) 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>const items = new Map();</code> בתוך <code>createStock</code>, ואחר כך <code>return { add, take, count };</code> — אובייקט ששלוש הפונקציות שבו "זוכרות" את <code>items</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>count</code> היא <code>items.get(item) ?? 0</code>, ושתי האחרות יכולות להשתמש בה. <code>take</code> מתחילה ב־guard: <code>if (count(item) &lt; qty) return false;</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P07-E27: מלאי פרטי
+function createStock() {
+  const items = new Map();
+
+  function count(item) {
+    return items.get(item) ?? 0;
+  }
+
+  function add(item, qty) {
+    items.set(item, count(item) + qty);
+  }
+
+  function take(item, qty) {
+    if (count(item) &lt; qty) return false;
+    items.set(item, count(item) - qty);
+    return true;
+  }
+
+  return { add, take, count };
+}
+
+const stock = createStock();
+stock.add("pen", 5);
+console.log(stock.take("pen", 2), stock.take("pen", 10), stock.count("pen"), stock.count("cup"));
+console.log(stock.items);
+
+module.exports = { createStock };</code></pre>
+<pre class="terminal">true false 3 0
+undefined</pre>
+<p>זה אותו רעיון כמו המונה בפרק 5, עם שלוש פונקציות במקום אחת. כולן נוצרו בתוך אותה קריאה ל־<code>createStock</code>, ולכן כולן רואות את אותו <code>items</code>. השורה <code>stock.items</code> מחזירה <code>undefined</code>: מבחוץ אין שום דרך לגשת ל־<code>Map</code>. הדרך היחידה לשנות את המלאי היא דרך <code>add</code> ו־<code>take</code>, וכך אף אחד לא יכול להכניס כמות שלילית "בטעות".</p>
+<p>בפרק 12 תכתוב את אותו דבר כ־<code>class</code> עם שדה פרטי (<code>#items</code>). זה אותו רעיון בתחביר אחר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>const items = new Map()</code> מחוץ ל־<code>createStock</code> — כל המלאים חולקים את אותו Map. הבודק תופס את זה.</li><li><code>items.get(item) + qty</code> לפריט חדש — <code>undefined + 5</code> הוא <code>NaN</code>. בגלל זה <code>?? 0</code>.</li><li>ב־<code>take</code>: להוריד קודם ולבדוק אחר כך — הכמות יורדת מתחת ל־0 גם כשמחזירים <code>false</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P07-E28">
+    <h3>P07-E28 · יתרה מאירועים 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>events.reduce((balance, e) =&gt; { switch (e.type) { ... } }, 0)</code>. כל <code>case</code> מחזיר את היתרה החדשה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>case "withdraw": return e.amount &lt;= balance ? balance - e.amount : balance;</code> ו־<code>default: return balance;</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P07-E28: יתרה מאירועים
+const FEE = 5;
+
+function balanceOf(events) {
+  return events.reduce((balance, e) =&gt; {
+    switch (e.type) {
+      case "deposit":
+        return balance + e.amount;
+      case "withdraw":
+        return e.amount &lt;= balance ? balance - e.amount : balance;
+      case "fee":
+        return balance - FEE;
+      default:
+        return balance;
+    }
+  }, 0);
+}
+
+console.log(
+  balanceOf([
+    { type: "deposit", amount: 100 },
+    { type: "withdraw", amount: 30 },
+    { type: "withdraw", amount: 500 },
+    { type: "fee" },
+    { type: "bonus", amount: 1000 },
+  ])
+);
+
+module.exports = { balanceOf };</code></pre>
+<pre class="terminal">65</pre>
+<p>ה־reducer מקבל "היתרה עד עכשיו" ואירוע אחד, ומחזיר את היתרה אחרי האירוע. ה־<code>switch</code> מחליט איך. כל <code>case</code> מסתיים ב־<code>return</code>, ולכן אין צורך ב־<code>break</code> (כמו ב־<code>P05-E27</code>). ה־<code>default</code> חשוב במיוחד כאן: בלעדיו, אירוע לא מוכר מחזיר <code>undefined</code>, וכל האירועים שאחריו מחושבים על <code>undefined</code> ונותנים <code>NaN</code>.</p>
+<p>הדפוס הזה נקרא <strong>event sourcing</strong>: שומרים את מה שקרה, ומחשבים את המצב ממנו. כך עובדים הרבה מערכות פיננסיות, כי ההיסטוריה המלאה נשמרת תמיד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>default</code> — אירוע לא מוכר הופך את היתרה ל־<code>undefined</code>, ואחר כך ל־<code>NaN</code>.</li><li>לשכוח את ה־<code>0</code> בסוף ה־<code>reduce</code> — האירוע הראשון (אובייקט) הופך ליתרה ההתחלתית.</li><li><code>e.amount &lt; balance</code> — משיכה של כל היתרה (בדיוק) נדחית.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P07-E01">
     <h3>P07-E01 · גישה לשדות <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
