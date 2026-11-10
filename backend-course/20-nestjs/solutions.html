@@ -13,6 +13,270 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>20-nestjs/solutions/</code>.</p></div>
+<div class="ex typed" id="P20-E26">
+    <h3>P20-E26 · מודול סימניות — מקובץ ריק 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סדר הכתיבה: imports ← <code>interface Bookmark</code> ← <code>class CreateBookmarkDto</code> עם decorators ← <code>@Injectable() class BookmarksService</code> (המערך ו־<code>nextId</code> כשדות פרטיים) ← <code>@Controller("bookmarks")</code> ← <code>@Module({ controllers, providers })</code>. מה מייבאים? כל decorator שהשתמשת בו: <code>@nestjs/common</code> לחלק של HTTP, ו־<code>class-validator</code> ל־DTO.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>DTO של מערך: <code>@IsOptional() @IsArray() @ArrayMaxSize(5) @IsString({ each: true }) tags?: string[];</code>. ‏404: ‏<code>throw new NotFoundException(<code>...</code>)</code> בתוך ה־service. ‏204: ‏<code>@HttpCode(204)</code> מעל ה־<code>@Delete(":id")</code>. ‏id: ‏<code>@Param("id", ParseIntPipe) id: number</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E26: מודול סימניות — מקובץ ריק
+import { Body, Controller, Delete, Get, HttpCode, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, Query } from "@nestjs/common";
+import { ArrayMaxSize, IsArray, IsOptional, IsString, IsUrl, Length } from "class-validator";
+
+export interface Bookmark {
+  id: number;
+  url: string;
+  title: string;
+  tags: string[];
+}
+
+export class CreateBookmarkDto {
+  @IsUrl()
+  url: string;
+
+  @IsString()
+  @Length(1, 100)
+  title: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  tags?: string[];
+}
+
+@Injectable()
+export class BookmarksService {
+  private readonly bookmarks: Bookmark[] = [];
+  private nextId = 1;
+
+  list(tag?: string): Bookmark[] {
+    return tag === undefined ? this.bookmarks : this.bookmarks.filter((b) =&gt; b.tags.includes(tag));
+  }
+
+  get(id: number): Bookmark {
+    const bookmark = this.bookmarks.find((b) =&gt; b.id === id);
+    if (!bookmark) throw new NotFoundException(`סימנייה ${id} לא נמצאה`);
+    return bookmark;
+  }
+
+  create(dto: CreateBookmarkDto): Bookmark {
+    const bookmark = { id: this.nextId++, url: dto.url, title: dto.title.trim(), tags: dto.tags ?? [] };
+    this.bookmarks.push(bookmark);
+    return bookmark;
+  }
+
+  remove(id: number): void {
+    const bookmark = this.get(id);
+    this.bookmarks.splice(this.bookmarks.indexOf(bookmark), 1);
+  }
+}
+
+@Controller("bookmarks")
+export class BookmarksController {
+  constructor(private readonly bookmarks: BookmarksService) {}
+
+  @Get()
+  list(@Query("tag") tag?: string) {
+    return this.bookmarks.list(tag);
+  }
+
+  @Get(":id")
+  get(@Param("id", ParseIntPipe) id: number) {
+    return this.bookmarks.get(id);
+  }
+
+  @Post()
+  create(@Body() dto: CreateBookmarkDto) {
+    return this.bookmarks.create(dto);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  remove(@Param("id", ParseIntPipe) id: number) {
+    this.bookmarks.remove(id);
+  }
+}
+
+@Module({ controllers: [BookmarksController], providers: [BookmarksService] })
+export class BookmarksModule {}</code></pre>
+<p>שים לב איך כל שכבה עושה דבר אחד. ה־DTO והוולידציה דוחים קלט רע לפני שהוא מגיע לקוד. ה־service מחזיק את הנתונים ומחליט מה "לא נמצא". ה־controller רק מתרגם בין HTTP לבין קריאה ל־service. ‏<code>remove</code> משתמשת ב־<code>get</code>, ולכן ה־404 נכתב פעם אחת.</p>
+<p>ה־<code>NotFoundException</code> נזרק מה־service, ו־Nest הופך אותו ל־404 עם <code>{ statusCode, message, error }</code>. ה־controller לא צריך <code>if</code>.</p>
+<p><code>ParseIntPipe</code> הופך את <code>"2"</code> מה־URL למספר 2, ומחזיר 400 על <code>"abc"</code>. בלעדיו <code>b.id === id</code> משווה מספר למחרוזת, וכל סימנייה "לא נמצאת".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את ה־controller או את ה־service ב־<code>@Module</code> — ‏404 לכל כתובת, או <code>Nest can't resolve dependencies</code> (‏P20-E03).</li><li><code>@Param("id") id: number</code> בלי <code>ParseIntPipe</code> — הטיפוס אומר number, אבל בזמן ריצה זו מחרוזת.</li><li><code>@IsString() tags</code> בלי <code>{ each: true }</code> — מערך תמיד נכשל, כי מערך אינו מחרוזת.</li><li>בלי <code>@HttpCode(204)</code> על ה־DELETE — ‏Nest מחזיר 200 כברירת מחדל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P20-E27">
+    <h3>P20-E27 · slug: ‏regex בפונקציה וב־pipe 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>slugify</code> בשלוש שרשרות: <code>.toLowerCase()</code> ← <code>.replace(/[^a-z0-9]+/g, "-")</code> ← <code>.replace(/^-+|-+$/g, "")</code>. ה־<code>+</code> אחרי הסוגריים הוא מה שהופך "רצף" למקף אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>regex ל־slug תקין: <code>/^[a-z0-9]+(?:-[a-z0-9]+)*$/</code> — מילה, ואחריה אפס או יותר פעמים "מקף ומילה". ‏<code>(?:...)</code> היא קבוצה בלי שמירה. ב־controller: ‏<code>@Get("preview")</code> <strong>לפני</strong> <code>@Get(":slug")</code>, אחרת <code>preview</code> נתפס כ־slug.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E27: slug — regex בפונקציה וב־pipe
+import { BadRequestException, Controller, Get, Injectable, Module, Param, type PipeTransform, Query } from "@nestjs/common";
+
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+@Injectable()
+export class SlugPipe implements PipeTransform&lt;string, string&gt; {
+  transform(value: string): string {
+    if (typeof value !== "string" || value.length &gt; 60 || !SLUG.test(value)) {
+      throw new BadRequestException(`slug לא תקין: ${value}`);
+    }
+    return value;
+  }
+}
+
+@Controller("slugs")
+export class SlugsController {
+  @Get("preview")
+  preview(@Query("title") title = "") {
+    return { slug: slugify(title) };
+  }
+
+  @Get(":slug")
+  show(@Param("slug", SlugPipe) slug: string) {
+    return { slug };
+  }
+}
+
+@Module({ controllers: [SlugsController] })
+export class SlugsModule {}</code></pre>
+<p>שני ה־regex משלימים זה את זה: <code>slugify</code> <em>מייצרת</em> slug מכל טקסט, ו־<code>SlugPipe</code> <em>בודק</em> שמה שהגיע מבחוץ הוא slug. כל מה ש־<code>slugify</code> מייצרת עובר את ה־pipe (חוץ ממחרוזת ריקה). הבודק מנסה גם <code>"hello--world"</code> ו־<code>"-hello"</code>, שה־pipe צריך לדחות.</p>
+<p>pipe הוא מחלקה עם מתודה אחת, <code>transform</code>, שמקבלת ערך ומחזירה ערך (או זורקת). ‏<code>implements PipeTransform</code> הוא החוזה, כמו ב־interface מפרק 12. ‏Nest מפעיל את ה־pipe לפני ה־handler, ולכן הקוד ב־<code>show</code> כבר יודע שה־slug תקין.</p>
+<p>הסדר של ה־routes חשוב: Nest בודק אותם לפי הסדר במחלקה. אילו <code>:slug</code> היה ראשון, ‏<code>/slugs/preview</code> היה מגיע אליו עם <code>slug = "preview"</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>.replace(/[^a-z0-9]/g, "-")</code> בלי <code>+</code> — ‏<code>"a & b"</code> הופך ל־<code>"a---b"</code>.</li><li><code>/^[a-z0-9-]+$/</code> — מקבל <code>"--"</code>, ‏<code>"-a"</code> ו־<code>"a--b"</code>.</li><li><code>.toLowerCase()</code> אחרי ה־replace — האותיות הגדולות כבר הפכו למקפים.</li><li>לזרוק <code>Error</code> רגיל מה־pipe — הלקוח מקבל 500 במקום 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P20-E28">
+    <h3>P20-E28 · סיכום לקוח משני repositories 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הדפוס של P20-E18, פעמיים: <code>export const CUSTOMERS_REPOSITORY = "CUSTOMERS_REPOSITORY";</code>, ‏<code>constructor(@Inject(CUSTOMERS_REPOSITORY) private readonly customers: CustomersRepository, @Inject(ORDERS_REPOSITORY) ...)</code>, וב־module ‏<code>{ provide: CUSTOMERS_REPOSITORY, useClass: InMemoryCustomersRepository }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>const [customer, orders] = await Promise.all([this.customers.findById(id), this.orders.findByCustomer(id)]);</code>. אחר כך <code>filter</code> ל־paid, ו־<code>reduce((sum, o) =&gt; sum + Math.round(o.total * 100), 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E28: סיכום לקוח — שני repositories במקביל
+import { Controller, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe } from "@nestjs/common";
+
+export interface Customer {
+  id: number;
+  fullName: string;
+}
+
+export interface Order {
+  id: number;
+  customerId: number;
+  total: number;
+  status: "paid" | "cancelled";
+}
+
+export interface CustomersRepository {
+  findById(id: number): Promise&lt;Customer | null&gt;;
+}
+
+export interface OrdersRepository {
+  findByCustomer(customerId: number): Promise&lt;Order[]&gt;;
+}
+
+export const CUSTOMERS_REPOSITORY = "CUSTOMERS_REPOSITORY";
+export const ORDERS_REPOSITORY = "ORDERS_REPOSITORY";
+
+export class InMemoryCustomersRepository implements CustomersRepository {
+  private readonly customers: Customer[] = [{ id: 1, fullName: "Dana Levi" }];
+
+  async findById(id: number) {
+    return this.customers.find((c) =&gt; c.id === id) ?? null;
+  }
+}
+
+export class InMemoryOrdersRepository implements OrdersRepository {
+  private readonly orders: Order[] = [
+    { id: 1, customerId: 1, total: 120.5, status: "paid" },
+    { id: 2, customerId: 1, total: 80, status: "cancelled" },
+  ];
+
+  async findByCustomer(customerId: number) {
+    return this.orders.filter((o) =&gt; o.customerId === customerId);
+  }
+}
+
+@Injectable()
+export class SummaryService {
+  constructor(
+    @Inject(CUSTOMERS_REPOSITORY) private readonly customers: CustomersRepository,
+    @Inject(ORDERS_REPOSITORY) private readonly orders: OrdersRepository,
+  ) {}
+
+  async summary(customerId: number) {
+    const [customer, orders] = await Promise.all([this.customers.findById(customerId), this.orders.findByCustomer(customerId)]);
+    if (!customer) throw new NotFoundException(`לקוח ${customerId} לא נמצא`);
+    const paid = orders.filter((o) =&gt; o.status === "paid");
+    const agorot = paid.reduce((sum, o) =&gt; sum + Math.round(o.total * 100), 0);
+    return { customer, orders: paid.length, total: agorot / 100 };
+  }
+}
+
+@Controller("customers")
+export class SummaryController {
+  constructor(private readonly service: SummaryService) {}
+
+  @Get(":id/summary")
+  summary(@Param("id", ParseIntPipe) id: number) {
+    return this.service.summary(id);
+  }
+}
+
+@Module({
+  controllers: [SummaryController],
+  providers: [
+    SummaryService,
+    { provide: CUSTOMERS_REPOSITORY, useClass: InMemoryCustomersRepository },
+    { provide: ORDERS_REPOSITORY, useClass: InMemoryOrdersRepository },
+  ],
+})
+export class SummaryModule {}</code></pre>
+<p>ה־service לא יודע מאיפה מגיעים הלקוחות וההזמנות. הוא מכיר רק שני interfaces ושני tokens. לכן הבודק יכול להחליף את המימוש במזויף איטי, ולמדוד שהבקשות יצאו יחד: 80ms ולא 160ms.</p>
+<p>את ההזמנות מביאים במקביל ללקוח, גם אם בסוף יתברר שהלקוח לא קיים. זו בחירה: במקרה הנפוץ (הלקוח קיים) חוסכים זמן, ובמקרה הנדיר שולחים שאילתה מיותרת אחת.</p>
+<p>הסכום באגורות שלמות, כמו ב־P17-E28. ‏<code>19.9 × 3</code> בשקלים הוא <code>59.699999999999996</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>new InMemoryOrdersRepository()</code> בתוך ה־service — הבודק לא יכול להחליף אותו, ונכשל בבדיקה ש"עברו דרך ה־repositories".</li><li><code>await</code> לכל repository בנפרד — 160ms.</li><li>לספור גם הזמנות מבוטלות.</li><li>להחזיר <code>null</code> כשהלקוח לא קיים — הלקוח של ה־API מקבל 200 עם גוף ריק.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P20-E01">
     <h3>P20-E01 · מ־Express ל־Nest <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

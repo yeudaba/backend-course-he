@@ -10,7 +10,7 @@ export default {
   prismaProjects: ["solutions/tasks-api"],
   nestProjects: ["solutions/tasks-api"],
   time: "5 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+, VS Code, פרויקט 2 בשלב ב׳ (Prisma).</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>
