@@ -1,0 +1,6 @@
+-- P26.5-E28: האירוע הבא לכל מפתח ב־outbox — חזרה על CTE ופונקציות חלון
+-- רק אירועים שלא פורסמו (published_at IS NULL). לכל (topic, key): topic, key,
+-- next_id (ה־id הקטן מבין הממתינים), event_type שלו, pending (כמה ממתינים לאותו topic+key)
+-- מיון: next_id
+--
+-- בדיקה:  npm run check P26.5-E28

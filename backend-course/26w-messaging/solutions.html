@@ -13,6 +13,192 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26w-messaging/solutions/</code>.</p></div>
+<div class="ex typed" id="P26.5-E26">
+    <h3>P26.5-E26 · להחזיר סדר להודעות 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שדות מספיקים: <code>#next</code> (הבא בתור) ו־<code>#waiting = new Map&lt;number, T&gt;()</code>. ב־<code>push</code>, שלושת המקרים לפי הסדר: <code>seq &lt; #next || #waiting.has(seq)</code> ← כפילות. <code>seq &gt; #next</code> ← לשמור ב־Map. אחרת ← למסור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שמסרת את <code>seq</code>: ‏<code>this.#next++</code>, ואז <code>while (this.#waiting.has(this.#next))</code>: מוציאים מה־Map, מוסרים, ומקדמים. ‏<code>gaps</code>: ‏<code>Math.max(...this.#waiting.keys())</code>, ולולאה מ־<code>#next</code> עד אליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E26 — להחזיר סדר להודעות
+export type PushResult = "delivered" | "buffered" | "duplicate";
+
+export class ReorderBuffer&lt;T&gt; {
+  #next: number;
+  #waiting = new Map&lt;number, T&gt;();
+  #deliver: (seq: number, message: T) =&gt; void;
+
+  constructor(deliver: (seq: number, message: T) =&gt; void, startSeq = 1) {
+    this.#deliver = deliver;
+    this.#next = startSeq;
+  }
+
+  push(seq: number, message: T): PushResult {
+    if (!Number.isInteger(seq)) throw new TypeError(`seq חייב להיות מספר שלם: ${seq}`);
+    if (seq &lt; this.#next || this.#waiting.has(seq)) return "duplicate";
+    if (seq &gt; this.#next) {
+      this.#waiting.set(seq, message);
+      return "buffered";
+    }
+    this.#deliver(seq, message);
+    this.#next++;
+    while (this.#waiting.has(this.#next)) {
+      const waiting = this.#waiting.get(this.#next) as T;
+      this.#waiting.delete(this.#next);
+      this.#deliver(this.#next, waiting);
+      this.#next++;
+    }
+    return "delivered";
+  }
+
+  get nextSeq(): number {
+    return this.#next;
+  }
+
+  get pending(): number {
+    return this.#waiting.size;
+  }
+
+  gaps(): number[] {
+    if (this.#waiting.size === 0) return [];
+    const max = Math.max(...this.#waiting.keys());
+    const missing: number[] = [];
+    for (let seq = this.#next; seq &lt; max; seq++) if (!this.#waiting.has(seq)) missing.push(seq);
+    return missing;
+  }
+}
+
+const buffer = new ReorderBuffer&lt;string&gt;((seq, status) =&gt; console.log(`  ← ${seq}: ${status}`));
+for (const [seq, status] of [[1, "placed"], [3, "shipped"], [5, "refunded"], [3, "shipped"], [2, "paid"], [1, "placed"]] as const) {
+  const result = buffer.push(seq, status);
+  console.log(`push ${seq} → ${result}`, result === "buffered" ? `(חסר: ${buffer.gaps().join(", ")})` : "");
+}
+console.log("next:", buffer.nextSeq, "pending:", buffer.pending);</code></pre>
+<pre class="terminal">  ← 1: placed
+push 1 → delivered 
+push 3 → buffered (חסר: 2)
+push 5 → buffered (חסר: 2, 4)
+push 3 → duplicate 
+  ← 2: paid
+  ← 3: shipped
+push 2 → delivered 
+push 1 → duplicate 
+next: 4 pending: 1</pre>
+<p>כש־2 מגיע, שתי הודעות נמסרות: 2, ומיד אחריה 3 שחיכתה. ‏5 עדיין מחכה ל־4. ‏<code>gaps()</code> הוא מה שמראים בלוג או במדד: "ממתינים ל־4 כבר 30 שניות" הוא סימן שהודעה הלכה לאיבוד, או שנתקעה ב־DLQ.</p>
+<p>מה חסר כאן, ובמערכת אמיתית חייב להיות? <strong>גבול</strong>. אם 4 לא מגיעה לעולם, ה־Map גדל בלי סוף, וההזמנה תקועה. פתרונות: זמן המתנה מקסימלי ואז התראה, או מסירה עם "דילוג" מתועד. ובנוסף, ‏<code>#next</code> חי בזיכרון: אחרי restart הוא חוזר ל־1. לכן שומרים אותו במסד, באותה טרנזקציה של הטיפול (כמו <code>processed_events</code> בשיעור 5), ומעבירים ל־<code>startSeq</code>.</p>
+<p>הרבה פעמים אפשר לחסוך את כל זה: אם כל ההודעות של הזמנה הולכות לאותו partition (‏key = מזהה ההזמנה), ‏Kafka כבר שומר את הסדר. ‏ReorderBuffer נחוץ כשאין לך שליטה על התשתית, או כשההודעות מגיעות מכמה מקורות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למסור רק את <code>seq</code> ולא לבדוק מי מחכה אחריו — 3 נשארת ב־Map לנצח.</li><li>לבדוק כפילות רק מול <code>#next</code> — הודעה שמחכה ומגיעה שוב דורסת את הראשונה.</li><li>לשמור את כל ההודעות במערך ולמיין בכל <code>push</code> — עובד, אבל O(n log n) לכל הודעה, ואין דרך פשוטה לזהות כפילות.</li><li><code>Math.max(...[])</code> כשאין ממתינות — ‏<code>-Infinity</code>. בדוק קודם שה־Map לא ריק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26.5-E27">
+    <h3>P26.5-E27 · בדיקות ל־decide: לנסות שוב או dead letter? 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש השהיות ראשונות מראות את הנוסחה (וגם שהחזקה מתחילה מ־0). לתקרה צריך שני צדדים: ניסיון שבו הנוסחה עוד מתחת ל־60,000 (6 ← 32,000), וניסיון שבו היא כבר מעל (7 ← 64,000, ולכן 60,000).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לגבול של <code>maxAttempts</code>: ‏<code>decide(4, 5)</code> ← retry, ‏<code>decide(5, 5)</code> ← dead-letter. ל־<code>reason</code>: בדוק ש<em>מכיל</em> את הודעת השגיאה (<code>includes</code>), ולא שהוא שווה למחרוזת מדויקת. ‏TypeScript ידרוש לבדוק קודם ש־<code>action === "dead-letter"</code> לפני שניגשים ל־<code>reason</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { decide } from "./P26.5-E27.ts";
+
+const temporary = { retryable: true, message: "connection reset" };
+const permanent = { retryable: false, message: "product 99 not found" };
+
+test("השהיה שמכפילה את עצמה: 1000, 2000, 4000", () =&gt; {
+  assert.deepEqual(decide(1, 10, temporary), { action: "retry", delayMs: 1000 });
+  assert.deepEqual(decide(2, 10, temporary), { action: "retry", delayMs: 2000 });
+  assert.deepEqual(decide(3, 10, temporary), { action: "retry", delayMs: 4000 });
+});
+
+test("תקרה של 60 שניות", () =&gt; {
+  assert.deepEqual(decide(6, 20, temporary), { action: "retry", delayMs: 32_000 });
+  assert.deepEqual(decide(7, 20, temporary), { action: "retry", delayMs: 60_000 });
+  assert.deepEqual(decide(19, 20, temporary), { action: "retry", delayMs: 60_000 });
+});
+
+test("maxAttempts: הניסיון האחרון ← dead-letter, זה שלפניו ← retry", () =&gt; {
+  assert.equal(decide(4, 5, temporary).action, "retry");
+  const last = decide(5, 5, temporary);
+  assert.equal(last.action, "dead-letter");
+  assert.ok(last.action === "dead-letter" &amp;&amp; last.reason.includes("connection reset"), "ה־reason כולל את הודעת השגיאה");
+  assert.equal(decide(1, 1, temporary).action, "dead-letter", "maxAttempts של 1 — בלי ניסיון חוזר");
+});
+
+test("שגיאה קבועה ← dead-letter מיד", () =&gt; {
+  const d = decide(1, 5, permanent);
+  assert.equal(d.action, "dead-letter");
+  assert.ok(d.action === "dead-letter" &amp;&amp; d.reason.includes("product 99 not found"));
+});
+
+test("attempt לא תקין ← RangeError", () =&gt; {
+  for (const bad of [0, -1, 1.5, NaN]) assert.throws(() =&gt; decide(bad, 5, temporary), RangeError, String(bad));
+});</code></pre>
+<p>שלושה דברים כאן שקל לפספס. <strong>הגבול של maxAttempts</strong>: מימוש עם <code>&gt;</code> במקום <code>&gt;=</code> נותן ניסיון נוסף, ורק <code>decide(5, 5)</code> תופס אותו. <strong>התקרה משני הצדדים</strong>: בדיקה רק על 19 לא מבדילה בין תקרה של 30 שניות ל־60 בניסיון הנכון, ובדיקה רק על 6 לא תופסת מימוש בלי תקרה. <strong>ה־reason</strong>: מי שמסתכל על ה־DLQ בשלוש בלילה צריך לראות <em>למה</em> ההודעה שם.</p>
+<p><code>includes</code> ולא <code>equal</code> על ה־<code>reason</code>: הניסוח המדויק הוא פרט מימוש. מה שחשוב הוא שהמידע שם. בדיקה שמשווה מחרוזת שלמה נשברת בכל שינוי ניסוח, ומלמדת את הצוות להתעלם מבדיקות אדומות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את 1, 2, 3 — שלושה מוטנטים (בלי תקרה, תקרה של 30 שניות, ו־<code>&gt;</code>) עוברים.</li><li><code>assert.equal(d.reason, "נכשל 5 פעמים: connection reset")</code> — עובד על הקוד הזה, אבל קושר את הבדיקה לניסוח.</li><li>לבדוק <code>RangeError</code> רק על 0 — שבר (<code>1.5</code>) עובר במימוש שבודק רק <code>attempt &lt; 1</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26.5-E28">
+    <h3>P26.5-E28 · האירוע הבא לכל מפתח ב־outbox 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־CTE: כל השורות שלא פורסמו, ועליהן שני חלונות על אותה חלוקה: <code>ROW_NUMBER() OVER (PARTITION BY topic, key ORDER BY id) AS rn</code> ו־<code>COUNT(*) OVER (PARTITION BY topic, key) AS pending</code>. בשאילתה החיצונית: <code>WHERE rn = 1</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אי אפשר לכתוב <code>WHERE rn = 1</code> באותה שאילתה שבה מחשבים את <code>rn</code>: ‏<code>WHERE</code> רץ לפני החלונות. לכן ה־CTE. ‏<code>WHERE published_at IS NULL</code> שייך ל־CTE, כדי שהחלונות יספרו רק ממתינים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH pending AS (
+  SELECT
+    id, topic, key, event_type,
+    ROW_NUMBER() OVER (PARTITION BY topic, key ORDER BY id) AS rn,
+    COUNT(*) OVER (PARTITION BY topic, key) AS pending
+  FROM outbox
+  WHERE published_at IS NULL
+)
+SELECT topic, key, id AS next_id, event_type, pending
+FROM pending
+WHERE rn = 1
+ORDER BY next_id;</code></pre>
+<pre class="terminal">  topic   |   key   | next_id |   event_type    | pending
+----------+---------+---------+-----------------+---------
+ orders   | order-2 |       4 | OrderPaid       |       2
+ payments | pay-9   |       5 | PaymentCaptured |       2
+ orders   | order-1 |       6 | OrderShipped    |       2
+ orders   | order-3 |       8 | OrderPlaced     |       1
+ audit    | order-1 |      11 | OrderViewed     |       1
+(5 rows)</pre>
+<p><code>order-1</code> ב־<code>orders</code>: אירועים 1 ו־3 כבר פורסמו, ולכן הבא בתור הוא 6, ואחריו עוד אחד (10). ב־<code>audit</code> יש גם <code>order-1</code>, אבל זה רצף אחר, עם סדר משלו. ‏<code>PARTITION BY key</code> לבד היה מערבב ביניהם: ‏<code>pending</code> של 3, ו־<code>OrderViewed</code> היה נעלם.</p>
+<p>למה לא <code>GROUP BY topic, key</code> עם <code>MIN(id)</code>? ‏<code>MIN(id)</code> נותן את <code>next_id</code>, אבל לא את <code>event_type</code> שלו. בשביל זה צריך <code>JOIN</code> חזרה לטבלה. ‏<code>ROW_NUMBER</code> נותן את כל השורה הראשונה בכל קבוצה בשלב אחד. זה הדפוס של "top-N לכל קבוצה" מ־P18-E28.</p>
+<p>ב־relay אמיתי השאילתה נגמרת ב־<code>FOR UPDATE SKIP LOCKED</code> (שיעור 5), כדי ששני relays לא יפרסמו את אותו אירוע. אבל עם פונקציות חלון אי אפשר לנעול. לכן בפועל נועלים קודם את השורות (<code>SELECT ... FOR UPDATE SKIP LOCKED</code>), ובוחרים מהן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסנן <code>published_at IS NULL</code> בשאילתה החיצונית, אחרי החלון — ‏<code>rn = 1</code> הוא האירוע הראשון שאי פעם נכתב, והוא כבר פורסם.</li><li><code>PARTITION BY key</code> בלי <code>topic</code> — רצפים של topics שונים מתערבבים.</li><li><code>ORDER BY created_at</code> בחלון — שני אירועים באותה מילישנייה מקבלים סדר מקרי. ‏<code>id</code> (‏bigserial) מגדיר סדר כתיבה חד־משמעי.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.5-E01">
     <h3>P26.5-E01 · איזה כלי? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
