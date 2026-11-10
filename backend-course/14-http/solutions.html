@@ -13,6 +13,183 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>14-http/solutions/</code>.</p></div>
+<div class="ex typed" id="P14-E26">
+    <h3>P14-E26 · פירוק header של Cookie 🤖 <span class="tag type warmup">🔥 חימום</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>header.split(";")</code>, ובכל חלק: <code>const i = part.indexOf("=")</code>. אם <code>i === -1</code> — <code>continue</code>. השם הוא <code>part.slice(0, i).trim()</code>, והערך <code>part.slice(i + 1).trim()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה לא <code>part.split("=")</code>? כי <code>"a=b=c".split("=")</code> נותן שלושה חלקים, והערך נחתך. ואם בכל זאת רוצים split, צריך לחבר בחזרה: <code>const [name, ...rest] = part.split("="); rest.join("=")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E26: פירוק header של Cookie
+export function parseCookies(header) {
+  const cookies = {};
+  if (!header) {
+    return cookies;
+  }
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i === -1) {
+      continue;
+    }
+    const name = part.slice(0, i).trim();
+    const value = part.slice(i + 1).trim();
+    if (name) {
+      cookies[name] = decodeURIComponent(value);
+    }
+  }
+  return cookies;
+}
+
+console.log(parseCookies("theme=dark; lang=he; cart=%D7%A1%D7%9C"));
+console.log(parseCookies("token=a=b=c;  broken ; =x"));
+console.log(parseCookies(undefined));</code></pre>
+<pre class="terminal">{ theme: 'dark', lang: 'he', cart: 'סל' }
+{ token: 'a=b=c' }
+{}</pre>
+<p>זה אותו פירוק כמו של query string (P14-E06) ושל קובץ <code>.env</code> (P13-E10): מפרידים לזוגות, ובכל זוג חותכים ב־<code>=</code> <strong>הראשון</strong>. ‏<code>indexOf</code> ו־<code>slice</code> עושים את זה בלי להרוס ערכים שיש בהם <code>=</code>, כמו טוקנים ב־base64.</p>
+<p>בפרק 21 תשמור טוקן בעוגייה עם <code>HttpOnly</code>. בפרויקט אמיתי ספרייה כמו <code>cookie-parser</code> מפרקת את ה־header בשבילך, ועכשיו אתה יודע מה היא עושה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>const [name, value] = part.split("=")</code> — ‏<code>a=b=c</code> נהיה <code>"b"</code>.</li><li>לשכוח <code>trim</code> — אחרי <code>split(";")</code> לכל שם חוץ מהראשון יש רווח בהתחלה (<code>" lang"</code>).</li><li>לא לבדוק <code>undefined</code> — ‏<code>header.split</code> קורס כשהדפדפן לא שלח עוגיות בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E27">
+    <h3>P14-E27 · סטטיסטיקת בקשות כמחלקה 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>#routes = new Map()</code>. הערך לכל route: <code>{ count, totalMs, errors }</code>. ב־<code>record</code>: ‏<code>const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 }</code>, מעדכנים, ו־<code>set</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>[...this.#routes]</code> נותן מערך של <code>[route, s]</code>. ‏<code>map</code> לאובייקט התוצאה, ואז <code>sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route))</code>. כשההפרש הוא 0 (תיקו), ה־<code>||</code> עובר לקריטריון השני.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E27: סטטיסטיקת בקשות כמחלקה
+export class RequestStats {
+  #routes = new Map();
+
+  record(method, path, status, ms) {
+    const route = `${method} ${path}`;
+    const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 };
+    s.count++;
+    s.totalMs += ms;
+    if (status &gt;= 500) {
+      s.errors++;
+    }
+    this.#routes.set(route, s);
+  }
+
+  get total() {
+    let sum = 0;
+    for (const s of this.#routes.values()) {
+      sum += s.count;
+    }
+    return sum;
+  }
+
+  summary() {
+    return [...this.#routes]
+      .map(([route, s]) =&gt; ({ route, count: s.count, avgMs: Math.round(s.totalMs / s.count), errors: s.errors }))
+      .sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route));
+  }
+}
+
+const stats = new RequestStats();
+stats.record("GET", "/users", 200, 12);
+stats.record("GET", "/users", 200, 20);
+stats.record("POST", "/users", 201, 35);
+stats.record("GET", "/orders", 500, 101);
+stats.record("GET", "/users", 503, 3);
+console.log(stats.total);
+console.log(stats.summary());</code></pre>
+<pre class="terminal">5
+[
+  { route: 'GET /users', count: 3, avgMs: 12, errors: 1 },
+  { route: 'GET /orders', count: 1, avgMs: 101, errors: 1 },
+  { route: 'POST /users', count: 1, avgMs: 35, errors: 0 }
+]</pre>
+<p>שומרים <code>totalMs</code> ולא את הממוצע. ממוצע אי אפשר לעדכן בלי לדעת על כמה בקשות הוא חושב. סכום ומונה מעדכנים בפעולה אחת, ומחשבים את הממוצע רק כשמבקשים <code>summary()</code>.</p>
+<p><code>b.count - a.count || ...</code>: ההפרש 0 הוא falsy, ולכן רק בתיקו נבדק הקריטריון השני. זה הדפוס שראית בפרק 6 למיון לפי כמה שדות.</p>
+<p>כך עובדים כלי ניטור כמו Prometheus (פרק 24): לכל route יש מונים מצטברים, ומהם מחשבים ממוצעים ואחוזי שגיאות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור <code>avgMs</code> ולעדכן אותו ב־<code>(avg + ms) / 2</code> — זה לא ממוצע. בשלוש בקשות 12, 20, 3 יוצא 9.5 במקום 11.67.</li><li>לספור <code>status &gt;= 400</code> כשגיאה — 404 היא תשובה תקינה של השרת. כאן סופרים תקלות של השרת (5xx).</li><li><code>routes = new Map()</code> בלי <code>#</code> — הבודק מגלה שדה ציבורי.</li><li><code>total()</code> כמתודה במקום <code>get total()</code> — ‏<code>stats.total</code> מחזיר פונקציה ולא מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E28">
+    <h3>P14-E28 · לחכות שהשרת יעלה 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השהיה: <code>const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));</code> (פרק 10). הלולאה: <code>let attempt = 0; while (attempt &lt; tries) { attempt++; ... }</code>, ואחרי הלולאה <code>throw</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך הלולאה: <code>try { const res = await fetch(url); if (res.ok) return attempt; } catch { }</code>, ואחריו <code>if (attempt &lt; tries) await sleep(delayMs);</code>. ה־<code>catch</code> הריק בכוונה: שגיאת רשת היא בדיוק המצב שבו ממשיכים לחכות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E28: לחכות שהשרת יעלה
+import http from "node:http";
+
+const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));
+
+export async function waitUntilReady(url, { tries = 10, delayMs = 100 } = {}) {
+  let attempt = 0;
+  while (attempt &lt; tries) {
+    attempt++;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        return attempt;
+      }
+    } catch {
+      // השרת עוד לא מקשיב — ננסה שוב
+    }
+    if (attempt &lt; tries) {
+      await sleep(delayMs);
+    }
+  }
+  throw new Error(`השרת לא מוכן אחרי ${tries} ניסיונות`);
+}
+
+// שרת שעונה 503 בשתי הבקשות הראשונות, ואז 200
+let calls = 0;
+const server = http.createServer((req, res) =&gt; {
+  calls++;
+  res.writeHead(calls &lt;= 2 ? 503 : 200).end();
+});
+server.listen(0, async () =&gt; {
+  const url = `http://localhost:${server.address().port}/health`;
+  console.log("מוכן בניסיון", await waitUntilReady(url, { delayMs: 20 }));
+  try {
+    await waitUntilReady("http://localhost:1/health", { tries: 3, delayMs: 20 });
+  } catch (err) {
+    console.log(err.message);
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">מוכן בניסיון 3
+השרת לא מוכן אחרי 3 ניסיונות</pre>
+<p>כמה פעמים הלולאה תרוץ? לא יודעים מראש — היא נעצרת כשהשרת עונה. זה המקרה הקלאסי ל־<code>while</code> (כמו <code>fetchAll</code> ב־P10-E28). ‏<code>return</code> מתוך הלולאה יוצא גם מהפונקציה, ולכן ה־<code>throw</code> אחרי הלולאה קורה רק אם כל הניסיונות נכשלו.</p>
+<p>ההבדל מ־P14-E19 (ניסיון חוזר חכם): שם מנסים שוב פעולה שנכשלה. כאן מחכים שמשהו <em>יהיה מוכן</em>. גם 503 וגם "החיבור נדחה" פירושם "עוד לא".</p>
+<p>בפרק 23 תראה את אותו רעיון ב־<code>healthcheck</code> של Docker Compose.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>try/catch</code> סביב <code>fetch</code> — כשהשרת עוד לא מקשיב, <code>fetch</code> זורק (<code>ECONNREFUSED</code>), והפונקציה נכשלת כבר בניסיון הראשון.</li><li><code>while (true)</code> בלי תנאי עצירה — אם השרת לא עולה אף פעם, הסקריפט תקוע לנצח.</li><li>לחכות גם אחרי הניסיון האחרון — עוד <code>delayMs</code> מבוזבז לפני השגיאה.</li><li><code>setTimeout(() =&gt; {}, delayMs)</code> בלי Promise ו־<code>await</code> — לא מחכה בכלל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P14-E01">
     <h3>P14-E01 · לפרק כתובות <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

@@ -19,7 +19,7 @@ export async function exportsOf(testUrl, file, names, how = "export") {
   const mod = await load(testUrl, file);
   for (const name of names) {
     if (mod[name] === undefined) {
-      assert.fail(`הקובץ ${file} לא מייצא את ${name}. ${how === "module.exports" ? `בסוף הקובץ: module.exports = { ${names.join(", ")} };` : `כתוב export לפני ההגדרה: export function ${name}(...)`}`);
+      assert.fail(`הקובץ ${file} לא מייצא את ${name}. ${how === "module.exports" ? `בסוף הקובץ: module.exports = { ${names.join(", ")} };` : `כתוב export לפני ההגדרה: ${/^[A-Z]/.test(name) ? `export class ${name}` : `export function ${name}(...)`}`}`);
     }
   }
   return mod;
