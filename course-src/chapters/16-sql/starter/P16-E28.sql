@@ -1,0 +1,6 @@
+-- P16-E28: אזור לכל לקוח — CASE כמו switch
+-- full_name | region: Tel Aviv/Ramat Gan → 'center', Haifa → 'north', Jerusalem → 'jerusalem',
+--                     Beer Sheva → 'south', אחרת (גם NULL) → 'unknown' | contact: הטלפון, ואם אין — האימייל
+-- מיון: center, north, jerusalem, south, unknown — ובתוך כל אזור לפי full_name
+--
+-- בדיקה:  npm run check P16-E28

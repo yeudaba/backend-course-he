@@ -13,6 +13,201 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>16-sql/solutions/</code>.</p></div>
+<div class="ex typed" id="P16-E26">
+    <h3>P16-E26 · יומן אימונים — טבלה, נתונים ושאילתה 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תזכורת לתחביר: <code>integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY</code>, ‏<code>CHECK (kind IN ('run', 'bike', 'swim'))</code>, ‏<code>CHECK (minutes BETWEEN 1 AND 600)</code>, ‏<code>DEFAULT CURRENT_DATE</code>. עמודה בלי <code>NOT NULL</code> היא לא חובה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>INSERT</code> רושמים את העמודות במפורש, ובמקום ריק כותבים <code>NULL</code>: <code>('swim', 45, NULL, '2026-11-02', 'pool')</code>. בשאילתה: <code>WHERE distance_km IS NOT NULL</code>, ו־<code>ROUND(minutes / distance_km, 2) AS min_per_km</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE workouts (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  kind         text NOT NULL CHECK (kind IN ('run', 'bike', 'swim')),
+  minutes      integer NOT NULL CHECK (minutes BETWEEN 1 AND 600),
+  distance_km  numeric(6, 2) CHECK (distance_km &gt; 0),
+  done_on      date NOT NULL DEFAULT CURRENT_DATE,
+  note         text
+);
+
+INSERT INTO workouts (kind, minutes, distance_km, done_on, note) VALUES
+  ('run', 30, 5.2, '2026-11-01', NULL),
+  ('swim', 45, NULL, '2026-11-02', 'pool'),
+  ('bike', 90, 32.5, '2026-11-03', NULL),
+  ('run', 25, 4.1, '2026-11-05', 'hills');
+
+SELECT done_on, kind, ROUND(minutes / distance_km, 2) AS min_per_km
+FROM workouts
+WHERE distance_km IS NOT NULL
+ORDER BY done_on;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 4
+  done_on   | kind | min_per_km
+------------+------+------------
+ 2026-11-01 | run  |       5.77
+ 2026-11-03 | bike |       2.77
+ 2026-11-05 | run  |       6.10
+(3 rows)</pre>
+<p><code>CHECK (distance_km &gt; 0)</code> בלי <code>NOT NULL</code>: כשהערך הוא <code>NULL</code>, התנאי לא "נכשל" (הוא "לא ידוע"), ולכן השורה מתקבלת. זה בדיוק מה שרצינו: מרחק לא חובה, אבל אם יש — חיובי. זה אותו כלל כמו <code>uses &lt;= max_uses</code> ב־P16-E24.</p>
+<p><code>minutes / distance_km</code>: מספר שלם חלקי <code>numeric</code> נותן <code>numeric</code>, ולכן אין כאן בעיה של חלוקת שלמים. אילו שתי העמודות היו <code>integer</code>, ‏<code>30 / 4</code> היה נותן 7 ולא 7.5.</p>
+<p>ה־<code>WHERE distance_km IS NOT NULL</code> לא רק מסנן את השחייה. בלעדיו השורה של השחייה הייתה מופיעה עם <code>min_per_km</code> ריק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>distance_km numeric(6, 2) NOT NULL CHECK (...)</code> — אימון השחייה נדחה.</li><li><code>WHERE distance_km != NULL</code> — שום שורה לא חוזרת. עם NULL משווים רק עם <code>IS</code> / <code>IS NOT</code>.</li><li><code>id serial</code> — עובד, אבל מאפשר להכניס id ידני. הבודק מצפה ש"רק המסד ממספר" (<code>GENERATED ALWAYS</code>).</li><li>לשכוח <code>DEFAULT CURRENT_DATE</code> — ‏<code>INSERT</code> בלי תאריך נכשל, במקום לקבל את היום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P16-E27">
+    <h3>P16-E27 · בונה שאילתות עם פרמטרים 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני מערכים: <code>conditions = ["is_active"]</code> ו־<code>values = []</code>. פונקציית עזר קטנה: <code>const param = (value) =&gt; { values.push(value); return <code>$${values.length}</code>; }</code>. כך המספר תמיד מתאים למקום של הערך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>if (filters.category !== undefined) conditions.push(<code>category = ${param(filters.category)}</code>);</code>. ‏<code>!== undefined</code> ולא <code>if (filters.minPrice)</code> — אחרת <code>minPrice: 0</code> נעלם. בסוף: <code>conditions.join(" AND ")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P16-E27: בונה שאילתות עם פרמטרים
+export type ProductFilters = {
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  search?: string;
+  inStock?: boolean;
+  sort?: "price" | "-price" | "name";
+  limit?: number;
+};
+
+export function buildProductQuery(filters: ProductFilters): { text: string; values: unknown[] } {
+  const conditions = ["is_active"];
+  const values: unknown[] = [];
+  const param = (value: unknown) =&gt; {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  if (filters.category !== undefined) conditions.push(`category = ${param(filters.category)}`);
+  if (filters.minPrice !== undefined) conditions.push(`price &gt;= ${param(filters.minPrice)}`);
+  if (filters.maxPrice !== undefined) conditions.push(`price &lt;= ${param(filters.maxPrice)}`);
+  if (filters.search !== undefined) conditions.push(`name ILIKE ${param(`%${filters.search}%`)}`);
+  if (filters.inStock === true) conditions.push("stock &gt; 0");
+  if (filters.inStock === false) conditions.push("stock = 0");
+
+  let orderBy: string;
+  switch (filters.sort) {
+    case "price":
+      orderBy = "price, id";
+      break;
+    case "-price":
+      orderBy = "price DESC, id";
+      break;
+    case "name":
+      orderBy = "name";
+      break;
+    case undefined:
+      orderBy = "id";
+      break;
+    default:
+      throw new Error(`מיון לא מוכר: ${filters.sort}`);
+  }
+
+  let text = `SELECT id, name, price FROM products WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy}`;
+  if (filters.limit !== undefined) text += ` LIMIT ${param(filters.limit)}`;
+  return { text, values };
+}
+
+console.log(buildProductQuery({}));
+console.log(buildProductQuery({ category: "beans", maxPrice: 90, inStock: true, sort: "-price", limit: 2 }));
+console.log(buildProductQuery({ search: "grinder", sort: "name" }));</code></pre>
+<pre class="terminal">{
+  text: 'SELECT id, name, price FROM products WHERE is_active ORDER BY id',
+  values: []
+}
+{
+  text: 'SELECT id, name, price FROM products WHERE is_active AND category = $1 AND price &lt;= $2 AND stock &gt; 0 ORDER BY price DESC, id LIMIT $3',
+  values: [ 'beans', 90, 2 ]
+}
+{
+  text: 'SELECT id, name, price FROM products WHERE is_active AND name ILIKE $1 ORDER BY name',
+  values: [ '%grinder%' ]
+}</pre>
+<p>הפונקציה <code>param</code> היא העיקר: היא שומרת את הערך ומחזירה את המספר שלו. כך אי אפשר לטעות ב־<code>$3</code> כשחלק מהמסננים חסרים. המספור נבנה לפי מה שבאמת נשלח.</p>
+<p>למה <code>stock &gt; 0</code> נכתב ישר בטקסט ו־<code>category</code> לא? כי <code>stock &gt; 0</code> הוא קוד שאנחנו כתבנו. ‏<code>category</code> מגיע מהמשתמש. כל מה שמגיע מבחוץ עובר כפרמטר, וכך <code>'; DROP TABLE products; --</code> הוא סתם מחרוזת שלא נמצאת. גם המיון מגיע מהמשתמש, אבל הוא עובר דרך <code>switch</code> שמתרגם אותו לטקסט שלנו. ערך לא מוכר נזרק, ולא נכנס לשאילתה.</p>
+<p>ה־<code>case undefined:</code> נראה מוזר, אבל הוא חוקי: <code>switch</code> משווה עם <code>===</code>, ו־<code>undefined</code> הוא ערך כמו כל ערך אחר. בזכותו ה־<code>default</code> נשאר רק לערכים לא מוכרים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code><code>category = '${filters.category}'</code></code> — ‏SQL injection. הבודק שולח <code>search</code> עם מירכאה ובודק שהטבלה שרדה.</li><li><code>if (filters.minPrice)</code> — ‏<code>minPrice: 0</code> ו־<code>inStock: false</code> נעלמים.</li><li>מספור קבוע (<code>price &gt;= $2</code>) — כשאין category, ‏<code>$2</code> מצביע על הערך הלא נכון.</li><li><code>ORDER BY price</code> בלי <code>id</code> — בשני מוצרים באותו מחיר הסדר לא מובטח, ו־LIMIT מחזיר כל פעם משהו אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P16-E28">
+    <h3>P16-E28 · אזור לכל לקוח (CASE כמו switch) 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בצורה הקצרה כל <code>WHEN</code> הוא ערך אחד, כמו <code>case</code> ב־JavaScript. לשתי ערים של אותו אזור כותבים שני <code>WHEN</code> (ב־PostgreSQL אין <code>WHEN 'a', 'b'</code>). ‏<code>contact</code>: ‏<code>COALESCE(phone, email)</code>.</p>
+<p>ל־<code>NULL</code> אין <code>WHEN</code>: ‏<code>CASE city WHEN NULL</code> משווה עם <code>=</code>, ו־<code>NULL = NULL</code> אינו true. ה־<code>ELSE</code> תופס גם אותו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון בסדר משלך: <code>CASE</code> נוסף בתוך <code>ORDER BY</code>, שהופך כל אזור למספר: <code>ORDER BY CASE region WHEN 'center' THEN 1 WHEN 'north' THEN 2 ... END, full_name</code>. ב־<code>ORDER BY</code> מותר להשתמש בכינוי <code>region</code>, אבל רק כשהוא עומד לבד. בתוך ביטוי (כמו <code>CASE</code>) הכינוי לא מוכר, וצריך לחזור על הביטוי של העיר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT
+  full_name,
+  CASE city
+    WHEN 'Tel Aviv' THEN 'center'
+    WHEN 'Ramat Gan' THEN 'center'
+    WHEN 'Haifa' THEN 'north'
+    WHEN 'Jerusalem' THEN 'jerusalem'
+    WHEN 'Beer Sheva' THEN 'south'
+    ELSE 'unknown'
+  END AS region,
+  COALESCE(phone, email) AS contact
+FROM customers
+ORDER BY
+  CASE city
+    WHEN 'Tel Aviv' THEN 1
+    WHEN 'Ramat Gan' THEN 1
+    WHEN 'Haifa' THEN 2
+    WHEN 'Jerusalem' THEN 3
+    WHEN 'Beer Sheva' THEN 4
+    ELSE 5
+  END,
+  full_name;</code></pre>
+<pre class="terminal">  full_name   |  region   |        contact
+--------------+-----------+-----------------------
+ Dana Levi    | center    | 050-1111111
+ Itay Hadad   | center    | 052-7777777
+ lior katz    | center    | lior.katz@example.com
+ Michal Biton | center    | michal@example.com
+ Gal Ohayon   | north     | 054-8888888
+ Shira David  | north     | 050-5555555
+ Yossi Cohen  | north     | yossi@example.com
+ Noa Mizrahi  | jerusalem | 052-2222222
+ Tamar Gabay  | jerusalem | 058-6666666
+ Ron Avraham  | south     | 053-4444444
+ Avi Peretz   | unknown   | 054-3333333
+ Omer Shalom  | unknown   | omer@example.com
+(12 rows)</pre>
+<p>שני ה־<code>CASE</code> הם <code>switch</code> לכל דבר: ערך אחד מושווה לרשימת קבועים, ו־<code>ELSE</code> הוא ה־<code>default</code>. הראשון מתרגם עיר לשם אזור, והשני מתרגם עיר למקום בתור. ב־<code>ORDER BY</code> חוזרים על <code>city</code> ולא כותבים <code>CASE region</code>, כי כינוי מה־<code>SELECT</code> לא מוכר בתוך ביטוי.</p>
+<p>Omer ו־Avi בלי עיר, והם בסוף, ב־<code>unknown</code>. ה־<code>ELSE</code> תפס אותם, כמו ב־P16-E21: השוואה ל־NULL אף פעם לא "נכונה".</p>
+<p>סדר מיון "עסקי" (לא א״ב ולא מספרי) הוא מקום טבעי ל־<code>CASE</code> בתוך <code>ORDER BY</code>. בפרויקטים גדולים שומרים אותו בעמודה בטבלה (<code>regions.sort_order</code>), ואז ה־<code>CASE</code> נעלם — נראה טבלאות קשורות בפרק 17.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ORDER BY region</code> — מיון לפי א״ב: ‏center, jerusalem, north, south, unknown.</li><li><code>WHEN NULL THEN 'unknown'</code> בלי <code>ELSE</code> — הלקוחות בלי עיר מקבלים <code>NULL</code> ולא <code>'unknown'</code>.</li><li><code>ORDER BY CASE region WHEN ...</code> — ‏<code>column "region" does not exist</code>: בתוך ביטוי ב־ORDER BY אי אפשר להשתמש בכינוי.</li><li><code>COALESCE(email, phone)</code> — הסדר הפוך, וכולם מקבלים אימייל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P16-E01">
     <h3>P16-E01 · איזה טיפוס? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

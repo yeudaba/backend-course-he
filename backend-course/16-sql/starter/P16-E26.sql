@@ -1,0 +1,7 @@
+-- P16-E26: יומן אימונים — טבלה, נתונים ושאילתה (מקובץ ריק)
+-- 1. CREATE TABLE workouts: id (רק המסד ממספר) | kind: 'run'/'bike'/'swim', חובה | minutes: שלם 1–600, חובה
+--    distance_km: numeric(6, 2), לא חובה, אם יש — חיובי | done_on: date, חובה, ברירת מחדל היום | note: text, לא חובה
+-- 2. INSERT אחד עם ארבעת האימונים מהטבלה בדף התרגילים
+-- 3. SELECT: האימונים שיש להם מרחק — done_on, kind, min_per_km (דקות לק״מ, 2 ספרות) — לפי done_on
+--
+-- בדיקה:  npm run check P16-E26
