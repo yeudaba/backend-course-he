@@ -13,6 +13,266 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26-redis/solutions/</code>.</p></div>
+<div class="ex typed" id="P26-E31">
+    <h3>P26-E31 · sessions ב־Redis 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>await redis.multi().hset(key, { ...data, userId: String(userId) }).expire(key, ttlSec).sadd(...).exec()</code>. ‏<code>HGETALL</code> על מפתח שלא קיים מחזיר <code>{}</code>, לא <code>null</code>. ‏<code>const { userId, ...data } = hash</code> מפריד את <code>userId</code> משאר השדות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תוקף לרשימה: <code>EXPIRE key ttl NX</code> קובע תוקף רק אם אין לה עדיין, ו־<code>EXPIRE key ttl GT</code> רק מאריך. שניהם ברצף. ב־ioredis: <code>.expire(key, ttl, "NX").expire(key, ttl, "GT")</code>. ב־<code>destroyAllForUser</code>: ‏<code>SMEMBERS</code>, ואז <code>redis.del(...ids.map(k))</code>. ‏<code>DEL</code> מחזיר כמה מפתחות היו קיימים ונמחקו. זה בדיוק המספר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E31 — sessions ב־Redis
+import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
+
+export type Session = { userId: number; data: Record&lt;string, string&gt; };
+
+const sessionKey = (id: string) =&gt; `session:${id}`;
+const userKey = (userId: number) =&gt; `user:${userId}:sessions`;
+
+export async function createSession(redis: Redis, userId: number, data: Record&lt;string, string&gt; = {}, ttlSec = 1800): Promise&lt;string&gt; {
+  const id = randomUUID();
+  await redis
+    .multi()
+    .hset(sessionKey(id), { ...data, userId: String(userId) })
+    .expire(sessionKey(id), ttlSec)
+    .sadd(userKey(userId), id)
+    // הרשימה חיה כמו ה־session הארוך ביותר שבה: NX — אם אין לה עדיין תוקף, GT — רק להאריך
+    .expire(userKey(userId), ttlSec, "NX")
+    .expire(userKey(userId), ttlSec, "GT")
+    .exec();
+  return id;
+}
+
+export async function getSession(redis: Redis, id: string, ttlSec = 1800): Promise&lt;Session | null&gt; {
+  const hash = await redis.hgetall(sessionKey(id));
+  if (Object.keys(hash).length === 0) return null;
+  const { userId, ...data } = hash;
+  await redis.multi().expire(sessionKey(id), ttlSec).expire(userKey(Number(userId)), ttlSec, "GT").exec();
+  return { userId: Number(userId), data };
+}
+
+export async function destroySession(redis: Redis, id: string): Promise&lt;boolean&gt; {
+  const userId = await redis.hget(sessionKey(id), "userId");
+  if (userId === null) return false;
+  await redis.multi().del(sessionKey(id)).srem(userKey(Number(userId)), id).exec();
+  return true;
+}
+
+export async function destroyAllForUser(redis: Redis, userId: number): Promise&lt;number&gt; {
+  const ids = await redis.smembers(userKey(userId));
+  const deleted = ids.length &gt; 0 ? await redis.del(...ids.map(sessionKey)) : 0;
+  await redis.del(userKey(userId));
+  return deleted;
+}</code></pre>
+<p>ניסיון קצר, מקובץ נפרד (<code>demo.mts</code> ליד הפתרון, כדי שהבודק לא יריץ אותו כשהוא טוען את הקובץ שלך):</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+import { createSession, getSession, destroySession, destroyAllForUser } from "./P26-E31.ts";
+
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "demo-e31:" });
+const laptop = await createSession(redis, 7, { device: "laptop" });
+const phone = await createSession(redis, 7, { device: "phone" }, 60);
+console.log(await getSession(redis, laptop));
+console.log("ttl:", await redis.ttl(`session:${phone}`), await redis.ttl("user:7:sessions"));
+console.log("destroy phone:", await destroySession(redis, phone), await getSession(redis, phone));
+await createSession(redis, 7, { device: "tablet" });
+console.log("logout everywhere:", await destroyAllForUser(redis, 7));
+console.log(await redis.exists("user:7:sessions"));
+redis.disconnect();</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node demo.mts
+{ userId: 7, data: { device: 'laptop' } }
+ttl: 60 1800
+destroy phone: true null
+logout everywhere: 2
+0</pre>
+<p>שורה 2: ה־session של הטלפון חי 60 שניות, והרשימה של המשתמש 1,800. בלי <code>NX</code>/‏<code>GT</code>, ה־session הקצר היה קובע לרשימה 60 שניות. אחרי דקה היא הייתה נמחקת, ו־"התנתק מכל המכשירים" לא היה מוצא את הלפטופ.</p>
+<p>למה הרשימה בכלל? בלעדיה, כדי למצוא את כל ה־sessions של משתמש צריך לסרוק את כל המפתחות (<code>SCAN session:*</code>) ולקרוא כל אחד. זה איטי, ובשרת גדול זה מיליוני מפתחות. האינדקס ההפוך (משתמש ← מזהים) הוא אותו רעיון כמו אינדקס במסד. המחיר: לשמור על שניהם מעודכנים, ולכן <code>MULTI</code>.</p>
+<p>הרשימה יכולה להכיל מזהים של sessions שכבר פגו. זה לא מזיק: ‏<code>DEL</code> עליהם לא עושה כלום, והרשימה עצמה פגה בסוף. בגלל זה <code>destroyAllForUser</code> סופרת לפי מה ש־<code>DEL</code> החזיר, ולא לפי אורך הרשימה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> כמזהה — אפשר לנחש. מזהה session הוא סיסמה זמנית.</li><li><code>HSET</code> ואז <code>EXPIRE</code> בלי <code>MULTI</code> — אם השרת נופל ביניהם, נשאר session בלי תוקף, לנצח.</li><li><code>if (!hash)</code> — ‏<code>{}</code> הוא truthy, ו־session שלא קיים חוזר כ־<code>{ userId: NaN }</code>.</li><li>לקבוע לרשימה <code>EXPIRE</code> רגיל בכל יצירה — session קצר מקצר את הרשימה של כולם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26-E32">
+    <h3>P26-E32 · לקרוא את INFO של Redis 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>text.split(/\r?\n/)</code> מפריד גם <code>\r\n</code> וגם <code>\n</code>. בלולאה: משתנה <code>section</code> שמצביע על האובייקט של המקטע הנוכחי. שורה שמתחילה ב־<code>#</code> יוצרת אובייקט חדש ומכניסה אותו ל־<code>info</code>. שורה רגילה נכנסת ל־<code>section</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Object.fromEntries(value.split(",").map((pair) =&gt; { const [k, n] = pair.split("="); return [k, Number(n)]; }))</code>. ב־<code>hitRatio</code>: ‏<code>Number(info.stats?.keyspace_hits ?? 0)</code>, ואז <code>Math.round(ratio * 1000) / 1000</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E32 — לקרוא את INFO של Redis
+export type Info = Record&lt;string, Record&lt;string, string&gt;&gt;;
+
+export function parseInfo(text: string): Info {
+  const info: Info = {};
+  let section: Record&lt;string, string&gt; | undefined;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "") continue;
+    if (line.startsWith("#")) {
+      section = {};
+      info[line.slice(1).trim().toLowerCase()] = section;
+      continue;
+    }
+    const colon = line.indexOf(":");
+    if (colon === -1 || section === undefined) continue;
+    section[line.slice(0, colon)] = line.slice(colon + 1);
+  }
+  return info;
+}
+
+export function parseKeyspace(info: Info): Record&lt;string, Record&lt;string, number&gt;&gt; {
+  const result: Record&lt;string, Record&lt;string, number&gt;&gt; = {};
+  for (const [db, value] of Object.entries(info.keyspace ?? {})) {
+    result[db] = Object.fromEntries(
+      value.split(",").map((pair) =&gt; {
+        const [key, n] = pair.split("=");
+        return [key, Number(n)];
+      }),
+    );
+  }
+  return result;
+}
+
+export function hitRatio(info: Info): number | null {
+  const hits = Number(info.stats?.keyspace_hits ?? 0);
+  const misses = Number(info.stats?.keyspace_misses ?? 0);
+  if (hits + misses === 0) return null;
+  return Math.round((hits / (hits + misses)) * 1000) / 1000;
+}
+
+const sample = [
+  "# Server",
+  "redis_version:8.2.1",
+  "os:Linux 6.10.14-linuxkit aarch64",
+  "listener0:name=tcp,bind=*,port=6379",
+  "",
+  "# Stats",
+  "keyspace_hits:1520",
+  "keyspace_misses:480",
+  "",
+  "# Keyspace",
+  "db0:keys=1204,expires=980,avg_ttl=512331,subexpiry=0",
+  "db3:keys=7,expires=0,avg_ttl=0,subexpiry=0",
+].join("\r\n");
+const info = parseInfo(sample);
+console.log(info.server);
+console.log(parseKeyspace(info));
+console.log(hitRatio(info), hitRatio(parseInfo("# Stats\r\nkeyspace_hits:0\r\nkeyspace_misses:0")));</code></pre>
+<pre class="terminal">{
+  redis_version: '8.2.1',
+  os: 'Linux 6.10.14-linuxkit aarch64',
+  listener0: 'name=tcp,bind=*,port=6379'
+}
+{
+  db0: { keys: 1204, expires: 980, avg_ttl: 512331, subexpiry: 0 },
+  db3: { keys: 7, expires: 0, avg_ttl: 0, subexpiry: 0 }
+}
+0.76 null</pre>
+<p>‏76% פגיעות: שלוש מכל ארבע קריאות לא מגיעות למסד. זה המספר שמראה אם ה־cache מתוכנן נכון. אם הוא נמוך, ה־TTL קצר מדי, או שהמפתחות כוללים משהו שמשתנה בכל בקשה (למשל זמן).</p>
+<p>‏<code>split(/\r?\n/)</code> במקום <code>split("\n")</code>: עם <code>"\n"</code> בלבד, כל ערך נשאר עם <code>\r</code> בסוף. ‏<code>"8.2.1\r" === "8.2.1"</code> הוא <code>false</code>, ובמסוף לא רואים את ההבדל. זו אחת התקלות המבלבלות ביותר בקריאת פרוטוקולים ישנים (HTTP/1, ‏SMTP, ‏Redis).</p>
+<p>‏<code>listener0:name=tcp,bind=*,port=6379</code> — בערך יש <code>=</code> ופסיקים, ובשורות אחרות גם נקודתיים. בגלל זה <code>indexOf</code> של הנקודתיים הראשונות, ולא <code>split(":")</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>split("\n")</code> — ‏<code>\r</code> נשאר בסוף כל ערך.</li><li><code>line.split(":")</code> — ערך עם נקודתיים נחתך.</li><li>חלוקה באפס — שרת שעלה עכשיו מחזיר <code>NaN</code>, וגרף שמצייר <code>NaN</code> נשבר.</li><li>להשאיר את המספרים כמחרוזות ב־<code>parseKeyspace</code> — ‏<code>"1204" &gt; "980"</code> הוא <code>false</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26-E33">
+    <h3>P26-E33 · TypedEmitter: אירועים עם טיפוסים 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>החתימה שעושה את כל העבודה: <code>on&lt;K extends keyof Events&gt;(event: K, listener: (payload: Events[K]) =&gt; void)</code>. ‏<code>K</code> הוא שם אירוע מסוים, ו־<code>Events[K]</code> הוא ה־payload שלו. אותו דבר ב־<code>emit</code>. האחסון: <code>#listeners = new Map&lt;keyof Events, Set&lt;(payload: any) =&gt; void&gt;&gt;()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>once</code>: עוטפים את המאזין בפונקציה שקודם קוראת ל־<code>this.off(event, wrapper)</code> ורק אז ל־<code>listener</code>, ורושמים את העטיפה. ב־<code>emit</code> עוברים על <em>עותק</em>: <code>[...set]</code>. מחיקה מ־<code>Set</code> תוך כדי מעבר עליו עלולה לדלג על איבר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E33 — TypedEmitter: אירועים עם טיפוסים
+type Listener&lt;T&gt; = (payload: T) =&gt; void;
+
+export class TypedEmitter&lt;Events extends Record&lt;string, unknown&gt;&gt; {
+  #listeners = new Map&lt;keyof Events, Set&lt;Listener&lt;any&gt;&gt;&gt;();
+
+  on&lt;K extends keyof Events&gt;(event: K, listener: Listener&lt;Events[K]&gt;): () =&gt; void {
+    let set = this.#listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.#listeners.set(event, set);
+    }
+    set.add(listener);
+    return () =&gt; this.off(event, listener);
+  }
+
+  off&lt;K extends keyof Events&gt;(event: K, listener: Listener&lt;Events[K]&gt;): void {
+    const set = this.#listeners.get(event);
+    if (!set) return;
+    set.delete(listener);
+    if (set.size === 0) this.#listeners.delete(event);
+  }
+
+  once&lt;K extends keyof Events&gt;(event: K, listener: Listener&lt;Events[K]&gt;): () =&gt; void {
+    const wrapper: Listener&lt;Events[K]&gt; = (payload) =&gt; {
+      this.off(event, wrapper);
+      listener(payload);
+    };
+    return this.on(event, wrapper);
+  }
+
+  emit&lt;K extends keyof Events&gt;(event: K, payload: Events[K]): number {
+    const set = this.#listeners.get(event);
+    if (!set) return 0;
+    const listeners = [...set];
+    for (const listener of listeners) listener(payload);
+    return listeners.length;
+  }
+
+  listenerCount(event: keyof Events): number {
+    return this.#listeners.get(event)?.size ?? 0;
+  }
+}
+
+type ShopEvents = {
+  "order.paid": { orderId: number; totalCents: number };
+  "stock.low": { productId: number; left: number };
+};
+
+const bus = new TypedEmitter&lt;ShopEvents&gt;();
+const stop = bus.on("order.paid", (e) =&gt; console.log(`הזמנה ${e.orderId}: ${(e.totalCents / 100).toFixed(2)} ₪`));
+bus.once("stock.low", (e) =&gt; console.log(`מלאי נמוך: מוצר ${e.productId}, נשארו ${e.left}`));
+console.log(bus.emit("order.paid", { orderId: 17, totalCents: 27890 }));
+console.log(bus.emit("stock.low", { productId: 3, left: 2 }), bus.emit("stock.low", { productId: 3, left: 1 }));
+stop();
+console.log(bus.emit("order.paid", { orderId: 18, totalCents: 100 }), bus.listenerCount("order.paid"));</code></pre>
+<pre class="terminal">הזמנה 17: 278.90 ₪
+1
+מלאי נמוך: מוצר 3, נשארו 2
+1 0
+0 0</pre>
+<p>שורה 3, ‏<code>1 0</code>: ה־<code>once</code> נקרא באירוע הראשון ונעלם, ולכן השני כבר לא מגיע לאף אחד. בשורה האחרונה <code>stop()</code> ביטל את המאזין היחיד של <code>order.paid</code>.</p>
+<p><code>K extends keyof Events</code> ו־<code>Events[K]</code> הם מה שהופך את ה־emitter מ"כל מחרוזת" ל־API עם חוזה. העורך משלים שמות אירועים, ושינוי במבנה של <code>order.paid</code> מראה שגיאה בכל מקום ששולח אותו. בפנים יש <code>any</code> אחד: ‏<code>Map</code> לא יכול לזכור שלכל מפתח יש טיפוס אחר. ה־API החיצוני מגן על הכול, כמו ב־<code>Repository&lt;T&gt;</code> של פרק 12.</p>
+<p>‏<code>on</code> שמחזיר פונקציית ביטול נוח במיוחד בקוד שנרשם לזמן מוגבל, כמו חיבור SSE (שיעור 6): נרשמים כשהלקוח מתחבר, וקוראים ל־<code>stop()</code> ב־<code>req.on("close")</code>. בלי זה, כל חיבור שנסגר משאיר מאזין, והזיכרון גדל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מערך במקום <code>Set</code> — אותו מאזין נרשם פעמיים ונקרא פעמיים.</li><li>לעבור על ה־<code>Set</code> עצמו כש־<code>once</code> מוחק באמצע — מאזין שנרשם אחריו עלול לא להיקרא.</li><li><code>emit(event: string, payload: unknown)</code> — עובד, אבל בלי שום בדיקה של TypeScript, כמו <code>EventEmitter</code>.</li><li>ב־<code>once</code>, לקרוא ל־<code>listener</code> לפני <code>off</code> — אם המאזין עצמו קורא ל־<code>emit</code> לאותו אירוע, הוא נקרא שוב.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26-E01">
     <h3>P26-E01 · Redis או PostgreSQL? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
