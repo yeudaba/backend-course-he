@@ -17,7 +17,7 @@ if (projectDir && !fs.existsSync(path.join(projectDir, "package.json"))) {
   console.log(`לא נמצא package.json ב־${projectDir}. ודא שהנתיב אחרי --dir הוא תיקיית הפרויקט.`);
   process.exit(1);
 }
-if (!/^(P\d\d(\.5)?(-E\d\d)?|PR\d(-[A-Z0-9]+)?)$/.test(id)) {
+if (!/^(P\d\d(\.\d)?(-E\d\d)?|PR\d(-[A-Z0-9]+)?)$/.test(id)) {
   console.log("שימוש: npm run check P05-E07   (או: npm run check P05 לכל הפרק)");
   process.exit(1);
 }
