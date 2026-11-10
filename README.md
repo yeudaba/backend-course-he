@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **971** | **765** | **682** |
+| **42** | **196** | **1004** | **798** | **706** |
 
 ## מה שונה כאן
 
@@ -162,8 +162,8 @@
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 28 | 23 | ✔ |
 | [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 28 | 23 | ✔ |
-| [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 25 | 20 | ✔ |
-| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 25 | 20 | ✔ |
+| [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 28 | 23 | ✔ |
+| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 28 | 23 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -202,13 +202,13 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 15](backend-course/15-express/index.html) | Express ו־REST | 4 | 25 | 20 | ✔ |
+| [פרק 15](backend-course/15-express/index.html) | Express ו־REST | 4 | 28 | 23 | ✔ |
 | [פרויקט 2](backend-course/15p-project-tasks/index.html) | API לניהול משימות — שלב א׳: בזיכרון | 6 | — | 5 | ✔ |
-| [יחידה 15.5](backend-course/15w-web-bridge/index.html) | גישור: HTML, CSS ו־fetch | 4 | 12 | 6 | ✔ |
-| [פרק 16](backend-course/16-sql/index.html) | SQL מהיסוד | 4 | 25 | 20 | ✔ |
-| [פרק 17](backend-course/17-relations/index.html) | קשרים ושאילתות | 4 | 25 | 20 | ✔ |
-| [פרק 18](backend-course/18-consistency/index.html) | עקביות וביצועים | 4 | 25 | 20 | ✔ |
-| [פרק 19](backend-course/19-prisma/index.html) | Prisma ו־migrations | 4 | 25 | 21 | ✔ |
+| [יחידה 15.5](backend-course/15w-web-bridge/index.html) | גישור: HTML, CSS ו־fetch | 4 | 15 | 9 | ✔ |
+| [פרק 16](backend-course/16-sql/index.html) | SQL מהיסוד | 4 | 28 | 23 | ✔ |
+| [פרק 17](backend-course/17-relations/index.html) | קשרים ושאילתות | 4 | 28 | 23 | ✔ |
+| [פרק 18](backend-course/18-consistency/index.html) | עקביות וביצועים | 4 | 28 | 23 | ✔ |
+| [פרק 19](backend-course/19-prisma/index.html) | Prisma ו־migrations | 4 | 28 | 24 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -270,9 +270,9 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 25 | 21 | ✔ |
-| [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 25 | 22 | ✔ |
-| [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 25 | 21 | ✔ |
+| [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 28 | 24 | ✔ |
+| [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 28 | 25 | ✔ |
+| [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 28 | 24 | ✔ |
 | [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 25 | 21 | ✔ |
 | [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 30 | 26 | ✔ |
 | [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 25 | 22 | ✔ |

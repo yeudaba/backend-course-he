@@ -449,7 +449,25 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
     - פרק 10: E26 🔥 חיבור אסינכרוני עם callback (error-first, תמיד אסינכרוני), E27 🔁 סכום הזמנה במקביל (map/reduce + Promise.all, נמדד זמן), E28 🔁 כל העמודים (while + await, pagination).
     - פרק 11: E26 ✍️ Omit/Pick/Partial/Record (utility types), E27 🔁 משך זמן מטקסט ובחזרה (number | null), E28 🔁 שליפת משתמשים: נמצאו וחסרים (Promise.all + Set).
     - פרק 12: E26 ✍️ מחסן כמחלקה (המשך של P07-E27), E27 🔁 Money — אובייקט ערך (private constructor, פסיקים כמו P05-E25), E28 🔁 דוח הלקוחות הגדולים (service + repositories מזויפים, תופס N+1).
-- **הבא בתור:** פרק 13 והלאה, לפי הסדר. בפרקים 24, 26, 30 המזהים E31–E33. לפרקי TS אפשר להעתיק את `tests/_ts.mjs` מפרק 12.
+- **בוצע — פרקים 13–22 (בלי 15p), סבב 3:** בכל פרק E26–E28 ו־`expectedExercises: 28`; ביחידה 15.5 המזהים E13–E15 ו־`expectedExercises: 15`. קובצי התחלה ריקים (הערה עם המשימה ושם הייצוא), קישורים מקופסת התרגול של השיעור המתאים.
+  - **עוזרי בדיקות:** `tests/_src.mjs` בפרקים 13, 14 ו־15.5 (גרסת ESM: ההודעה אומרת `export function` / `export class`). ‏`tests/_ts.mjs` בפרקים 15–19, 21–22 (ב־15: הודעת `export const` לסכמות; **ב־21–22: עם `--typeRoots <course>/node_modules/@types --types node`**, אחרת `Buffer` ו־`node:crypto` לא מוכרים כשהקובץ לא מייבא חבילה). בוחן טיפוסים (`typeProbe`) רץ מתיקייה זמנית, ולכן אסור לו לייבא חבילות (`pg`, ‏`express`) — לוקחים את הטיפוס מהקובץ של הלומד (`Parameters<typeof f>[0]`).
+  - **פרקי SQL:** תרגילי SQL נבדקים עם `sandbox` + `fileRows`/`expectedRows`, ותרגילי DDL גם עם שורות שחייבות להידחות. את ה־```out של SQL מילאתי עם `node course-src/build.mjs --fill <prefix>` (גדר `out` עם `?` בלבד).
+  - **`tests/_schema.mjs` בפרק 19 (חדש):** `schemaToSql(testUrl, file)` מריץ `prisma migrate diff --from-empty --to-schema ... --script` בתיקייה זמנית. **חובה** קובץ config עם `datasource` (גם `{ url: undefined }`), אחרת Prisma 7 מחזיר פלט ריק עם קוד 0.
+  - **פרק 20:** הבודקים טוענים את הקובץ עם `loadNest` ובודקים בעצמם שהייצוא קיים (קובץ ריק מתקמפל לקובץ ריק).
+  - **פרק 22:** ‏E26 הוא "כתוב את הבדיקות" (`files/P22-E26/` עם `variants` ו־11 `mutants`); קובץ ה־spec בהתחלה ריק לגמרי (גם בלי imports). הקוד הנבדק הועתק גם ל־`starter/` ול־`solutions/` כמו בשאר התרגילים.
+  - **חדשים:**
+    - פרק 13: E26 ✍️ פירוק שורת לוג עם regex (Common Log Format), E27 🔁 העלאת גרסה semver (switch), E28 🔁 מיזוג קובצי הגדרות במקביל (Promise.all + reduce).
+    - פרק 14: E26 🔥 פירוק header של Cookie, E27 🔁 סטטיסטיקת בקשות כמחלקה (class + Map + sort), E28 🔁 לחכות שהשרת יעלה (while + await + fetch).
+    - פרק 15: E26 ✍️ API משימות מקובץ ריק (Express + Zod), E27 🔁 סכמת הרשמה עם regex (Zod ‏regex/transform/pipe), E28 🔁 סכום עגלה (Map + reduce בתוך route).
+    - יחידה 15.5: E13 ✍️ טבלת HTML מנתונים, E14 🔁 debounce (closure + setTimeout), E15 🔁 לוח בקרה במקביל (Promise.allSettled).
+    - פרק 16: E26 ✍️ יומן אימונים — CREATE TABLE + INSERT + שאילתה מקובץ ריק, E27 🔁 בונה שאילתות עם פרמטרים ב־TS (switch + type, רץ על המסד, בודק injection), E28 🔁 אזור לכל לקוח (CASE בצורה הקצרה כ־switch, NULL ב־ELSE).
+    - פרק 17: E26 ✍️ הספרייה מ־P17-E01 בקוד (5 טבלאות, CASCADE מול חסימה), E27 🔁 ההזמנה הכמה של הלקוח (CTE + ROW_NUMBER + SUM OVER), E28 🔁 JOIN ו־GROUP BY בקוד TS (Map + אגורות, מושווה ל־P17-E12).
+    - פרק 18: E26 ✍️ withTransaction generic + transferAll, E27 🔁 batch loader (closure + Map + new Promise, ‏ANY($1)), E28 🔁 שלושת הלקוחות המובילים בכל חודש (GROUP BY + ROW_NUMBER על 200,000 שורות).
+    - פרק 19: E26 ✍️ הספרייה כ־schema של Prisma (כתיבת `model`), E27 🔁 עמוד מוצרים (findMany + count ב־Promise.all), E28 🔁 repository לקטגוריות (interface + class + extends Error + switch על P2002/P2025).
+    - פרק 20: E26 ✍️ מודול סימניות מקובץ ריק, E27 🔁 slug — regex ב־slugify וב־SlugPipe, E28 🔁 סיכום לקוח משני repositories (tokens + Promise.all + reduce באגורות).
+    - פרק 21: E26 ✍️ JWT ביד עם node:crypto (זהה ל־jsonwebtoken, ‏timingSafeEqual), E27 🔁 פירוק header של Authorization (switch + regex + union), E28 🔁 רשימת חסימה לטוקנים (class + Map + שעון מוזרק).
+    - פרק 22: E26 ✍️ בדיקות ל־pagination (מוטציות), E27 🔁 מטמון LRU (Map + class + generics), E28 🔁 memoizeAsync עם שעון מוזרק (closure + Map + Promise).
+- **הבא בתור:** פרק 23 והלאה, לפי הסדר (23, 24, 25…). בפרקים 24, 26, 30 המזהים E31–E33. לפרקי TS העתק את `tests/_ts.mjs` מפרק 21 (עם הטיפוסים של Node).
 
 ---
 
