@@ -13,6 +13,184 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25-deploy/solutions/</code>.</p></div>
+<div class="ex typed" id="P25-E26">
+    <h3>P25-E26 · feature flags: לפתוח ל־10% מהמשתמשים 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>createHash("sha256").update(text).digest()</code> בלי ארגומנט מחזיר <code>Buffer</code>, ול־<code>Buffer</code> יש <code>readUInt32BE(0)</code>: מספר בין 0 לכ־4.3 מיליארד. ‏<code>% 100</code> מביא אותו לטווח.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלוש שורות ב־<code>isEnabled</code>: ‏<code>const flag = flags[flagName]; if (!flag || !flag.enabled) return false; if (flag.allow?.includes(userId)) return true;</code> ואז ההשוואה. ‏<code>?.</code> מטפל בדגל בלי <code>allow</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E26 — feature flags עם פריסה הדרגתית
+import { createHash } from "node:crypto";
+
+export type Flag = { enabled: boolean; percent: number; allow?: string[] };
+
+export function bucketOf(flagName: string, userId: string): number {
+  const digest = createHash("sha256").update(`${flagName}:${userId}`).digest();
+  return digest.readUInt32BE(0) % 100;
+}
+
+export function isEnabled(flags: Record&lt;string, Flag&gt;, flagName: string, userId: string): boolean {
+  const flag = flags[flagName];
+  if (!flag || !flag.enabled) return false;
+  if (flag.allow?.includes(userId)) return true;
+  return bucketOf(flagName, userId) &lt; flag.percent;
+}
+
+const flags: Record&lt;string, Flag&gt; = {
+  "new-checkout": { enabled: true, percent: 10, allow: ["qa-1"] },
+  "dark-mode": { enabled: false, percent: 100 },
+};
+console.log(bucketOf("new-checkout", "user-1"), bucketOf("new-checkout", "user-2"), bucketOf("dark-mode", "user-1"));
+console.log(isEnabled(flags, "new-checkout", "qa-1"), isEnabled(flags, "dark-mode", "user-1"), isEnabled(flags, "nope", "user-1"));
+let on = 0;
+for (let i = 0; i &lt; 10_000; i++) if (isEnabled(flags, "new-checkout", `user-${i}`)) on++;
+console.log(`${on} מתוך 10,000`);</code></pre>
+<pre class="terminal">83 61 20
+true false false
+1020 מתוך 10,000</pre>
+<p>1,020 מתוך 10,000. ה־hash מפזר את המשתמשים באופן כמעט אחיד, ולכן 10% בקוד הם בערך 10% מהמשתמשים. בלי טבלה במסד ובלי לזכור מי קיבל מה.</p>
+<p>שתי תכונות חשובות יוצאות מהנוסחה. <strong>יציבות:</strong> משתמש שקיבל את הפיצ'ר ב־10% ממשיך לקבל אותו ב־20%, כי הדלי שלו לא השתנה (‏<code>83 &lt; 10</code> לא, ‏<code>83 &lt; 90</code> כן). בלי זה, משתמש היה רואה את הפיצ'ר מופיע ונעלם בכל רענון. <strong>אי־תלות:</strong> שם הדגל נמצא בתוך ה־hash. בלי זה אותם 10% "בני מזל" היו מקבלים כל ניסוי, וכל באג.</p>
+<p>בפרודקשן הדגלים יושבים בשירות (LaunchDarkly, ‏Unleash) או בטבלה, ומשתנים בלי deploy. החישוב בצד השרת הוא אותו חישוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random() &lt; percent / 100</code> — בכל בקשה תשובה אחרת. המשתמש רואה את הקופה החדשה, ובלחיצה הבאה את הישנה.</li><li>hash של <code>userId</code> בלבד — אותם משתמשים בכל הדגלים.</li><li><code>&lt;=</code> במקום <code>&lt;</code> — ב־<code>percent: 0</code> דלי 0 עדיין מקבל את הפיצ'ר (1% מהמשתמשים).</li><li>לבדוק <code>allow</code> לפני <code>enabled</code> — כיבוי חירום של דגל לא מכבה אותו לצוות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25-E27">
+    <h3>P25-E27 · כמה זמן השרת למעלה 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>טבלת יחידות: <code>[["d", 86400], ["h", 3600], ["m", 60], ["s", 1]]</code>. עוברים עליה עם <code>map</code>, ובכל יחידה: <code>Math.floor(rest / size)</code>, ואז <code>rest %= size</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>parts.findIndex((p) =&gt; p.value &gt; 0)</code> נותן את היחידה הראשונה. ‏<code>-1</code> אומר שהכול אפס ← <code>"0s"</code>. אחרת <code>parts.slice(first, first + 2).filter(...).map(...).join(" ")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E27 — כמה זמן השרת למעלה
+const UNITS: [string, number][] = [
+  ["d", 86_400],
+  ["h", 3_600],
+  ["m", 60],
+  ["s", 1],
+];
+
+export function formatUptime(totalSeconds: number): string {
+  if (!Number.isInteger(totalSeconds) || totalSeconds &lt; 0) throw new RangeError("totalSeconds חייב להיות מספר שלם לא שלילי");
+  let rest = totalSeconds;
+  const parts = UNITS.map(([unit, size]) =&gt; {
+    const value = Math.floor(rest / size);
+    rest %= size;
+    return { unit, value };
+  });
+  const first = parts.findIndex((p) =&gt; p.value &gt; 0);
+  if (first === -1) return "0s";
+  return parts
+    .slice(first, first + 2)
+    .filter((p) =&gt; p.value &gt; 0)
+    .map((p) =&gt; `${p.value}${p.unit}`)
+    .join(" ");
+}
+
+for (const s of [0, 42, 60, 3_601, 3_661, 90_061, 1_209_600 + 7_200 + 59]) console.log(s, "→", formatUptime(s));</code></pre>
+<pre class="terminal">0 → 0s
+42 → 42s
+60 → 1m
+3601 → 1h
+3661 → 1h 1m
+90061 → 1d 1h
+1216859 → 14d 2h</pre>
+<p>הסדר של <code>slice</code> ואז <code>filter</code> הוא העיקר. ב־3,601 שניות החלון הוא <code>[1h, 0m]</code>, ואחרי הסינון נשאר <code>1h</code>. מי שמסנן קודם ורק אז חותך מקבל <code>1h 1s</code>: שתי יחידות שאינן צמודות, שקשה לקרוא.</p>
+<p><code>map</code> עם משתנה <code>rest</code> מבחוץ עובד, כי <code>map</code> עובר על המערך לפי הסדר. אבל זו פונקציה עם תופעת לוואי. אם זה מפריע לך, לולאת <code>for...of</code> שדוחפת למערך כתובה באותו אורך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>totalSeconds / 3600</code> בלי <code>Math.floor</code> — ‏<code>1.0169h</code>.</li><li>להחזיר <code>""</code> על 0 — שדה ריק ב־<code>/version</code> נראה כמו באג.</li><li>לסנן אפסים לפני <code>slice</code> — ‏<code>3601</code> הופך ל־<code>"1h 1s"</code>.</li><li><code>if (totalSeconds &lt; 0)</code> בלבד — ‏<code>NaN</code> ו־<code>1.5</code> עוברים. ‏<code>Number.isInteger</code> תופס את שניהם (וגם <code>Infinity</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25-E28">
+    <h3>P25-E28 · mapLimit: הרבה עבודות, מעט במקביל 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הרעיון: <code>limit</code> "עובדים". כל עובד הוא פונקציה <code>async</code> עם לולאה: לוקח את האינדקס הבא (<code>const i = next++</code>), מחכה ל־<code>fn</code>, ושומר ב־<code>results[i]</code>. ‏<code>next</code> ו־<code>results</code> משותפים לכל העובדים (closure). ‏JavaScript רץ על thread אחד, ולכן <code>next++</code> לא יכול "להתנגש".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>const workers = Array.from({ length: Math.min(limit, items.length) }, () =&gt; worker()); await Promise.all(workers);</code>. כדי לעצור אחרי שגיאה: משתנה <code>failed</code> שהעובד מדליק ב־<code>catch</code> (ואז זורק שוב), ותנאי הלולאה בודק אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E28 — mapLimit: הרבה עבודות, מעט במקביל
+export async function mapLimit&lt;T, R&gt;(items: T[], limit: number, fn: (item: T, index: number) =&gt; Promise&lt;R&gt;): Promise&lt;R[]&gt; {
+  if (!Number.isInteger(limit) || limit &lt; 1) throw new RangeError("limit חייב להיות מספר שלם חיובי");
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  let failed = false;
+
+  async function worker(): Promise&lt;void&gt; {
+    while (next &lt; items.length &amp;&amp; !failed) {
+      const index = next++;
+      try {
+        results[index] = await fn(items[index], index);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () =&gt; worker());
+  await Promise.all(workers);
+  return results;
+}
+
+async function demo() {
+  const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+  let running = 0;
+  let peak = 0;
+  const started = Date.now();
+  const sizes = await mapLimit(["a.js", "b.js", "c.css", "d.png", "e.svg"], 2, async (file, i) =&gt; {
+    running++;
+    peak = Math.max(peak, running);
+    await sleep(100);
+    running--;
+    return `${i}:${file}`;
+  });
+  console.log(sizes);
+  console.log("peak:", peak, "· ~ms:", Math.round((Date.now() - started) / 100) * 100);
+  try {
+    await mapLimit([1, 2, 3], 2, async (n) =&gt; {
+      if (n === 2) throw new Error(`upload ${n} failed`);
+      return n;
+    });
+  } catch (err) {
+    console.log("נכשל:", (err as Error).message);
+  }
+}
+demo();</code></pre>
+<pre class="terminal">[ '0:a.js', '1:b.js', '2:c.css', '3:d.png', '4:e.svg' ]
+peak: 2 · ~ms: 300
+נכשל: upload 2 failed</pre>
+<p>חמישה קבצים, שניים במקביל, 100ms כל אחד: שלושה "סבבים", כ־300ms. אחד־אחד היה לוקח 500ms, וכולם יחד 100ms עם חמישה חיבורים פתוחים. ‏<code>peak: 2</code> מראה שהמגבלה נשמרה.</p>
+<p>למה עובדים ולא "קבוצות של 2" (‏<code>Promise.all</code> על <code>slice(0, 2)</code>, אחר כך <code>slice(2, 4)</code>)? בקבוצות, כל קבוצה מחכה לאיטי שבה. עם עובדים, מי שסיים לוקח מיד את הבא. כשהזמנים שונים (קובץ של 2KB מול קובץ של 20MB) ההבדל גדול.</p>
+<p>זה מה שחבילות כמו <code>p-limit</code> עושות, וזה גם הרעיון של <code>connectionLimit</code> ב־pool של מסד נתונים: מספר קבוע של "עובדים", ותור לכל השאר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>results.push(...)</code> במקום <code>results[i] = ...</code> — התוצאות בסדר הסיום, לא בסדר הקלט.</li><li>לחלק לקבוצות קבועות — נכון, אבל איטי כשהזמנים לא אחידים.</li><li><code>Array.from({ length: limit })</code> בלי <code>Math.min</code> — עם 2 פריטים ו־limit של 10 זה עובד, אבל יוצרים 8 עובדים מיותרים.</li><li>לבלוע את השגיאה ב־<code>catch</code> בלי לזרוק שוב — ‏<code>mapLimit</code> "מצליחה" עם חורים במערך.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25-E01">
     <h3>P25-E01 · CI, CD, deploy — מה זה מה? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

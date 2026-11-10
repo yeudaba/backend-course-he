@@ -11,7 +11,7 @@ export default {
   nestProjects: ["solutions/tasks-api"],
   testTimeout: 120000, // PR2-CI מריץ tsc על כל הפרויקט
   time: "4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, Docker Desktop, ופרויקט 2 בשלב ז׳ — ב־repo משלו ב־GitHub (<code>tasks-api</code>), עם push שעובד.</p>
 <p><strong>מה מתקינים / פותחים עכשיו:</strong></p>
 <ul>
