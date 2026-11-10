@@ -9,7 +9,7 @@ export default {
   checker: true,
   testTimeout: 60000,
   time: "4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop (פרק 23), ופרק 25 — ה־CI וה־deploy של פרויקט 2.</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>
