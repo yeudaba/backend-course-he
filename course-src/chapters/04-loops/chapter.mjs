@@ -6,10 +6,12 @@ export default {
   title: "לולאות",
   part: "חטיבה א׳ — יסודות JavaScript",
   fast: true,
+  checker: true,
   time: "3 מפגשים (במסלול המהיר: 1–2)",
   expectedExercises: 25,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, Error Lens, Prettier.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
+<p><strong>🤖 הבודק האוטומטי:</strong> תרגילי הכתיבה נבדקים כמו בפרק 1 — <code>npm run check P04-E06</code> (לפי מזהה התרגיל). אם דילגת על פרק 1: העתק פעם אחת את <code>package.json</code> ואת התיקייה <code>tools</code> (ראה קופסת 🧰 של פרק 1).</p>
 ${copyStep("04-loops")}
 ${verifyNode}
 <p><strong>⌨️ קיצור שחשוב בפרק הזה:</strong> <kbd>Ctrl</kbd> + <kbd>C</kbd> ב־Terminal עוצר תוכנית שנתקעה בלולאה אינסופית.</p>`,
