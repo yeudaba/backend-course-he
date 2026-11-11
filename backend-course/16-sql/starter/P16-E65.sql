@@ -1,0 +1,4 @@
+-- P16-E65: סיכום של פולי הקפה
+-- שורה אחת על beans הפעילים: products, units, avg_price (2 ספרות), price_range, stock_value
+--
+-- בדיקה:  npm run check P16-E65

@@ -55,6 +55,172 @@
 
 </div></details>
   </div>
+<div class="ex" id="P16-E72">
+    <h3>P16-E72 · מה RETURNING מחזיר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>RETURNING</code> מחזיר את השורות <strong>אחרי</strong> השינוי — כולל ערכי ברירת מחדל שהמסד מילא.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־brewing יש ארבעה מוצרים — לכמה מהם יש לפחות 5 במלאי?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO products (name, category, price, added_on)
+VALUES ('Milk Frother', 'accessories', 59.90, '2026-11-01')
+RETURNING id, stock, is_active;
+
+UPDATE products SET stock = stock - 5
+WHERE category = 'brewing' AND stock &gt;= 5
+RETURNING id, name, stock;
+
+DELETE FROM products WHERE stock = 0 AND NOT is_active
+RETURNING name;</code></pre>
+<pre class="terminal"> id | stock | is_active
+----+-------+-----------
+ 15 |     0 | t
+(1 row)
+
+INSERT 0 1
+ id |       name       | stock
+----+------------------+-------
+  7 | French Press 1L  |    20
+  9 | Moka Pot 6 Cups  |     7
+ 13 | Gooseneck Kettle |     2
+(3 rows)
+
+UPDATE 3
+     name
+---------------
+ Digital Scale
+(1 row)
+
+DELETE 1</pre>
+<p>ה־INSERT החזיר את ה־id שהמסד בחר (15) ואת ברירות המחדל (<code>stock</code> 0, ‏<code>is_active</code> true) — בדיוק מה ש־<code>POST</code> צריך להחזיר ב־201, בלי שאילתה נוספת. ה־UPDATE החזיר את הערכים <strong>החדשים</strong>; ה־DELETE — את מה שנמחק (שימושי ליומן). בלי RETURNING היית מקבל רק "UPDATE 3".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>אחרי INSERT, לשלוף את "השורה האחרונה" עם <code>ORDER BY id DESC LIMIT 1</code> — בשרת עם בקשות במקביל, זו אולי שורה של מישהו אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E73">
+    <h3>P16-E73 · הודעות של אילוצים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חפש ב־<code>CREATE TABLE</code> את <code>CHECK</code>, ‏<code>NOT NULL</code> ו־<code>UNIQUE</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האחרון: ב־<code>shop.sql</code> האימייל של Itay הוא <code>itay@Example.com</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO products (name, category, price, added_on) VALUES ('Free Sample', 'beans', 0, '2026-11-01');
+INSERT INTO products (name, category, price, stock, added_on) VALUES ('Ghost', 'beans', 10, -1, '2026-11-01');
+INSERT INTO products (category, price, added_on) VALUES ('beans', 10, '2026-11-01');
+INSERT INTO customers (full_name, email, joined_on) VALUES ('Dana Two', 'dana@example.com', '2026-11-01');
+INSERT INTO customers (full_name, email, joined_on) VALUES ('Itay Two', 'itay@example.com', '2026-11-01');</code></pre>
+<pre class="terminal">ERROR:  new row for relation "products" violates check constraint "products_price_check"
+DETAIL:  Failing row contains (15, Free Sample, beans, 0.00, 0, t, 2026-11-01).
+ERROR:  new row for relation "products" violates check constraint "products_stock_check"
+DETAIL:  Failing row contains (16, Ghost, beans, 10.00, -1, t, 2026-11-01).
+ERROR:  null value in column "name" of relation "products" violates not-null constraint
+DETAIL:  Failing row contains (17, null, beans, 10.00, 0, t, 2026-11-01).
+ERROR:  duplicate key value violates unique constraint "customers_email_key"
+DETAIL:  Key (email)=(dana@example.com) already exists.
+INSERT 0 1</pre>
+<p>ארבע הודעות שאומרות בדיוק מה הבעיה — כולל שם האילוץ (<code>products_price_check</code>, ‏<code>customers_email_key</code>). בפרק 18 תתרגם אותן לתשובת HTTP (‏<code>23505</code> = unique ← 409). והאחרון <strong>הצליח</strong>: <code>UNIQUE</code> משווה תו־תו, ו־<code>Example</code> ≠ <code>example</code> — שני חשבונות לאותה תיבת דואר. (הפתרון: לשמור באותיות קטנות, או אילוץ על <code>lower(email)</code> — פרק 18.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך רק על אילוצי המסד בלי ולידציה בשרת — המשתמש יקבל "violates check constraint" במקום "המחיר חייב להיות חיובי". שניהם: Zod להודעה טובה, המסד כרשת ביטחון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E74">
+    <h3>P16-E74 · IDENTITY ו"חורים" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>GENERATED ALWAYS</code> = "רק המסד ממספר".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>המונה מתקדם ברגע שמבקשים ממנו מספר — גם אם ה־INSERT נכשל אחר כך (על ה־UNIQUE).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE tags (
+  id   integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name text NOT NULL UNIQUE
+);
+INSERT INTO tags (name) VALUES ('new'), ('sale');
+INSERT INTO tags (id, name) VALUES (10, 'hot');
+INSERT INTO tags (name) VALUES ('sale');
+INSERT INTO tags (name) VALUES ('gift');
+DELETE FROM tags WHERE name = 'gift';
+INSERT INTO tags (name) VALUES ('vip');
+SELECT id, name FROM tags ORDER BY id;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 2
+ERROR:  cannot insert a non-DEFAULT value into column "id"
+DETAIL:  Column "id" is an identity column defined as GENERATED ALWAYS.
+HINT:  Use OVERRIDING SYSTEM VALUE to override.
+ERROR:  duplicate key value violates unique constraint "tags_name_key"
+DETAIL:  Key (name)=(sale) already exists.
+INSERT 0 1
+DELETE 1
+INSERT 0 1
+ id | name
+----+------
+  1 | new
+  2 | sale
+  5 | vip
+(3 rows)</pre>
+<p>1 ו־2 רגיל. 10 נדחה — אי אפשר לבחור id ידנית. ה־<code>'sale'</code> הכפול נכשל, אבל "שרף" את 3. ‏<code>gift</code> קיבל 4 ונמחק — ו־<code>vip</code> קיבל 5. תוצאה: 1, 2, 5. חורים הם תקינים לגמרי: id הוא <strong>זהות</strong>, לא מספור. מי שצריך "מספר חשבונית רציף" — בונה אותו בנפרד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיק מ־"id 5" ש"נוצרו 5 תגיות" — לספירה יש <code>COUNT(*)</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E75">
+    <h3>P16-E75 · עמודה חדשה בטבלה מלאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>עמודה חדשה מתחילה ב־NULL בכל השורות הקיימות — אלא אם יש לה DEFAULT.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>SET NOT NULL</code> בודק את כל השורות שכבר קיימות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">ALTER TABLE products ADD COLUMN weight_g integer NOT NULL;
+ALTER TABLE products ADD COLUMN weight_g integer;
+ALTER TABLE products ADD COLUMN brand text NOT NULL DEFAULT 'house';
+SELECT id, weight_g, brand FROM products WHERE id &lt;= 2 ORDER BY id;
+ALTER TABLE products ALTER COLUMN weight_g SET NOT NULL;</code></pre>
+<pre class="terminal">ERROR:  column "weight_g" of relation "products" contains null values
+ALTER TABLE
+ALTER TABLE
+ id | weight_g | brand
+----+----------+-------
+  1 |          | house
+  2 |          | house
+(2 rows)
+
+ERROR:  column "weight_g" of relation "products" contains null values</pre>
+<p>הדרך להוסיף עמודת חובה לטבלה קיימת היא בשלבים: (1) להוסיף כ־nullable (או עם DEFAULT); (2) למלא ערכים (<code>UPDATE</code>); (3) רק אז <code>SET NOT NULL</code>. זה בדיוק מה שתעשה ב־migrations בפרק 19 — על טבלה עם מיליון שורות, בלי להשבית את השרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף DEFAULT "סתם" כדי שה־ALTER יעבור (<code>DEFAULT 0</code> למשקל) — עכשיו לכל המוצרים "משקל 0", וזה נראה כמו נתון אמיתי.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P16-E12">
     <h3>P16-E12 · מוצר חדש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -284,7 +450,134 @@ INSERT 0 4
 
 </div></details>
   </div>
+<div class="ex" id="P16-E76">
+    <h3>P16-E76 · רשימת דיוור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ערך מתוך רשימה: <code class="mid">CHECK (source IN ('site', 'checkout', 'import'))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־INSERT עם כמה שורות, כל השורות עם אותן עמודות. ברירת מחדל באמצע — <code>DEFAULT</code>: <code class="mid">('dana@example.com', DEFAULT, DEFAULT)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE subscribers (
+  id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  email         text NOT NULL UNIQUE,
+  source        text NOT NULL DEFAULT 'site' CHECK (source IN ('site', 'checkout', 'import')),
+  confirmed     boolean NOT NULL DEFAULT false,
+  subscribed_on date NOT NULL DEFAULT CURRENT_DATE
+);
+
+INSERT INTO subscribers (email, source, subscribed_on) VALUES
+  ('dana@example.com', DEFAULT, DEFAULT),
+  ('yossi@example.com', 'checkout', DEFAULT),
+  ('noa@example.com', 'import', '2026-01-08');
+
+UPDATE subscribers SET confirmed = true WHERE source = 'checkout';
+
+SELECT email, source, confirmed FROM subscribers ORDER BY id;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 3
+UPDATE 1
+       email       |  source  | confirmed
+-------------------+----------+-----------
+ dana@example.com  | site     | f
+ yossi@example.com | checkout | t
+ noa@example.com   | import   | f
+(3 rows)</pre>
+<p><code>DEFAULT</code> בתוך <code>VALUES</code> אומר "תשתמש בברירת המחדל של העמודה" — כך שלוש שורות שונות נכנסות ב־INSERT אחד. ‏<code>CHECK ... IN</code> הוא "enum" פשוט: המסד ידחה <code>'facebook'</code> גם אם הקוד שכח לבדוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>source text DEFAULT 'site'</code> בלי <code>NOT NULL</code> — מישהו ישלח <code>NULL</code> במפורש, והברירה לא תופעל (DEFAULT רק כשהעמודה <strong>חסרה</strong>).</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P16-E77">
+    <h3>P16-E77 · עמודת date שמגיעה ל־Node <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>pg</code> הופך <code>date</code> ל־<code>Date</code> של JavaScript — ולאובייקט <code>Date</code> חייבת להיות שעה. איזו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חצות בישראל (UTC+2 בנובמבר) = 22:00 של היום הקודם ב־UTC.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>Date</code> — "חצות ב־20.11 לפי השעון של המחשב". בישראל זה 22:00Z של ה־19, ולכן ה־ISO "זז" יום אחורה (התצוגה המקומית עדיין 20.11).</li><li><code class="mid">"due":"2026-11-19T22:00:00.000Z"</code> — לקוח בכל מקום אחר בעולם יראה את ה־19. "יום יעד" הפך לרגע בזמן, ושגוי.</li><li><code>timestamptz</code> הוא באמת רגע בזמן, עם אזור זמן — ההמרה ל־<code>Date</code> מדויקת.</li><li>(א) לבקש מחרוזת מהמסד: <code>SELECT due::text</code> ← <code>"2026-11-20"</code>. (ב) להגדיר ל־<code>pg</code> להחזיר <code>date</code> כמחרוזת (<code class="mid">types.setTypeParser(1082, (v) =&gt; v)</code> — פרק 18). בשני המקרים, ה־API מחזיר <code>"2026-11-20"</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק במחשב שעובד ב־UTC (שרת, CI) — שם הבאג לא מופיע, ובמחשב של המפתח בישראל כן (או להפך).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E78">
+    <h3>P16-E78 · numeric(10, 2) — עיגול וגבול <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ערך עם יותר מ־2 ספרות אחרי הנקודה <strong>מעוגל</strong> (לא נחתך).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>10 ספרות סך הכול, 2 אחרי הנקודה ← לכל היותר 8 לפני הנקודה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE prices (price numeric(10, 2));
+INSERT INTO prices VALUES (19.999), (19.994), (0.005), (12345678.99);
+INSERT INTO prices VALUES (123456789.00);
+SELECT price FROM prices;
+SELECT ROUND(2.5) AS a, ROUND(3.5) AS b, ROUND(-2.5) AS c;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 4
+ERROR:  numeric field overflow
+DETAIL:  A field with precision 10, scale 2 must round to an absolute value less than 10^8.
+    price
+-------------
+       20.00
+       19.99
+        0.01
+ 12345678.99
+(4 rows)
+
+ a | b | c
+---+---+----
+ 3 | 4 | -3
+(1 row)</pre>
+<p>עיגול שקט (19.999 ← 20.00) ושגיאה רועשת (9 ספרות לפני הנקודה). ו־<code>ROUND</code> של numeric מעגל חצי "הרחק מאפס" (2.5 ← 3) — בניגוד ל־<code>toFixed</code> ב־JavaScript, שלפעמים מעגל אחרת בגלל ייצוג בינארי (<code>(1.005).toFixed(2)</code> הוא <code>"1.00"</code>). כשהשרת מחשב סכום ומשווה למסד — עגל במקום אחד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהמסד "יזרוק שגיאה" על 19.999 — הוא מקבל ומעגל, והאגורה "נעלמת" בלי הודעה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E79">
+    <h3>P16-E79 · DELETE או "מחיקה רכה"? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחרי DELETE השורה <strong>לא קיימת</strong>. אחרי (ב) היא קיימת, רק "מוסתרת".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"שכחתי לסנן is_active" — באיזה מקום זה יקרה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>המסד יסרב (אם יש מפתח זר, פרק 17), או — בלי מפתח זר — ההזמנות יצביעו על מוצר שלא קיים. היסטוריה נשברת.</li><li>כל שאילתה ל"מוצרים זמינים" צריכה <code>WHERE is_active</code> — ומספיק מקום אחד ששכח, והמוצר "חוזר".</li><li>בשתיהן <code>204</code>. אחר כך <code>GET</code> ← <code>404</code> בשתיהן (ב־(ב) — כי ה־route מסנן <code>is_active</code>). ללקוח זה נראה אותו דבר.</li><li>מחיקה אמיתית (או "אנונימיזציה" — דריסה של השם, האימייל והטלפון). מחיקה רכה <strong>לא</strong> מוחקת את המידע — רק מסתירה.</li></ol>
+<p>כלל אצבע: נתונים עסקיים שיש להם היסטוריה (מוצרים, הזמנות) — רכה. מידע אישי לבקשת המשתמש, ונתונים זמניים (sessions, טוקנים) — מחיקה אמיתית.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור מחיקה רכה "ליתר ביטחון" לכל טבלה — הטבלאות מתמלאות בשורות מתות, וכל שאילתה צריכה לזכור לסנן.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P16-E24">
     <h3>P16-E24 · אתגר: טבלת קופונים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -367,6 +660,49 @@ ORDER BY price, name;</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>WHEN stock &lt; 10</code> לפני <code>WHEN stock = 0</code> — מוצר שאזל יסומן "last units".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E80">
+    <h3>P16-E80 · יצירת מוצר — Zod ואז INSERT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">INSERT INTO products (name, category, price, stock, added_on) VALUES ($1, $2, $3, $4, CURRENT_DATE) RETURNING id, name, category, price, stock, is_active</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ה־<code>parse</code>, השתמש ב־<code>data</code> (עם ה־trim וה־default) — לא ב־<code>input</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P16-E80: יצירת מוצר — Zod ואז INSERT
+import { z } from "zod";
+
+export type Db = { query(text: string, values?: unknown[]): Promise&lt;{ rows: any[] }&gt; };
+
+export const productInput = z.object({
+  name: z.string().trim().min(2).max(100),
+  category: z.enum(["beans", "grinders", "brewing", "accessories"]),
+  price: z.number().positive().max(100000).multipleOf(0.01),
+  stock: z.number().int().min(0).default(0),
+});
+
+export async function createProduct(client: Db, input: unknown) {
+  const data = productInput.parse(input);
+  const { rows } = await client.query(
+    `INSERT INTO products (name, category, price, stock, added_on)
+     VALUES ($1, $2, $3, $4, CURRENT_DATE)
+     RETURNING id, name, category, price, stock, is_active`,
+    [data.name, data.category, data.price, data.stock],
+  );
+  const r = rows[0];
+  return { id: r.id, name: r.name, category: r.category, price: Number(r.price), stock: r.stock, isActive: r.is_active };
+}</code></pre>
+<p>שלושה גבולות, שלושה תפקידים: Zod — "האם הקלט הגיוני" (עם הודעה למשתמש); המסד — "האם הנתונים עקביים" (CHECK, NOT NULL — גם אם מישהו עקף את הקוד); ו־RETURNING + המרה — "מה הלקוח מקבל". בפרק 19 Prisma יחליף את ה־SQL ואת ההמרה — אבל הגבולות יישארו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח ל־INSERT את <code>input.name</code> — בלי ה־trim, ועם <code>stock</code> חסר שהופך ל־<code>undefined</code> (ונכשל ב־NOT NULL, כי pg שולח <code>null</code>).</li><li>לתפוס את ה־ZodError בפונקציה ולהחזיר <code>null</code> — מי שקרא לא יודע מה היה לא תקין.</li></ul>
 
 
 </div></details>

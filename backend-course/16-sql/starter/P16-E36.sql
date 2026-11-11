@@ -1,0 +1,4 @@
+-- P16-E36: הלקוחות מחיפה
+-- full_name, email של הלקוחות מ־Haifa, לפי id
+--
+-- בדיקה:  npm run check P16-E36

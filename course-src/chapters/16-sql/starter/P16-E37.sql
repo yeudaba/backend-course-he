@@ -1,0 +1,4 @@
+-- P16-E37: מוצרים לא פעילים
+-- name, category, stock של המוצרים ש־is_active שלהם false, לפי id
+--
+-- בדיקה:  npm run check P16-E37

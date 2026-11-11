@@ -51,6 +51,190 @@ SELECT COUNT(*) AS q6 FROM customers WHERE city &lt;&gt; 'Haifa';</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P16-E58">
+    <h3>P16-E58 · NOT IN עם NULL ברשימה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>x IN (a, b)</code> = <code>x = a OR x = b</code>. ‏<code>x NOT IN (a, b)</code> = <code>x &lt;&gt; a AND x &lt;&gt; b</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>x &lt;&gt; NULL</code> הוא NULL — ו־<code>true AND NULL</code> הוא NULL (טבלה בשיעור).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT COUNT(*) FROM customers WHERE city IN ('Haifa', NULL);
+SELECT COUNT(*) FROM customers WHERE city NOT IN ('Haifa');
+SELECT COUNT(*) FROM customers WHERE city NOT IN ('Haifa', NULL);
+SELECT COUNT(*) FROM customers WHERE city IS DISTINCT FROM 'Haifa';</code></pre>
+<pre class="terminal"> count
+-------
+     3
+(1 row)
+
+ count
+-------
+     7
+(1 row)
+
+ count
+-------
+     0
+(1 row)
+
+ count
+-------
+     9
+(1 row)</pre>
+<p>שאילתה 3 מחזירה <strong>אפס</strong>: לכל לקוח, ‏<code>city &lt;&gt; NULL</code> הוא NULL, וכל ה־AND הופך ל־NULL. NULL אחד ברשימה של <code>NOT IN</code> "מוחק" את כל התוצאה. זה קורה במציאות כשהרשימה מגיעה משאילתה אחרת (פרק 17) שיש בה NULL. ושאילתה 2 מפספסת את שני הלקוחות בלי עיר — 4 מכסה גם אותם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות <code>NOT IN (...)</code> מרשימה שמגיעה מהמשתמש, בלי לסנן <code>null</code> ממנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E59">
+    <h3>P16-E59 · ממוצע שמתעלם מ־NULL <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל הצבירות חוץ מ־<code>COUNT(*)</code> מתעלמות מ־NULL — כאילו השורה לא קיימת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>COALESCE(x, 0)</code> הופך את ה־NULL ל־0 — ועכשיו הוא "קיים". ו־<code>30 / 3</code> של שלמים?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT COUNT(*) AS all_rows, COUNT(x) AS with_x, SUM(x) AS sum_x,
+       AVG(x) AS avg_x, AVG(COALESCE(x, 0)) AS avg_zero, SUM(x) / COUNT(*) AS sum_div_all
+FROM (VALUES (10), (NULL), (20)) AS t(x);</code></pre>
+<pre class="terminal"> all_rows | with_x | sum_x |        avg_x        |      avg_zero       | sum_div_all
+----------+--------+-------+---------------------+---------------------+-------------
+        3 |      2 |    30 | 15.0000000000000000 | 10.0000000000000000 |          10
+(1 row)</pre>
+<p>שני ממוצעים, שתי שאלות שונות: <code>AVG(x)</code> = "הממוצע של מי שדירג" (15); ‏<code>AVG(COALESCE(x, 0))</code> = "הממוצע כשמי שלא דירג נחשב 0" (10). אין תשובה "נכונה" — צריך להחליט מה המשמעות של NULL בעמודה. ו־<code>SUM / COUNT(*)</code> הוא עוד דרך להגיע ל־10 (ושוב: חילוק שלמים).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>COALESCE(..., 0)</code> "ליתר ביטחון" על כל עמודה בממוצע — זה משנה את התשובה, לא רק "מגן" עליה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E60">
+    <h3>P16-E60 · צבירה על אפס שורות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>צבירה מחזירה <strong>תמיד</strong> שורה אחת — גם כשאין שורות לצבור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"סכום של כלום" — 0 או NULL? ב־SQL: NULL. רק <code>COUNT</code> מחזיר 0.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT COUNT(*) AS n, SUM(stock) AS units, MAX(price) AS max_price, AVG(price) AS avg_price,
+       COALESCE(SUM(stock), 0) AS units_or_zero
+FROM products
+WHERE category = 'tea';</code></pre>
+<pre class="terminal"> n | units | max_price | avg_price | units_or_zero
+---+-------+-----------+-----------+---------------
+ 0 |       |           |           |             0
+(1 row)</pre>
+<p><code>COUNT</code> הוא 0, וכל השאר NULL. ב־Node זה מגיע כ־<code>null</code> — ו־<code>units.toFixed()</code> קורס, או ש־<code>total + units</code> הופך ל־<code>total + null</code>. לכן לסכומים שמוצגים או מחושבים: <code>COALESCE(SUM(...), 0)</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>rows.length === 0</code> כדי לדעת "אין נתונים" בשאילתת צבירה — תמיד יש שורה אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E61">
+    <h3>P16-E61 · עמודה רגילה ליד צבירה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>MAX</code> הופך 14 שורות לשורה אחת. מאיזו מהן המסד אמור לקחת את <code>name</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"היקר ביותר" = למיין לפי מחיר ולקחת את הראשון (שיעור 2).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT name, MAX(price) FROM products;</code></pre>
+<pre class="terminal">ERROR:  column "products.name" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: SELECT name, MAX(price) FROM products;
+               ^</pre>
+<pre><code class="lang-sql">SELECT name, price FROM products ORDER BY price DESC, id LIMIT 1;
+SELECT MAX(price) AS max_price, MIN(price) AS min_price, COUNT(*) AS n FROM products;</code></pre>
+<pre class="terminal">         name         | price
+----------------------+--------
+ Electric Grinder Pro | 649.00
+(1 row)
+
+ max_price | min_price | n
+-----------+-----------+----
+    649.00 |     19.90 | 14
+(1 row)</pre>
+<p>PostgreSQL מסרב: עמודה רגילה ליד צבירה חייבת להיות ב־<code>GROUP BY</code> (פרק 17), אחרת לא ברור מאיזו שורה לקחת אותה. ("היו צריכים לקחת את השם של המקסימום" — אבל מה אם יש שני מוצרים באותו מחיר? ומה עם <code>MIN</code> באותה שאילתה?) ל"השורה עם הערך הגבוה" — <code>ORDER BY ... LIMIT 1</code>. לצבירות "נקיות" — רק צבירות ב־SELECT.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח שזה יעבוד כי "ב־MySQL זה עבד" — שם, במצב ישן, המסד בוחר שם <strong>אקראי</strong>. PostgreSQL מעדיף שגיאה על תשובה שגויה (נראה ביחידה 25.5).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E62">
+    <h3>P16-E62 · NULL במיון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־PostgreSQL, NULL נחשב "גדול מכל ערך" במיון: בסוף ב־ASC, בהתחלה ב־DESC.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>NULLS FIRST</code> / <code>NULLS LAST</code> קובעים במפורש. ו־<code>ORDER BY 2</code> = "לפי העמודה השנייה ב־SELECT".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT full_name, city FROM customers ORDER BY city, id LIMIT 3;
+SELECT full_name, city FROM customers ORDER BY city DESC, id LIMIT 3;
+SELECT full_name, city FROM customers ORDER BY city NULLS FIRST, id LIMIT 3;
+SELECT full_name, COALESCE(city, 'zzz') AS city FROM customers ORDER BY 2, id LIMIT 3;</code></pre>
+<pre class="terminal">  full_name  |    city
+-------------+------------
+ Ron Avraham | Beer Sheva
+ Yossi Cohen | Haifa
+ Shira David | Haifa
+(3 rows)
+
+  full_name  |   city
+-------------+----------
+ Avi Peretz  |
+ Omer Shalom |
+ Dana Levi   | Tel Aviv
+(3 rows)
+
+  full_name  |    city
+-------------+------------
+ Avi Peretz  |
+ Omer Shalom |
+ Ron Avraham | Beer Sheva
+(3 rows)
+
+  full_name  |    city
+-------------+------------
+ Ron Avraham | Beer Sheva
+ Yossi Cohen | Haifa
+ Shira David | Haifa
+(3 rows)</pre>
+<p>"מיון לפי עיר, יורד" שם את מי שאין לו עיר <strong>ראשון</strong> — כנראה לא מה שהמשתמש רצה לראות בראש הרשימה. כשמיון של עמודה שיכולה להיות NULL חשוב למשתמש — מחליטים במפורש (<code>NULLS LAST</code>). (ושים לב: מסדים אחרים — MySQL למשל — מסדרים NULL הפוך. עוד סיבה להיות מפורש.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לפתור" עם <code>COALESCE(city, 'zzz')</code> — עובד, עד שתהיה עיר שמתחילה ב־zzz, או מיון בעברית.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P16-E10">
     <h3>P16-E10 · בלי טלפון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -174,6 +358,218 @@ ORDER BY full_name;</code></pre>
 
 </div></details>
   </div>
+<div class="ex typed" id="P16-E63">
+    <h3>P16-E63 · לקוחות מתל אביב ואיך ליצור קשר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>COALESCE(a, b)</code> — הראשון שאינו NULL.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שם לעמודה מחושבת: <code>AS contact</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT full_name, COALESCE(phone, email) AS contact
+FROM customers
+WHERE city = 'Tel Aviv'
+ORDER BY full_name;</code></pre>
+<pre class="terminal">  full_name   |      contact
+--------------+--------------------
+ Dana Levi    | 050-1111111
+ Itay Hadad   | 052-7777777
+ Michal Biton | michal@example.com
+(3 rows)</pre>
+<p>‏<code>COALESCE</code> עם שתי עמודות היא דרך נקייה ל"ערך עם גיבוי" — בלי <code>if</code> בקוד שמקבל את התוצאה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>AS contact</code> — העמודה תיקרא <code>coalesce</code>, והבודק (וכל קוד שקורא אותה) לא ימצא אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E64">
+    <h3>P16-E64 · פרופיל של טבלת הלקוחות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>COUNT(*) - COUNT(phone)</code> — כל השורות פחות אלה שיש בהן טלפון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>MIN</code> ו־<code>MAX</code> עובדים גם על תאריכים. ‏<code>COUNT(DISTINCT city)</code> — בלי NULL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT
+  COUNT(*)                AS customers,
+  COUNT(phone)            AS with_phone,
+  COUNT(*) - COUNT(phone) AS without_phone,
+  COUNT(DISTINCT city)    AS cities,
+  MIN(joined_on)          AS first_joined,
+  MAX(joined_on)          AS last_joined
+FROM customers;</code></pre>
+<pre class="terminal"> customers | with_phone | without_phone | cities | first_joined | last_joined
+-----------+------------+---------------+--------+--------------+-------------
+        12 |          8 |             4 |      5 | 2025-11-02   | 2026-09-14
+(1 row)</pre>
+<p>שאילתת "פרופיל" כזו היא הדבר הראשון שכדאי להריץ על טבלה שלא מכירים: כמה שורות, כמה ריקות בכל עמודה, טווח תאריכים. היא מגלה מהר נתונים חסרים או מוזרים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>COUNT(phone IS NULL)</code> — סופר את כל השורות (הביטוי הוא true או false, אף פעם לא NULL).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E65">
+    <h3>P16-E65 · סיכום של פולי הקפה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>MAX(price) - MIN(price)</code> — אפשר לחשב עם תוצאות של צבירות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>SUM(price * stock)</code> — הכפל קורה לכל שורה, ואז הסכום.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT
+  COUNT(*)                   AS products,
+  SUM(stock)                 AS units,
+  ROUND(AVG(price), 2)       AS avg_price,
+  MAX(price) - MIN(price)    AS price_range,
+  SUM(price * stock)         AS stock_value
+FROM products
+WHERE category = 'beans' AND is_active;</code></pre>
+<pre class="terminal"> products | units | avg_price | price_range | stock_value
+----------+-------+-----------+-------------+-------------
+        3 |   160 |     68.23 |       60.00 |     7184.00
+(1 row)</pre>
+<p><code>SUM(price * stock)</code> שונה מ־<code>SUM(price) * SUM(stock)</code> — הראשון "כמה שווה המלאי", השני מספר חסר משמעות. ה־Espresso Blend הלא פעיל לא נספר בשום עמודה, כי ה־WHERE רץ לפני הצבירה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>AVG(price) * SUM(stock)</code> כ"שווי מלאי" — מוצר זול עם מלאי גדול מעוות את התוצאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E66">
+    <h3>P16-E66 · כל מי שלא מחיפה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי דרכים לתנאי: <code class="mid">city IS DISTINCT FROM 'Haifa'</code>, או <code class="mid">city &lt;&gt; 'Haifa' OR city IS NULL</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אפשר לתת לעמודה המחושבת את השם <code>city</code> — ה־WHERE עדיין רואה את העמודה המקורית (שיעור 2, סדר הביצוע).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT id, full_name, COALESCE(city, 'unknown') AS city
+FROM customers
+WHERE city IS DISTINCT FROM 'Haifa'
+ORDER BY id;</code></pre>
+<pre class="terminal"> id |  full_name   |    city
+----+--------------+------------
+  1 | Dana Levi    | Tel Aviv
+  3 | Noa Mizrahi  | Jerusalem
+  4 | Avi Peretz   | unknown
+  5 | Michal Biton | Tel Aviv
+  6 | Ron Avraham  | Beer Sheva
+  8 | Omer Shalom  | unknown
+  9 | Tamar Gabay  | Jerusalem
+ 10 | Itay Hadad   | Tel Aviv
+ 11 | lior katz    | Ramat Gan
+(9 rows)</pre>
+<p>9 לקוחות: 12 פחות 3 מחיפה. עם <code>city &lt;&gt; 'Haifa'</code> לבד היו יוצאים 7 — שני "unknown" נעלמים בשקט (P16-E04, שורה 6).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב את ה־COALESCE בתוך ה־WHERE (<code class="mid">COALESCE(city, '') &lt;&gt; 'Haifa'</code>) — עובד, אבל מסתיר את הכוונה, ומונע שימוש ב־index (פרק 18).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P16-E67">
+    <h3>P16-E67 · null ב־JavaScript מול NULL ב־SQL <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־JavaScript, <code>null</code> בחשבון הופך ל־0; בשרשור מחרוזות — ל־<code>"null"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־SQL, ‏NULL "מדביק": כל חשבון והשוואה איתו נותנים NULL. ‏<code>GREATEST</code> הוא יוצא דופן — הוא מתעלם מ־NULL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">console.log(null === null, null == undefined, null + 5, null &gt; 0, null &gt;= 0);
+console.log([null, 5].includes(null), "a" + null, Math.max(3, null));</code></pre>
+<pre class="terminal">true true 5 false true
+true anull 3</pre>
+<pre><code class="lang-sql">SELECT NULL = NULL AS eq, NULL + 5 AS plus, NULL &gt; 0 AS gt, 'a' || NULL AS concat, GREATEST(3, NULL) AS greatest;</code></pre>
+<pre class="terminal"> eq | plus | gt | concat | greatest
+----+------+----+--------+----------
+    |      |    |        |        3
+(1 row)</pre>
+<p>ב־JavaScript, <code>null</code> הוא ערך שמומר בשקט (ל־0, ל־"null") — ולכן <code>null &gt;= 0</code> הוא <code>true</code> ו־<code>null + 5</code> הוא 5. ב־SQL הוא "לא ידוע", והתוצאה נשארת לא ידועה (ריק בטבלה = NULL). כשנתונים עוברים בין העולמות (פרק 18), אותה עמודה יכולה להתנהג אחרת ב־WHERE וב־<code>filter</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" ב־JavaScript חישוב שנתן NULL במסד — הבעיה היא שחסר ערך, לא שהחשבון שגוי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E68">
+    <h3>P16-E68 · מה pg מחזיר מ־COUNT ו־SUM? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>COUNT</code> ו־<code>SUM</code> של integer מחזירים <code>bigint</code> — מספר שלם עד ‎9×10¹⁸. כמה ספרות JavaScript שומר בדיוק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>numeric</code> יכול להכיל ספרות רבות אחרי הנקודה — יותר ממה ש־<code>number</code> מחזיק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>COUNT</code>/<code>SUM</code> מחזירים <code>bigint</code>, ו־<code>number</code> שומר בדיוק רק עד ‎2⁵³ (בערך 9×10¹⁵). כדי לא להחזיר מספר שגוי בשקט, <code>pg</code> מחזיר מחרוזת. <code>7</code> הוא <code>integer</code> רגיל — נכנס ב־<code>number</code>.</li><li>אותה סיבה: <code>numeric</code> מדויק, ו־<code>number</code> לא (<code>0.1 + 0.2</code>). ‏<code>float8</code> (<code>f</code>) כבר "לא מדויק" במסד, ולכן הוא מגיע כ־<code>number</code>.</li><li>JSON: <code>"n":"2"</code> — הלקוח מקבל מחרוזת. ‏<code>n + 1</code> ← <code>"21"</code>.</li><li>ממירים במפורש איפה שבטוח: <code>Number(row.n)</code>, או בשאילתה <code>COUNT(*)::int</code>. לכסף — להשאיר מחרוזת או לעבור לאגורות (P16-E56, ‏P16-E70).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיר ל־<code>pg</code> "תמיד להמיר bigint ל־number" גלובלית — עובד, עד שמזהה גדול מ־2⁵³ מאבד ספרות בלי שגיאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E69">
+    <h3>P16-E69 · reduce מול SUM ו־AVG <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>0 + 10 + null + 20</code> — ‏null הופך ל־0 בחשבון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>על מערך ריק: <code>Math.max()</code> הוא <code>-Infinity</code>, ו־<code>0 / 0</code> הוא <code>NaN</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const ratings = [10, null, 20];
+const sum = ratings.reduce((s, x) =&gt; s + x, 0);
+console.log(sum, sum / ratings.length);
+
+const present = ratings.filter((x) =&gt; x !== null);
+console.log(present.reduce((s, x) =&gt; s + x, 0) / present.length, present.length);
+
+const empty = [];
+console.log(empty.reduce((s, x) =&gt; s + x, 0), Math.max(...empty), empty.reduce((s, x) =&gt; s + x, 0) / empty.length);</code></pre>
+<pre class="terminal">30 10
+15 2
+0 -Infinity NaN</pre>
+<p>ה"ממוצע" הנאיבי ב־JavaScript הוא 10 — כמו <code>AVG(COALESCE(x, 0))</code>, לא כמו <code>AVG(x)</code>. כדי לקבל את ההתנהגות של SQL צריך <code>filter</code> קודם. ועל אפס ערכים, SQL מחזיר NULL (ברור: "אין"), ו־JavaScript מחזיר 0, ‏<code>-Infinity</code> ו־<code>NaN</code> — שלושה ערכים שנראים כמו מספרים. ב־P16-E71 תכתוב צבירות ב־JavaScript שמתנהגות כמו במסד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשב ממוצע עם <code>sum / arr.length</code> על נתונים שיש בהם <code>null</code> — המכנה כולל את מי שלא דירג.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P16-E28">
     <h3>P16-E28 · אזור לכל לקוח (CASE כמו switch) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -234,7 +630,99 @@ ORDER BY
 
 </div></details>
   </div>
+<div class="ex" id="P16-E70">
+    <h3>P16-E70 · דוח מלאי מ־Node 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשאילתה: <code>COUNT(*)::int</code>, ‏<code class="mid">COALESCE(SUM(stock), 0)::int</code>, ‏<code>ROUND(AVG(price), 2)</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בקוד: <code class="long">const num = (v: string | null) =&gt; (v === null ? null : Number(v));</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P16-E70: דוח מלאי מ־Node
+export type Db = { query(text: string, values?: unknown[]): Promise&lt;{ rows: any[] }&gt; };
+export type Report = { products: number; units: number; cheapest: number | null; priciest: number | null; avgPrice: number | null };
+
+const num = (v: string | number | null) =&gt; (v === null ? null : Number(v));
+
+export async function inventoryReport(client: Db, category?: string): Promise&lt;Report&gt; {
+  const values: unknown[] = [];
+  let where = "is_active";
+  if (category !== undefined) {
+    values.push(category);
+    where += " AND category = $1";
+  }
+  const { rows } = await client.query(
+    `SELECT COUNT(*)::int AS products, COALESCE(SUM(stock), 0)::int AS units,
+            MIN(price) AS cheapest, MAX(price) AS priciest, ROUND(AVG(price), 2) AS avg_price
+     FROM products WHERE ${where}`,
+    values,
+  );
+  const r = rows[0];
+  return { products: r.products, units: r.units, cheapest: num(r.cheapest), priciest: num(r.priciest), avgPrice: num(r.avg_price) };
+}</code></pre>
+<p>שני כלים לטיפוסים: <code>::int</code> בתוך השאילתה (כשבטוח שהמספר קטן), ו־<code>Number()</code> בקוד עם טיפול ב־<code>null</code>. השאילתה עצמה כמעט זהה לזו שבשיעור — ההבדל הוא כל מה שקורה בדרך מהמסד ל־JavaScript.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number(r.cheapest)</code> בלי לבדוק null — ‏<code>Number(null)</code> הוא 0, ו"המוצר הזול ביותר" בקטגוריה ריקה עולה 0.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P16-E71">
+    <h3>P16-E71 · צבירות ב־JavaScript שמתנהגות כמו SQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const values = rows.map((r) =&gt; r[column]).filter((v) =&gt; v !== null &amp;&amp; v !== undefined);</code> — והכול מחושב מ־<code>values</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>min/max בלולאה עם <code>&lt;</code> — עובד גם למספרים וגם למחרוזות (בניגוד ל־<code>Math.min</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P16-E71: צבירות ב־JavaScript שמתנהגות כמו SQL
+type Row = Record&lt;string, unknown&gt;;
+type Value = number | string;
+
+export function aggregate(rows: Row[], column: string) {
+  const values = rows.map((r) =&gt; r[column]).filter((v) =&gt; v !== null &amp;&amp; v !== undefined) as Value[];
+  if (values.length === 0) return { count: 0, countAll: rows.length, sum: null, avg: null, min: null, max: null };
+  let min = values[0];
+  let max = values[0];
+  for (const v of values) {
+    if (v &lt; min) min = v;
+    if (v &gt; max) max = v;
+  }
+  const numbers = values as number[];
+  const sum = typeof values[0] === "number" ? numbers.reduce((s, x) =&gt; s + x, 0) : null;
+  return { count: values.length, countAll: rows.length, sum, avg: sum === null ? null : sum / values.length, min, max };
+}
+
+console.log(aggregate([{ x: 10 }, { x: null }, { x: 20 }, {}], "x"));
+console.log(aggregate([{ d: "2026-03-05" }, { d: "2025-11-02" }, { d: null }], "d"));
+console.log(aggregate([], "x"));</code></pre>
+<pre class="terminal">{ count: 2, countAll: 4, sum: 30, avg: 15, min: 10, max: 20 }
+{
+  count: 2,
+  countAll: 3,
+  sum: null,
+  avg: null,
+  min: '2025-11-02',
+  max: '2026-03-05'
+}
+{ count: 0, countAll: 0, sum: null, avg: null, min: null, max: null }</pre>
+<p>בעמודת מחרוזות (תאריכים) <code>sum</code> ו־<code>avg</code> הם <code>null</code> — גם SQL לא יסכם טקסט (הוא יחזיר שגיאה). העיקר: הממוצע 15 (לא 10), ואפס ערכים נותן <code>null</code> — ולא אחד משלושת ה"מספרים" המטעים של P16-E69.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.min(...values)</code> על תאריכים — <code>NaN</code>; ועל מערך ריק — <code>Infinity</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-ddl-dml.html"><small>הבא</small>שיעור 4 — יצירת טבלאות ושינוי נתונים</a></div>
 </main>
 </body>

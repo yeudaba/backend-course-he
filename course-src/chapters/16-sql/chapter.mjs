@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true,
   time: "5 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה מתקינים עכשיו:</strong> שרת PostgreSQL, תוסף ל־VS Code, ומסד לקורס.</p>
 <h3>1. שרת PostgreSQL</h3>
 <p><strong>קודם בדוק אם כבר יש לך:</strong> ב־Terminal, <code>ls /Library/PostgreSQL /Applications | grep -i postgres</code>. אם מופיע <code>PostgreSQL 18</code> (או גרסה אחרת) — כבר הותקן בעבר (מהאתר של EDB, עם pgAdmin). <strong>אל תתקין Postgres.app בנוסף</strong> — שניהם ירצו את פורט 5432. דלג לסעיף "יש לי כבר PostgreSQL".</p>
