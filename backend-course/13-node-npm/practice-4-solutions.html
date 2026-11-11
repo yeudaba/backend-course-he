@@ -47,6 +47,162 @@ report
 
 </div></details>
   </div>
+<div class="ex" id="P13-E72">
+    <h3>P13-E72 · join, resolve ו־parse <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>join</code> מחבר הכול לנתיב אחד; <code>resolve</code> עובד כמו <code>cd</code> אחרי <code>cd</code> — נתיב מוחלט באמצע "מתחיל מחדש".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>relative(from, to)</code> — איך להגיע מ־<code>from</code> ל־<code>to</code>. אם התשובה מתחילה ב־<code>..</code> — <code>to</code> מחוץ ל־<code>from</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import path from "node:path";
+console.log(path.join("/srv/app", "/etc/passwd"));
+console.log(path.resolve("/srv/app", "/etc/passwd"));
+console.log(path.normalize("uploads//2026/../avatars/./me.png"));
+console.log(path.dirname("/srv/app/src/server.mjs"));
+console.log(path.parse("/home/dana/report.final.pdf"));
+console.log(path.relative("/srv/app", "/srv/app/uploads/a.png"), path.relative("/srv/app", "/etc"));</code></pre>
+<pre class="terminal">/srv/app/etc/passwd
+/etc/passwd
+uploads/avatars/me.png
+/srv/app/src
+{
+  root: '/',
+  dir: '/home/dana',
+  base: 'report.final.pdf',
+  ext: '.pdf',
+  name: 'report.final'
+}
+uploads/a.png ../../etc</pre>
+<p>שתי שורות מסוכנות: <code>resolve</code> עם קלט מהמשתמש שמתחיל ב־<code>/</code> "בורח" לגמרי מהתיקייה. ו־<code>relative</code> נותן דרך פשוטה לבדוק "האם הנתיב בתוך התיקייה": אם התוצאה מתחילה ב־<code>..</code> — לא (הבסיס של <code>safeJoin</code> ב־P13-E11).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>join</code> ו־<code>resolve</code> זהים. ‏<code>join</code> לא מתייחס ל־<code>/</code> באמצע כ"התחלה מחדש"; <code>resolve</code> כן — ותמיד מחזיר נתיב מוחלט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E73">
+    <h3>P13-E73 · readFile או stream? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל: מה גודל הקובץ ביחס לזיכרון — וכמה פעמים במקביל זה קורה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>גם קובץ "בינוני" × 1000 בקשות במקביל = הרבה זיכרון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>readFile.</strong> קטן, פעם אחת — פשוט יותר.</li><li><strong>stream.</strong> 8GB לא ייכנס לזיכרון (ובכל מקרה — לא צריך את כולו בבת אחת).</li><li><strong>שניהם סבירים;</strong> stream עדיף בשרת, כי אם 100 משתמשים מעלים בבת אחת — 300MB בזיכרון. ‏<code>createHash</code> יודע לקבל חלקים (<code>update</code> לכל חלק).</li><li><strong>stream (readline).</strong> מעבדים שורה ושולחים, בלי להחזיק את כל הקובץ — וגם מתחילים לעבוד מיד.</li><li><strong>stream</strong>, בלי ספק: 1GB × אלף משתמשים = טרה־בייט זיכרון. עם stream, כל הורדה מחזיקה רק חלק קטן בכל רגע.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"הקובץ קטן אצלי, אז readFile בסדר" — בייצור הקבצים גדלים, והבקשות מגיעות במקביל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E74">
+    <h3>P13-E74 · כמה שורות ספר readline? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השורה האחרונה בקובץ לא מסתיימת ב־<code>\n</code> — האם readline מדלג עליה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>crlfDelay: Infinity</code> מטפל ב־<code>\r\n</code> (סוף שורה של Windows) כשורה אחת שנגמרת. ומה עם <code>split("\n")</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import readline from "node:readline";
+
+const file = path.join(os.tmpdir(), "p13-e74.log");
+fs.writeFileSync(file, "GET /a 200\n\nPOST /b 500\r\nGET /c 404");
+
+const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
+let lines = 0;
+let empty = 0;
+const statuses = [];
+for await (const line of rl) {
+  lines++;
+  if (line === "") {
+    empty++;
+    continue;
+  }
+  statuses.push(Number(line.split(" ")[2]));
+}
+console.log(lines, empty, statuses);
+console.log(fs.readFileSync(file, "utf8").split("\n").length);</code></pre>
+<pre class="terminal">4 1 [ 200, 500, 404 ]
+4</pre>
+<p>readline נותן את השורה האחרונה גם בלי <code>\n</code> בסופה, ומסיר את ה־<code>\r</code> של Windows — ולכן <code>500</code> יצא מספר נקי. שורה ריקה היא שורה (צריך לדלג בעצמך). ו־<code>split("\n")</code> נותן אותו מספר שורות — אבל משאיר את ה־<code>\r</code> בסוף השורה השלישית. <code>Number</code> אמנם סולח עליו (הוא מתעלם מרווחים לבנים בקצוות), אבל בדיקה כמו <code>line.endsWith("500")</code> או השוואה של מחרוזות — תיכשל בשקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>for await</code> ולכתוב <code>for</code> רגיל — <code>rl</code> אינו מערך, והלולאה זורקת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E75">
+    <h3>P13-E75 · randomUUID, randomBytes או Math.random? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השאלה: האם מישהו <strong>ירוויח</strong> מלנחש את הערך? אם כן — <code>Math.random</code> לא בא בחשבון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>hash הוא דטרמיניסטי (אותו קלט ← אותה תוצאה) — זה בדיוק מה שצריך לזיהוי כפילויות, ובדיוק הבעיה בסיסמאות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>randomUUID()</code> — ייחודי, ולא אפשר לנחש את ההזמנה הבאה (בניגוד ל־<code>/orders/1</code>, <code>/orders/2</code>...).</li><li><code class="mid">randomBytes(32).toString("hex")</code> — אקראי קריפטוגרפי. מי שמנחש טוקן — משתלט על חשבון.</li><li><code>Math.random()</code> מספיק — אין מה להרוויח מלנחש סדר שאלות.</li><li><code>randomUUID()</code> — ייחודי לכל בקשה.</li><li><code>createHash("sha256")</code> על התוכן — אותו קובץ ← אותו hash.</li><li><strong>אף אחד מהם!</strong> לסיסמאות — bcrypt/argon2, איטיים בכוונה ועם salt (פרק 21). ‏sha256 מהיר מדי — אפשר לנסות מיליארדי סיסמאות בשנייה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> כטוקן אבטחה — הוא נראה אקראי, אבל אפשר לשחזר את הרצף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E76">
+    <h3>P13-E76 · מה hash מבטיח? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>hash הוא דטרמיניסטי, ואורך התוצאה קבוע — לא משנה כמה גדול הקלט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>update</code> כמה פעמים = כאילו הכול נשלח ברצף אחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import { createHash } from "node:crypto";
+const sha = (s) =&gt; createHash("sha256").update(s).digest("hex");
+
+const a = sha("hello");
+const b = sha("hello");
+const c = sha("Hello");
+console.log(a === b, a === c, a.length, c.length);
+console.log(sha("").slice(0, 12), sha("x".repeat(1_000_000)).length);
+const parts = createHash("sha256").update("hel").update("lo").digest("hex");
+console.log(parts === a);</code></pre>
+<pre class="terminal">true false 64 64
+e3b0c44298fc 64
+true</pre>
+<p>שלוש תכונות: אותו קלט ← אותה תוצאה; שינוי של אות אחת ← תוצאה אחרת לגמרי; ואורך קבוע (64 תווי hex = 256 ביט). השורה האחרונה היא מה שמאפשר hash על stream: מזינים חלק אחרי חלק (P13-E73, סעיף 3). ומה hash <strong>לא</strong> נותן: דרך לחזור מהתוצאה לקלט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־hash כ"הצפנה" — אין מפתח, ואין "פענוח". זה טביעת אצבע.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P13-E11">
     <h3>P13-E11 · נתיב בטוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -385,61 +541,173 @@ null</pre>
 
 </div></details>
   </div>
-<div class="ex typed" id="P13-E28">
-    <h3>P13-E28 · מיזוג קובצי הגדרות במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+<div class="ex typed" id="P13-E77">
+    <h3>P13-E77 · שם קובץ פנוי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>פונקציית עזר <code>readJson(file)</code>: ‏<code class="mid">await fs.readFile(file, "utf8")</code>, ואז <code>JSON.parse</code> בתוך <code>try/catch</code> שזורק את השגיאה החדשה. אחר כך: <code class="mid">await Promise.all(files.map(readJson))</code>.</p>
-<p>שים לב ש־<code>try</code> עוטף רק את <code>JSON.parse</code>, ולא את <code>readFile</code>. כך שגיאת "קובץ לא קיים" לא הופכת ל"JSON לא תקין".</p>
+<p>פונקציית עזר <code>exists(p)</code>: <code class="long">try { await fs.stat(p); return true; } catch (err) { if (err.code === "ENOENT") return false; throw err; }</code></p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>מיזוג: <code class="long">configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {})</code>. ב־spread, מה שמופיע מאוחר יותר גובר.</p>
+<p><code class="long">const ext = path.extname(safe); const base = safe.slice(0, safe.length - ext.length);</code> ולולאה <code>for (let i = 1; ; i++)</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P13-E28: מיזוג קובצי הגדרות במקביל
+<pre><code class="lang-js">// P13-E77: שם קובץ פנוי
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
-async function readJson(file) {
-  const text = await fs.readFile(file, "utf8");
+async function exists(p) {
   try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`${path.basename(file)}: JSON לא תקין`);
+    await fs.stat(p);
+    return true;
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw err;
   }
 }
 
-export async function loadConfigs(files) {
-  const configs = await Promise.all(files.map(readJson));
-  return configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {});
+export async function freeName(dir, name) {
+  const safe = path.basename(name);
+  if (!(await exists(path.join(dir, safe)))) return safe;
+  const ext = path.extname(safe);
+  const base = safe.slice(0, safe.length - ext.length);
+  for (let i = 1; ; i++) {
+    const candidate = `${base} (${i})${ext}`;
+    if (!(await exists(path.join(dir, candidate)))) return candidate;
+  }
 }
 
-const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cfg-"));
-await fs.writeFile(path.join(dir, "default.json"), '{ "port": 3000, "logLevel": "info" }');
-await fs.writeFile(path.join(dir, "local.json"), '{ "logLevel": "debug" }');
-await fs.writeFile(path.join(dir, "broken.json"), "{ port: 1 }");
-
-console.log(await loadConfigs([path.join(dir, "default.json"), path.join(dir, "local.json")]));
-try {
-  await loadConfigs([path.join(dir, "default.json"), path.join(dir, "broken.json")]);
-} catch (err) {
-  console.log(err.message);
-}</code></pre>
-<pre class="terminal">{ port: 3000, logLevel: 'debug' }
-broken.json: JSON לא תקין</pre>
-<p><code>Promise.all</code> שומר על הסדר של המערך, גם אם קובץ אחד נקרא מהר מהאחר. לכן ה־<code>reduce</code> ממזג בדיוק לפי הסדר שביקשו, והקובץ האחרון גובר.</p>
-<p>ה־<code>try</code> הצר הוא העיקר כאן: הוא תופס רק את השגיאה שאנחנו יודעים להסביר (JSON שבור), ומוסיף לה את שם הקובץ. שגיאה אחרת, כמו קובץ חסר, עוברת כמו שהיא. ככה מי שקורא את ההודעה יודע מה באמת קרה.</p>
+import os from "node:os";
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "p13-e77-"));
+await fs.writeFile(path.join(dir, "report.pdf"), "");
+await fs.writeFile(path.join(dir, "report (1).pdf"), "");
+console.log(await freeName(dir, "report.pdf"), "|", await freeName(dir, "../../etc/notes.txt"), "|", await freeName(dir, "archive.tar.gz"));</code></pre>
+<pre class="terminal">report (2).pdf | notes.txt | archive.tar.gz</pre>
+<p>ה־<code>basename</code> הוא שורת ההגנה: <code>"../../etc/notes.txt"</code> הופך ל־<code>"notes.txt"</code> לפני שבכלל נוגעים בדיסק. ושים לב: בין הבדיקה "הקובץ פנוי" לבין הכתיבה, תהליך אחר יכול לתפוס את השם (race condition, נדבר עליו בפרק 18). בקוד אמיתי כותבים עם <code class="mid">fs.writeFile(p, data, { flag: "wx" })</code> — שנכשל אם הקובץ כבר קיים — ומנסים את השם הבא.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>for ... of</code> עם <code>await</code> בתוכו — עובד, אבל קורא קובץ אחרי קובץ. הבודק מחפש <code>Promise.all</code>.</li><li><code>{ ...config, ...merged }</code> — הסדר הפוך, והקובץ הראשון גובר.</li><li><code>try</code> סביב הכול עם <code>catch</code> שזורק "JSON לא תקין" — קובץ חסר מקבל הודעה שקרית.</li><li>להחזיר את <code>err.message</code> המקורי של <code>JSON.parse</code> — הוא לא אומר באיזה קובץ הבעיה.</li></ul>
+<ul><li><code>name.split(".")[0]</code> לבסיס — <code>my.report.pdf</code> הופך ל־<code>my (1).pdf</code>.</li><li><code>catch { return false; }</code> לכל שגיאה — "אין הרשאה" נחשב "פנוי", והכתיבה תיכשל אחר כך עם הודעה מבלבלת.</li></ul>
 
 
 </div></details>
   </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P13-E78">
+    <h3>P13-E78 · readdir ו־stat במקביל <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>readdir</code> מחזיר גם את התיקייה <code>sub</code>. ‏<code>stats[i]</code> שייך ל־<code>names[i]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגודל של <code>b.txt</code> הוא 5 בתים, של <code>a.log</code> — 1.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "p13-e78-"));
+await fs.writeFile(path.join(dir, "b.txt"), "12345");
+await fs.writeFile(path.join(dir, "a.log"), "1");
+await fs.mkdir(path.join(dir, "sub"));
+
+const names = await fs.readdir(dir);
+console.log(names.sort());
+const stats = await Promise.all(names.map((n) =&gt; fs.stat(path.join(dir, n))));
+const files = names.filter((n, i) =&gt; stats[i].isFile());
+const bytes = stats.reduce((s, st) =&gt; s + (st.isFile() ? st.size : 0), 0);
+console.log(files, bytes);
+const entries = await fs.readdir(dir, { withFileTypes: true });
+console.log(entries.filter((e) =&gt; e.isDirectory()).map((e) =&gt; e.name));
+await fs.rm(dir, { recursive: true });</code></pre>
+<pre class="terminal">[ 'a.log', 'b.txt', 'sub' ]
+[ 'a.log', 'b.txt' ] 6
+[ 'sub' ]</pre>
+<p>שים לב ל־<code>names.sort()</code>: הוא <strong>ממיין את המערך עצמו</strong> (פרק 6), ולכן גם ה־<code>map</code> שאחריו עובר על הסדר הממוין — ו־<code>stats[i]</code> עדיין מתאים ל־<code>names[i]</code>. אילו היינו ממיינים <em>אחרי</em> ה־<code>Promise.all</code>, ההתאמה בין השמות לנתונים הייתה נשברת. ‏<code>withFileTypes</code> חוסך את כל ה־stat כשצריך רק את הסוג.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על הסדר של <code>readdir</code> — הוא תלוי במערכת ההפעלה. ממיינים אם הסדר חשוב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E79">
+    <h3>P13-E79 · startsWith — בדיקה שנראית בטוחה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האם <code>"/srv/uploads-evil/x.sh"</code> מתחיל ב־<code>"/srv/uploads"</code>? (תו־תו.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"."</code> — זו התיקייה עצמה, לא קובץ בתוכה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import path from "node:path";
+const base = "/srv/uploads";
+
+function naive(userPath) {
+  const full = path.resolve(base, userPath);
+  return full.startsWith(base);
+}
+function better(userPath) {
+  const full = path.resolve(base, userPath);
+  const rel = path.relative(base, full);
+  return rel !== "" &amp;&amp; !rel.startsWith("..") &amp;&amp; !path.isAbsolute(rel);
+}
+
+for (const p of ["a.png", "../etc/passwd", "../uploads-evil/x.sh", "/srv/uploads/b.png", "."]) {
+  console.log(p.padEnd(22), naive(p), better(p));
+}</code></pre>
+<pre class="terminal">a.png                  true true
+../etc/passwd          false false
+../uploads-evil/x.sh   true false
+/srv/uploads/b.png     true true
+.                      true false</pre>
+<p><code>/srv/uploads-evil</code> הוא תיקייה <strong>אחרת</strong> — אבל כמחרוזת הוא מתחיל ב־<code>/srv/uploads</code>, ולכן הבדיקה הנאיבית מאשרת אותו. גם <code>"."</code> עובר אצלה — וכתיבה "לתוך" התיקייה עצמה היא בעיה. הגרסה הטובה בודקת את היחס בין התיקיות, לא את התווים. (תיקון קצר אחר: <code class="mid">full.startsWith(base + path.sep)</code>.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק <code>userPath.includes("..")</code> — נתיב מוחלט (<code>/etc/passwd</code>) עובר, וגם שם קובץ תמים כמו <code>"a..b.png"</code> נחסם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E80">
+    <h3>P13-E80 · split מול regex על שורת לוג <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התאריך מכיל רווח (<code>+0000]</code> הוא מילה נפרדת) — זה מזיז את כל האינדקסים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>match</code> שלא מוצא התאמה מחזיר <code>null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const line = '203.0.113.7 - dana [10/Nov/2026:13:05:01 +0000] "GET /files/my%20doc.pdf HTTP/1.1" 200 512';
+
+const parts = line.split(" ");
+console.log(parts.length, parts[5], parts[6], parts[8]);
+
+const m = line.match(/"(\w+) (\S+) [^"]*" (\d{3}) (\d+|-)$/);
+console.log(m[1], m[2], Number(m[3]), m[4]);
+
+const broken = line.replace("200 512", "200");
+console.log(broken.match(/"(\w+) (\S+) [^"]*" (\d{3}) (\d+|-)$/));</code></pre>
+<pre class="terminal">10 "GET /files/my%20doc.pdf 200
+GET /files/my%20doc.pdf 200 512
+null</pre>
+<p>עם <code>split</code> צריך "לדעת" שהשיטה במקום 5 (עם המירכאה!) והסטטוס במקום 8 — וכל שינוי קטן בפורמט שובר את זה בשקט. ה־regex מתאר את <strong>המבנה</strong>, ושורה שלא מתאימה מחזירה <code>null</code> — שאפשר לספור כ"שורה לא תקינה" ולהמשיך (כמו <code>parseAccessLine</code> ב־P13-E26).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לגשת ל־<code>m[1]</code> בלי לבדוק ש־<code>m</code> אינו <code>null</code> — שורה שבורה אחת מפילה עיבוד של קובץ שלם.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P13-E24">
     <h3>P13-E24 · אתגר: פותר תלויות (mini-npm) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -562,6 +830,60 @@ console.log((await fs.readdir(tmp)).sort());</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להתחיל מ־app.log ← .1 — דורס את .1 הקיים לפני שהועבר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P13-E28">
+    <h3>P13-E28 · מיזוג קובצי הגדרות במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר <code>readJson(file)</code>: ‏<code class="mid">await fs.readFile(file, "utf8")</code>, ואז <code>JSON.parse</code> בתוך <code>try/catch</code> שזורק את השגיאה החדשה. אחר כך: <code class="mid">await Promise.all(files.map(readJson))</code>.</p>
+<p>שים לב ש־<code>try</code> עוטף רק את <code>JSON.parse</code>, ולא את <code>readFile</code>. כך שגיאת "קובץ לא קיים" לא הופכת ל"JSON לא תקין".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיזוג: <code class="long">configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {})</code>. ב־spread, מה שמופיע מאוחר יותר גובר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E28: מיזוג קובצי הגדרות במקביל
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+async function readJson(file) {
+  const text = await fs.readFile(file, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${path.basename(file)}: JSON לא תקין`);
+  }
+}
+
+export async function loadConfigs(files) {
+  const configs = await Promise.all(files.map(readJson));
+  return configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {});
+}
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cfg-"));
+await fs.writeFile(path.join(dir, "default.json"), '{ "port": 3000, "logLevel": "info" }');
+await fs.writeFile(path.join(dir, "local.json"), '{ "logLevel": "debug" }');
+await fs.writeFile(path.join(dir, "broken.json"), "{ port: 1 }");
+
+console.log(await loadConfigs([path.join(dir, "default.json"), path.join(dir, "local.json")]));
+try {
+  await loadConfigs([path.join(dir, "default.json"), path.join(dir, "broken.json")]);
+} catch (err) {
+  console.log(err.message);
+}</code></pre>
+<pre class="terminal">{ port: 3000, logLevel: 'debug' }
+broken.json: JSON לא תקין</pre>
+<p><code>Promise.all</code> שומר על הסדר של המערך, גם אם קובץ אחד נקרא מהר מהאחר. לכן ה־<code>reduce</code> ממזג בדיוק לפי הסדר שביקשו, והקובץ האחרון גובר.</p>
+<p>ה־<code>try</code> הצר הוא העיקר כאן: הוא תופס רק את השגיאה שאנחנו יודעים להסביר (JSON שבור), ומוסיף לה את שם הקובץ. שגיאה אחרת, כמו קובץ חסר, עוברת כמו שהיא. ככה מי שקורא את ההודעה יודע מה באמת קרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>for ... of</code> עם <code>await</code> בתוכו — עובד, אבל קורא קובץ אחרי קובץ. הבודק מחפש <code>Promise.all</code>.</li><li><code>{ ...config, ...merged }</code> — הסדר הפוך, והקובץ הראשון גובר.</li><li><code>try</code> סביב הכול עם <code>catch</code> שזורק "JSON לא תקין" — קובץ חסר מקבל הודעה שקרית.</li><li>להחזיר את <code>err.message</code> המקורי של <code>JSON.parse</code> — הוא לא אומר באיזה קובץ הבעיה.</li></ul>
 
 
 </div></details>
