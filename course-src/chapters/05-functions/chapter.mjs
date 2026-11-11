@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "4 מפגשים (במסלול המהיר: 2)",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, Error Lens, Prettier.</p>
 <p><strong>הבודק האוטומטי</strong> מוכר לך מפרק 1. מהפרק הזה הבדיקות לא רק משוות פלט — הן קוראות לפונקציות שלך עם ערכים שונים. אתה כותב את הפתרון בקובץ ההתחלה, ומריץ פקודה אחת שאומרת לך מה עובד ומה לא. (אם דילגת על פרקים 1–4 במסלול המהיר — בצע עכשיו את שלב ההעתקה הראשון למטה.)</p>
 <ol class="steps">
