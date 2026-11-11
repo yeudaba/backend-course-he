@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **1498** | **1046** | **1123** |
+| **42** | **196** | **1708** | **1132** | **1297** |
 
 ## מה שונה כאן
 
@@ -63,7 +63,7 @@
 | [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 4 | 80 | 44 | ✔ |
 | [פרויקט 1](backend-course/08p-project-expenses/index.html) | מנהל הוצאות בשורת הפקודה | 6 | — | 3 | ✔ |
 | [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 80 | 27 | ✔ |
-| [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 28 | 23 | ✔ |
+| [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 82 | 46 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -160,9 +160,9 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 28 | 23 | ✔ |
-| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 28 | 23 | ✔ |
-| [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 28 | 23 | ✔ |
+| [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 80 | 44 | ✔ |
+| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 80 | 44 | ✔ |
+| [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 80 | 44 | ✔ |
 | [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 28 | 23 | ✔ |
 
 <details>
