@@ -47,6 +47,178 @@ console.log(await show(Promise.race([ok(5, "a"), fail(10, "x")])));</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P10-E75">
+    <h3>P10-E75 · async מחזירה תמיד Promise <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בשיעור: <code>async function</code> <strong>תמיד</strong> מחזירה Promise. <code>return 5</code> ← Promise שמצליח עם 5.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ו־<code>throw</code> בתוך <code>async</code>? Promise שנכשל — לא זריקה רגילה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">async function five() {
+  return 5;
+}
+async function nothing() {}
+async function boom() {
+  throw new Error("בום");
+}
+
+console.log(five());
+console.log(nothing() instanceof Promise);
+five().then((v) =&gt; console.log("then:", v));
+boom().catch((e) =&gt; console.log("catch:", e.message));
+console.log("סוף");</code></pre>
+<pre class="terminal">Promise { 5 }
+true
+סוף
+then: 5
+catch: בום</pre>
+<p><code>Promise { 5 }</code> — Node מדפיס Promise שכבר הצליח עם הערך שבתוכו, אבל זה עדיין Promise: כדי להשתמש ב־5 צריך <code>then</code> או <code>await</code>. גם <code>boom()</code> לא זרקה בשורה שבה קראו לה — היא החזירה Promise שנכשל, וה־<code>catch</code> שלו תפס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>const n = five(); n + 1</code> — מקבלים <code>"[object Promise]1"</code>, לא 6.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E76">
+    <h3>P10-E76 · שתי פונקציות async משתלבות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל <code>await</code> עוצר רק את הפונקציה שלו. עד ה־<code>await</code> הראשון — הכול רץ מיד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חשב זמנים: א מדפיס ב־30 ו־60; ב מדפיס ב־20 ו־40.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+async function worker(name, ms) {
+  console.log(name, "התחיל");
+  await sleep(ms);
+  console.log(name, "באמצע");
+  await sleep(ms);
+  console.log(name, "סיים");
+}
+
+worker("א", 30);
+worker("ב", 20);
+console.log("שתיהן נקראו");</code></pre>
+<pre class="terminal">א התחיל
+ב התחיל
+שתיהן נקראו
+ב באמצע
+א באמצע
+ב סיים
+א סיים</pre>
+<p>שתי הפונקציות "חיות" בו־זמנית ומתחלפות. זה בדיוק מה שקורה בשרת: כל בקשה היא פונקציית <code>async</code>, וכשאחת מחכה למסד — אחרת ממשיכה. ‏<code>await</code> נראה כמו "עצירה", אבל הוא עוצר רק את הפונקציה, לא את המלצר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־ב מתחיל רק אחרי שא סיים, כי "יש await".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E77">
+    <h3>P10-E77 · רצף או מקביל? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל גם: מה קורה אם ב' יקרה <strong>למרות</strong> שא' נכשל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סעיף 5: לא "הכול יחד" ולא "אחד־אחד" — ראה את האתגר P10-E24.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>Promise.all.</strong> שלושתם צריכים רק את המזהה, שכבר יש. ‏300ms ← 100ms.</li><li><strong>רצף.</strong> אסור ליצור טוקן לפני שידוע שהסיסמה נכונה.</li><li><strong>רצף.</strong> האימייל תלוי בהצלחת החיוב — לא שולחים "התקבלה" על הזמנה שנכשלה.</li><li><strong>Promise.all</strong> (או <code>allSettled</code>, אם רוצים להציג דוח חלקי כשאחד נופל).</li><li><strong>לא זה ולא זה:</strong> 500 בבת אחת יפילו את השרת, ואחד־אחד ייקח נצח. מגבלת מקביליות — 5 בכל רגע (P10-E24).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל הכול במקביל "כי זה מהיר יותר" — גם כשיש תלות או השפעה (חיוב ואימייל).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E78">
+    <h3>P10-E78 · return או return await? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>return fail()</code> מחזיר את ה־Promise כמו שהוא — <strong>בלי לחכות</strong> לו בתוך ה־<code>try</code>. מתי הוא נכשל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עם <code>await</code>, הכישלון "קורה" בתוך ה־<code>try</code> — וה־<code>catch</code> רואה אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const fail = async () =&gt; {
+  throw new Error("נכשל");
+};
+
+async function withoutAwait() {
+  try {
+    return fail();
+  } catch {
+    return "נתפס בפנים";
+  }
+}
+
+async function withAwait() {
+  try {
+    return await fail();
+  } catch {
+    return "נתפס בפנים";
+  }
+}
+
+withoutAwait().then(console.log, (e) =&gt; console.log("ברח החוצה:", e.message));
+withAwait().then(console.log, (e) =&gt; console.log("ברח החוצה:", e.message));</code></pre>
+<pre class="terminal">נתפס בפנים
+ברח החוצה: נכשל</pre>
+<p>ה־<code>try</code> תופס רק מה שנזרק <strong>בזמן שהוא פתוח</strong>. בלי <code>await</code> הפונקציה יוצאת מה־<code>try</code> עם Promise שעוד לא נכשל, והכישלון מגיע למי שקרא. הכלל: בתוך <code>try</code> — תמיד <code>return await</code>. (הסדר בפלט: הכישלון שיוצא החוצה עובר עוד "קפיצה" בתור, ולכן מגיע שני.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיר את ה־<code>await</code> כי "הוא מיותר ב־return". מחוץ ל־<code>try</code> — נכון; בתוכו — זה משנה את ההתנהגות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E79">
+    <h3>P10-E79 · לקרוא תוצאה של allSettled <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בשיעור: כל איבר הוא <code class="mid">{ status: "fulfilled", value }</code> או <code class="mid">{ status: "rejected", reason }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הסדר במערך הוא סדר ה־Promises שהעברת — לא סדר הסיום.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const ok = (ms, v) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+const fail = (ms, m) =&gt; new Promise((_, rej) =&gt; setTimeout(() =&gt; rej(new Error(m)), ms));
+
+const results = await Promise.allSettled([ok(20, "משתמש"), fail(10, "אין חיבור"), ok(5, 3)]);
+console.log(results.map((r) =&gt; r.status));
+console.log(results.filter((r) =&gt; r.status === "fulfilled").map((r) =&gt; r.value));
+console.log(results.filter((r) =&gt; r.status === "rejected").map((r) =&gt; r.reason.message));</code></pre>
+<pre class="terminal">[ 'fulfilled', 'rejected', 'fulfilled' ]
+[ 'משתמש', 3 ]
+[ 'אין חיבור' ]</pre>
+<p><code>allSettled</code> לא נכשל לעולם — הוא מחזיר דוח על כל אחד, באותו סדר. השגיאה נמצאת ב־<code>reason</code> (לא ב־<code>error</code> ולא ב־<code>value</code>). זה הבסיס ללוח המחוונים ב־P10-E17.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>r.value</code> על איבר שנכשל — <code>undefined</code>, בלי שום שגיאה שתזהיר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P10-E11">
     <h3>P10-E11 · אותו דבר עם await 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -379,99 +551,125 @@ module.exports = { getProfilePage };</code></pre>
 
 </div></details>
   </div>
-<div class="ex typed" id="P10-E27">
-    <h3>P10-E27 · סכום הזמנה במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>שלושה שלבים: <code class="mid">items.map(({ sku }) =&gt; getPrice(sku))</code> (מערך של Promises) ← <code>await Promise.all(...)</code> (מערך של מחירים, באותו סדר) ← <code>reduce</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>ב־<code>reduce</code> הפרמטר השלישי הוא האינדקס: <code class="long">prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0)</code>.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P10-E27: סכום הזמנה במקביל
-async function orderTotal(items, getPrice) {
-  const prices = await Promise.all(items.map(({ sku }) =&gt; getPrice(sku)));
-  return prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0);
-}
-
-const catalog = { A: 10, B: 25 };
-const getPrice = (sku) =&gt; new Promise((resolve) =&gt; setTimeout(() =&gt; resolve(catalog[sku]), 50));
-
-const start = Date.now();
-orderTotal([{ sku: "A", qty: 3 }, { sku: "B", qty: 2 }], getPrice).then((total) =&gt; {
-  console.log(total, Date.now() - start &lt; 90 ? "במקביל" : "אחד אחרי השני");
-});
-
-module.exports = { orderTotal };</code></pre>
-<pre class="terminal">80 במקביל</pre>
-<p><code>Promise.all</code> שומר על הסדר: המחיר במקום <code>i</code> שייך לפריט במקום <code>i</code>, גם אם התשובות הגיעו בסדר אחר. בזכות זה אפשר לחבר בין <code>prices[i]</code> ל־<code>items[i].qty</code>.</p>
-<p>והשגיאה? אם Promise אחד נכשל, <code>Promise.all</code> נכשל איתו, ו־<code>await</code> זורק אותה הלאה. לא צריך <code>try/catch</code> — מי שקרא ל־<code>orderTotal</code> יחליט מה לעשות. (כשרוצים תוצאות חלקיות, משתמשים ב־<code>Promise.allSettled</code>, כמו ב־P10-E17.)</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code class="long">for (const item of items) { total += (await getPrice(item.sku)) * item.qty; }</code> — עובד, אבל אחד אחרי השני: 250ms במקום 50. הבודק תופס את זה.</li><li><code>items.map(async ...)</code> ואז <code>reduce</code> בלי <code>await Promise.all</code> — מחברים Promises ולא מספרים, ויוצא <code>"0[object Promise]..."</code>.</li><li><code class="mid">try { ... } catch { return 0; }</code> — שגיאה בשליפת מחיר הופכת להזמנה בחינם.</li></ul>
-
-
-</div></details>
-  </div>
-<div class="ex typed" id="P10-E28">
-    <h3>P10-E28 · כל העמודים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>כמה עמודים יהיו? לא יודעים מראש — רק מתי לעצור. זה <code>while</code>. משתנים: <code>all = []</code>, ‏<code>page = 1</code>, ‏<code>count = 0</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p><code class="long">while (page !== null) { if (count === maxPages) throw ...; const { items, next } = await getPage(page); all.push(...items); page = next; count++; }</code>.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P10-E28: כל העמודים
-async function fetchAll(getPage, maxPages = 100) {
-  const all = [];
-  let page = 1;
-  let count = 0;
-  while (page !== null) {
-    if (count === maxPages) {
-      throw new Error("יותר מדי עמודים");
-    }
-    const { items, next } = await getPage(page);
-    all.push(...items);
-    page = next;
-    count++;
-  }
-  return all;
-}
-
-const pages = {
-  1: { items: ["a", "b"], next: 2 },
-  2: { items: ["c"], next: 3 },
-  3: { items: [], next: null },
-};
-const getPage = async (n) =&gt; {
-  console.log(`מביא עמוד ${n}`);
-  return pages[n];
-};
-
-fetchAll(getPage).then((all) =&gt; console.log(all));
-
-module.exports = { fetchAll };</code></pre>
-<pre class="terminal">מביא עמוד 1
-מביא עמוד 2
-מביא עמוד 3
-[ 'a', 'b', 'c' ]</pre>
-<p>כאן <code>await</code> בתוך לולאה הוא <strong>הכרחי</strong>, בניגוד ל־P10-E27: את מספר העמוד הבא יודעים רק אחרי שהתשובה הנוכחית הגיעה, ולכן אי אפשר לבקש את כל העמודים במקביל.</p>
-<p><code>all.push(...items)</code> פורש את הפריטים אחד אחד לתוך המערך. <code>all.push(items)</code> (בלי שלוש הנקודות) היה מכניס מערך שלם כפריט אחד. ובדיקת <code>maxPages</code> קורית <strong>לפני</strong> הבקשה, כך שלעולם לא יוצאות יותר מ־<code>maxPages</code> בקשות. זה אותו "guard נגד לולאה אינסופית" כמו ב־P04-E25.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>all.push(items)</code> — יוצא <code>[["a", "b"], ["c"], []]</code>.</li><li><code>while (next)</code> בלי <code>await</code> — <code>getPage(page)</code> מחזירה Promise, ול־Promise אין שדה <code>next</code>.</li><li>לבדוק את <code>maxPages</code> אחרי הבקשה — יוצאת בקשה אחת יותר מהמותר.</li></ul>
-
-
-</div></details>
-  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P10-E80">
+    <h3>P10-E80 · await בלולאה מול map <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הלולאה: שלוש המתנות של 40ms, אחת אחרי השנייה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>map</code> עם <code>async</code> מחזיר מערך של Promises — גם הוא מתחיל את כולן יחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const sleep = (ms, v) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+const price = (id) =&gt; sleep(40, id * 10);
+const ids = [1, 2, 3];
+const round = (t) =&gt; Math.round((Date.now() - t) / 40) * 40;
+
+let t = Date.now();
+let sum = 0;
+for (const id of ids) {
+  sum += await price(id);
+}
+console.log("for:", sum, round(t));
+
+t = Date.now();
+const prices = await Promise.all(ids.map((id) =&gt; price(id)));
+console.log("map:", prices.reduce((s, p) =&gt; s + p, 0), round(t));
+
+t = Date.now();
+const all = await Promise.all(ids.map(async (id) =&gt; (await price(id)) + 1));
+console.log("async map:", all, round(t));</code></pre>
+<pre class="terminal">for: 60 120
+map: 60 40
+async map: [ 11, 21, 31 ] 40</pre>
+<p>(הזמנים עוגלו לכפולות של 40, כדי שהפלט יהיה יציב.) אותה תוצאה, פי שלושה מהר. ולמה <code>for</code> עם <code>await</code> עדיין קיים? כשיש תלות בין הסיבובים, או כשחייבים "אחד בכל פעם" (P10-E18) — שם הוא בדיוק הכלי הנכון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ids.map(async ...)</code> בלי <code>Promise.all</code> — מערך של Promises, לא של מספרים (P10-E71).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E81">
+    <h3>P10-E81 · try/catch רגיל ופונקציית async <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האם הקריאה ל־<code>boom()</code> בלי <code>await</code> זורקת? (P10-E75.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עם <code>await</code> — ה־Promise שנכשל זורק בתוך <code>main</code>, ושם יש <code>try</code> פתוח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">async function boom() {
+  throw new Error("בום");
+}
+
+try {
+  const p = boom();
+  console.log("לא נזרק כאן");
+  p.catch((e) =&gt; console.log("ה־catch של ה־Promise:", e.message));
+} catch (err) {
+  console.log("try/catch רגיל:", err.message);
+}
+
+async function main() {
+  try {
+    await boom();
+  } catch (err) {
+    console.log("try/catch עם await:", err.message);
+  }
+}
+main();</code></pre>
+<pre class="terminal">לא נזרק כאן
+ה־catch של ה־Promise: בום
+try/catch עם await: בום</pre>
+<p>ה־<code>catch</code> הרגיל לא רץ אף פעם. בלי ה־<code>p.catch</code> — ה־Promise שנכשל לא היה נתפס בכלל, ו־Node היה קורס (unhandled rejection). שתי דרכים נכונות: <code>.catch</code> על ה־Promise, או <code>await</code> בתוך <code>try</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף קריאה לפונקציית <code>async</code> ב־<code>try/catch</code> בלי <code>await</code>, ולהרגיש "מוגן".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E82">
+    <h3>P10-E82 · מפירמידה לארבע שורות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל שלב הוא שורה: <code class="mid">const config = await readConfigP();</code> וכן הלאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"בכל מקרה" — <code>finally</code> (פרק 8). ולגבי מקביל: מי תלוי במי?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">async function report() {
+  try {
+    const config = await readConfigP();
+    const user = await readUserP(config.userId);
+    const orders = await readOrdersP(user.id);
+    await sendReportP(orders);
+    console.log("done");
+  } catch (err) {
+    handle(err);
+  } finally {
+    console.log("סיימנו");
+  }
+}</code></pre>
+<ol><li>ארבע שורות, ו־<code>catch</code> אחד לכל השלבים — כולל שגיאה שנזרקת בקוד שלנו (למשל <code>config.userId</code> על <code>undefined</code>).</li><li>מקום אחד: <code>finally</code>. בגרסת ה־callbacks היו צריכים חמישה.</li><li>לא כמו שהקוד כתוב: כל שלב צריך את התוצאה של הקודם (<code>config</code> ← <code>user</code> ← <code>orders</code>). אילו <code>readOrdersP</code> הייתה מקבלת את <code>config.userId</code> ישירות — אפשר היה להביא את המשתמש וההזמנות יחד: <code class="mid">await Promise.all([readUserP(id), readOrdersP(id)])</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>try/catch</code> נפרד סביב כל שורה — חוזרים לפירמידה, רק בלי ההזחה.</li><li>לשכוח את <code>await</code> לפני <code>sendReportP</code> — "done" מודפס לפני שהדוח נשלח, וכישלון שלו לא נתפס.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P10-E24">
     <h3>P10-E24 · אתגר: מגבלת מקביליות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -561,6 +759,98 @@ module.exports = { memoizeAsync };</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לשמור את התוצאה רק אחרי ש־fn סיימה — בקשות מקבילות כולן מפספסות את ה־cache וקוראות ל־fn.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E27">
+    <h3>P10-E27 · סכום הזמנה במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה שלבים: <code class="mid">items.map(({ sku }) =&gt; getPrice(sku))</code> (מערך של Promises) ← <code>await Promise.all(...)</code> (מערך של מחירים, באותו סדר) ← <code>reduce</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>reduce</code> הפרמטר השלישי הוא האינדקס: <code class="long">prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E27: סכום הזמנה במקביל
+async function orderTotal(items, getPrice) {
+  const prices = await Promise.all(items.map(({ sku }) =&gt; getPrice(sku)));
+  return prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0);
+}
+
+const catalog = { A: 10, B: 25 };
+const getPrice = (sku) =&gt; new Promise((resolve) =&gt; setTimeout(() =&gt; resolve(catalog[sku]), 50));
+
+const start = Date.now();
+orderTotal([{ sku: "A", qty: 3 }, { sku: "B", qty: 2 }], getPrice).then((total) =&gt; {
+  console.log(total, Date.now() - start &lt; 90 ? "במקביל" : "אחד אחרי השני");
+});
+
+module.exports = { orderTotal };</code></pre>
+<pre class="terminal">80 במקביל</pre>
+<p><code>Promise.all</code> שומר על הסדר: המחיר במקום <code>i</code> שייך לפריט במקום <code>i</code>, גם אם התשובות הגיעו בסדר אחר. בזכות זה אפשר לחבר בין <code>prices[i]</code> ל־<code>items[i].qty</code>.</p>
+<p>והשגיאה? אם Promise אחד נכשל, <code>Promise.all</code> נכשל איתו, ו־<code>await</code> זורק אותה הלאה. לא צריך <code>try/catch</code> — מי שקרא ל־<code>orderTotal</code> יחליט מה לעשות. (כשרוצים תוצאות חלקיות, משתמשים ב־<code>Promise.allSettled</code>, כמו ב־P10-E17.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="long">for (const item of items) { total += (await getPrice(item.sku)) * item.qty; }</code> — עובד, אבל אחד אחרי השני: 250ms במקום 50. הבודק תופס את זה.</li><li><code>items.map(async ...)</code> ואז <code>reduce</code> בלי <code>await Promise.all</code> — מחברים Promises ולא מספרים, ויוצא <code>"0[object Promise]..."</code>.</li><li><code class="mid">try { ... } catch { return 0; }</code> — שגיאה בשליפת מחיר הופכת להזמנה בחינם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E28">
+    <h3>P10-E28 · כל העמודים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה עמודים יהיו? לא יודעים מראש — רק מתי לעצור. זה <code>while</code>. משתנים: <code>all = []</code>, ‏<code>page = 1</code>, ‏<code>count = 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">while (page !== null) { if (count === maxPages) throw ...; const { items, next } = await getPage(page); all.push(...items); page = next; count++; }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E28: כל העמודים
+async function fetchAll(getPage, maxPages = 100) {
+  const all = [];
+  let page = 1;
+  let count = 0;
+  while (page !== null) {
+    if (count === maxPages) {
+      throw new Error("יותר מדי עמודים");
+    }
+    const { items, next } = await getPage(page);
+    all.push(...items);
+    page = next;
+    count++;
+  }
+  return all;
+}
+
+const pages = {
+  1: { items: ["a", "b"], next: 2 },
+  2: { items: ["c"], next: 3 },
+  3: { items: [], next: null },
+};
+const getPage = async (n) =&gt; {
+  console.log(`מביא עמוד ${n}`);
+  return pages[n];
+};
+
+fetchAll(getPage).then((all) =&gt; console.log(all));
+
+module.exports = { fetchAll };</code></pre>
+<pre class="terminal">מביא עמוד 1
+מביא עמוד 2
+מביא עמוד 3
+[ 'a', 'b', 'c' ]</pre>
+<p>כאן <code>await</code> בתוך לולאה הוא <strong>הכרחי</strong>, בניגוד ל־P10-E27: את מספר העמוד הבא יודעים רק אחרי שהתשובה הנוכחית הגיעה, ולכן אי אפשר לבקש את כל העמודים במקביל.</p>
+<p><code>all.push(...items)</code> פורש את הפריטים אחד אחד לתוך המערך. <code>all.push(items)</code> (בלי שלוש הנקודות) היה מכניס מערך שלם כפריט אחד. ובדיקת <code>maxPages</code> קורית <strong>לפני</strong> הבקשה, כך שלעולם לא יוצאות יותר מ־<code>maxPages</code> בקשות. זה אותו "guard נגד לולאה אינסופית" כמו ב־P04-E25.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>all.push(items)</code> — יוצא <code>[["a", "b"], ["c"], []]</code>.</li><li><code>while (next)</code> בלי <code>await</code> — <code>getPage(page)</code> מחזירה Promise, ול־Promise אין שדה <code>next</code>.</li><li>לבדוק את <code>maxPages</code> אחרי הבקשה — יוצאת בקשה אחת יותר מהמותר.</li></ul>
 
 
 </div></details>

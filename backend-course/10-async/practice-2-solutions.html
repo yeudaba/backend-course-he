@@ -45,6 +45,136 @@
 
 </div></details>
   </div>
+<div class="ex" id="P10-E46">
+    <h3>P10-E46 · קובץ שלא קיים, ומה קודם <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>fs.readFile</code> חוזרת מיד. ה־callback רץ רק כשמערכת ההפעלה ענתה — גם אם התשובה היא "אין קובץ".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כשיש שגיאה, הפרמטר השני לא מקבל ערך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const fs = require("node:fs");
+
+console.log("1. מבקש");
+fs.readFile("/no/such/file.txt", "utf8", (err, text) =&gt; {
+  console.log("3. err:", err ? err.code : null);
+  console.log("4. text:", text);
+});
+console.log("2. ממשיך");</code></pre>
+<pre class="terminal">1. מבקש
+2. ממשיך
+3. err: ENOENT
+4. text: undefined</pre>
+<p>גם כישלון מגיע "אחר כך": Node שולח את הבקשה למערכת ההפעלה וממשיך. כשיש שגיאה, ה־callback מקבל אותה בפרמטר הראשון, והשני נשאר <code>undefined</code>. <code>ENOENT</code> = "Error NO ENTry" — אין קובץ כזה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שבשגיאה ה־callback לא נקרא בכלל. הוא תמיד נקרא — פעם אחת, עם שגיאה או עם תוצאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E47">
+    <h3>P10-E47 · למה השגיאה ראשונה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חשוב על מי שכותב את ה־callback: מה הדבר הראשון שהוא רואה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אין שגיאה" נכתב ב־Node כ־<code>null</code>. ולגבי פעמיים: מה יקרה אם ה־callback שולח אימייל או מחייב כרטיס?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כי אי אפשר לכתוב callback בלי לתת שם לפרמטר הראשון — הוא תמיד מול העיניים, ומזכיר לבדוק אותו. אילו השגיאה הייתה אחרונה, קל היה לכתוב <code>(data) =&gt; ...</code> ולשכוח שיש בכלל שגיאה.</li><li><code>callback(null, data)</code> — הצלחה, והתוצאה היא <code>data</code>. <code>callback(err)</code> — כישלון; אין תוצאה.</li><li>הצלחה. "אין שגיאה, ואין גם מה להחזיר" — למשל אחרי כתיבת קובץ.</li><li>מי שקורא לך מניח שה־callback הוא "סוף הפעולה". קריאה שנייה מריצה את ההמשך פעמיים: תשובה כפולה ללקוח, חיוב כפול, או קריסה ("כבר נשלחה תשובה"). זה הבאג שב־P10-E20.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>if (data)</code> במקום <code>if (err)</code> — קובץ ריק (<code>""</code>) הוא הצלחה עם ערך falsy.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E48">
+    <h3>P10-E48 · try סביב readFile <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האם <code>fs.readFile</code> <strong>זורקת</strong>? או שהיא מעבירה את השגיאה למקום אחר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>text?.length</code> — אם <code>text</code> הוא <code>undefined</code>, התוצאה <code>undefined</code> (בלי קריסה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const fs = require("node:fs");
+
+try {
+  fs.readFile("/no/such/file.txt", "utf8", (err, text) =&gt; {
+    console.log("ב־callback, אורך:", text?.length);
+  });
+  console.log("סוף ה־try");
+} catch (err) {
+  console.log("נתפס:", err.code);
+}
+console.log("אחרי");</code></pre>
+<pre class="terminal">סוף ה־try
+אחרי
+ב־callback, אורך: undefined</pre>
+<p>ה־<code>catch</code> לא רץ אף פעם: <code>readFile</code> לא זורקת, והשגיאה מגיעה ל־callback בפרמטר <code>err</code> — שהקוד פשוט התעלם ממנו. התיקון: לוותר על ה־<code>try</code>, ובתחילת ה־callback:</p>
+<pre><code class="lang-js">if (err) {
+  console.log("נכשל:", err.code);
+  return;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>try/catch</code> נוסף סביב הקריאה "ליתר ביטחון". הוא לא תופס כלום; רק <code>err</code> נושא את השגיאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E49">
+    <h3>P10-E49 · לקרוא פירמידה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ספור את הפונקציות שמקוננות זו בתוך זו — כל callback הוא רמה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סעיף 4: "בכל מקרה" = אחרי הצלחה <strong>וגם</strong> בכל אחת מנקודות הכישלון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ארבע רמות (<code>readConfig</code> ← <code>readUser</code> ← <code>readOrders</code> ← <code>sendReport</code>), וארבע בדיקות שגיאה זהות.</li><li>הקוד ימשיך אחרי השגיאה: למשל ינסה לקרוא <code>config.userId</code> כש־<code>config</code> הוא <code>undefined</code> — קריסה, או <code>handle</code> וגם המשך הזרימה.</li><li>לא. הכול ברצף — 400ms. בהנחה הזו, אפשר היה להריץ את שתיהן יחד ולחסוך 100ms, אבל עם callbacks זה דורש "מונה" כמו ב־P10-E37 — עוד קוד מסובך.</li><li>בחמישה מקומות: ארבע הפעמים שבהן קוראים ל־<code>handle</code>, ועוד אחת בסוף ההצלחה (או לעטוף את <code>handle</code>). בשיעור 3 זה יהיה <code>.finally()</code> אחד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־callback hell הוא רק "בעיה של הזחה". הבעיה האמיתית: טיפול בשגיאות שחוזר על עצמו, ו"תמיד בסוף" שאין לו מקום אחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E50">
+    <h3>P10-E50 · Sync או callback? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השאלה היא: האם יש בזמן הזה <strong>מישהו אחר</strong> שמחכה למלצר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפני שהשרת התחיל לקבל בקשות — אין אף אחד שמחכה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>Sync</strong> בסדר. אין שום דבר אחר לעשות עד שההגדרות נטענו; הקוד פשוט יותר.</li><li><strong>callback</strong> (או Promise). בזמן הקריאה שאר הבקשות צריכות לקבל שירות.</li><li><strong>Sync</strong> בסדר. כלי שורת פקודה של משתמש אחד, פעולה אחת.</li><li><strong>Sync</strong> בסדר. זה קורה פעם אחת, לפני שמישהו מחכה.</li><li><strong>לא זה ולא זה</strong> כמו שהוא: גם <code>readFile</code> יטען 2GB לזיכרון. קוראים בחתיכות (streams — בפרק 13); אבל בוודאי לא Sync.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Sync תמיד רע". הוא רע רק כשיש מישהו אחר שמחכה — כלומר בתוך שרת שכבר מקבל בקשות.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P10-E07">
     <h3>P10-E07 · callback בסגנון Node 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -216,7 +346,534 @@ a ו־b חייבים להיות מספרים</pre>
 
 </div></details>
   </div>
+<div class="ex typed" id="P10-E51">
+    <h3>P10-E51 · שורות מקובץ 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התבנית מהשיעור: <code class="long">fs.readFile(file, "utf8", (err, text) =&gt; { if (err) { callback(err); return; } ... })</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>text.split("\n")</code>, ואם האיבר האחרון ריק — <code>pop()</code>. (קובץ ריק לגמרי ← מערך ריק.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E51: שורות מקובץ
+const fs = require("node:fs");
+
+function readLines(file, callback) {
+  fs.readFile(file, "utf8", (err, text) =&gt; {
+    if (err) {
+      callback(err);
+      return;
+    }
+    const lines = text.split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    callback(null, lines);
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e51.txt");
+fs.writeFileSync(file, "קפה\nחלב\nלחם\n");
+readLines(file, (err, lines) =&gt; {
+  console.log(err, lines);
+  readLines("/no/such/file.txt", (err) =&gt; console.log(err.code));
+});
+
+module.exports = { readLines };</code></pre>
+<pre class="terminal">null [ 'קפה', 'חלב', 'לחם' ]
+ENOENT</pre>
+<p>בהדגמה הקריאה השנייה מתחילה רק בתוך ה־callback של הראשונה. אילו שתיהן היו יוצאות "למטבח" יחד, הסדר בפלט היה יכול להשתנות — מי שעונה קודם מודפס קודם. זה בדיוק המצב בשרת: לא יודעים מי יחזור ראשון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>fs.readFileSync</code> — זו כבר לא פונקציה עם callback אמיתי.</li><li>לשכוח את ה־<code>return</code> אחרי <code>callback(err)</code> — ואז <code>text.split</code> על <code>undefined</code> זורק בתוך ה־callback.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E52">
+    <h3>P10-E52 · שני קבצים, אחד אחרי השני 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי רמות: ה־callback של הקריאה הראשונה קורא ל־<code>fs.readFile(fileB, ...)</code>, ובתוך ה־callback השני — <code>callback(null, a + b)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בכל רמה: <code class="mid">if (err) { callback(err); return; }</code> לפני כל דבר אחר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E52: שני קבצים, אחד אחרי השני
+const fs = require("node:fs");
+
+function joinFiles(fileA, fileB, callback) {
+  fs.readFile(fileA, "utf8", (err, a) =&gt; {
+    if (err) {
+      callback(err);
+      return;
+    }
+    fs.readFile(fileB, "utf8", (err, b) =&gt; {
+      if (err) {
+        callback(err);
+        return;
+      }
+      callback(null, a + b);
+    });
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const head = path.join(os.tmpdir(), "p10-e52-head.txt");
+const body = path.join(os.tmpdir(), "p10-e52-body.txt");
+fs.writeFileSync(head, "כותרת\n");
+fs.writeFileSync(body, "גוף\n");
+joinFiles(head, body, (err, text) =&gt; {
+  console.log(err);
+  console.log(text);
+  joinFiles(head, "/no/such/file.txt", (err) =&gt; console.log("נכשל:", err.code));
+});
+
+module.exports = { joinFiles };</code></pre>
+<pre class="terminal">null
+כותרת
+גוף
+
+נכשל: ENOENT</pre>
+<p>שתי רמות, שתי בדיקות שגיאה זהות — פירמידה קטנה. הבודק מוודא גם שהקריאה השנייה לא מתחילה לפני שהראשונה הצליחה. בשיעור 3 תכתוב את אותו דבר כשרשרת שטוחה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל את שתי הקריאות יחד ולחבר "מה שהגיע" — הסדר לא מובטח, ו־<code>textA + textB</code> עלול להפוך.</li><li>אותו שם <code>err</code> בשתי הרמות בלי <code>return</code> — קל לבלבל איזו שגיאה נבדקת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E53">
+    <h3>P10-E53 · לשמור JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">let text; try { text = JSON.stringify(data, null, 2); } catch (err) { ...; return; }</code> — כאן <code>try</code> כן עובד, כי <code>stringify</code> סינכרוני.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code class="mid">fs.writeFile(file, text, (err) =&gt; ...)</code> מעבירים את <code>err</code> כמו שהוא: אם אין שגיאה הוא <code>null</code>. אבל עדיף במפורש: <code class="mid">if (err) ... else callback(null)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E53: לשמור JSON
+const fs = require("node:fs");
+
+function saveJson(file, data, callback) {
+  let text;
+  try {
+    text = JSON.stringify(data, null, 2);
+  } catch (err) {
+    setTimeout(() =&gt; callback(err), 0);
+    return;
+  }
+  fs.writeFile(file, text, (err) =&gt; {
+    if (err) {
+      callback(err);
+      return;
+    }
+    callback(null);
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e53.json");
+saveJson(file, { theme: "dark", fonts: [12, 14] }, (err) =&gt; {
+  console.log("נשמר?", err === null);
+  console.log(fs.readFileSync(file, "utf8"));
+  saveJson(file, { n: 10n }, (err) =&gt; console.log(err.message));
+});
+
+module.exports = { saveJson };</code></pre>
+<pre class="terminal">נשמר? true
+{
+  "theme": "dark",
+  "fonts": [
+    12,
+    14
+  ]
+}
+Do not know how to serialize a BigInt</pre>
+<p>שני סוגי שגיאות, שתי דרכים לתפוס: את <code>JSON.stringify</code> (סינכרוני) — <code>try/catch</code>; את הכתיבה (אסינכרונית) — <code>err</code> ב־callback. מבחוץ, מי שמשתמש ב־<code>saveJson</code> רואה דרך אחת בלבד: ה־callback.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתת ל־<code>stringify</code> לזרוק החוצה — מי שקרא ל־<code>saveJson</code> מצפה לשגיאות רק ב־callback.</li><li><code>callback(err)</code> מיד בתוך ה־<code>catch</code> — הבודק תופס שזה סינכרוני.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E54">
+    <h3>P10-E54 · לעטוף readFile ב־Promise 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">return new Promise((resolve, reject) =&gt; { fs.readFile(file, "utf8", (err, text) =&gt; { ... }); });</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־callback: <code class="mid">if (err) reject(err); else resolve(text);</code>. ול־<code>readUpper</code>: <code class="mid">return readText(file).then((t) =&gt; t.toUpperCase());</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E54: לעטוף readFile ב־Promise
+const fs = require("node:fs");
+
+function readText(file) {
+  return new Promise((resolve, reject) =&gt; {
+    fs.readFile(file, "utf8", (err, text) =&gt; {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(text);
+      }
+    });
+  });
+}
+
+function readUpper(file) {
+  return readText(file).then((t) =&gt; t.toUpperCase());
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e54.txt");
+fs.writeFileSync(file, "hello");
+readText(file)
+  .then((t) =&gt; console.log(t))
+  .then(() =&gt; readUpper(file))
+  .then((t) =&gt; console.log(t))
+  .then(() =&gt; readText("/no/such.txt"))
+  .catch((e) =&gt; console.log(e.code));
+
+module.exports = { readText, readUpper };</code></pre>
+<pre class="terminal">hello
+HELLO
+ENOENT</pre>
+<p>מבפנים — callback רגיל עם error-first. מבחוץ — Promise, שאפשר לשרשר. זה כל הסוד של "לעטוף ספרייה ישנה". ה־<code>return</code> ב־<code>readUpper</code> חשוב: בלעדיו הפונקציה מחזירה <code>undefined</code>, ואי אפשר לקרוא ל־<code>.then</code> על התוצאה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return text</code> מתוך ה־callback במקום <code>resolve(text)</code> — ה־Promise נשאר pending לנצח.</li><li>לכתוב גם <code>reject(err)</code> וגם <code>resolve(text)</code> בלי <code>else</code> — לא מזיק (Promise מסתיים פעם אחת), אבל מבלבל את מי שקורא.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P10-E55">
+    <h3>P10-E55 · תוצאות שמגיעות בסדר אחר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי מסתיים ראשון? ‏b (10ms), אחר כך c, ובסוף a.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>push</code> מוסיף לפי סדר ההגעה. <code>byIndex[i] = ...</code> שם כל תוצאה במקום שלה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">function fakeRead(name, ms, callback) {
+  setTimeout(() =&gt; callback(null, name.toUpperCase()), ms);
+}
+
+const files = [["a", 30], ["b", 10], ["c", 20]];
+const results = [];
+const byIndex = [];
+for (let i = 0; i &lt; files.length; i++) {
+  const [name, ms] = files[i];
+  fakeRead(name, ms, (err, text) =&gt; {
+    results.push(text);
+    byIndex[i] = text;
+    if (results.length === files.length) {
+      console.log("push:", results);
+      console.log("byIndex:", byIndex);
+    }
+  });
+}
+console.log("אחרי הלולאה:", results.length);</code></pre>
+<pre class="terminal">אחרי הלולאה: 0
+push: [ 'B', 'C', 'A' ]
+byIndex: [ 'A', 'B', 'C' ]</pre>
+<p>אחרי הלולאה עוד לא הגיעה אף תוצאה — לכן 0. <code>push</code> נותן את סדר ההגעה (B, C, A); השמה לפי <code>i</code> שומרת את הסדר המקורי. כשצריך "תוצאה לכל קובץ" — תמיד לפי אינדקס (ובשיעור 4 <code>Promise.all</code> עושה את זה לבד).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code class="mid">byIndex.length === files.length</code> כתנאי סיום: כשמגיע c (אינדקס 2) האורך כבר 3, למרות שבאינדקס 0 עוד אין כלום. לכן סופרים בנפרד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E56">
+    <h3>P10-E56 · throw או callback? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>parsePrice</code> זורקת <strong>בתוך</strong> ה־callback של <code>setTimeout</code>. מי מחכה שם עם <code>catch</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־setTimeout: <code class="mid">try { ... } catch (err) { callback(err); return; }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־<code>try/catch</code> שבחוץ כבר הסתיים כשהטיימר רץ (P10-E41). <code>parsePrice</code> זורקת, אף אחד לא תופס, והתוכנית <strong>קורסת</strong> — ו־<code>cb</code> לא נקרא בכלל.</li><li>תופסים בתוך ה־callback, ומעבירים הלאה:</li></ol>
+<pre><code class="lang-js">function parsePrice(text) {
+  const n = Number(text);
+  if (Number.isNaN(n)) throw new TypeError(`"${text}" אינו מחיר`);
+  return n;
+}
+
+function parsePriceLater(text, callback) {
+  setTimeout(() =&gt; {
+    let price;
+    try {
+      price = parsePrice(text);
+    } catch (err) {
+      callback(err);
+      return;
+    }
+    callback(null, price);
+  }, 10);
+}
+
+parsePriceLater("12.5", (err, p) =&gt; console.log(err, p));
+parsePriceLater("abc", (err) =&gt; console.log(err.name, err.message));</code></pre>
+<pre class="terminal">null 12.5
+TypeError "abc" אינו מחיר</pre>
+<p>שים לב: <code>callback(null, price)</code> נמצא <strong>מחוץ</strong> ל־<code>try</code>. אחרת, אם ה־callback עצמו זורק — ה־<code>catch</code> היה תופס את זה וקורא ל־callback פעם שנייה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את <code>callback(null, ...)</code> בתוך ה־<code>try</code> — callback כפול כשהוא זורק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E57">
+    <h3>P10-E57 · כל callback הוא אסינכרוני? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל על כל פונקציה: האם היא צריכה לחכות למשהו חיצוני (דיסק, רשת, זמן)?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מספר ההשוואות ש־<code>sort</code> עושה על 3 איברים — הרץ ובדוק. העיקר: כולן מודפסות לפני "C".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const fs = require("node:fs");
+
+[1, 2].forEach((n) =&gt; console.log("forEach", n));
+console.log("A");
+fs.readFile(__filename, "utf8", () =&gt; console.log("readFile"));
+console.log("B");
+const sorted = [3, 1, 2].sort((a, b) =&gt; {
+  console.log("השוואה");
+  return a - b;
+});
+console.log("C", sorted);</code></pre>
+<pre class="terminal">forEach 1
+forEach 2
+A
+B
+השוואה
+השוואה
+השוואה
+השוואה
+C [ 1, 2, 3 ]
+readFile</pre>
+<p>רק "readFile" מגיע בסוף. <code>forEach</code> ו־<code>sort</code> הם callbacks סינכרוניים: הפונקציה לא חוזרת עד שהם רצו. (מספר ההשוואות תלוי באלגוריתם של <code>sort</code> — לא חשוב לזכור.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שכל פונקציה שמקבלת פונקציה היא אסינכרונית — ואז לחכות לתוצאה של <code>map</code> עם <code>await</code> מיותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E58">
+    <h3>P10-E58 · לקרוא את כל הקבצים במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה משתנים: <code>texts = []</code>, ‏<code>left = files.length</code>, ‏<code>finished = false</code>. בכל callback: אם כבר <code>finished</code> — יוצאים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בשגיאה: <code class="mid">finished = true; callback(err);</code>. בהצלחה: <code class="long">texts[i] = text; left--; if (left === 0) { finished = true; callback(null, texts); }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E58: לקרוא את כל הקבצים במקביל
+const fs = require("node:fs");
+
+function readAll(files, callback) {
+  if (files.length === 0) {
+    setTimeout(() =&gt; callback(null, []), 0);
+    return;
+  }
+  const texts = [];
+  let left = files.length;
+  let finished = false;
+  files.forEach((file, i) =&gt; {
+    fs.readFile(file, "utf8", (err, text) =&gt; {
+      if (finished) return;
+      if (err) {
+        finished = true;
+        callback(err);
+        return;
+      }
+      texts[i] = text;
+      left--;
+      if (left === 0) {
+        finished = true;
+        callback(null, texts);
+      }
+    });
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const a = path.join(os.tmpdir(), "p10-e58-a.txt");
+const b = path.join(os.tmpdir(), "p10-e58-b.txt");
+fs.writeFileSync(a, "ראשון");
+fs.writeFileSync(b, "שני");
+readAll([a, b, a], (err, texts) =&gt; {
+  console.log(err, texts);
+  readAll([a, "/no/such.txt", b], (err) =&gt; console.log("נכשל:", err.code));
+});
+
+module.exports = { readAll };</code></pre>
+<pre class="terminal">null [ 'ראשון', 'שני', 'ראשון' ]
+נכשל: ENOENT</pre>
+<p>זה בערך מה ש־<code>Promise.all</code> עושה מבפנים: מתחיל הכול, סופר, שומר לפי אינדקס, ונכשל פעם אחת. עכשיו אתה יודע למה הוא כל כך שימושי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>texts.push(text)</code> — הסדר לפי מי שסיים קודם.</li><li>לבדוק <code class="mid">texts.length === files.length</code> — מערך עם "חור" באמצע כבר באורך מלא.</li><li>בלי הדגל <code>finished</code> — שתי שגיאות ← callback פעמיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E59">
+    <h3>P10-E59 · משתמשים מקובץ CSV 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const lines = text.split("\n");</code> ולולאה מ־<code>i = 1</code> (מדלגים על הכותרת). מספר השורה בקובץ הוא <code>i + 1</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך הלולאה: <code class="mid">if (lines[i].trim() === "") continue;</code>, ‏<code class="mid">const parts = lines[i].split(",").map((p) =&gt; p.trim());</code>. בשגיאה — <code class="mid">callback(new Error(...)); return;</code> (ה־<code>return</code> יוצא מה־callback כולו).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E59: משתמשים מקובץ CSV
+const fs = require("node:fs");
+
+function loadUsers(file, callback) {
+  fs.readFile(file, "utf8", (err, text) =&gt; {
+    if (err) {
+      callback(err);
+      return;
+    }
+    const lines = text.split("\n");
+    const users = [];
+    for (let i = 1; i &lt; lines.length; i++) {
+      if (lines[i].trim() === "") continue;
+      const parts = lines[i].split(",").map((p) =&gt; p.trim());
+      const age = Number(parts[1]);
+      if (parts.length !== 3 || parts[1] === "" || Number.isNaN(age)) {
+        callback(new Error(`שורה ${i + 1} לא תקינה`));
+        return;
+      }
+      users.push({ name: parts[0], age, city: parts[2] });
+    }
+    callback(null, users);
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e59.csv");
+fs.writeFileSync(file, "name,age,city\nדנה, 31 ,חיפה\nעומר,27,תל אביב\n");
+loadUsers(file, (err, users) =&gt; {
+  console.log(users);
+  fs.writeFileSync(file, "name,age,city\nדנה,31,חיפה\nעומר,זקן,תל אביב\n");
+  loadUsers(file, (err) =&gt; console.log(err.message));
+});
+
+module.exports = { loadUsers };</code></pre>
+<pre class="terminal">[
+  { name: 'דנה', age: 31, city: 'חיפה' },
+  { name: 'עומר', age: 27, city: 'תל אביב' }
+]
+שורה 3 לא תקינה</pre>
+<p>ה־<code>return</code> בתוך הלולאה יוצא מה־callback כולו — ולכן אחרי שגיאה לא מגיעים ל־<code>callback(null, users)</code>. <code>parts[1] === ""</code> נבדק בנפרד, כי <code>Number("")</code> הוא 0 ולא <code>NaN</code> (פרק 2).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>break</code> במקום <code>return</code> אחרי השגיאה — יוצאים מהלולאה וקוראים ל־callback פעם שנייה, עם הצלחה.</li><li>לספור שורות מ־0 — ההודעה אומרת "שורה 2" על השורה השלישית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E60">
+    <h3>P10-E60 · משימות ברצף בלי פירמידה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה פנימית <code>next(i)</code>: אם <code>i === tasks.length</code> — <code>callback(null, results)</code>. אחרת — <code class="mid">tasks[i]((err, result) =&gt; { ... })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־done: בשגיאה — <code>callback(err); return;</code>. אחרת <code class="mid">results.push(result); next(i + 1);</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E60: משימות ברצף בלי פירמידה
+function series(tasks, callback) {
+  const results = [];
+  if (tasks.length === 0) {
+    setTimeout(() =&gt; callback(null, results), 0);
+    return;
+  }
+  function next(i) {
+    if (i === tasks.length) {
+      callback(null, results);
+      return;
+    }
+    tasks[i]((err, result) =&gt; {
+      if (err) {
+        callback(err);
+        return;
+      }
+      results.push(result);
+      next(i + 1);
+    });
+  }
+  next(0);
+}
+
+const log = [];
+series([
+  (done) =&gt; setTimeout(() =&gt; { log.push("config"); done(null, "config"); }, 10),
+  (done) =&gt; setTimeout(() =&gt; { log.push("user"); done(null, "user"); }, 5),
+], (err, results) =&gt; {
+  console.log(err, results, log);
+  series([
+    (done) =&gt; done(new Error("אין הגדרות")),
+    (done) =&gt; done(null, "לא אמור לרוץ"),
+  ], (err) =&gt; console.log("נכשל:", err.message));
+});
+
+module.exports = { series };</code></pre>
+<pre class="terminal">null [ 'config', 'user' ] [ 'config', 'user' ]
+נכשל: אין הגדרות</pre>
+<p>השלב השני (5ms) רץ אחרי הראשון (10ms) למרות שהוא מהיר יותר — כי הוא <strong>מתחיל</strong> רק כשהראשון סיים. ארבעת שלבי הפירמידה מהשיעור הופכים למערך שטוח של ארבע פונקציות, עם טיפול בשגיאה במקום אחד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להריץ את כל המשימות בלולאה — הן רצות במקביל, ולא ברצף.</li><li>לקרוא ל־<code>next(i + 1)</code> גם אחרי שגיאה — ממשיכים לשלב הבא אחרי כישלון.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-promises.html"><small>הבא</small>שיעור 3 — Promises</a></div>
 </main>
 </body>

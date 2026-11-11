@@ -51,6 +51,188 @@ D 7</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P10-E61">
+    <h3>P10-E61 · Promise מסתיים פעם אחת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חזור לאיור 1 בשיעור: מ־pending עוברים פעם אחת, ואחרי זה Promise "קפוא".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>resolve</code> ו־<code>reject</code> הם פונקציות רגילות — הן לא עוצרות את הקוד שאחריהן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const p = new Promise((resolve, reject) =&gt; {
+  resolve("ראשון");
+  reject(new Error("מאוחר מדי"));
+  resolve("שני");
+  console.log("הקוד בפנים ממשיך לרוץ");
+});
+
+p.then((v) =&gt; console.log("then:", v)).catch((e) =&gt; console.log("catch:", e.message));
+p.then((v) =&gt; console.log("then נוסף:", v));</code></pre>
+<pre class="terminal">הקוד בפנים ממשיך לרוץ
+then: ראשון
+then נוסף: ראשון</pre>
+<p>הקריאה הראשונה קובעת: ה־Promise הצליח עם "ראשון", וכל הקריאות שאחריה מתעלמות בשקט. אפשר לחבר כמה <code>then</code> לאותו Promise — כולם מקבלים את אותו ערך. וזה ההבדל הגדול מ־callback: Promise <strong>לא יכול</strong> "להיקרא פעמיים" (P10-E20).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>resolve</code> עובד כמו <code>return</code>. הוא לא יוצא מהפונקציה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E62">
+    <h3>P10-E62 · finally ומה עובר הלאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>finally</code> לא מקבל את הערך ולא משנה אותו — הערך (או השגיאה) עובר דרכו הלאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שגיאה מדלגים על <code>then</code>, אבל לא על <code>finally</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">Promise.resolve(5)
+  .finally(() =&gt; {
+    console.log("finally 1");
+    return 100;
+  })
+  .then((x) =&gt; {
+    console.log("then 1:", x);
+    throw new Error("שבר");
+  })
+  .finally(() =&gt; console.log("finally 2"))
+  .then((x) =&gt; console.log("then 2:", x))
+  .catch((e) =&gt; console.log("catch:", e.message))
+  .finally(() =&gt; console.log("finally 3"));</code></pre>
+<pre class="terminal">finally 1
+then 1: 5
+finally 2
+catch: שבר
+finally 3</pre>
+<p>ה־<code>return 100</code> ב־finally 1 לא שינה כלום — <code>then 1</code> קיבל 5. השגיאה עברה דרך finally 2 (שרץ) ודרך then 2 (שדולג) עד ה־catch. ‏finally 3 רץ אחרי ש־catch "תיקן" את השרשרת. זה התפקיד של finally: ניקוי (לסגור חיבור, לכבות "טוען...") בלי להתערב בתוצאה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־finally מקבל את הערך כפרמטר — הוא מקבל כלום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E63">
+    <h3>P10-E63 · מה רץ מיד ב־new Promise? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשיעור: "הפונקציה שבפנים רצה מיד".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־<code>then</code> רץ רק אחרי ש־<code>resolve</code> נקרא — וזה קורה בתוך הטיימר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">console.log(1);
+const p = new Promise((resolve) =&gt; {
+  console.log(2);
+  setTimeout(() =&gt; {
+    console.log(5);
+    resolve("סוף");
+  }, 10);
+  console.log(3);
+});
+p.then((v) =&gt; console.log(6, v));
+console.log(4);</code></pre>
+<pre class="terminal">1
+2
+3
+4
+5
+6 סוף</pre>
+<p>הפונקציה שמעבירים ל־<code>new Promise</code> רצה <strong>סינכרונית</strong>, בזמן היצירה. מה שאסינכרוני הוא רק מה שבתוכה מחכה (כאן — הטיימר). לכן <code>new Promise</code> לא "מעביר קוד לרקע": לולאה כבדה בתוכו תחסום בדיוק כמו בחוץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־2 ו־3 יודפסו אחרי 4 "כי זה Promise".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E64">
+    <h3>P10-E64 · then שלא מחכה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־<code>then</code> הראשון קורא ל־<code>save</code> — אבל מה הוא <strong>מחזיר</strong>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם <code>then</code> מחזיר Promise, השרשרת מחכה לו. אם הוא מחזיר <code>undefined</code> — לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+function save(item) {
+  return sleep(20).then(() =&gt; {
+    console.log("נשמר:", item);
+    return item.length;
+  });
+}
+
+Promise.resolve("מחברת")
+  .then((item) =&gt; {
+    save(item);
+  })
+  .then((len) =&gt; console.log("אורך:", len))
+  .finally(() =&gt; console.log("סיימנו"));</code></pre>
+<pre class="terminal">אורך: undefined
+סיימנו
+נשמר: מחברת</pre>
+<p>"סיימנו" מודפס <strong>לפני</strong> "נשמר": השרשרת לא חיכתה לשמירה, ו־<code>len</code> הוא <code>undefined</code>. גרוע מזה — אם <code>save</code> הייתה נכשלת, אף <code>catch</code> לא היה תופס (unhandled rejection). התיקון: <code class="mid">.then((item) =&gt; save(item))</code> — בלי סוגריים מסולסלים, או עם <code>return save(item);</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>sleep</code> נוסף "כדי לחכות" — מסתיר את הבאג ולא מתקן אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E65">
+    <h3>P10-E65 · איזה catch תופס? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>catch</code> תופס רק שגיאות <strong>מלמעלה</strong> — מה שקרה לפניו בשרשרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ש־catch החזיר ערך, השרשרת שוב "תקינה" — ה־then הבא רץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">Promise.reject(new Error("א"))
+  .then(() =&gt; console.log("1"))
+  .catch((e) =&gt; {
+    console.log("catch ראשון:", e.message);
+    return "תוקן";
+  })
+  .then((v) =&gt; {
+    console.log("2", v);
+    throw new Error("ב");
+  })
+  .then(() =&gt; console.log("3"))
+  .catch((e) =&gt; console.log("catch שני:", e.message))
+  .then(() =&gt; console.log("4"));</code></pre>
+<pre class="terminal">catch ראשון: א
+2 תוקן
+catch שני: ב
+4</pre>
+<p>כל <code>catch</code> אחראי על הקטע שמעליו, עד ה־catch הקודם. השגיאה "ב" נזרקה <strong>אחרי</strong> ה־catch הראשון, ולכן רק השני יכול לתפוס אותה. ‏"1" ו־"3" לא מודפסים — דילגו עליהם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־catch אחד בתחילת השרשרת "מגן" על כולה. הוא מגן רק על מה שלפניו.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P10-E09">
     <h3>P10-E09 · שרשרת then 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -250,7 +432,384 @@ module.exports = { priceWithShipping };</code></pre>
 
 </div></details>
   </div>
+<div class="ex typed" id="P10-E66">
+    <h3>P10-E66 · בדיקת גיל — כ־Promise 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמו <code>delayedValue</code> בשיעור: <code class="long">return new Promise((resolve, reject) =&gt; { setTimeout(() =&gt; { ... }, 10); });</code></p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך הטיימר: <code class="long">if (typeof age !== "number" || age &lt; 0) { reject(new RangeError("גיל לא תקין")); return; }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E66: בדיקת גיל — כ־Promise
+function checkAge(age) {
+  return new Promise((resolve, reject) =&gt; {
+    setTimeout(() =&gt; {
+      if (typeof age !== "number" || Number.isNaN(age) || age &lt; 0) {
+        reject(new RangeError("גיל לא תקין"));
+        return;
+      }
+      resolve(age &gt;= 18 ? "מותר" : "אסור");
+    }, 10);
+  });
+}
+
+checkAge(20)
+  .then(console.log)
+  .then(() =&gt; checkAge(12))
+  .then(console.log)
+  .then(() =&gt; checkAge(-3))
+  .catch((e) =&gt; console.log(e.name, e.message));
+
+module.exports = { checkAge };</code></pre>
+<pre class="terminal">מותר
+אסור
+RangeError גיל לא תקין</pre>
+<p>שלושה מצבים, שתי דרכים לסיים: <code>resolve</code> לשתי התשובות הלגיטימיות, ‏<code>reject</code> לקלט שאי אפשר לענות עליו. "אסור" הוא <strong>לא</strong> שגיאה — זו תשובה. (<code>Number.isNaN</code> תופס את <code>NaN</code>, שהוא דווקא מסוג <code>"number"</code>.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>reject("גיל לא תקין")</code> עם מחרוזת — אין <code>message</code>, ואין stack. תמיד <code>Error</code>.</li><li>להחליט מחוץ לטיימר ולקרוא ל־<code>reject</code> מיד — הבודק מצפה שגם הכישלון יגיע אחרי 10ms.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E67">
+    <h3>P10-E67 · קורא JSON עם then 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const fs = require("node:fs/promises");</code> ו־<code class="mid">return fs.readFile(file, "utf8").then((text) =&gt; ...)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־then: <code>try { return JSON.parse(text); } catch { throw new Error(<code>JSON לא תקין ב־${file}</code>); }</code>. שגיאה שנזרקת בתוך then הופכת לכישלון של ה־Promise. כך שגיאת הקריאה לא עוברת דרך ה־try, ונשארת כמו שהיא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E67: קורא JSON עם then
+const fs = require("node:fs/promises");
+
+function readJson(file) {
+  return fs.readFile(file, "utf8").then((text) =&gt; {
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`JSON לא תקין ב־${file}`);
+    }
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const good = path.join(os.tmpdir(), "p10-e67.json");
+const bad = path.join(os.tmpdir(), "p10-e67-bad.json");
+require("node:fs").writeFileSync(good, '{"port": 8080}');
+require("node:fs").writeFileSync(bad, "{port: 8080}");
+readJson(good)
+  .then((cfg) =&gt; console.log(cfg.port))
+  .then(() =&gt; readJson(bad))
+  .catch((e) =&gt; console.log(e.message.replace(os.tmpdir(), "&lt;tmp&gt;")))
+  .then(() =&gt; readJson("/no/such.json"))
+  .catch((e) =&gt; console.log(e.code));
+
+module.exports = { readJson };</code></pre>
+<pre class="terminal">8080
+JSON לא תקין ב־&lt;tmp&gt;/p10-e67-bad.json
+ENOENT</pre>
+<p>שים לב איפה ה־<code>try</code>: רק סביב <code>JSON.parse</code>, שהוא סינכרוני. שגיאת קריאה לא עוברת דרכו — היא דוחה את ה־Promise של <code>readFile</code>, וה־then שלנו פשוט לא רץ. ככה כל סוג שגיאה מגיע למי שקרא עם המידע הנכון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">.catch(() =&gt; { throw new Error("JSON לא תקין...") })</code> בסוף השרשרת — גם "קובץ לא קיים" יקבל את ההודעה הזו, וה־<code>code</code> ילך לאיבוד.</li><li>לשכוח <code>return</code> לפני <code>fs.readFile(...)</code> — הפונקציה מחזירה <code>undefined</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E68">
+    <h3>P10-E68 · העתק באותיות גדולות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני then: הראשון מחזיר את ה־Promise של <code>fs.writeFile</code> (כדי שהשרשרת תחכה לו); השני מחזיר את האורך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האורך צריך לעבור מה־then הראשון לשני. אפשרות: <code class="long">.then((text) =&gt; fs.writeFile(dest, text.toUpperCase()).then(() =&gt; text.length))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E68: העתק באותיות גדולות
+const fs = require("node:fs/promises");
+
+function copyUpper(src, dest) {
+  return fs.readFile(src, "utf8").then((text) =&gt; {
+    const upper = text.toUpperCase();
+    return fs.writeFile(dest, upper).then(() =&gt; upper.length);
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const a = path.join(os.tmpdir(), "p10-e68-a.txt");
+const b = path.join(os.tmpdir(), "p10-e68-b.txt");
+require("node:fs").writeFileSync(a, "hello");
+copyUpper(a, b)
+  .then((n) =&gt; console.log(n, require("node:fs").readFileSync(b, "utf8")))
+  .then(() =&gt; copyUpper("/no/such.txt", b))
+  .catch((e) =&gt; console.log(e.code));
+
+module.exports = { copyUpper };</code></pre>
+<pre class="terminal">5 HELLO
+ENOENT</pre>
+<p><code>fs.writeFile</code> מצליח עם <code>undefined</code>, ולכן ה־<code>.then(() =&gt; upper.length)</code> הפנימי "מחליף" את הערך באורך. ה־<code>return</code> לפניו גורם לשרשרת החיצונית לחכות לכתיבה — אחרת מי שקרא היה מקבל את האורך לפני שהקובץ נכתב (הבודק קורא את הקובץ ברגע שה־Promise מצליח).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>fs.writeFile(...)</code> בלי <code>return</code> — ה־Promise מצליח לפני שהכתיבה הסתיימה, ושגיאת כתיבה הולכת לאיבוד.</li><li><code>fs.writeFileSync</code> בתוך ה־then — עובד, אבל חוסם; המשימה היא שרשרת.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P10-E69">
+    <h3>P10-E69 · Promise, טיימר ו־executor <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד הסינכרוני: B ו־F. אחר כך — מי כבר מוכן בתור ה־Promises?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כש־C רץ, הוא "משחרר" את ה־then של D — שנכנס לסוף התור, אחרי E.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">setTimeout(() =&gt; console.log("A"), 0);
+const p = new Promise((resolve) =&gt; {
+  console.log("B");
+  resolve("C");
+});
+p.then((v) =&gt; {
+  console.log(v);
+  return "D";
+}).then((v) =&gt; console.log(v));
+Promise.resolve().then(() =&gt; console.log("E"));
+console.log("F");</code></pre>
+<pre class="terminal">B
+F
+C
+E
+D
+A</pre>
+<p>בתור ה־Promises בהתחלה: C ו־E (לפי סדר הרישום). C רץ, ומכניס את D לסוף התור — אחרי E. רק כשהתור ריק לגמרי — הטיימר A.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים D מיד אחרי C, כאילו כל השרשרת רצה "ברצף אחד". כל then הוא משימה נפרדת בתור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E70">
+    <h3>P10-E70 · אותה פעולה — callback מול Promise <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ספור את בדיקות השגיאה בכל גרסה. ומה קורה בכל גרסה אם <code>config</code> הוא <code>undefined</code> ו־<code>config.userId</code> זורק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה קורה בכל גרסה אם <code>readConfig</code> בטעות קוראת ל־callback פעמיים?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>שגיאות במקום אחד:</strong> ב־Promises יש <code>catch</code> אחד; ב־callbacks — בדיקה בכל רמה.</li><li><strong>שגיאה שנזרקת:</strong> אם <code>config.userId</code> זורק, בגרסת ה־Promises ה־catch תופס. בגרסת ה־callbacks — זריקה בתוך callback מפילה את התוכנית (P10-E56).</li><li><strong>"פעם אחת":</strong> Promise מסתיים פעם אחת (P10-E61). callback יכול בטעות להיקרא פעמיים, ואז <code>readUser</code> רץ פעמיים.</li><li><strong>שטוח מול מקונן:</strong> שלב נוסף ב־Promises = עוד שורת <code>then</code>; ב־callbacks = עוד רמת הזחה.</li><li><strong>ערך שאפשר להחזיר:</strong> פונקציה שמחזירה Promise אפשר להעביר הלאה ולחבר אליה עוד then או <code>finally</code>; את גרסת ה־callback אי אפשר "להחזיר".</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ב־Promises אין שגיאות". יש — הן פשוט מגיעות למקום אחד, ובלי catch הן מפילות את Node (unhandled rejection).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E71">
+    <h3>P10-E71 · map שמחזיר Promises <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>typeof</code> של Promise הוא <code>"object"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>0 + promise</code> ← <code>"0[object Promise]"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const sleep = (ms, v) =&gt; new Promise((r) =&gt; setTimeout(() =&gt; r(v), ms));
+
+const results = [1, 2, 3].map((n) =&gt; sleep(10, n * 2));
+console.log(results.length, results[0] instanceof Promise);
+console.log(results.map((r) =&gt; typeof r));
+results[2].then((v) =&gt; console.log("השלישי:", v));
+const sum = results.reduce((s, r) =&gt; s + r, 0);
+console.log(typeof sum, sum.slice(0, 7));</code></pre>
+<pre class="terminal">3 true
+[ 'object', 'object', 'object' ]
+string 0[objec
+השלישי: 6</pre>
+<p>שלוש ה"הבטחות" יצאו לדרך יחד (המקביליות כבר כאן!), אבל המערך מכיל הבטחות, לא מספרים. לחשב סכום אפשר רק אחרי שכולן הסתיימו — עם <code>then</code> על כל אחת, או עם <code>Promise.all</code> (שיעור 4).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסכם מערך של Promises עם <code>reduce</code> ולקבל מחרוזת מוזרה במקום מספר — באג נפוץ מאוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E72">
+    <h3>P10-E72 · promisify משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">return (...args) =&gt; new Promise((resolve, reject) =&gt; { fn(...args, callback); });</code> — מה ה־callback?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">(err, value) =&gt; { if (err) reject(err); else resolve(value); }</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E72: promisify משלך
+function promisify(fn) {
+  return (...args) =&gt;
+    new Promise((resolve, reject) =&gt; {
+      fn(...args, (err, value) =&gt; {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(value);
+        }
+      });
+    });
+}
+
+function addLater(a, b, cb) {
+  setTimeout(() =&gt; (typeof a === "number" ? cb(null, a + b) : cb(new TypeError("לא מספר"))), 5);
+}
+const add = promisify(addLater);
+add(2, 3)
+  .then(console.log)
+  .then(() =&gt; add("x", 1))
+  .catch((e) =&gt; console.log(e.message))
+  .then(() =&gt; promisify(require("node:fs").readFile)("/no/such.txt", "utf8"))
+  .catch((e) =&gt; console.log(e.code));
+
+module.exports = { promisify };</code></pre>
+<pre class="terminal">5
+לא מספר
+ENOENT</pre>
+<p>כל הקסם הוא ב־<code>...args</code> פעמיים: פעם כדי <strong>לאסוף</strong> את הארגומנטים שמי שקרא העביר, ופעם כדי <strong>לפזר</strong> אותם חזרה לפונקציה המקורית — עם ה־callback שלנו בסוף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>fn(args, callback)</code> בלי spread — הפונקציה מקבלת מערך כארגומנט ראשון.</li><li>לקרוא ל־<code>fn</code> מיד ב־<code>promisify</code> (לא בתוך הפונקציה שמוחזרת) — אין עדיין ארגומנטים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E73">
+    <h3>P10-E73 · סכום המספרים בקובץ 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">fs.readFile(file, "utf8").then((text) =&gt; { ... })</code>. בפנים — לולאה רגילה על <code>text.split("\n")</code>, עם <code>sum</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>const t = lines[i].trim(); if (t === "") continue; const n = Number(t); if (Number.isNaN(n)) throw new Error(<code class="mid">שורה ${i + 1}: "${t}" אינו מספר</code>);</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E73: סכום המספרים בקובץ
+const fs = require("node:fs/promises");
+
+function sumFile(file) {
+  return fs.readFile(file, "utf8").then((text) =&gt; {
+    const lines = text.split("\n");
+    let sum = 0;
+    for (let i = 0; i &lt; lines.length; i++) {
+      const t = lines[i].trim();
+      if (t === "") continue;
+      const n = Number(t);
+      if (Number.isNaN(n)) throw new Error(`שורה ${i + 1}: "${t}" אינו מספר`);
+      sum += n;
+    }
+    return sum;
+  });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e73.txt");
+require("node:fs").writeFileSync(file, "10\n 2.5\n\n7\n");
+sumFile(file)
+  .then(console.log)
+  .then(() =&gt; {
+    require("node:fs").writeFileSync(file, "10\nעשרים\n");
+    return sumFile(file);
+  })
+  .catch((e) =&gt; console.log(e.message));
+
+module.exports = { sumFile };</code></pre>
+<pre class="terminal">19.5
+שורה 2: "עשרים" אינו מספר</pre>
+<p>אין כאן <code>reject</code> — ה־<code>throw</code> בתוך then עושה את אותה עבודה. זה הופך קוד "רגיל" (לולאה, תנאים, throw מפרק 8) לחלק משרשרת Promises בלי לשנות אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">text.split("\n").map(Number)</code> — שורה ריקה הופכת ל־0 בשקט, ושורה עם טקסט ל־<code>NaN</code> שמקלקל את כל הסכום.</li><li>לספור שורות בלי השורות הריקות — מספר השורה בהודעה לא תואם לקובץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E74">
+    <h3>P10-E74 · הגדרות עם ברירות מחדל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">fs.readFile(file, "utf8").then((text) =&gt; ({ ...defaults, ...JSON.parse(text) })).catch((err) =&gt; { ... })</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־catch: <code class="long">if (err.code === "ENOENT") return { ...defaults }; throw err;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E74: הגדרות עם ברירות מחדל
+const fs = require("node:fs/promises");
+
+function loadSettings(file, defaults) {
+  return fs
+    .readFile(file, "utf8")
+    .then((text) =&gt; ({ ...defaults, ...JSON.parse(text) }))
+    .catch((err) =&gt; {
+      if (err.code === "ENOENT") return { ...defaults };
+      throw err;
+    });
+}
+
+const os = require("node:os");
+const path = require("node:path");
+const file = path.join(os.tmpdir(), "p10-e74.json");
+require("node:fs").writeFileSync(file, '{"port": 8080, "name": "shop"}');
+const defaults = { port: 3000, debug: false };
+loadSettings(file, defaults)
+  .then((s) =&gt; console.log(s))
+  .then(() =&gt; loadSettings("/no/such.json", defaults))
+  .then((s) =&gt; console.log(s, s === defaults))
+  .then(() =&gt; loadSettings(os.tmpdir(), defaults))
+  .catch((e) =&gt; console.log("נכשל:", e.code));
+
+module.exports = { loadSettings };</code></pre>
+<pre class="terminal">{ port: 8080, debug: false, name: 'shop' }
+{ port: 3000, debug: false } false
+נכשל: EISDIR</pre>
+<p>קובץ שלא קיים הוא מצב צפוי ("לא הגדירו כלום") — ולכן הופכים אותו להצלחה. תיקייה במקום קובץ (<code>EISDIR</code>) או JSON שבור הם טעויות שמישהו צריך לראות — ולכן זורקים הלאה. בלי ה־<code>throw err</code>, ה־catch היה "בולע" אותן ומחזיר <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>.catch(() =&gt; defaults)</code> — כל שגיאה נבלעת, כולל JSON שבור שמישהו כתב בטעות; והאובייקט המקורי מוחזר (מי שישנה אותו ישנה את ה־defaults).</li><li><code class="mid">Object.assign(defaults, data)</code> — משנה את <code>defaults</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-async-await.html"><small>הבא</small>שיעור 4 — async/await, מקביליות וכשלים</a></div>
 </main>
 </body>
