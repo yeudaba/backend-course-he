@@ -34,6 +34,131 @@
 
 </div></details>
   </div>
+<div class="ex" id="P14-E44">
+    <h3>P14-E44 · איזה header? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל התשובות בטבלה בסעיף 2 של השיעור. במצב 5 יש <strong>שני</strong> headers — אחד לכל כיוון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Content-Type</code> מתאר את מה ש<strong>נשלח</strong>; <code>Accept</code> מבקש את מה ש<strong>יחזור</strong>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>Location: /orders/42</code> — בתשובה (עם 201).</li><li><code class="mid">Content-Type: application/json</code> — בבקשה.</li><li><code>Accept: application/json</code> — בבקשה.</li><li><code class="mid">Authorization: Bearer eyJ...</code> — בבקשה.</li><li><code>Set-Cookie: lang=he</code> בתשובה, ואחר כך <code>Cookie: lang=he</code> בכל בקשה (הדפדפן מוסיף לבד).</li><li><code>X-Request-Id: 7f3a...</code> — בתשובה (ולפעמים הלקוח שולח אותו כבר בבקשה).</li><li><code class="mid">Cache-Control: max-age=3600</code> — בתשובה (פרק 26).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח <code>Content-Type</code> ב־GET בלי גוף "כדי לקבל JSON" — זה התפקיד של <code>Accept</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E45">
+    <h3>P14-E45 · מה שבור בהודעה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חזור לטבלה "חלק / בבקשה / בתשובה" — מה <strong>חובה</strong> בין headers לגוף? ובאיזו תשובה אין גוף?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בהודעה (ד) הבעיה לא במבנה — היא במה שהלקוח (או כלי ניטור) יסיק מהשורה הראשונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol type="a"><li><strong>אין שורה ריקה</strong> לפני הגוף. השרת יקרא את <code>{"name":...}</code> כעוד header (לא תקין) — ובדרך כלל יחזיר 400.</li><li><strong>Content-Type שגוי.</strong> הגוף הוא JSON, אבל ה־header אומר טקסט. שרת קפדן יחזיר 415, ו־Express (פרק 15) פשוט לא יפרש את הגוף — <code>req.body</code> יהיה <code>undefined</code>.</li><li><strong>204 = "אין תוכן"</strong> — לתשובה הזו אסור גוף. הלקוח יתעלם ממנו (או יתבלבל בחיבור). אם רוצים להחזיר משהו ← 200.</li><li><strong>status שקרי.</strong> הגוף אומר "לא נמצא", ה־status אומר "הצליח". <code>res.ok</code> יהיה <code>true</code>, ניטור יראה "הכול תקין", ו־cache עלול לשמור את השגיאה. ← 404.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהגוף "מספיק" כדי לדווח על שגיאה. כלים — fetch, ניטור, cache, retry — מסתכלים קודם על ה־status.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E46">
+    <h3>P14-E46 · השרת "זוכר" — ומה רע בזה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>יש משתנה אחד לכל השרת — לא אחד לכל משתמש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>stateless: "כל בקשה צריכה להכיל את כל מה שצריך כדי לטפל בה — כולל <strong>מי</strong> שלח אותה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">let currentUser = null;
+
+function handle(req) {
+  if (req.path === "/login") {
+    currentUser = req.body.name;
+    return `שלום ${currentUser}`;
+  }
+  if (req.path === "/me") return `אתה ${currentUser}`;
+}
+
+console.log(handle({ path: "/login", body: { name: "דנה" } }));
+console.log(handle({ path: "/login", body: { name: "יוסי" } }));
+console.log(handle({ path: "/me" })); // דנה שולחת</code></pre>
+<pre class="terminal">שלום דנה
+שלום יוסי
+אתה יוסי</pre>
+<p>דנה רואה את הפרטים של יוסי — דליפת מידע. (1) הבקשה צריכה לשאת הוכחה: <code class="mid">Authorization: Bearer &lt;token&gt;</code> או cookie, והשרת מזהה לפיה את המשתמש <strong>בכל בקשה</strong> מחדש. (2) <code>Map</code> בזיכרון של עותק א׳ לא קיים בעותק ב׳: דנה מתחברת מול א׳, הבקשה הבאה מגיעה ל־ב׳ — "לא מחוברת". לכן או שהטוקן עצמו נושא את הזהות (JWT, פרק 21), או שהמידע נשמר במקום משותף (מסד, Redis — פרק 26).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה עובד אצלי" — בבדיקה עם משתמש אחד ושרת אחד הבאג לא נראה בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E47">
+    <h3>P14-E47 · ביקורת על תשובת JSON <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות שדות, תאריך, כסף, מבנה של רשימה, ומבנה של שגיאה. ואל תשכח את ה־status.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"1/11/26" — זה 1 בנובמבר או 11 בינואר? ובאיזה אזור זמן?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>שמות לא אחידים</strong> (<code>Order_ID</code>, <code>Total</code>) ← camelCase: <code>id</code>, <code>total</code>.</li><li><strong>תאריך דו־משמעי ובלי אזור זמן</strong> ← ISO 8601: <code class="mid">"createdAt": "2026-11-01T10:00:00Z"</code>.</li><li><strong>כסף כ־float</strong> עם שארית ← אגורות (<code>"totalAgorot": 5970</code>) או מחרוזת (<code>"59.70"</code>).</li><li><strong>רשימה כמחרוזת</strong> ← מערך של אובייקטים: <code class="mid">"items": [{"name":"מקלדת"}, ...]</code> — הלקוח לא צריך לפרק טקסט.</li><li><code>"status":"ok"</code> <strong>מיותר ומבלבל</strong> — הסטטוס כבר ב־HTTP. (אם הכוונה היא מצב ההזמנה — שם ברור: <code>"orderStatus": "paid"</code>.)</li><li><strong>שגיאה עם 200</strong> ← 404.</li><li><strong>מבנה שגיאה לא קבוע</strong> ← <code class="mid">{"error":{"code":"NOT_FOUND","message":"ההזמנה לא נמצאה"}}</code> — הלקוח תמיד יודע איפה לחפש.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן רק את ה"נראות" (שמות) ולהשאיר את ה־200 — זו הבעיה שגורמת לבאגים אצל הלקוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E48">
+    <h3>P14-E48 · למה Content-Length הוא 29? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Buffer.byteLength</code> סופר <strong>בתים</strong> בקידוד UTF-8, ו־<code>length</code> סופר תווים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אות אנגלית — בית אחד. אות עברית — שניים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const body = JSON.stringify({ name: "מסך", price: 899 });
+console.log(body);
+console.log(body.length, Buffer.byteLength(body));
+console.log("abc".length, Buffer.byteLength("abc"));
+console.log("שלום".length, Buffer.byteLength("שלום"));</code></pre>
+<pre class="terminal">{"name":"מסך","price":899}
+26 29
+3 3
+4 8</pre>
+<p><code>Content-Length</code> הוא מספר <strong>הבתים</strong> שעוברים ברשת: 26 תווים, מתוכם 3 אותיות עבריות ← 3 בתים נוספים ← 29. אם השרת יקבל 26, הוא יקרא רק 26 בתים — הגוף ייחתך באמצע (<code>{"name":"מסך","price":8</code>), ‏<code>JSON.parse</code> ייכשל, והבתים שנשארו ייקראו כ"התחלה" של הבקשה הבאה. לכן אף פעם לא מחשבים <code>Content-Length</code> עם <code>.length</code> (P14-E14).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק עם טקסט באנגלית — שם תווים ובתים שווים, והבאג מופיע רק אצל משתמשים בעברית.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P14-E08">
     <h3>P14-E08 · פירוק headers 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -255,7 +380,457 @@ console.log(parseCookies(undefined));</code></pre>
 
 </div></details>
   </div>
+<div class="ex typed" id="P14-E49">
+    <h3>P14-E49 · פירוק שורת status 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const [first, code, ...rest] = line.split(" ");</code> — ‏<code>rest.join(" ")</code> מחזיר את הטקסט, עם הרווחים.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>/^\d{3}$/.test(code)</code> — בדיוק 3 ספרות. אחר כך <code>Number(code)</code> ובדיקת טווח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E49: פירוק שורת status
+export function parseStatusLine(line) {
+  const [first, code = "", ...rest] = line.trim().split(" ");
+  const status = Number(code);
+  if (!first.startsWith("HTTP/") || first.length === 5 || !/^\d{3}$/.test(code) || status &lt; 100 || status &gt; 599) {
+    throw new Error(`שורת status לא תקינה: ${line}`);
+  }
+  return { version: first.slice(5), status, text: rest.join(" ") };
+}
+
+console.log(parseStatusLine("HTTP/1.1 404 Not Found"));
+console.log(parseStatusLine("HTTP/2 200"));
+console.log(parseStatusLine("HTTP/1.1 503 Service Unavailable"));
+for (const bad of ["404 Not Found", "HTTP/1.1 OK", "HTTP/1.1 99 Old", "HTTP/1.1 2000 Big"]) {
+  try {
+    parseStatusLine(bad);
+  } catch (err) {
+    console.log(err.message);
+  }
+}</code></pre>
+<pre class="terminal">{ version: '1.1', status: 404, text: 'Not Found' }
+{ version: '2', status: 200, text: '' }
+{ version: '1.1', status: 503, text: 'Service Unavailable' }
+שורת status לא תקינה: 404 Not Found
+שורת status לא תקינה: HTTP/1.1 OK
+שורת status לא תקינה: HTTP/1.1 99 Old
+שורת status לא תקינה: HTTP/1.1 2000 Big</pre>
+<p>פירוק עם <code>...rest</code> שומר על כל מה שאחרי ה־status — <code>"Service Unavailable"</code> נשאר שלם. ב־HTTP/2 אין בכלל טקסט, ולכן הלקוח צריך להסתמך רק על המספר — עוד סיבה לא לבנות לוגיקה על הטקסט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>line.split(" ")[2]</code> כטקסט — מקבלים רק <code>"Not"</code>.</li><li><code>Number("2O0")</code> ובדיקת <code>isNaN</code> בלבד — לא תופס <code>"2000"</code>. בדוק גם את המבנה וגם את הטווח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E50">
+    <h3>P14-E50 · לקרוא Content-Type 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const [type, ...params] = value.split(";");</code> — וכל פרמטר מתפרק ב־<code>=</code> הראשון (<code>indexOf</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מירכאות: <code>v.replace(/^"|"$/g, "")</code>. ‏<code>isJson</code> יכולה להשתמש ב־<code>parseContentType</code> — ולטפל ב־<code>null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E50: לקרוא Content-Type
+export function parseContentType(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const [type, ...params] = value.split(";");
+  let charset = null;
+  for (const param of params) {
+    const i = param.indexOf("=");
+    if (i === -1) continue;
+    const name = param.slice(0, i).trim().toLowerCase();
+    if (name === "charset") charset = param.slice(i + 1).trim().replace(/^"|"$/g, "").toLowerCase();
+  }
+  return { type: type.trim().toLowerCase(), charset };
+}
+
+export function isJson(value) {
+  const parsed = parseContentType(value);
+  if (!parsed) return false;
+  return parsed.type === "application/json" || parsed.type.endsWith("+json");
+}
+
+for (const v of ["application/json; charset=utf-8", "Application/JSON", 'text/html;Charset="UTF-8"', "multipart/form-data; boundary=x1", "application/problem+json", undefined]) {
+  console.log(String(v).padEnd(34), parseContentType(v), isJson(v));
+}</code></pre>
+<pre class="terminal">application/json; charset=utf-8    { type: 'application/json', charset: 'utf-8' } true
+Application/JSON                   { type: 'application/json', charset: null } true
+text/html;Charset="UTF-8"          { type: 'text/html', charset: 'utf-8' } false
+multipart/form-data; boundary=x1   { type: 'multipart/form-data', charset: null } false
+application/problem+json           { type: 'application/problem+json', charset: null } true
+undefined                          null false</pre>
+<p>שרת שבודק <code class="mid">req.headers["content-type"] === "application/json"</code> ידחה לקוח תקין שמוסיף <code>; charset=utf-8</code> (וזה מה שרוב הלקוחות עושים). לכן מפרקים את ה־header, ולא משווים אותו כמחרוזת. (ב־P14-E17 הסתפקת ב־<code>includes</code> — זה עובד, אבל גם <code>text/not-application/json</code> היה עובר.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>split("=")</code> בלי הגבלה — ערך שיש בו <code>=</code> (כמו boundary) נחתך.</li><li>לשכוח <code>trim</code> אחרי ה־<code>;</code> — בדרך כלל יש רווח: <code>"; charset"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E51">
+    <h3>P14-E51 · לבחור פורמט לפי Accept 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם הופכים את ה־header למערך <code>{ type, q }</code>: ‏<code>split(",")</code>, ואז לכל חלק <code>split(";")</code> ופרמטר <code>q=</code> (‏<code>Number</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפורמט אחד: <code class="long">const exact = list.find((r) =&gt; r.type === f) ?? list.find((r) =&gt; r.type === f.split("/")[0] + "/*") ?? list.find((r) =&gt; r.type === "*/*");</code> — ‏<code>??</code> נותן את הסדר "ספציפי קודם".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E51: לבחור פורמט לפי Accept
+function parseAccept(accept) {
+  return accept.split(",").map((part) =&gt; {
+    const [type, ...params] = part.split(";").map((s) =&gt; s.trim().toLowerCase());
+    let q = 1;
+    for (const p of params) if (p.startsWith("q=")) q = Number(p.slice(2));
+    return { type, q };
+  });
+}
+
+export function chooseFormat(accept, available) {
+  if (!accept || accept.trim() === "") return available[0] ?? null;
+  const list = parseAccept(accept);
+  let best = null;
+  let bestQ = 0;
+  for (const format of available) {
+    const f = format.toLowerCase();
+    const rule =
+      list.find((r) =&gt; r.type === f) ?? list.find((r) =&gt; r.type === f.split("/")[0] + "/*") ?? list.find((r) =&gt; r.type === "*/*");
+    const q = rule?.q ?? 0;
+    if (q &gt; bestQ) {
+      best = format;
+      bestQ = q;
+    }
+  }
+  return best;
+}
+
+const both = ["application/json", "text/html"];
+console.log(chooseFormat("text/html, application/json;q=0.9, */*;q=0.1", both));
+console.log(chooseFormat("application/json", both));
+console.log(chooseFormat("*/*", both));
+console.log(chooseFormat("text/*;q=0.5, */*;q=0.2", both));
+console.log(chooseFormat("image/png", both));
+console.log(chooseFormat("*/*, application/json;q=0", both));
+console.log(chooseFormat(undefined, both));</code></pre>
+<pre class="terminal">text/html
+application/json
+application/json
+text/html
+null
+text/html
+application/json</pre>
+<p>שתי החלטות "של שרת": בשוויון (<code>*/*</code>) מנצח הפורמט ש<strong>השרת</strong> מעדיף — ולכן מעבירים את <code>available</code> לפי סדר. ו־<code>application/json;q=0</code> גובר על <code>*/*</code> כי הוא ספציפי יותר — הלקוח אמר במפורש "רק לא JSON". אם אין פורמט מתאים, שרת אמיתי מחזיר <strong>406 Not Acceptable</strong>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקחת את ה־q הגבוה מבין <strong>כל</strong> הרשומות שמתאימות — אז <code>*/*</code> (q=1) "מבטל" את <code>application/json;q=0</code>.</li><li><code>q &gt;= bestQ</code> — בשוויון מנצח האחרון, לא המועדף.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P14-E52">
+    <h3>P14-E52 · מה יוצא מאובייקט של מחלקה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>JSON.stringify</code> לוקח רק שדות "רגילים" (enumerable) של האובייקט עצמו. שדה עם <code>#</code> — לא שדה רגיל. getter נמצא על ה־prototype.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>password = "1234"</code> בלי <code>#</code> הוא שדה ציבורי — בדיוק כמו <code>this.name</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">class User {
+  #passwordHash = "9f86d081884c7d65";
+  constructor(name, email) {
+    this.name = name;
+    this.email = email;
+    this.createdAt = new Date("2026-11-01T10:00:00Z");
+  }
+  get initials() {
+    return this.name[0];
+  }
+}
+console.log(JSON.stringify(new User("דנה", "dana@x.co")));
+
+class Admin extends User {
+  password = "1234";
+}
+console.log(JSON.stringify(new Admin("יוסי", "yossi@x.co")));</code></pre>
+<pre class="terminal">{"name":"דנה","email":"dana@x.co","createdAt":"2026-11-01T10:00:00.000Z"}
+{"name":"יוסי","email":"yossi@x.co","createdAt":"2026-11-01T10:00:00.000Z","password":"1234"}</pre>
+<p>ה־<code>#passwordHash</code> לא יצא — טוב. אבל ה־getter <code>initials</code> גם לא יצא (אם הלקוח צריך אותו — מוסיפים אותו במפורש), והתאריך הפך למחרוזת ISO. והגרוע: <code>password</code> במחלקה היורשת <strong>דלף</strong> ללקוח. לכן לא שולחים אובייקט פנימי כמו שהוא — בונים במפורש את מה שיוצא (<code>{ id, name, email }</code>), כמו ב־DTO בפרק 20.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על "זה אובייקט של מחלקה, אז רק מה שצריך ייצא" — כל שדה ציבורי יוצא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E53">
+    <h3>P14-E53 · הלקוח קורא שגיאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה <code>"לא נמצא".message</code>? (מחרוזת היא לא <code>undefined</code> — אפשר לקרוא ממנה שדות.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתשובה השלישית <code>data.error</code> הוא <code>undefined</code>. מה קורה כשקוראים <code>.message</code> של <code>undefined</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const responses = [
+  '{"error":{"code":"NOT_FOUND","message":"לא נמצא"}}',
+  '{"error":"לא נמצא"}',
+  '{"message":"Internal Server Error"}',
+];
+for (const text of responses) {
+  const data = JSON.parse(text);
+  try {
+    console.log(data.error.message ?? "(אין הודעה)");
+  } catch (err) {
+    console.log("קרס:", err.message);
+  }
+}
+for (const text of responses) console.log(JSON.parse(text).error?.message ?? "(אין הודעה)");</code></pre>
+<pre class="terminal">לא נמצא
+(אין הודעה)
+קרס: Cannot read properties of undefined (reading 'message')
+לא נמצא
+(אין הודעה)
+(אין הודעה)</pre>
+<p>שלוש תשובות, שלוש התנהגויות: הודעה, "אין הודעה" (שקט — ההודעה האמיתית הלכה לאיבוד), וקריסה. <code>?.</code> מונע את הקריסה, אבל עדיין מאבד את המידע. הפתרון האמיתי בצד השרת: מבנה שגיאה אחד לכל ה־API — ואז ללקוח יש מקום אחד לחפש בו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>try/catch</code> "פותר" — הוא רק מסתיר שהמבנה לא אחיד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E54">
+    <h3>P14-E54 · כסף ב־JSON <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מחשב שומר מספרים כמו 19.9 ו־0.1 בבסיס 2 — ולא תמיד בדיוק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אגורות הן מספרים שלמים, ושלמים (עד מיליונים רבים) נשמרים בדיוק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const items = [
+  { name: "מחברת", price: 19.9, qty: 3 },
+  { name: "עט", price: 0.1, qty: 1 },
+  { name: "מחק", price: 0.2, qty: 2 },
+];
+const total = items.reduce((sum, i) =&gt; sum + i.price * i.qty, 0);
+console.log(total, JSON.stringify({ total }));
+console.log(total === 60.2);
+
+const agorot = items.reduce((sum, i) =&gt; sum + Math.round(i.price * 100) * i.qty, 0);
+console.log(agorot, (agorot / 100).toFixed(2), JSON.stringify({ totalAgorot: agorot }));</code></pre>
+<pre class="terminal">?</pre>
+<p>הסכום ב־float "כמעט" 60.2 — ו־JSON שולח ללקוח בדיוק את ה"כמעט". הלקוח יציג מספר משונה, או ייכשל בהשוואה לסכום שחושב אצלו. באגורות (<code>Math.round(price * 100)</code>, ואז רק חיבור של שלמים) הסכום מדויק, ו־<code>toFixed</code> בא רק בתצוגה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>toFixed(2)</code> באמצע החישוב — מחזיר מחרוזת, והחיבור הבא הופך לשרשור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E55">
+    <h3>P14-E55 · משגיאה לתשובה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־constructor: <code class="long">super(message); this.name = "ValidationError"; this.details = details;</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר הבדיקות: <code class="mid">if (err instanceof ValidationError) ...</code>, וכו׳. ‏<code>SyntaxError</code> הוא מחלקה מובנית — גם עליה עובד <code>instanceof</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E55: משגיאה לתשובה
+export class NotFoundError extends Error {
+  name = "NotFoundError";
+}
+export class ConflictError extends Error {
+  name = "ConflictError";
+}
+export class ValidationError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.name = "ValidationError";
+    this.details = details;
+  }
+}
+
+const reply = (status, code, message, extra = {}) =&gt; ({ status, body: { error: { code, message, ...extra } } });
+
+export function toApiError(err) {
+  if (err instanceof ValidationError) return reply(400, "VALIDATION", err.message, { details: err.details });
+  if (err instanceof NotFoundError) return reply(404, "NOT_FOUND", err.message);
+  if (err instanceof ConflictError) return reply(409, "CONFLICT", err.message);
+  if (err instanceof SyntaxError) return reply(400, "INVALID_JSON", "JSON לא תקין");
+  return reply(500, "INTERNAL", "שגיאה פנימית");
+}
+
+console.log(JSON.stringify(toApiError(new ValidationError("קלט לא תקין", ["price: חייב להיות מספר"]))));
+console.log(JSON.stringify(toApiError(new NotFoundError("המוצר לא נמצא"))));
+let parseError;
+try {
+  JSON.parse("{oops");
+} catch (err) {
+  parseError = err;
+}
+console.log(JSON.stringify(toApiError(parseError)));
+console.log(JSON.stringify(toApiError(new Error("connect ECONNREFUSED 10.0.0.5:5432"))));</code></pre>
+<pre class="terminal">{"status":400,"body":{"error":{"code":"VALIDATION","message":"קלט לא תקין","details":["price: חייב להיות מספר"]}}}
+{"status":404,"body":{"error":{"code":"NOT_FOUND","message":"המוצר לא נמצא"}}}
+{"status":400,"body":{"error":{"code":"INVALID_JSON","message":"JSON לא תקין"}}}
+{"status":500,"body":{"error":{"code":"INTERNAL","message":"שגיאה פנימית"}}}</pre>
+<p>השורה האחרונה היא הסיבה ל"בלי ההודעה המקורית": <code>ECONNREFUSED 10.0.0.5:5432</code> מגלה לכל העולם את כתובת המסד הפנימית. את ההודעה המלאה כותבים ליומן (<code>console.error</code>), וללקוח — הודעה כללית. ‏<code>name = "..."</code> כשדה במחלקה הוא דרך קצרה להגדיר את השם בלי constructor.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>err instanceof Error</code> ראשון — כל השגיאות הן <code>Error</code>, וכולן יקבלו 500.</li><li>להחזיר <code>err.message</code> גם ב־500 — דליפת מידע פנימי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E56">
+    <h3>P14-E56 · מאובייקט פנימי ל־JSON של API 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה מקרים לפי הסדר: <code>value instanceof Date</code>, ‏<code>Array.isArray(value)</code>, ‏<code class="mid">value !== null &amp;&amp; typeof value === "object"</code>. (למה Date קודם? כי גם הוא <code>typeof "object"</code>.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>camelCase: <code class="mid">key.replace(/_([a-z])/g, (all, ch) =&gt; ch.toUpperCase())</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E56: מאובייקט פנימי ל־JSON של API
+const camel = (key) =&gt; key.replace(/_([a-z])/g, (all, ch) =&gt; ch.toUpperCase());
+
+export function toApiJson(value) {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toApiJson);
+  if (value !== null &amp;&amp; typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, v]) =&gt; v !== undefined)
+        .map(([k, v]) =&gt; [camel(k), toApiJson(v)]),
+    );
+  }
+  return value;
+}
+
+const row = {
+  order_id: 17,
+  created_at: new Date("2026-11-01T10:00:00Z"),
+  shipped_at: null,
+  internal_note: undefined,
+  total_agorot: 5970,
+  customer: { full_name: "דנה לוי", vipLevel: 2 },
+  items: [{ product_id: 3, unit_price_agorot: 1990 }],
+};
+console.log(JSON.stringify(toApiJson(row), null, 2));</code></pre>
+<pre class="terminal">{
+  "orderId": 17,
+  "createdAt": "2026-11-01T10:00:00.000Z",
+  "shippedAt": null,
+  "totalAgorot": 5970,
+  "customer": {
+    "fullName": "דנה לוי",
+    "vipLevel": 2
+  },
+  "items": [
+    {
+      "productId": 3,
+      "unitPriceAgorot": 1990
+    }
+  ]
+}</pre>
+<p>רקורסיה היא הכלי הטבעי כאן: אובייקט יכול להכיל מערך של אובייקטים שמכילים תאריך — ואותה פונקציה מטפלת בכל רמה. ‏<code>null</code> נשאר <code>null</code> (זה מידע: "עוד לא נשלח"), ו־<code>undefined</code> נעלם — כמו ש־<code>JSON.stringify</code> היה עושה בכל מקרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>typeof value === "object"</code> בלי לבדוק <code>null</code> — ‏<code>Object.entries(null)</code> זורק.</li><li>לבדוק אובייקט לפני Date — התאריך הופך ל־<code>{}</code> (אין לו שדות רגילים).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E57">
+    <h3>P14-E57 · sessions בזיכרון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const [scheme, token, ...rest] = (headers.authorization ?? "").split(" ");</code> — תקין רק אם <code>scheme === "Bearer"</code>, יש <code>token</code>, ו־<code>rest</code> ריק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">this.#sessions.delete(token)</code> כבר מחזיר <code>true</code>/<code>false</code>. ו־<code>get(token) ?? null</code> — כי <code>get</code> של מפתח חסר מחזיר <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E57: sessions בזיכרון
+export class SessionStore {
+  #sessions = new Map();
+
+  login(user) {
+    const token = crypto.randomUUID();
+    this.#sessions.set(token, user);
+    return token;
+  }
+
+  userFor(headers) {
+    const [scheme, token, ...rest] = (headers.authorization ?? "").split(" ");
+    if (scheme !== "Bearer" || !token || rest.length &gt; 0) return null;
+    return this.#sessions.get(token) ?? null;
+  }
+
+  logout(token) {
+    return this.#sessions.delete(token);
+  }
+
+  get size() {
+    return this.#sessions.size;
+  }
+}
+
+const a = new SessionStore();
+const dana = a.login("דנה");
+const yossi = a.login("יוסי");
+console.log(a.size, dana === yossi);
+console.log(a.userFor({ authorization: `Bearer ${dana}` }), a.userFor({ authorization: `Bearer ${yossi}` }));
+console.log(a.userFor({}), a.userFor({ authorization: dana }), a.userFor({ authorization: `Basic ${dana}` }));
+const b = new SessionStore();
+console.log("עותק שני:", b.userFor({ authorization: `Bearer ${dana}` }));
+console.log(a.logout(dana), a.logout(dana), a.size, a.userFor({ authorization: `Bearer ${dana}` }));</code></pre>
+<pre class="terminal">2 false
+דנה יוסי
+null null null
+עותק שני: null
+true false 1 null</pre>
+<p>כל בקשה מביאה את הטוקן, והשרת לא "זוכר" מי שלח את הבקשה הקודמת — רק איזה טוקן שייך למי. השורה "עותק שני" מראה את הגבול: שרת נוסף עם <code>Map</code> משלו לא מכיר את דנה. בפרק 21 נראה טוקן שנושא את הזהות בעצמו (JWT), ובפרק 26 — sessions ב־Redis משותף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>headers.Authorization</code> (באות גדולה) — ב־Node השמות מגיעים באותיות קטנות, והערך תמיד <code>undefined</code>.</li><li>להחזיר <code>undefined</code> במקום <code>null</code> לטוקן לא מוכר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-tools.html"><small>הבא</small>שיעור 3 — כלים: curl, REST Client ו־DevTools</a></div>
 </main>
 </body>

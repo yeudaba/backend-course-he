@@ -56,6 +56,219 @@ try {
 
 </div></details>
   </div>
+<div class="ex" id="P14-E75">
+    <h3>P14-E75 · באיזה סדר יודפס? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>listen</code> לא מחכה — הוא מתחיל להאזין "ברקע" (פרק 10), וה־callback שלו רץ אחר כך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.end</code> שולח את התשובה, אבל לא עוצר את הפונקציה — מה שאחריו עדיין רץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  console.log("handler:", req.method, req.url);
+  res.end("ok");
+  console.log("handler: אחרי end");
+});
+console.log("לפני listen");
+server.listen(0, () =&gt; console.log("מאזין"));
+console.log("אחרי listen");
+await once(server, "listening");
+
+const res = await fetch(`http://localhost:${server.address().port}/a?x=1`);
+console.log("client:", res.status, await res.text());
+server.close();</code></pre>
+<pre class="terminal">לפני listen
+אחרי listen
+מאזין
+handler: GET /a?x=1
+handler: אחרי end
+client: 200 ok</pre>
+<p>שלושה דברים לזכור: (1) <code>listen</code> אסינכרוני — "אחרי listen" לפני "מאזין". (2) <code>req.url</code> הוא רק הנתיב וה־query, בלי host. (3) <code>res.end</code> הוא לא <code>return</code> — קוד אחריו רץ. אם אחריו יש עוד <code>res.end</code> (למשל אחרי <code>if</code> בלי <code>return</code>), תקבל שגיאה — ראה P14-E77.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שה־handler רץ פעם אחת, כשהשרת עולה. הוא רץ <strong>על כל בקשה</strong> — callback.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E76">
+    <h3>P14-E76 · שרת ששוכח את res.end <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־status וה־headers נשלחו כבר ב־<code>writeHead</code>/<code>write</code>. מה עם סוף הגוף?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.text()</code> מחכה ל<strong>סוף</strong> הגוף. ה־timeout חל גם על קריאת הגוף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.write("מתחיל...");
+  // שכחנו res.end()
+});
+server.listen(0);
+await once(server, "listening");
+
+const start = Date.now();
+try {
+  const res = await fetch(`http://localhost:${server.address().port}/`, { signal: AbortSignal.timeout(300) });
+  console.log("status:", res.status);
+  console.log("גוף:", await res.text());
+} catch (err) {
+  console.log(err.name, "אחרי", Date.now() - start &gt;= 300 ? "300ms לפחות" : "פחות מ־300ms");
+} finally {
+  server.closeAllConnections();
+  server.close();
+}</code></pre>
+<pre class="terminal">status: 200
+TimeoutError אחרי 300ms לפחות</pre>
+<p>ה־<code>fetch</code> עצמו הצליח — status 200 הגיע. אבל הגוף לא נגמר אף פעם, ו־<code>res.text()</code> חיכה עד שה־timeout ביטל אותו. בלי <code>AbortSignal.timeout</code>, הלקוח היה מחכה עד שמשהו בדרך מנתק (דקות). זה הבאג (2) של P14-E20. (‏<code>closeAllConnections</code> רק סוגר את החיבור שנשאר פתוח, כדי שהדוגמה תסתיים.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיק מ"status 200" שהתשובה הגיעה. ה־status מגיע ראשון; הגוף יכול להיתקע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E77">
+    <h3>P14-E77 · end פעמיים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחרי <code>res.end</code> הפונקציה ממשיכה (P14-E75). מה קורה כשמנסים לכתוב שוב status?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>השגיאה נזרקת ב־<code>writeHead</code> השני — לפני שה־<code>end</code> השני רץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  try {
+    if (req.url === "/secret") {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "צריך להתחבר" }));
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ secret: 42 }));
+  } catch (err) {
+    console.log("שרת:", err.code);
+  }
+});
+server.listen(0);
+await once(server, "listening");
+
+const res = await fetch(`http://localhost:${server.address().port}/secret`);
+console.log("לקוח:", res.status, await res.text());
+server.close();</code></pre>
+<pre class="terminal">שרת: ERR_HTTP_HEADERS_SENT
+לקוח: 401 {"error":"צריך להתחבר"}</pre>
+<p>הלקוח קיבל את ה־401 הנכון — במקרה. השרת ניסה לשלוח headers שנית וקיבל <code>ERR_HTTP_HEADERS_SENT</code> ("כבר שלחתי headers"). בלי ה־<code>try/catch</code> השגיאה הייתה מפילה את <strong>כל השרת</strong>. ואם השורות היו מסודרות אחרת (<code>res.write</code> במקום <code>writeHead</code>), הסוד היה דולף. הכלל: <code>return res.end(...)</code>, או <code>return send(...)</code>, כמו בשרת ההדגמה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לראות "401 הגיע" ולהניח שהקוד תקין. הבאג נראה רק ביומן של השרת — או כשהוא קורס.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E78">
+    <h3>P14-E78 · מה מגיע ל־req.url? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הלקוח (fetch) מקודד את הכתובת לפני השליחה. ה־<code>#</code> בכלל לא נשלח לשרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>..</code> ו־<code>.</code> בנתיב — URL "מנרמל" אותם כבר בצד הלקוח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  console.log(JSON.stringify(req.url), "→", url.pathname, JSON.stringify(url.searchParams.get("q")));
+  res.end();
+});
+server.listen(0);
+await once(server, "listening");
+const base = `http://localhost:${server.address().port}`;
+
+for (const path of ["/search?q=מסך", "/search?q=red shoes#top", "/a/../b/./c", "/search?q=a&amp;q=b"]) {
+  await fetch(base + path);
+}
+server.close();</code></pre>
+<pre class="terminal">"/search?q=%D7%9E%D7%A1%D7%9A" → /search "מסך"
+"/search?q=red%20shoes" → /search "red shoes"
+"/b/c" → /b/c null
+"/search?q=a&amp;q=b" → /search "a"</pre>
+<p><code>req.url</code> הוא הטקסט שנשלח ברשת — מקודד. ‏<code>searchParams.get</code> מפענח בשבילך (זו הסיבה לעבוד דרך URL ולא לפרק ביד, P14-E23). ה־<code>#top</code> לא הגיע — הוא קיים רק בדפדפן. ו־<code>get</code> החזיר רק את ה־<code>q</code> הראשון (P14-E31).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות <code>req.url === "/search"</code> — כל query, אפילו ריק, שובר את ההשוואה. משווים את <code>pathname</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E79">
+    <h3>P14-E79 · json() על תשובה בלי גוף <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>res.json()</code> הוא בעצם <code class="mid">JSON.parse(await res.text())</code>. מה <code>JSON.parse("")</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרתי proxy (nginx, load balancer) מחזירים בשגיאות 502/504 דף HTML — לא את ה־JSON שלך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  if (req.url === "/deleted") return res.writeHead(204).end();
+  if (req.url === "/html") return res.writeHead(502, { "Content-Type": "text/html" }).end("&lt;h1&gt;Bad Gateway&lt;/h1&gt;");
+  res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true}');
+});
+server.listen(0);
+await once(server, "listening");
+const base = `http://localhost:${server.address().port}`;
+
+for (const path of ["/ok", "/deleted", "/html"]) {
+  const res = await fetch(base + path);
+  try {
+    console.log(path, res.status, await res.json());
+  } catch (err) {
+    console.log(path, res.status, err.name + ":", err.message);
+  }
+}
+server.close();</code></pre>
+<pre class="terminal">/ok 200 { ok: true }
+/deleted 204 SyntaxError: Unexpected end of JSON input
+/html 502 SyntaxError: Unexpected token '&lt;', "&lt;h1&gt;Bad Gateway&lt;/h1&gt;" is not valid JSON</pre>
+<p>שתי ההצלחות־לכאורה נכשלו ב־<code>json()</code>: ל־204 אין גוף (<code class="mid">Unexpected end of JSON input</code>), ו־502 החזיר HTML. לקוח זהיר בודק לפני: אם <code>res.status === 204</code> ← אין מה לקרוא; אם <code>Content-Type</code> אינו JSON (P14-E50) ← לא קוראים <code>json()</code>, ומדווחים על השגיאה לפי ה־status.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לראות <code>SyntaxError</code> ביומן ולחפש באג ב־JSON של השרת — כשבעצם השרת בכלל לא ענה, וה־HTML הגיע מה־proxy שלפניו.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P14-E11">
     <h3>P14-E11 · השרת הראשון שלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -490,137 +703,150 @@ console.log(parseSearch("/products"), parseSearch("/products?q=%D7%9E%D7%A1%D7%9
 
 </div></details>
   </div>
-<div class="ex typed" id="P14-E27">
-    <h3>P14-E27 · סטטיסטיקת בקשות כמחלקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p><code>#routes = new Map()</code>. הערך לכל route: <code>{ count, totalMs, errors }</code>. ב־<code>record</code>: ‏<code class="long">const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 }</code>, מעדכנים, ו־<code>set</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p><code>[...this.#routes]</code> נותן מערך של <code>[route, s]</code>. ‏<code>map</code> לאובייקט התוצאה, ואז <code class="long">sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route))</code>. כשההפרש הוא 0 (תיקו), ה־<code>||</code> עובר לקריטריון השני.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P14-E27: סטטיסטיקת בקשות כמחלקה
-export class RequestStats {
-  #routes = new Map();
-
-  record(method, path, status, ms) {
-    const route = `${method} ${path}`;
-    const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 };
-    s.count++;
-    s.totalMs += ms;
-    if (status &gt;= 500) {
-      s.errors++;
-    }
-    this.#routes.set(route, s);
-  }
-
-  get total() {
-    let sum = 0;
-    for (const s of this.#routes.values()) {
-      sum += s.count;
-    }
-    return sum;
-  }
-
-  summary() {
-    return [...this.#routes]
-      .map(([route, s]) =&gt; ({ route, count: s.count, avgMs: Math.round(s.totalMs / s.count), errors: s.errors }))
-      .sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route));
-  }
-}
-
-const stats = new RequestStats();
-stats.record("GET", "/users", 200, 12);
-stats.record("GET", "/users", 200, 20);
-stats.record("POST", "/users", 201, 35);
-stats.record("GET", "/orders", 500, 101);
-stats.record("GET", "/users", 503, 3);
-console.log(stats.total);
-console.log(stats.summary());</code></pre>
-<pre class="terminal">5
-[
-  { route: 'GET /users', count: 3, avgMs: 12, errors: 1 },
-  { route: 'GET /orders', count: 1, avgMs: 101, errors: 1 },
-  { route: 'POST /users', count: 1, avgMs: 35, errors: 0 }
-]</pre>
-<p>שומרים <code>totalMs</code> ולא את הממוצע. ממוצע אי אפשר לעדכן בלי לדעת על כמה בקשות הוא חושב. סכום ומונה מעדכנים בפעולה אחת, ומחשבים את הממוצע רק כשמבקשים <code>summary()</code>.</p>
-<p><code>b.count - a.count || ...</code>: ההפרש 0 הוא falsy, ולכן רק בתיקו נבדק הקריטריון השני. זה הדפוס שראית בפרק 6 למיון לפי כמה שדות.</p>
-<p>כך עובדים כלי ניטור כמו Prometheus (פרק 24): לכל route יש מונים מצטברים, ומהם מחשבים ממוצעים ואחוזי שגיאות.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>לשמור <code>avgMs</code> ולעדכן אותו ב־<code>(avg + ms) / 2</code> — זה לא ממוצע. בשלוש בקשות 12, 20, 3 יוצא 9.5 במקום 11.67.</li><li>לספור <code>status &gt;= 400</code> כשגיאה — 404 היא תשובה תקינה של השרת. כאן סופרים תקלות של השרת (5xx).</li><li><code>routes = new Map()</code> בלי <code>#</code> — הבודק מגלה שדה ציבורי.</li><li><code>total()</code> כמתודה במקום <code>get total()</code> — ‏<code>stats.total</code> מחזיר פונקציה ולא מספר.</li></ul>
-
-
-</div></details>
-  </div>
-<div class="ex typed" id="P14-E28">
-    <h3>P14-E28 · לחכות שהשרת יעלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>השהיה: <code class="long">const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));</code> (פרק 10). הלולאה: <code class="mid">let attempt = 0; while (attempt &lt; tries) { attempt++; ... }</code>, ואחרי הלולאה <code>throw</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>בתוך הלולאה: <code class="long">try { const res = await fetch(url); if (res.ok) return attempt; } catch { }</code>, ואחריו <code class="mid">if (attempt &lt; tries) await sleep(delayMs);</code>. ה־<code>catch</code> הריק בכוונה: שגיאת רשת היא בדיוק המצב שבו ממשיכים לחכות.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P14-E28: לחכות שהשרת יעלה
-import http from "node:http";
-
-const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));
-
-export async function waitUntilReady(url, { tries = 10, delayMs = 100 } = {}) {
-  let attempt = 0;
-  while (attempt &lt; tries) {
-    attempt++;
-    try {
-      const res = await fetch(url);
-      if (res.ok) {
-        return attempt;
-      }
-    } catch {
-      // השרת עוד לא מקשיב — ננסה שוב
-    }
-    if (attempt &lt; tries) {
-      await sleep(delayMs);
-    }
-  }
-  throw new Error(`השרת לא מוכן אחרי ${tries} ניסיונות`);
-}
-
-// שרת שעונה 503 בשתי הבקשות הראשונות, ואז 200
-let calls = 0;
-const server = http.createServer((req, res) =&gt; {
-  calls++;
-  res.writeHead(calls &lt;= 2 ? 503 : 200).end();
-});
-server.listen(0, async () =&gt; {
-  const url = `http://localhost:${server.address().port}/health`;
-  console.log("מוכן בניסיון", await waitUntilReady(url, { delayMs: 20 }));
-  try {
-    await waitUntilReady("http://localhost:1/health", { tries: 3, delayMs: 20 });
-  } catch (err) {
-    console.log(err.message);
-  }
-  server.close();
-});</code></pre>
-<pre class="terminal">מוכן בניסיון 3
-השרת לא מוכן אחרי 3 ניסיונות</pre>
-<p>כמה פעמים הלולאה תרוץ? לא יודעים מראש — היא נעצרת כשהשרת עונה. זה המקרה הקלאסי ל־<code>while</code> (כמו <code>fetchAll</code> ב־P10-E28). ‏<code>return</code> מתוך הלולאה יוצא גם מהפונקציה, ולכן ה־<code>throw</code> אחרי הלולאה קורה רק אם כל הניסיונות נכשלו.</p>
-<p>ההבדל מ־P14-E19 (ניסיון חוזר חכם): שם מנסים שוב פעולה שנכשלה. כאן מחכים שמשהו <em>יהיה מוכן</em>. גם 503 וגם "החיבור נדחה" פירושם "עוד לא".</p>
-<p>בפרק 23 תראה את אותו רעיון ב־<code>healthcheck</code> של Docker Compose.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>בלי <code>try/catch</code> סביב <code>fetch</code> — כשהשרת עוד לא מקשיב, <code>fetch</code> זורק (<code>ECONNREFUSED</code>), והפונקציה נכשלת כבר בניסיון הראשון.</li><li><code>while (true)</code> בלי תנאי עצירה — אם השרת לא עולה אף פעם, הסקריפט תקוע לנצח.</li><li>לחכות גם אחרי הניסיון האחרון — עוד <code>delayMs</code> מבוזבז לפני השגיאה.</li><li><code class="mid">setTimeout(() =&gt; {}, delayMs)</code> בלי Promise ו־<code>await</code> — לא מחכה בכלל.</li></ul>
-
-
-</div></details>
-  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P14-E80">
+    <h3>P14-E80 · בקשה אחת חוסמת את כולן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כשה־handler של <code>/report</code> בתוך ה־<code>while</code>, האם Node יכול להריץ עוד callback — כולל ה־handler של <code>/ping</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>/ping</code> נשלח 50ms אחרי <code>/report</code> — כלומר כשהשרת עוד "תקוע".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const busy = (ms) =&gt; {
+  const end = Date.now() + ms;
+  while (Date.now() &lt; end) {}
+};
+const log = [];
+const server = http.createServer((req, res) =&gt; {
+  log.push(`התחיל ${req.url}`);
+  if (req.url === "/report") busy(300);
+  log.push(`סיים ${req.url}`);
+  res.end();
+});
+server.listen(0);
+await once(server, "listening");
+const base = `http://localhost:${server.address().port}`;
+
+const report = fetch(base + "/report").then(() =&gt; log.push("לקוח: report חזר"));
+await new Promise((r) =&gt; setTimeout(r, 50));
+const ping = fetch(base + "/ping").then(() =&gt; log.push("לקוח: ping חזר"));
+await Promise.all([report, ping]);
+console.log(log.join("\n"));
+server.close();</code></pre>
+<pre class="terminal">התחיל /report
+סיים /report
+לקוח: report חזר
+התחיל /ping
+סיים /ping
+לקוח: ping חזר</pre>
+<p><code>/ping</code> לא התחיל עד ש־<code>/report</code> סיים — ה־while תפס את ה־thread היחיד. הבקשה המהירה חיכתה כ־250ms בלי שום סיבה שקשורה אליה. בשרת עם הרבה משתמשים, route אחד שמחשב סינכרונית מאט את <strong>כולם</strong>. לכן עבודה כבדה עושים אסינכרונית (מסד, קבצים — שלא חוסמים), מחלקים, או מעבירים לתהליך אחר (פרק 26, תורים).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש"שרת Node מטפל בבקשות במקביל" אומר שהקוד שלך רץ במקביל. ההמתנה (רשת, דיסק) מקבילית; ה־JavaScript — לא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E81">
+    <h3>P14-E81 · מונה בתוך או מחוץ ל־handler <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש רמות: <code>total</code> — אחד לכל התוכנית; <code>count</code> — אחד לכל קריאה ל־<code>createCounterServer</code>; ‏<code>perRequest</code> — אחד לכל קריאה ל־handler.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת a קיבל שלוש בקשות, b שתיים — ו־<code>total</code> סופר את כולן יחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+let total = 0;
+function createCounterServer() {
+  let count = 0;
+  return http.createServer((req, res) =&gt; {
+    let perRequest = 0;
+    count++;
+    total++;
+    perRequest++;
+    res.end(`${count} ${total} ${perRequest}`);
+  });
+}
+
+const a = createCounterServer();
+const b = createCounterServer();
+for (const s of [a, b]) {
+  s.listen(0);
+  await once(s, "listening");
+}
+const hit = async (s) =&gt; (await fetch(`http://localhost:${s.address().port}/`)).text();
+console.log(await hit(a), "|", await hit(a), "|", await hit(b), "|", await hit(a), "|", await hit(b));
+a.close();
+b.close();</code></pre>
+<pre class="terminal">1 1 1 | 2 2 1 | 1 3 1 | 3 4 1 | 2 5 1</pre>
+<p><code>perRequest</code> תמיד 1 — הוא נוצר מחדש בכל בקשה (וזה המקום לנתונים של בקשה אחת). ‏<code>count</code> שייך לשרת — כך עבד ב־P14-E18 "לכל שרת רשימה משלו", וכך הבדיקות יכולות ליצור שרת נקי לכל בדיקה. ‏<code>total</code> משותף לכולם — נוח, אבל שני שרתים בבדיקות "מזהמים" זה את זה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את הנתונים (רשימת הפתקים) <strong>בתוך</strong> ה־handler — הם נמחקים בכל בקשה, וה־POST "לא נשמר".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E82">
+    <h3>P14-E82 · async handler שזורק <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מתי רץ ה־handler — בתוך ה־<code>try</code> שסביב <code>createServer</code>, או אחרי שהוא כבר הסתיים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Promise שנדחה ואף אחד לא עשה לו <code>catch</code> — זה בדיוק unhandled rejection. ומישהו קרא ל־<code>res.end</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+process.on("unhandledRejection", (err) =&gt; console.log("unhandledRejection:", err.message));
+
+let server;
+try {
+  server = http.createServer(async (req, res) =&gt; {
+    await new Promise((r) =&gt; setTimeout(r, 10));
+    throw new Error("המסד לא זמין");
+  });
+} catch (err) {
+  console.log("catch:", err.message);
+}
+server.listen(0);
+await once(server, "listening");
+
+try {
+  await fetch(`http://localhost:${server.address().port}/`, { signal: AbortSignal.timeout(300) });
+  console.log("הגיעה תשובה");
+} catch (err) {
+  console.log("לקוח:", err.name);
+}
+server.closeAllConnections();
+server.close();</code></pre>
+<pre class="terminal">unhandledRejection: המסד לא זמין
+לקוח: TimeoutError</pre>
+<p>ה־<code>catch</code> לא רץ: <code>createServer</code> רק <strong>רשם</strong> את ה־handler ויצא. השגיאה נזרקה מאוחר יותר, בתוך Promise שאיש לא מחכה לו — ‏unhandled rejection. הלקוח לא קיבל כלום (אף אחד לא קרא ל־<code>res.end</code>) ונפל ב־timeout. בלי <code>process.on</code>, ‏Node (מגרסה 15) <strong>מפיל את כל התהליך</strong> על unhandled rejection — כל המשתמשים מתנתקים בגלל בקשה אחת. הפתרון: <code>try/catch</code> <strong>בתוך</strong> ה־handler האסינכרוני, שמחזיר 500. ‏Express 5 (פרק 15) עושה את זה בשבילך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפתור עם <code class="mid">process.on("unhandledRejection")</code> בקוד אמיתי ולהמשיך כרגיל — השרת לא קורס, אבל הלקוח עדיין תקוע בלי תשובה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P14-E24">
     <h3>P14-E24 · אתגר: Express משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -798,6 +1024,136 @@ export function createLimitedServer({ limit, windowMs, now = Date.now }) {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>Retry-After</code> במילישניות — התקן מגדיר שניות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E27">
+    <h3>P14-E27 · סטטיסטיקת בקשות כמחלקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>#routes = new Map()</code>. הערך לכל route: <code>{ count, totalMs, errors }</code>. ב־<code>record</code>: ‏<code class="long">const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 }</code>, מעדכנים, ו־<code>set</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>[...this.#routes]</code> נותן מערך של <code>[route, s]</code>. ‏<code>map</code> לאובייקט התוצאה, ואז <code class="long">sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route))</code>. כשההפרש הוא 0 (תיקו), ה־<code>||</code> עובר לקריטריון השני.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E27: סטטיסטיקת בקשות כמחלקה
+export class RequestStats {
+  #routes = new Map();
+
+  record(method, path, status, ms) {
+    const route = `${method} ${path}`;
+    const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 };
+    s.count++;
+    s.totalMs += ms;
+    if (status &gt;= 500) {
+      s.errors++;
+    }
+    this.#routes.set(route, s);
+  }
+
+  get total() {
+    let sum = 0;
+    for (const s of this.#routes.values()) {
+      sum += s.count;
+    }
+    return sum;
+  }
+
+  summary() {
+    return [...this.#routes]
+      .map(([route, s]) =&gt; ({ route, count: s.count, avgMs: Math.round(s.totalMs / s.count), errors: s.errors }))
+      .sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route));
+  }
+}
+
+const stats = new RequestStats();
+stats.record("GET", "/users", 200, 12);
+stats.record("GET", "/users", 200, 20);
+stats.record("POST", "/users", 201, 35);
+stats.record("GET", "/orders", 500, 101);
+stats.record("GET", "/users", 503, 3);
+console.log(stats.total);
+console.log(stats.summary());</code></pre>
+<pre class="terminal">5
+[
+  { route: 'GET /users', count: 3, avgMs: 12, errors: 1 },
+  { route: 'GET /orders', count: 1, avgMs: 101, errors: 1 },
+  { route: 'POST /users', count: 1, avgMs: 35, errors: 0 }
+]</pre>
+<p>שומרים <code>totalMs</code> ולא את הממוצע. ממוצע אי אפשר לעדכן בלי לדעת על כמה בקשות הוא חושב. סכום ומונה מעדכנים בפעולה אחת, ומחשבים את הממוצע רק כשמבקשים <code>summary()</code>.</p>
+<p><code>b.count - a.count || ...</code>: ההפרש 0 הוא falsy, ולכן רק בתיקו נבדק הקריטריון השני. זה הדפוס שראית בפרק 6 למיון לפי כמה שדות.</p>
+<p>כך עובדים כלי ניטור כמו Prometheus (פרק 24): לכל route יש מונים מצטברים, ומהם מחשבים ממוצעים ואחוזי שגיאות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור <code>avgMs</code> ולעדכן אותו ב־<code>(avg + ms) / 2</code> — זה לא ממוצע. בשלוש בקשות 12, 20, 3 יוצא 9.5 במקום 11.67.</li><li>לספור <code>status &gt;= 400</code> כשגיאה — 404 היא תשובה תקינה של השרת. כאן סופרים תקלות של השרת (5xx).</li><li><code>routes = new Map()</code> בלי <code>#</code> — הבודק מגלה שדה ציבורי.</li><li><code>total()</code> כמתודה במקום <code>get total()</code> — ‏<code>stats.total</code> מחזיר פונקציה ולא מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E28">
+    <h3>P14-E28 · לחכות שהשרת יעלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השהיה: <code class="long">const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));</code> (פרק 10). הלולאה: <code class="mid">let attempt = 0; while (attempt &lt; tries) { attempt++; ... }</code>, ואחרי הלולאה <code>throw</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך הלולאה: <code class="long">try { const res = await fetch(url); if (res.ok) return attempt; } catch { }</code>, ואחריו <code class="mid">if (attempt &lt; tries) await sleep(delayMs);</code>. ה־<code>catch</code> הריק בכוונה: שגיאת רשת היא בדיוק המצב שבו ממשיכים לחכות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E28: לחכות שהשרת יעלה
+import http from "node:http";
+
+const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));
+
+export async function waitUntilReady(url, { tries = 10, delayMs = 100 } = {}) {
+  let attempt = 0;
+  while (attempt &lt; tries) {
+    attempt++;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        return attempt;
+      }
+    } catch {
+      // השרת עוד לא מקשיב — ננסה שוב
+    }
+    if (attempt &lt; tries) {
+      await sleep(delayMs);
+    }
+  }
+  throw new Error(`השרת לא מוכן אחרי ${tries} ניסיונות`);
+}
+
+// שרת שעונה 503 בשתי הבקשות הראשונות, ואז 200
+let calls = 0;
+const server = http.createServer((req, res) =&gt; {
+  calls++;
+  res.writeHead(calls &lt;= 2 ? 503 : 200).end();
+});
+server.listen(0, async () =&gt; {
+  const url = `http://localhost:${server.address().port}/health`;
+  console.log("מוכן בניסיון", await waitUntilReady(url, { delayMs: 20 }));
+  try {
+    await waitUntilReady("http://localhost:1/health", { tries: 3, delayMs: 20 });
+  } catch (err) {
+    console.log(err.message);
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">מוכן בניסיון 3
+השרת לא מוכן אחרי 3 ניסיונות</pre>
+<p>כמה פעמים הלולאה תרוץ? לא יודעים מראש — היא נעצרת כשהשרת עונה. זה המקרה הקלאסי ל־<code>while</code> (כמו <code>fetchAll</code> ב־P10-E28). ‏<code>return</code> מתוך הלולאה יוצא גם מהפונקציה, ולכן ה־<code>throw</code> אחרי הלולאה קורה רק אם כל הניסיונות נכשלו.</p>
+<p>ההבדל מ־P14-E19 (ניסיון חוזר חכם): שם מנסים שוב פעולה שנכשלה. כאן מחכים שמשהו <em>יהיה מוכן</em>. גם 503 וגם "החיבור נדחה" פירושם "עוד לא".</p>
+<p>בפרק 23 תראה את אותו רעיון ב־<code>healthcheck</code> של Docker Compose.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>try/catch</code> סביב <code>fetch</code> — כשהשרת עוד לא מקשיב, <code>fetch</code> זורק (<code>ECONNREFUSED</code>), והפונקציה נכשלת כבר בניסיון הראשון.</li><li><code>while (true)</code> בלי תנאי עצירה — אם השרת לא עולה אף פעם, הסקריפט תקוע לנצח.</li><li>לחכות גם אחרי הניסיון האחרון — עוד <code>delayMs</code> מבוזבז לפני השגיאה.</li><li><code class="mid">setTimeout(() =&gt; {}, delayMs)</code> בלי Promise ו־<code>await</code> — לא מחכה בכלל.</li></ul>
 
 
 </div></details>
