@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **1290** | **959** | **980** |
+| **42** | **196** | **1498** | **1046** | **1123** |
 
 ## מה שונה כאן
 
@@ -58,11 +58,11 @@
 | [פרק 3](backend-course/03-conditions/index.html) | תנאים <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
 | [פרק 4](backend-course/04-loops/index.html) | לולאות <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
 | [פרק 5](backend-course/05-functions/index.html) | פונקציות <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
-| [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 28 | 23 | ✔ |
-| [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 28 | 23 | ✔ |
-| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 4 | 28 | 23 | ✔ |
+| [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
+| [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
+| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 4 | 80 | 44 | ✔ |
 | [פרויקט 1](backend-course/08p-project-expenses/index.html) | מנהל הוצאות בשורת הפקודה | 6 | — | 3 | ✔ |
-| [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 28 | 3 | ✔ |
+| [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 80 | 27 | ✔ |
 | [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 28 | 23 | ✔ |
 
 <details>
