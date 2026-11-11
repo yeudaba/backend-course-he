@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 10</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 10</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>10-async/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P10-E03">
+    <h3>P10-E03 · error-first <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סדר הפרמטרים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה קורה אם יש שגיאה — האם הקוד עוצר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הפרמטרים הפוכים: הראשון הוא <code>err</code>.</li><li><code>JSON.parse</code> רץ <em>לפני</em> בדיקת השגיאה — אם הקריאה נכשלה, <code>text</code> הוא <code>undefined</code> וה־parse זורק.</li><li>אחרי "שגיאה" אין <code>return</code> — הקוד ממשיך ל־<code>data.total</code>.</li><li><code>JSON.parse</code> של קובץ פגום זורק בתוך ה־callback — שגיאה שלא נתפסת ומפילה את התוכנית.</li></ol>
+<pre><code class="lang-js">fs.readFile("data.json", "utf8", (err, text) =&gt; {
+  if (err) {
+    console.log("שגיאה:", err.message);
+    return;
+  }
+  try {
+    console.log(JSON.parse(text).total);
+  } catch {
+    console.log("JSON לא תקין");
+  }
+});</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את ה־<code>return</code> — הבאג הכי נפוץ עם callbacks.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E07">
+    <h3>P10-E07 · callback בסגנון Node 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בתוך ה־callback של readFile: אם יש err — <code>return callback(err)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>JSON.parse בתוך try/catch. היזהר לא לקרוא ל־callback בתוך ה־try (אם הוא עצמו יזרוק — ייקרא שוב מה־catch).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E07: callback בסגנון error-first
+const fs = require("node:fs");
+
+function readJson(file, callback) {
+  fs.readFile(file, "utf8", (err, text) =&gt; {
+    if (err) {
+      callback(err);
+      return;
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (parseError) {
+      callback(parseError);
+      return;
+    }
+    callback(null, data);
+  });
+}
+
+readJson("/no/such.json", (err) =&gt; console.log(err.code));
+
+module.exports = { readJson };</code></pre>
+<pre class="terminal">ENOENT</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="long">try { callback(null, JSON.parse(text)) } catch (e) { callback(e) }</code> — אם ה־callback של מי שקרא זורק, הוא יקרא פעמיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E08">
+    <h3>P10-E08 · מ־callback ל־Promise 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שיעור 2, סעיף 4.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">return new Promise((resolve, reject) =&gt; legacyGetPrice(code, (err, price) =&gt; ...))</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E08
+function legacyGetPrice(code, callback) {
+  const prices = { "KB-101": 199, "MS-201": 89 };
+  setTimeout(() =&gt; {
+    if (code in prices) {
+      callback(null, prices[code]);
+    } else {
+      callback(new Error(`אין מחיר ל־${code}`));
+    }
+  }, 5);
+}
+
+function getPrice(code) {
+  return new Promise((resolve, reject) =&gt; {
+    legacyGetPrice(code, (err, price) =&gt; {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(price);
+      }
+    });
+  });
+}
+
+getPrice("KB-101").then((p) =&gt; console.log(p));
+
+module.exports = { legacyGetPrice, getPrice };</code></pre>
+<pre class="terminal">199</pre>
+<p>(ל־Node יש עוזר מובנה: <code class="mid">require("node:util").promisify(legacyGetPrice)</code> — עושה בדיוק את זה לכל פונקציה error-first.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return price</code> מתוך ה־callback — חוזר ל־legacyGetPrice, לא אליך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P10-E20">
+    <h3>P10-E20 · callback שנקרא פעמיים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חסר <code>return</code> אחרי טיפול בשגיאה; ה־parse לא בתוך try.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מבנה נכון: אם err ← cb(err) ו־return; try parse; catch ← cb(e) ו־return; cb(null, data).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E20: מתוקן
+const fs = require("node:fs");
+
+function loadSettings(file, cb) {
+  fs.readFile(file, "utf8", (err, text) =&gt; {
+    if (err) {
+      cb(err);
+      return;
+    }
+    let settings;
+    try {
+      settings = JSON.parse(text);
+    } catch (parseErr) {
+      cb(parseErr);
+      return;
+    }
+    cb(null, { theme: "light", ...settings });
+  });
+}
+
+module.exports = { loadSettings };</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף try/catch סביב <code>fs.readFile</code> — לא תופס שום דבר אסינכרוני.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E26">
+    <h3>P10-E26 · חיבור אסינכרוני עם callback 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל הקוד של הפונקציה נכנס לתוך <code class="mid">setTimeout(() =&gt; { ... }, 10)</code>. כך גם השגיאה וגם התוצאה מגיעות אחרי ההמתנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־setTimeout: <code class="long">if (typeof a !== "number" || typeof b !== "number") { callback(new TypeError(...)); return; }</code>, ואחריו <code>callback(null, a + b);</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E26: חיבור אסינכרוני עם callback
+function addLater(a, b, callback) {
+  setTimeout(() =&gt; {
+    if (typeof a !== "number" || typeof b !== "number") {
+      callback(new TypeError("a ו־b חייבים להיות מספרים"));
+      return;
+    }
+    callback(null, a + b);
+  }, 10);
+}
+
+addLater(2, 3, (err, sum) =&gt; console.log(err, sum));
+addLater(2, "3", (err) =&gt; console.log(err.message));
+console.log("קודם אני");
+
+module.exports = { addLater };</code></pre>
+<pre class="terminal">קודם אני
+null 5
+a ו־b חייבים להיות מספרים</pre>
+<p><code>"קודם אני"</code> מודפס ראשון, כי שתי הקריאות ל־<code>addLater</code> רק <strong>רושמות</strong> טיימר וחוזרות מיד (שיעור 1). ה־callbacks רצים אחר כך, מתוך ה־event loop.</p>
+<p>למה גם השגיאה מחכה? כי פונקציה שלפעמים קוראת ל־callback מיד ולפעמים אחר כך מבלבלת את מי שמשתמש בה: הקוד שאחרי הקריאה רץ פעם לפני ה־callback ופעם אחריו. הכלל ב־Node: callback תמיד אסינכרוני.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקת הטיפוסים <strong>לפני</strong> ה־<code>setTimeout</code>, עם <code>callback(err)</code> מיד — השגיאה מגיעה בסנכרון. הבודק תופס את זה.</li><li>לשכוח <code>return</code> אחרי ה־callback של השגיאה — ה־callback נקרא פעמיים, פעם עם שגיאה ופעם עם <code>"23"</code>.</li><li><code>return a + b</code> מתוך ה־setTimeout — הערך הולך לאיבוד. מי שקרא ל־<code>addLater</code> כבר לא מחכה.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-promises.html"><small>הבא</small>שיעור 3 — Promises</a></div>
+</main>
+</body>
+</html>

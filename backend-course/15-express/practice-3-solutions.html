@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 15</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 15</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>15-express/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P15-E05">
+    <h3>P15-E05 · לתקן API לא־REST <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות עצם ברבים; הפעולה ב־method.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"זול" הוא סינון — query.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>GET /users/5</code> ← 200</li><li><code>DELETE /users/5</code> ← 204</li><li><code>POST /orders</code> עם גוף <code class="mid">{ "productId": 7, "quantity": 2 }</code> ← 201. GET שיוצר הזמנה — מסוכן (דפדפן יכול לשלוח שוב, סורק יכול "ללחוץ").</li><li><code>PATCH /users/5</code> עם <code>{ "email": "..." }</code> ← 200</li><li><code>GET /users/5/orders</code> (או <code>GET /orders?userId=5</code>) ← 200</li><li><code class="mid">GET /products?maxPrice=50&amp;sort=price</code> ← 200</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר id בגוף ב־PATCH — המשאב מזוהה בכתובת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E13">
+    <h3>P15-E13 · רשימה עם pagination 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Math.ceil(total / limit)</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">schema.safeParse(req.query)</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E13
+import express from "express";
+import { z } from "zod";
+
+export function paginate&lt;T&gt;(items: T[], page: number, limit: number) {
+  const start = (page - 1) * limit;
+  return {
+    data: items.slice(start, start + limit),
+    meta: { page, limit, total: items.length, totalPages: Math.ceil(items.length / limit) },
+  };
+}
+
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export function createApp(products: unknown[]) {
+  const app = express();
+  app.get("/products", (req, res) =&gt; {
+    const q = querySchema.safeParse(req.query);
+    if (!q.success) {
+      res.status(400).json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "קלט לא תקין",
+          details: q.error.issues.map((i) =&gt; ({ path: i.path.join("."), message: i.message })),
+        },
+      });
+      return;
+    }
+    res.json(paginate(products, q.data.page, q.data.limit));
+  });
+  return app;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 404 לעמוד ריק — העמוד "קיים", פשוט אין בו פריטים. הלקוח רואה <code>totalPages</code> ויודע לעצור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E16">
+    <h3>P15-E16 · Router ושכבות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־service לא מכיר את req/res — רק זורק <code>HttpError</code>. ה־router לא מכיר את המערך — רק קורא ל־service.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">constructor(repo: InMemoryUsersRepository) { this.repo = repo; }</code> — בלי <code>private repo</code> בפרמטר (Node לא תומך ב־TypeScript הזה בלי קומפילציה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E16
+import express, { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+
+export class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export class InMemoryUsersRepository {
+  #users: User[] = [];
+  #nextId = 1;
+  findAll(): User[] {
+    return [...this.#users];
+  }
+  findById(id: number): User | undefined {
+    return this.#users.find((u) =&gt; u.id === id);
+  }
+  findByEmail(email: string): User | undefined {
+    return this.#users.find((u) =&gt; u.email.toLowerCase() === email.toLowerCase());
+  }
+  insert(data: Omit&lt;User, "id"&gt;): User {
+    const user = { id: this.#nextId++, ...data };
+    this.#users.push(user);
+    return user;
+  }
+  delete(id: number): boolean {
+    const before = this.#users.length;
+    this.#users = this.#users.filter((u) =&gt; u.id !== id);
+    return this.#users.length &lt; before;
+  }
+}
+
+export class UsersService {
+  repo: InMemoryUsersRepository;
+  constructor(repo: InMemoryUsersRepository) {
+    this.repo = repo;
+  }
+  list() {
+    return this.repo.findAll();
+  }
+  get(id: number) {
+    const user = this.repo.findById(id);
+    if (!user) throw new HttpError(404, "USER_NOT_FOUND", "המשתמש לא נמצא");
+    return user;
+  }
+  create(data: { name: string; email: string }) {
+    if (this.repo.findByEmail(data.email)) throw new HttpError(409, "EMAIL_TAKEN", "האימייל כבר רשום");
+    return this.repo.insert(data);
+  }
+  remove(id: number) {
+    if (!this.repo.delete(id)) throw new HttpError(404, "USER_NOT_FOUND", "המשתמש לא נמצא");
+  }
+}
+
+const createUserSchema = z.object({ name: z.string().trim().min(1).max(50), email: z.email() });
+
+export function createUsersRouter(service: UsersService) {
+  const router = Router();
+  router.get("/", (req, res) =&gt; {
+    res.json(service.list());
+  });
+  router.get("/:id", (req, res) =&gt; {
+    res.json(service.get(Number(req.params.id)));
+  });
+  router.post("/", (req, res) =&gt; {
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((i) =&gt; ({ path: i.path.join("."), message: i.message }));
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "קלט לא תקין", details } });
+      return;
+    }
+    const user = service.create(parsed.data);
+    res.status(201).location(`/users/${user.id}`).json(user);
+  });
+  router.delete("/:id", (req, res) =&gt; {
+    service.remove(Number(req.params.id));
+    res.sendStatus(204);
+  });
+  return router;
+}
+
+export function createApp(service = new UsersService(new InMemoryUsersRepository())) {
+  const app = express();
+  app.use(express.json());
+  app.use("/users", createUsersRouter(service));
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err instanceof HttpError) {
+      res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      return;
+    }
+    next(err);
+  });
+  return app;
+}</code></pre>
+<p>שים לב: <code>service.get</code> זורק, וה־route לא תופס — השגיאה "עולה" ל־error handler. בגלל זה ה־routes קצרים כל כך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק אימייל כפול ב־router במקום ב־service — אז כל ממשק אחר (CLI, תור) ידלג על החוק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E19">
+    <h3>P15-E19 · שירות חיצוני 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>handler יכול להיות <code>async</code>. timeout: <code>Promise.race</code> עם Promise שנדחה אחרי זמן (פרק 10).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סמן את שגיאת ה־timeout (למשל מחלקה משלה) כדי להבדיל אותה משגיאת השירות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E19
+import express from "express";
+
+type Forecast = { tempC: number; summary: string };
+
+class TimeoutError extends Error {}
+
+function withTimeout&lt;T&gt;(promise: Promise&lt;T&gt;, ms: number): Promise&lt;T&gt; {
+  let timer: ReturnType&lt;typeof setTimeout&gt; | undefined;
+  const timeout = new Promise&lt;never&gt;((_, reject) =&gt; {
+    timer = setTimeout(() =&gt; reject(new TimeoutError()), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() =&gt; clearTimeout(timer));
+}
+
+export function createApp({ getForecast }: { getForecast: (city: string) =&gt; Promise&lt;Forecast | null&gt; }) {
+  const app = express();
+  app.get("/weather/:city", async (req, res) =&gt; {
+    const city = req.params.city;
+    let forecast: Forecast | null;
+    try {
+      forecast = await withTimeout(getForecast(city), 1000);
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        res.status(504).json({ error: { code: "UPSTREAM_TIMEOUT", message: "שירות מזג האוויר לא ענה בזמן" } });
+        return;
+      }
+      console.error(err);
+      res.status(502).json({ error: { code: "UPSTREAM_ERROR", message: "שירות מזג האוויר לא זמין" } });
+      return;
+    }
+    if (!forecast) {
+      res.status(404).json({ error: { code: "CITY_NOT_FOUND", message: "עיר לא מוכרת" } });
+      return;
+    }
+    res.json({ city, ...forecast });
+  });
+  return app;
+}</code></pre>
+<p><code>clearTimeout</code> ב־<code>finally</code> חשוב: בלעדיו, כל בקשה משאירה טיימר פתוח לשנייה, וגם מונעת מבדיקות להסתיים מהר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 500 על כל שגיאה של שירות חיצוני — הניטור יצביע על הקוד שלך, כשהבעיה אצל הספק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E23">
+    <h3>P15-E23 · ה־Promise שהפך ל־{} 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">JSON.stringify(Promise.resolve(5))</code> הוא <code>"{}"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>forEach</code> לא מחכה ל־callback async. ושגיאה בתוך <code>.then</code> שאף אחד לא מחזיר — אף אחד לא תופס.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E23: מתוקן
+import express, { type Request, type Response, type NextFunction } from "express";
+
+class NotFoundError extends Error {}
+
+const orders = new Map([[1, { id: 1, itemIds: [10, 11, 10] }]]);
+const prices = new Map([[10, 30], [11, 25]]);
+const delay = () =&gt; new Promise((r) =&gt; setTimeout(r, 5));
+
+export const repo = {
+  async findOrder(id: number) {
+    await delay();
+    const order = orders.get(id);
+    if (!order) throw new NotFoundError(`הזמנה ${id} לא נמצאה`);
+    return order;
+  },
+  async priceOf(itemId: number) {
+    await delay();
+    return prices.get(itemId) ?? 0;
+  },
+};
+
+export function createApp() {
+  const app = express();
+
+  app.get("/orders/:id", async (req, res) =&gt; {
+    const order = await repo.findOrder(Number(req.params.id));
+    res.json(order);
+  });
+
+  app.get("/orders/:id/total", async (req, res) =&gt; {
+    const order = await repo.findOrder(Number(req.params.id));
+    const itemPrices = await Promise.all(order.itemIds.map((id) =&gt; repo.priceOf(id)));
+    res.json({ total: itemPrices.reduce((a, b) =&gt; a + b, 0) });
+  });
+
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err instanceof NotFoundError) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: err.message } });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}</code></pre>
+<p>Express 5 מעביר ל־error handler רק Promise <em>שה־handler מחזיר</em>. <code class="mid">repo.findOrder(...).then(...)</code> בלי <code>return</code> (או בלי <code>async</code>/<code>await</code>) — השגיאה "יתומה", והבקשה נשארת בלי תשובה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>await</code> לפני <code class="mid">order.itemIds.forEach(async ...)</code> — forEach מחזיר undefined, אין למה לחכות. צריך <code>Promise.all</code> + <code>map</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15-E26">
+    <h3>P15-E26 · API משימות — מקובץ ריק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הסדר בקובץ: imports (<code>express</code>, ‏<code>z</code> מ־<code>zod</code>) ← <code>type Task</code> ← schema ← <code>createApp</code>. בתוך <code>createApp</code>: ‏<code>express.json()</code>, המערך ו־<code>nextId</code>, ארבעת ה־routes, ובסוף error handler עם 4 פרמטרים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>schema: <code class="long">z.object({ title: z.string().trim().min(1).max(100), done: z.boolean().default(false) })</code>. אחרי <code>safeParse</code>: ‏<code class="mid">result.error.issues.map((i) =&gt; i.path.join("."))</code>, ו־<code>new Set</code> כדי שכל שם יופיע פעם אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E26: API משימות מאפס
+import express, { type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
+
+type Task = { id: number; title: string; done: boolean };
+
+const newTaskSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  done: z.boolean().default(false),
+});
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const tasks: Task[] = [];
+  let nextId = 1;
+
+  const findTask = (id: string) =&gt; tasks.find((t) =&gt; t.id === Number(id));
+
+  app.get("/tasks", (req, res) =&gt; {
+    const { done } = req.query;
+    if (done === "true" || done === "false") {
+      res.json(tasks.filter((t) =&gt; t.done === (done === "true")));
+      return;
+    }
+    res.json(tasks);
+  });
+
+  app.get("/tasks/:id", (req, res) =&gt; {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    res.json(task);
+  });
+
+  app.post("/tasks", (req, res) =&gt; {
+    const result = newTaskSchema.safeParse(req.body);
+    if (!result.success) {
+      const fields = [...new Set(result.error.issues.map((i) =&gt; i.path.join(".")))];
+      res.status(400).json({ error: "קלט לא תקין", fields });
+      return;
+    }
+    const task = { id: nextId++, ...result.data };
+    tasks.push(task);
+    res.status(201).location(`/tasks/${task.id}`).json(task);
+  });
+
+  app.delete("/tasks/:id", (req, res) =&gt; {
+    const task = findTask(req.params.id);
+    if (!task) {
+      res.status(404).json({ error: "המשימה לא נמצאה" });
+      return;
+    }
+    tasks.splice(tasks.indexOf(task), 1);
+    res.sendStatus(204);
+  });
+
+  app.use((err: { type?: string }, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "JSON לא תקין" });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}
+
+// הדגמה: מפעילים על פורט פנוי, שולחים כמה בקשות וסוגרים
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const post = (body: unknown) =&gt; fetch(`${base}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  const created = await post({ title: "  לקנות חלב " });
+  console.log(created.status, created.headers.get("location"), await created.json());
+  const bad = await post({ title: "", done: "yes" });
+  console.log(bad.status, await bad.json());
+  console.log((await fetch(`${base}/tasks?done=false`).then((r) =&gt; r.json())).length);
+  server.close();
+});</code></pre>
+<pre class="terminal">201 /tasks/1 { id: 1, title: 'לקנות חלב', done: false }
+400 { error: 'קלט לא תקין', fields: [ 'title', 'done' ] }
+1</pre>
+<p>שים לב איפה כל דבר נמצא. ה־schema מחוץ ל־<code>createApp</code>: הוא קבוע, ואין סיבה לבנות אותו מחדש. הנתונים (<code>tasks</code>, ‏<code>nextId</code>) בפנים, כדי שכל אפליקציה תתחיל נקייה, כמו ב־P15-E08.</p>
+<p><code>findTask</code> משרתת שני routes. ‏<code>Number("abc")</code> הוא <code>NaN</code>, ו־<code>NaN</code> לא שווה לאף id — אז גם id שאינו מספר מקבל 404, בלי בדיקה נפרדת.</p>
+<p><code>...result.data</code> ולא <code>...req.body</code>: אחרי Zod יש לנו את הערכים <em>אחרי</em> trim ועם ברירת המחדל של <code>done</code>. ושדה מיותר שהלקוח שלח (למשל <code>id: 999</code>) לא נכנס, כי <code>z.object</code> מסיר שדות שלא הוגדרו.</p>
+<p>ההדגמה בסוף הקובץ מפעילה את השרת על פורט 0 (מערכת ההפעלה בוחרת פורט פנוי), שולחת שלוש בקשות, וסוגרת אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">const task = { id: nextId++, ...req.body }</code> — עוקף את Zod: הכותרת לא עוברת trim, והלקוח יכול לקבוע לעצמו <code>id</code>.</li><li>מערך המשימות ברמת הקובץ — בדיקה אחת "מלכלכת" את הבאה.</li><li><code>req.query.done === true</code> — ב־query הכול מחרוזות, ובמקרה הזה זה <code>"true"</code>.</li><li>לשכוח <code>return</code> אחרי <code>res.status(404).json(...)</code> — הקוד ממשיך, ומגיעים ל־<code class="mid">Cannot set headers after they are sent</code> (P15-E21).</li><li>error handler עם 3 פרמטרים — Express לא מזהה אותו כ־error handler.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15-E28">
+    <h3>P15-E28 · סכום עגלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קיבוץ: <code class="mid">const qtyBySku = new Map&lt;string, number&gt;()</code>, ובלולאה על <code>items</code>: ‏<code class="mid">qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty)</code>. ‏<code>Map</code> שומרת את סדר ההכנסה, ולכן הסדר נשמר מעצמו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לולאה שנייה, <code class="mid">for (const [sku, qty] of qtyBySku)</code>: מוצר חסר ← 404 ו־<code>return</code>. אחרת <code>lines.push(...)</code>. ובסוף: <code class="mid">lines.reduce((sum, line) =&gt; sum + line.subtotal, 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E28: סכום עגלה
+import express from "express";
+import { z } from "zod";
+
+export type Product = { name: string; price: number };
+
+const cartSchema = z.object({
+  items: z
+    .array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1).max(99) }))
+    .min(1),
+});
+
+export function createApp(catalog: Map&lt;string, Product&gt;) {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/cart/total", (req, res) =&gt; {
+    const result = cartSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: "קלט לא תקין" });
+      return;
+    }
+
+    // אותו sku פעמיים — מאחדים (Map שומרת על סדר ההופעה הראשונה)
+    const qtyBySku = new Map&lt;string, number&gt;();
+    for (const { sku, qty } of result.data.items) {
+      qtyBySku.set(sku, (qtyBySku.get(sku) ?? 0) + qty);
+    }
+
+    const lines = [];
+    for (const [sku, qty] of qtyBySku) {
+      const product = catalog.get(sku);
+      if (!product) {
+        res.status(404).json({ error: `מוצר לא קיים: ${sku}` });
+        return;
+      }
+      lines.push({ sku, name: product.name, qty, subtotal: product.price * qty });
+    }
+
+    const total = lines.reduce((sum, line) =&gt; sum + line.subtotal, 0);
+    res.json({ lines, total });
+  });
+
+  return app;
+}
+
+const catalog = new Map&lt;string, Product&gt;([
+  ["PEN", { name: "עט", price: 450 }],
+  ["CUP", { name: "כוס", price: 1990 }],
+]);
+const server = createApp(catalog).listen(0, async () =&gt; {
+  const address = server.address();
+  const url = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/cart/total`;
+  const post = async (body: unknown) =&gt; {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    console.log(res.status, JSON.stringify(await res.json()));
+  };
+  await post({ items: [{ sku: "PEN", qty: 2 }, { sku: "CUP", qty: 1 }, { sku: "PEN", qty: 1 }] });
+  await post({ items: [{ sku: "BOOK", qty: 1 }] });
+  await post({ items: [] });
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"lines":[{"sku":"PEN","name":"עט","qty":3,"subtotal":1350},{"sku":"CUP","name":"כוס","qty":1,"subtotal":1990}],"total":3340}
+404 {"error":"מוצר לא קיים: BOOK"}
+400 {"error":"קלט לא תקין"}</pre>
+<p>למה <code>for...of</code> ולא <code>map</code> בלולאה השנייה? כי באמצע יכול להיות <code>return</code> עם 404. מתוך callback של <code>map</code>, ‏<code>return</code> יוצא רק מה־callback, לא מה־route.</p>
+<p>המחירים באגורות (פרק 2), ולכן הסכום מדויק. ב־<code>19.9 × 3</code> בשקלים היה יוצא <code>59.699999999999996</code>.</p>
+<p>הקטלוג נכנס כפרמטר ל־<code>createApp</code>, כמו repository מוזרק בפרק 12. כך הבודק נותן קטלוג משלו, ובפרק 19 תוכל להחליף אותו בשאילתה למסד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר שתי שורות ל־PEN — לא קיבצת לפי <code>sku</code>.</li><li><code>catalog[sku]</code> במקום <code>catalog.get(sku)</code> — ב־Map זה תמיד <code>undefined</code>, וכל מוצר "לא קיים".</li><li>לבדוק 404 בתוך <code>items.map(...)</code> ולהמשיך — שתי תשובות לאותה בקשה.</li><li><code>reduce</code> בלי ערך התחלתי <code>0</code> — הצובר מתחיל כאובייקט השורה הראשונה, ולא כמספר.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-zod.html"><small>הבא</small>שיעור 4 — בדיקת קלט עם Zod</a></div>
+</main>
+</body>
+</html>

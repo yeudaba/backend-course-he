@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 21</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 21</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>21-auth/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P21-E04">
+    <h3>P21-E04 · שני טוקנים — למה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה אפשר לבטל, ומה לא?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(ג) — עקוב אחרי <code>refresh()</code> בשיעור 3: מה רואה השרת כשהדפדפן של דנה שולח טוקן שכבר הוחלף?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>(א) JWT אי אפשר לבטל — הוא תקף עד <code>exp</code>. טוקן גנוב היה עובד שבוע, גם אחרי יציאה וגם אחרי החלפת סיסמה.</p>
+<p>(ב) כל הערך של ה־refresh token הוא שאפשר <strong>לבטל</strong> אותו (יציאה, החלפת סיסמה, זיהוי גניבה) ולוודא שהוא חד־פעמי. לשם כך השרת צריך לזכור מה ניתן ומה כבר נוצל — כלומר מסד. ואם ממילא בודקים במסד, אין סיבה שהוא יהיה JWT: מחרוזת אקראית מספיקה.</p>
+<p>(ג) 09:05: התוקף שולח את הטוקן ← השרת מבטל אותו ומחזיר לתוקף זוג חדש (A2, R2). 09:30: הדפדפן של דנה שולח את אותו טוקן ← השרת רואה טוקן <em>שכבר בוטל</em> ← מבטל את <strong>כל</strong> ה־refresh tokens של דנה (כולל R2 של התוקף) ← 401 לדנה, שמתחברת מחדש עם סיסמה. התוקף נשאר עם A2 בלבד — עד 15 דקות מ־09:05, כלומר כבר לא תקף. (במערכת אמיתית גם שולחים לדנה מייל: "זיהינו כניסה חשודה".)</p>
+<p>(ד) הוא עובד עד שיפוג — לכל היותר 15 דקות. זה המחיר של JWT, ולכן התוקף קצר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שיציאה "מבטלת" את ה־access token. היא מבטלת רק את ה־refresh.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E15">
+    <h3>P21-E15 · refresh token אטום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">randomBytes(32).toString("base64url")</code> ו־<code class="mid">createHash("sha256").update(token).digest("hex")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"פג" — כש־<code>expiresAt &lt;= now</code>. בדיוק 7 ימים אחרי — כבר לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E15
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+export const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sha256 = (value: string) =&gt; createHash("sha256").update(value).digest("hex");
+
+interface Record {
+  userId: number;
+  expiresAt: number;
+  usedAt: number | null;
+}
+
+@Injectable()
+export class RefreshTokenService {
+  // המפתח הוא ה־hash של הטוקן — הטוקן עצמו לא נשמר בשום מקום
+  private readonly records = new Map&lt;string, Record&gt;();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  issue(userId: number): string {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, expiresAt: this.clock.now().getTime() + REFRESH_TTL_MS, usedAt: null });
+    return token;
+  }
+
+  rotate(token: string): { userId: number; refreshToken: string } {
+    const record = this.records.get(sha256(token));
+    const now = this.clock.now().getTime();
+    if (!record || record.usedAt !== null || record.expiresAt &lt;= now) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.usedAt = now; // פעם אחת בלבד
+    return { userId: record.userId, refreshToken: this.issue(record.userId) };
+  }
+
+  storedKeys(): string[] {
+    return [...this.records.keys()];
+  }
+}</code></pre>
+<p>שים לב ש־<code>storedKeys()</code> מחזיר רק hashes: אם מישהו ישפוך את ה־Map (או את הטבלה) — אין לו אף טוקן שעובד. ולמה SHA-256 ולא bcrypt? כי הטוקן אקראי לגמרי (אין מה לנחש), וכי צריך לחפש לפיו — bcrypt נותן hash שונה בכל פעם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> — לא מספיק אקראי לאבטחה. תמיד <code>crypto.randomBytes</code>.</li><li>למחוק את הרשומה הישנה במקום לסמן אותה — עובד כאן, אבל אז אי אפשר לזהות שימוש חוזר (E16).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E16">
+    <h3>P21-E16 · משפחות של טוקנים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל רשומה: <code class="mid">{ userId, familyId, expiresAt, revoked }</code>. <code>familyId</code> — מחרוזת אקראית שנוצרת ב־<code>login</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>rotate</code>, הסדר: לא קיים ← 401; מבוטל ← בטל משפחה, 401; פג ← 401; אחרת — בטל וצור חדש עם אותו <code>familyId</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E16
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sha256 = (value: string) =&gt; createHash("sha256").update(value).digest("hex");
+
+interface Record {
+  userId: number;
+  familyId: string; // כל הטוקנים שנולדו מאותה כניסה (אותו מכשיר)
+  expiresAt: number;
+  revoked: boolean;
+}
+
+@Injectable()
+export class RefreshTokenService {
+  private readonly records = new Map&lt;string, Record&gt;();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  private store(userId: number, familyId: string) {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, familyId, expiresAt: this.clock.now().getTime() + TTL_MS, revoked: false });
+    return token;
+  }
+
+  // כניסה חדשה = משפחה חדשה
+  login(userId: number): string {
+    return this.store(userId, randomBytes(8).toString("hex"));
+  }
+
+  rotate(token: string): { userId: number; refreshToken: string } {
+    const record = this.records.get(sha256(token));
+    if (!record) throw new UnauthorizedException("צריך להתחבר מחדש");
+    if (record.revoked) {
+      // שימוש חוזר: מישהו מחזיק עותק. מבטלים את כל המשפחה — רק המכשיר הזה, לא את כל המכשירים
+      for (const r of this.records.values()) if (r.familyId === record.familyId) r.revoked = true;
+      throw new UnauthorizedException("צריך להתחבר מחדש");
+    }
+    if (record.expiresAt &lt;= this.clock.now().getTime()) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.revoked = true;
+    return { userId: record.userId, refreshToken: this.store(record.userId, record.familyId) };
+  }
+
+  activeCount(userId: number): number {
+    return [...this.records.values()].filter((r) =&gt; r.userId === userId &amp;&amp; !r.revoked).length;
+  }
+}</code></pre>
+<p>rotation עם זיהוי שימוש חוזר מופיע בהמלצות האבטחה של OAuth, ו"משפחה" (token family) הוא המונח שספקי זהות כמו Auth0 משתמשים בו. התוקף שגנב מהלפטופ נחסם, הלפטופ מתחבר מחדש — והטלפון לא מרגיש כלום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבטל את המשפחה רק כשהטוקן <em>המבוטל</em> חוזר, אבל לשכוח שהחדש (שבידי התוקף או המשתמש) באותה משפחה — אז הוא ממשיך לעבוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E17">
+    <h3>P21-E17 · יציאה והחלפת סיסמה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>למה לדרוש את הסיסמה הישנה, אם המשתמש כבר מחובר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הבדיקות לפי הסדר: קודם הישנה (401), ורק אחר כך החדשה (400). כך ניסיון "לנחש" לא מקבל רמזים על מדיניות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E17
+import { createHash, randomBytes } from "node:crypto";
+import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import bcrypt from "bcryptjs";
+
+export const BCRYPT_ROUNDS = "BCRYPT_ROUNDS";
+const sha256 = (value: string) =&gt; createHash("sha256").update(value).digest("hex");
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+}
+
+@Injectable()
+export class AccountService {
+  private readonly users: User[] = [];
+  private readonly refreshTokens = new Map&lt;string, { userId: number; revoked: boolean }&gt;();
+
+  constructor(@Inject(BCRYPT_ROUNDS) private readonly rounds: number) {}
+
+  async createUser(email: string, password: string) {
+    const user = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(password, this.rounds) };
+    this.users.push(user);
+    return user.id;
+  }
+
+  async login(email: string, password: string): Promise&lt;string&gt; {
+    const user = this.users.find((u) =&gt; u.email === email);
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    const token = randomBytes(32).toString("base64url");
+    this.refreshTokens.set(sha256(token), { userId: user.id, revoked: false });
+    return token;
+  }
+
+  isActive(token: string): boolean {
+    const record = this.refreshTokens.get(sha256(token));
+    return record !== undefined &amp;&amp; !record.revoked;
+  }
+
+  logout(token: string): void {
+    const record = this.refreshTokens.get(sha256(token));
+    if (record) record.revoked = true; // טוקן לא מוכר — פשוט לא עושים כלום
+  }
+
+  async changePassword(userId: number, oldPassword: string, newPassword: string): Promise&lt;void&gt; {
+    const user = this.users.find((u) =&gt; u.id === userId);
+    if (!user) throw new NotFoundException("משתמש לא נמצא");
+    // מי שמחזיק טוקן גנוב לא יכול להחליף סיסמה בלי לדעת את הישנה
+    if (!(await bcrypt.compare(oldPassword, user.passwordHash))) throw new UnauthorizedException("הסיסמה הנוכחית שגויה");
+    if (newPassword.length &lt; 8) throw new BadRequestException("לפחות 8 תווים");
+    if (newPassword === oldPassword) throw new BadRequestException("הסיסמה החדשה זהה לישנה");
+    user.passwordHash = await bcrypt.hash(newPassword, this.rounds);
+    // "צא מכל המכשירים": אם הסיסמה דלפה, גם הטוקנים שנוצרו איתה לא בטוחים
+    for (const record of this.refreshTokens.values()) if (record.userId === userId) record.revoked = true;
+  }
+}</code></pre>
+<p>הסיסמה הישנה נדרשת כי "מחובר" לא אומר "זה באמת הוא": אולי מישהו גנב טוקן, או ישב ליד מחשב פתוח. בלי הישנה — הוא היה מחליף סיסמה ונועל את הבעלים בחוץ. וביטול כל הטוקנים — כי אם המשתמש מחליף סיסמה בגלל חשד, הוא מצפה שכל מי שהיה מחובר ייזרק החוצה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבטל את הטוקנים <em>לפני</em> הבדיקות ← ניסיון כושל עם סיסמה שגויה מנתק את המשתמש מכל המכשירים (התקפת "ניתוק" פשוטה).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E23">
+    <h3>P21-E23 · refresh token שבור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>(3): כמה מילישניות ביום?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(1): המפתח של ה־Map צריך להיות <code>sha256(token)</code> — גם ב־set וגם ב־get.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E23: מתוקן
+import { createHash, randomBytes } from "node:crypto";
+import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000; // ← תקלה 3: היה 24 * 60 * 60 — שניות, לא מילישניות
+const sha256 = (value: string) =&gt; createHash("sha256").update(value).digest("hex");
+
+@Injectable()
+export class RefreshTokenService {
+  // ← תקלה 1: היה Map לפי הטוקן עצמו. מי שקורא את האחסון — מקבל טוקנים עובדים
+  private readonly records = new Map&lt;string, { userId: number; expiresAt: number; used: boolean }&gt;();
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  issue(userId: number): string {
+    const token = randomBytes(32).toString("base64url");
+    this.records.set(sha256(token), { userId, expiresAt: this.clock.now().getTime() + 7 * DAY_MS, used: false });
+    return token;
+  }
+
+  rotate(token: string) {
+    const record = this.records.get(sha256(token));
+    if (!record || record.used || record.expiresAt &lt;= this.clock.now().getTime()) throw new UnauthorizedException("צריך להתחבר מחדש");
+    record.used = true; // ← תקלה 2: הישן לא סומן — עבד שוב ושוב
+    return { userId: record.userId, refreshToken: this.issue(record.userId) };
+  }
+
+  storedKeys(): string[] {
+    return [...this.records.keys()];
+  }
+}</code></pre>
+<p>(3) הוא באג יחידות קלאסי: <code>24 * 60 * 60</code> הוא מספר השניות ביום, ו־<code>Date.getTime()</code> במילישניות. שבעה "ימים" כאלה הם 604,800 מילישניות — קצת יותר מ־10 דקות. בדיקה עם שעון מזויף תופסת את זה מיד; בדיקה ידנית "התחברתי וזה עבד" — לא.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (1) רק ב־<code>set</code> ← כל ה־<code>get</code> נכשלים, ואף טוקן לא עובד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P21-E28">
+    <h3>P21-E28 · רשימת חסימה לטוקנים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שדות: <code class="mid">#blocked = new Map&lt;string, number&gt;()</code> (‏jti ← exp) ו־<code>#now: () =&gt; number</code>. ‏<code>isBlocked</code>: ‏<code class="long">const exp = this.#blocked.get(jti); return exp !== undefined &amp;&amp; exp &gt; this.#now();</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>cleanup</code>: ‏<code class="long">for (const [jti, exp] of this.#blocked) { if (exp &lt;= now) { this.#blocked.delete(jti); removed++; } }</code>. ב־<code>Map</code> מותר למחוק את הרשומה הנוכחית תוך כדי מעבר. קרא ל־<code>this.#now()</code> פעם אחת לפני הלולאה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E28: רשימת חסימה לטוקנים (logout ל־access token)
+export class TokenBlocklist {
+  #blocked = new Map&lt;string, number&gt;();
+  #now: () =&gt; number;
+
+  constructor(now: () =&gt; number = () =&gt; Math.floor(Date.now() / 1000)) {
+    this.#now = now;
+  }
+
+  block(jti: string, exp: number): void {
+    if (exp &lt;= this.#now()) return; // כבר פג תוקף — אין מה לחסום
+    this.#blocked.set(jti, exp);
+  }
+
+  isBlocked(jti: string): boolean {
+    const exp = this.#blocked.get(jti);
+    return exp !== undefined &amp;&amp; exp &gt; this.#now();
+  }
+
+  cleanup(): number {
+    const now = this.#now();
+    let removed = 0;
+    for (const [jti, exp] of this.#blocked) {
+      if (exp &lt;= now) {
+        this.#blocked.delete(jti);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  get size(): number {
+    return this.#blocked.size;
+  }
+}
+
+let now = 1000;
+const list = new TokenBlocklist(() =&gt; now);
+list.block("a", 1900);
+list.block("b", 1100);
+list.block("old", 900);
+console.log(list.size, list.isBlocked("a"), list.isBlocked("old"));
+now = 1200;
+console.log(list.isBlocked("b"), list.cleanup(), list.size);</code></pre>
+<pre class="terminal">2 true false
+false 1 1</pre>
+<p>השעון המוזרק הוא מה שמאפשר לבדוק את המחלקה. בלעדיו, כדי לראות טוקן פג היית צריך לחכות 15 דקות. זה אותו רעיון כמו <code>CLOCK</code> ב־P21-E12, רק בלי Nest.</p>
+<p>הרשימה לא גדלה לנצח: כל טוקן נשמר רק עד ה־<code>exp</code> שלו, כי אחר כך ה־guard ממילא ידחה אותו. לכן הגודל המקסימלי הוא "כמה טוקנים חסמו ב־15 הדקות האחרונות". ‏<code>cleanup</code> רץ בתזמון (למשל כל דקה), וגם <code>isBlocked</code> נכון בלעדיו.</p>
+<p>בשרת עם כמה מופעים, רשימה בזיכרון לא מספיקה: מופע אחד חוסם, והשני לא יודע. שם שומרים אותה ב־Redis עם TTL. זה בדיוק <code>SET jti 1 EX ttl</code>, ותראה אותו בפרק 26.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Date.now()</code> בלי חלוקה — ‏<code>exp</code> של JWT בשניות, ולכן כל טוקן נראה כאילו פג מזמן.</li><li><code>isBlocked</code> שבודק רק <code>has(jti)</code> — טוקן שפג (ועוד לא נוקה) נחשב חסום. כאן זה לא מזיק, אבל זה לא מה שהפונקציה מבטיחה.</li><li>לשמור טוקנים שכבר פגו — הרשימה גדלה בלי סיבה.</li><li><code>size()</code> כמתודה במקום <code>get size()</code>.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-authorization.html"><small>הבא</small>שיעור 4 — הרשאות, בעלות ו־OWASP</a></div>
+</main>
+</body>
+</html>

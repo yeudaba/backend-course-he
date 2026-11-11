@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 26</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26-redis/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26-E03">
+    <h3>P26-E03 · מלכודות של cache <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"שני הדברים הקשים במדעי המחשב: ביטול cache, ונתינת שמות."</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה נמצא במפתח של ה־cache? וכל מה שמשפיע על התשובה — נמצא שם?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>ביטול (invalidation).</strong> TTL הוא רשת ביטחון, לא תוכנית. בכל שינוי — מבטלים: מוחקים את המפתח, או מעלים "גרסה" לקבוצה (E14, ובפרויקט). ו־TTL קצר לנתונים שמשתנים.</li><li><strong>stampede.</strong> כולם מגלים יחד שאין ערך, וכולם טוענים. פתרונות: רק אחד טוען (מנעול / single-flight — E13), TTL עם "רעש" אקראי כדי שלא כל המפתחות יפוגו יחד, או רענון ברקע לפני שפג.</li><li><strong>penetration.</strong> שומרים גם את "אין תוצאה" (רשימה ריקה, ל־TTL קצר) — E20. ובנוסף: rate limit.</li><li><strong>מפתח בלי המשתמש.</strong> כל מה שמשפיע על התשובה — כולל מי שואל — חייב להיות במפתח. או: לא לשמור ב־cache משותף נתונים פרטיים בכלל. זו דליפת מידע, לא באג קטן.</li><li><strong>cache הפך לתלות.</strong> cache הוא אופטימיזציה: אם Redis לא עונה — הולכים למסד (איטי, אבל עובד). בפרויקט: <code>X-Cache: OFF</code>, והכול ממשיך.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים TTL של יום, יהיה מהר" — ואז באג "המחיר לא מתעדכן" שאף אחד לא מצליח לשחזר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E07">
+    <h3>P26-E07 · cache-aside 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"cache-aside" = הקוד שלך מנהל את ה־cache: בודק, טוען, שומר. Redis לא יודע כלום על המסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה לא לשמור <code>null</code>? "המוצר לא קיים" יישאר ל־TTL שלם גם אחרי שייווצר. (רשימה ריקה <code>[]</code> — כן שומרים: זו תשובה אמיתית, ראה E20.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E07
+import type { Redis } from "ioredis";
+
+// cache-aside: קודם Redis; אין ← טוענים מהמקור ושומרים עם TTL
+export function createCacheAside(redis: Redis) {
+  const stats = { hits: 0, misses: 0 };
+  async function get&lt;T&gt;(key: string, ttlSeconds: number, load: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+    const raw = await redis.get(key);
+    if (raw !== null) {
+      stats.hits++;
+      return JSON.parse(raw) as T;
+    }
+    stats.misses++;
+    const value = await load(); // אם load זורק — לא שומרים כלום (לא מחזיקים שגיאות ב־cache)
+    if (value !== undefined &amp;&amp; value !== null) await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+    return value;
+  }
+  return { get, stats, invalidate: (key: string) =&gt; redis.del(key) };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור ב־cache את השגיאה ("db down") — וכל הלקוחות יקבלו אותה עד שה־TTL נגמר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E13">
+    <h3>P26-E13 · cache שעומד בעומס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Map&lt;string, Promise&gt;</code> — ומוחקים ב־<code>finally</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>המנעול — כמו ב־E12, ומשחררים רק אם הוא שלך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E13
+import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
+
+const RELEASE = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`;
+const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+// מניעת stampede: מפתח פופולרי פג תוקף, ו־500 בקשות טוענות אותו מהמסד בבת אחת.
+// בתוך תהליך — "single flight" (Promise משותף). בין שרתים — מנעול: רק אחד טוען, האחרים מחכים לערך
+export function createStampedeCache(redis: Redis, { lockMs = 5000, waitMs = 3000, pollMs = 25 } = {}) {
+  const inFlight = new Map&lt;string, Promise&lt;unknown&gt;&gt;();
+
+  async function load&lt;T&gt;(key: string, ttlSeconds: number, loader: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+    const cached = await redis.get(key);
+    if (cached !== null) return JSON.parse(cached) as T;
+    const token = randomUUID();
+    if ((await redis.set(`${key}:lock`, token, "PX", lockMs, "NX")) === "OK") {
+      try {
+        const value = await loader();
+        await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+        return value;
+      } finally {
+        await redis.eval(RELEASE, 1, `${key}:lock`, token);
+      }
+    }
+    // מישהו אחר טוען — מחכים שהערך יופיע. לא הופיע בזמן? טוענים בעצמנו (עדיף איטי מתקוע)
+    for (const end = Date.now() + waitMs; Date.now() &lt; end; ) {
+      await sleep(pollMs);
+      const v = await redis.get(key);
+      if (v !== null) return JSON.parse(v) as T;
+    }
+    return loader();
+  }
+
+  return {
+    get&lt;T&gt;(key: string, ttlSeconds: number, loader: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+      const existing = inFlight.get(key);
+      if (existing) return existing as Promise&lt;T&gt;;
+      const p = load(key, ttlSeconds, loader).finally(() =&gt; inFlight.delete(key));
+      inFlight.set(key, p);
+      return p;
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחכות למנעול בלי גבול — הטוען נתקע, וכל השרתים נתקעים איתו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E14">
+    <h3>P26-E14 · ביטול עם גרסה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי קריאות ל־Redis ב־<code>get</code>: הגרסה, ואז הערך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>המפתחות של הגרסה הישנה לא נמחקים — יש להם TTL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E14
+import type { Redis } from "ioredis";
+
+// cache עם "גרסה" לכל קבוצה: invalidate = INCR אחד, במקום לחפש ולמחוק את כל הווריאציות
+export function createVersionedCache(redis: Redis) {
+  const version = async (group: string) =&gt; (await redis.get(`v:${group}`)) ?? "0";
+  return {
+    async get&lt;T&gt;(group: string, key: string, ttlSeconds: number, load: () =&gt; Promise&lt;T&gt;): Promise&lt;{ value: T; hit: boolean }&gt; {
+      const full = `c:${group}:${await version(group)}:${key}`;
+      const raw = await redis.get(full);
+      if (raw !== null) return { value: JSON.parse(raw) as T, hit: true };
+      const value = await load();
+      await redis.set(full, JSON.stringify(value), "EX", ttlSeconds);
+      return { value, hit: false };
+    },
+    // המפתחות הישנים לא נמחקים — הם פשוט לא נקראים יותר, ומתים ב־TTL
+    invalidate: (group: string) =&gt; redis.incr(`v:${group}`),
+  };
+}</code></pre>
+<p>זה בדיוק מה שהפרויקט עושה לרשימת המוצרים: יש לה וריאציה לכל צירוף של <code>q</code>, <code>sort</code>, <code>page</code>… — ואין דרך טובה למצוא ולמחוק את כולן (<code>KEYS</code> חוסם את Redis).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>redis.keys("products:*")</code> ואז <code>DEL</code> — <code>KEYS</code> סורק את <em>כל</em> המפתחות וחוסם את Redis לכל השרתים בזמן הזה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E20">
+    <h3>P26-E20 · cache עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה במפתח? מה ב־<code>SET</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>if (value)</code> כש־value הוא <code>[]</code>? ו־<code>0</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E20
+import type { Redis } from "ioredis";
+
+export async function cachedSearch&lt;T&gt;(redis: Redis, query: { q: string; page: number }, load: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  // תקלה 1: המפתח חייב לכלול את *כל* מה שמשפיע על התשובה — גם page
+  const key = `search:${JSON.stringify([query.q, query.page])}`;
+  const cached = await redis.get(key);
+  // תקלה 3: if (cached) / if (value) — 0, "", [] ו־false הם ערכים תקינים. בודקים null בלבד
+  if (cached !== null) return JSON.parse(cached) as T;
+  const value = await load();
+  // תקלה 2: בלי EX הערך לא פג לעולם — שינוי מחיר לא יגיע ללקוח אף פעם
+  await redis.set(key, JSON.stringify(value), "EX", 60);
+  return value;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את 3 עם <code>if (value?.length)</code> — ואז <code>0</code> (ספירה) עדיין לא נשמר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26-E32">
+    <h3>P26-E32 · לקרוא את INFO של Redis 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>text.split(/\r?\n/)</code> מפריד גם <code>\r\n</code> וגם <code>\n</code>. בלולאה: משתנה <code>section</code> שמצביע על האובייקט של המקטע הנוכחי. שורה שמתחילה ב־<code>#</code> יוצרת אובייקט חדש ומכניסה אותו ל־<code>info</code>. שורה רגילה נכנסת ל־<code>section</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">Object.fromEntries(value.split(",").map((pair) =&gt; { const [k, n] = pair.split("="); return [k, Number(n)]; }))</code>. ב־<code>hitRatio</code>: ‏<code class="mid">Number(info.stats?.keyspace_hits ?? 0)</code>, ואז <code class="mid">Math.round(ratio * 1000) / 1000</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E32 — לקרוא את INFO של Redis
+export type Info = Record&lt;string, Record&lt;string, string&gt;&gt;;
+
+export function parseInfo(text: string): Info {
+  const info: Info = {};
+  let section: Record&lt;string, string&gt; | undefined;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "") continue;
+    if (line.startsWith("#")) {
+      section = {};
+      info[line.slice(1).trim().toLowerCase()] = section;
+      continue;
+    }
+    const colon = line.indexOf(":");
+    if (colon === -1 || section === undefined) continue;
+    section[line.slice(0, colon)] = line.slice(colon + 1);
+  }
+  return info;
+}
+
+export function parseKeyspace(info: Info): Record&lt;string, Record&lt;string, number&gt;&gt; {
+  const result: Record&lt;string, Record&lt;string, number&gt;&gt; = {};
+  for (const [db, value] of Object.entries(info.keyspace ?? {})) {
+    result[db] = Object.fromEntries(
+      value.split(",").map((pair) =&gt; {
+        const [key, n] = pair.split("=");
+        return [key, Number(n)];
+      }),
+    );
+  }
+  return result;
+}
+
+export function hitRatio(info: Info): number | null {
+  const hits = Number(info.stats?.keyspace_hits ?? 0);
+  const misses = Number(info.stats?.keyspace_misses ?? 0);
+  if (hits + misses === 0) return null;
+  return Math.round((hits / (hits + misses)) * 1000) / 1000;
+}
+
+const sample = [
+  "# Server",
+  "redis_version:8.2.1",
+  "os:Linux 6.10.14-linuxkit aarch64",
+  "listener0:name=tcp,bind=*,port=6379",
+  "",
+  "# Stats",
+  "keyspace_hits:1520",
+  "keyspace_misses:480",
+  "",
+  "# Keyspace",
+  "db0:keys=1204,expires=980,avg_ttl=512331,subexpiry=0",
+  "db3:keys=7,expires=0,avg_ttl=0,subexpiry=0",
+].join("\r\n");
+const info = parseInfo(sample);
+console.log(info.server);
+console.log(parseKeyspace(info));
+console.log(hitRatio(info), hitRatio(parseInfo("# Stats\r\nkeyspace_hits:0\r\nkeyspace_misses:0")));</code></pre>
+<pre class="terminal">{
+  redis_version: '8.2.1',
+  os: 'Linux 6.10.14-linuxkit aarch64',
+  listener0: 'name=tcp,bind=*,port=6379'
+}
+{
+  db0: { keys: 1204, expires: 980, avg_ttl: 512331, subexpiry: 0 },
+  db3: { keys: 7, expires: 0, avg_ttl: 0, subexpiry: 0 }
+}
+0.76 null</pre>
+<p>‏76% פגיעות: שלוש מכל ארבע קריאות לא מגיעות למסד. זה המספר שמראה אם ה־cache מתוכנן נכון. אם הוא נמוך, ה־TTL קצר מדי, או שהמפתחות כוללים משהו שמשתנה בכל בקשה (למשל זמן).</p>
+<p>‏<code>split(/\r?\n/)</code> במקום <code>split("\n")</code>: עם <code>"\n"</code> בלבד, כל ערך נשאר עם <code>\r</code> בסוף. ‏<code>"8.2.1\r" === "8.2.1"</code> הוא <code>false</code>, ובמסוף לא רואים את ההבדל. זו אחת התקלות המבלבלות ביותר בקריאת פרוטוקולים ישנים (HTTP/1, ‏SMTP, ‏Redis).</p>
+<p>‏<code class="mid">listener0:name=tcp,bind=*,port=6379</code> — בערך יש <code>=</code> ופסיקים, ובשורות אחרות גם נקודתיים. בגלל זה <code>indexOf</code> של הנקודתיים הראשונות, ולא <code>split(":")</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>split("\n")</code> — ‏<code>\r</code> נשאר בסוף כל ערך.</li><li><code>line.split(":")</code> — ערך עם נקודתיים נחתך.</li><li>חלוקה באפס — שרת שעלה עכשיו מחזיר <code>NaN</code>, וגרף שמצייר <code>NaN</code> נשבר.</li><li>להשאיר את המספרים כמחרוזות ב־<code>parseKeyspace</code> — ‏<code>"1204" &gt; "980"</code> הוא <code>false</code>.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-shared.html"><small>הבא</small>שיעור 3 — מצב משותף: הגבלת קצב, מנעולים ו־Lua</a></div>
+</main>
+</body>
+</html>

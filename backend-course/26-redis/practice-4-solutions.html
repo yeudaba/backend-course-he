@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 26</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26-redis/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26-E04">
+    <h3>P26-E04 · בתור או עכשיו? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה: האם התשובה ללקוח <em>תלויה</em> בתוצאה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>worker שסיים את העבודה ונפל רגע לפני שדיווח "סיימתי" — מה התור יעשה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>עכשיו.</strong> התשובה ("הוזמן" / "אזל") תלויה בזה, וזה חלק מהטרנזקציה.</li><li><strong>תור.</strong> הלקוח לא צריך לחכות ל־SMTP, ו־SMTP שלא זמין לרגע לא צריך להכשיל הזמנה. נכשל ← retry עם backoff.</li><li><strong>תור.</strong> מחזירים מיד "בהכנה", וכשמוכן — מודיעים (או הלקוח בודק).</li><li><strong>תלוי.</strong> בפרויקט — עכשיו: הלקוח מחכה לתשובה "שולם / נדחה". במערכות גדולות — הספק עונה מאוחר יותר ב־webhook, וזה כבר אסינכרוני.</li><li><strong>תור עם delay</strong> (BullMQ: <code>delay</code>). לא cron שסורק כל דקה את כל ההזמנות.</li><li><strong>תור.</strong> עקביות "בסופו של דבר" מספיקה: חיפוש שמתעדכן אחרי שנייה זה בסדר.</li></ol>
+<p><strong>לא נכון.</strong> תורים מבטיחים "<em>לפחות</em> פעם אחת" (at-least-once). worker שנפל אחרי העבודה ולפני ה־ack ← העבודה תרוץ שוב. לכן כל צרכן חייב להיות idempotent: <code>jobId</code> קבוע להוספה, ובצד הביצוע — "כבר טופל?" (E18, ו־<code>UNIQUE (kind, order_id)</code> בפרויקט).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח מייל מתוך הטרנזקציה — ואז הטרנזקציה נכשלת (ROLLBACK), והמייל "ההזמנה התקבלה" כבר יצא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E16">
+    <h3>P26-E16 · תור מיילים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">queue.add(name, data, { jobId, attempts, backoff: { type: "exponential", delay } })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">new Worker(name, async (job) =&gt; …, { connection, prefix })</code> — אותו <code>name</code> ואותו <code>prefix</code> כמו ה־Queue.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E16
+import { Queue, Worker, type ConnectionOptions } from "bullmq";
+
+export interface Email {
+  to: string;
+  subject: string;
+}
+
+// יצרן: מוסיף עבודה. jobId מהעסק (לא אקראי): אותו מייל פעמיים = עבודה אחת
+export function createEmailQueue(connection: ConnectionOptions, prefix: string) {
+  const queue = new Queue&lt;Email&gt;("emails", { connection, prefix });
+  return {
+    queue,
+    send: (id: string, email: Email) =&gt;
+      queue.add("email", email, { jobId: id, attempts: 4, backoff: { type: "exponential", delay: 50 }, removeOnComplete: 100 }),
+    close: () =&gt; queue.close(),
+  };
+}
+
+// צרכן: מריץ את deliver; זריקה ← BullMQ ינסה שוב (attempts), עם backoff
+export function startEmailWorker(connection: ConnectionOptions, prefix: string, deliver: (email: Email) =&gt; Promise&lt;void&gt;) {
+  return new Worker&lt;Email&gt;("emails", async (job) =&gt; deliver(job.data), { connection, prefix, concurrency: 5 });
+}</code></pre>
+<p>הבודק: מייל אחד שנכשל פעמיים ומצליח בשלישית, אותו מייל שנשלח פעמיים, וכתובת שתמיד נכשלת — שמגיעה בסוף ל־failed ולא מנסה לנצח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>Worker בלי <code>maxRetriesPerRequest: null</code> בחיבור — BullMQ מזהיר, וחיבור שנקטע מפיל את ה־worker.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E17">
+    <h3>P26-E17 · עבודה מתוזמנת וביטול 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>queue.getJob(id)</code>, <code>job.isDelayed()</code>, <code>job.remove()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בפרויקט אין <code>cancel</code> — ה־worker פשוט בודק את המצב כשהעבודה רצה ("עדיין לא שולמה?"). שתי גישות; מה היתרון של כל אחת?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E17
+import { Queue, Worker, type ConnectionOptions } from "bullmq";
+
+// תזכורת מתוזמנת: עבודה עם delay. jobId לפי ההזמנה — כדי שאפשר יהיה לבטל אותה כשהלקוח שילם
+export function createReminders(connection: ConnectionOptions, prefix: string) {
+  const queue = new Queue&lt;{ orderId: number }&gt;("reminders", { connection, prefix });
+  return {
+    queue,
+    schedule: (orderId: number, delayMs: number) =&gt; queue.add("remind", { orderId }, { jobId: `remind-${orderId}`, delay: delayMs }),
+    // שולם לפני הזמן — מבטלים. מחזיר true אם הייתה עבודה ממתינה שבוטלה
+    async cancel(orderId: number) {
+      const job = await queue.getJob(`remind-${orderId}`);
+      if (!job || !(await job.isDelayed())) return false;
+      await job.remove();
+      return true;
+    },
+    close: () =&gt; queue.close(),
+  };
+}
+
+export function startReminderWorker(connection: ConnectionOptions, prefix: string, remind: (orderId: number) =&gt; Promise&lt;void&gt;) {
+  return new Worker&lt;{ orderId: number }&gt;("reminders", (job) =&gt; remind(job.data.orderId), { connection, prefix });
+}</code></pre>
+<p>בפרויקט בחרנו "לבדוק כשמגיע הזמן" ולא "לבטל כששולם": אם הביטול נכשל (Redis לא זמין לרגע) — העבודה תרוץ, ותבטל הזמנה ששולמה. בדיקה בזמן הריצה נכונה תמיד; ביטול הוא רק חיסכון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>cron כל דקה שסורק את כל ההזמנות "האם עברו 30 דקות" — עובד, אבל עמוס ולא מדויק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E18">
+    <h3>P26-E18 · צרכן idempotent 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">redis.set(key, "1", "EX", ttl, "NX")</code> מחזיר <code>"OK"</code> רק לראשון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה TTL? כדי שהסימונים לא יצטברו לנצח. (כמה זמן? יותר מהזמן שבו הודעה יכולה להגיע שוב.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E18
+import type { Redis } from "ioredis";
+
+// "צרכן idempotent": תורים מבטיחים "לפחות פעם אחת" — לא "בדיוק פעם אחת". retry, worker שנפל אחרי העבודה ולפני ack…
+// לכן כל הודעה מסומנת כ"טופלה". SET NX: רק הראשון מצליח לסמן. נכשל באמצע? מוחקים את הסימון — שינסו שוב
+export async function processOnce&lt;T&gt;(redis: Redis, messageId: string, ttlSeconds: number, handler: () =&gt; Promise&lt;T&gt;): Promise&lt;{ processed: boolean; result?: T }&gt; {
+  const key = `processed:${messageId}`;
+  if ((await redis.set(key, "1", "EX", ttlSeconds, "NX")) !== "OK") return { processed: false };
+  try {
+    return { processed: true, result: await handler() };
+  } catch (err) {
+    await redis.del(key);
+    throw err;
+  }
+}</code></pre>
+<p>יש עדינות: אם ה־handler הצליח, אבל התהליך מת לפני שהחזיר — הסימון קיים, וההודעה לא תטופל שוב. מצוין לחיוב; פחות למשהו שבאמת לא קרה. הפתרון החזק יותר — כמו בפרויקט: הייחודיות בתוך <em>אותה</em> פעולה (<code>UNIQUE</code> בטבלת המיילים), כך ש"טופל" ו"קרה" הם אותו דבר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמן "טופל" רק <em>אחרי</em> ה־handler — שתי העתקות שמגיעות יחד יריצו שתיהן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E23">
+    <h3>P26-E23 · תור עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה עושה ה־<code>try/catch</code> ב־worker מבחינת BullMQ?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>jobId: randomUUID()</code> — מה זה עושה לכפילויות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E23
+import { Queue, Worker, type ConnectionOptions } from "bullmq";
+
+export function createConfirmations(connection: ConnectionOptions, prefix: string, deliver: (orderId: number) =&gt; Promise&lt;void&gt;) {
+  const queue = new Queue&lt;{ orderId: number }&gt;("confirmations", { connection, prefix });
+  // תקלה 1: try/catch שבולע את השגיאה — מבחינת BullMQ העבודה "הצליחה", ואין retry. נותנים לשגיאה לעלות
+  const worker = new Worker&lt;{ orderId: number }&gt;("confirmations", (job) =&gt; deliver(job.data.orderId), { connection, prefix });
+  return {
+    // תקלה 2: jobId אקראי — כל קריאה היא עבודה חדשה (תשלום שנשלח פעמיים ← שני מיילים). מזהה עסקי
+    // תקלה 3: בלי attempts — ניסיון אחד בלבד
+    send: (orderId: number) =&gt; queue.add("confirm", { orderId }, { jobId: `confirm-${orderId}`, attempts: 5, backoff: { type: "exponential", delay: 50 } }),
+    close: async () =&gt; {
+      await worker.close();
+      await queue.close();
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>try/catch שבולע — "שקט" בלוגים, ומיילים שנעלמים בלי זכר. עדיף שעבודה תיכשל בקול ותגיע ל־failed.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 3, שלב 5: Redis בחנות</a></div>
+</main>
+</body>
+</html>

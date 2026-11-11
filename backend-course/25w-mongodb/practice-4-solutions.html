@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.7-E04">
+    <h3>P25.7-E04 · לקרוא explain <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>12 חזרו, 3,800 נבדקו. ו־SORT בתוכנית = מיון בזיכרון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ESR: שני שדות של שוויון, ואחריהם שדה המיון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li>האינדקס מצא את 3,800 ההזמנות של c42; את הסינון לפי status ואת המיון Mongo עשה אחר כך — קרא 3,800 מסמכים כדי להחזיר 12, ומיין בזיכרון.</li>
+<li><code class="mid">{ customerId: 1, status: 1, createdAt: -1 }</code>. שני שדות השוויון קודם (הסדר ביניהם פחות חשוב), ואחריהם שדה המיון — כך הרשומות באינדקס כבר ממוינות בתוך כל צירוף.</li>
+<li>אין SORT בתוכנית, ו־totalKeysExamined / totalDocsExamined ≈ 12.</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">{ createdAt: -1, customerId: 1 }</code> — שדה המיון ראשון: Mongo עובר על כל ההזמנות לפי זמן ומסנן תוך כדי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E12">
+    <h3>P25.7-E12 · אינדקסים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ESR: equality קודם, sort אחריו. <code class="mid">createIndex(keys, { name })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>TTL: <code class="mid">{ expiresAt: 1 }, { expireAfterSeconds: 0 }</code> — "0 שניות אחרי הזמן שבשדה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E12
+import type { Db } from "mongodb";
+
+export async function createIndexes(db: Db) {
+  // ESR: Equality (customerId) ← Sort (createdAt) — מתאים ל"ההזמנות של לקוח, מהחדשה"
+  await db.collection("orders").createIndex({ customerId: 1, createdAt: -1 }, { name: "customer_recent" });
+  await db.collection("products").createIndex({ category: 1, price: 1 }, { name: "category_price" });
+  // TTL: Mongo מוחק לבד מסמכים שה־expiresAt שלהם עבר (תהליך רקע, בערך פעם בדקה)
+  await db.collection("sessions").createIndex({ expiresAt: 1 }, { name: "sessions_ttl", expireAfterSeconds: 0 });
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">{ createdAt: -1, customerId: 1 }</code> — עדיין IXSCAN, אבל על כל ההזמנות.</li><li>TTL על שדה שהוא מחרוזת — Mongo לא מוחק כלום (רק Date).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E14">
+    <h3>P25.7-E14 · מכירות לפי מוצר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>$match ← $unwind ← $group ← $sort ← $project.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } }</code>, ו־<code class="mid">name: { $first: "$items.name" }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E14
+import type { Db } from "mongodb";
+
+export async function salesByProduct(db: Db) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $in: ["paid", "delivered"] } } }, // קודם מסננים — פחות מסמכים לשלבים הבאים
+      { $unwind: "$items" }, // מסמך לכל פריט
+      { $group: { _id: "$items.productId", name: { $first: "$items.name" }, units: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } } } },
+      { $sort: { revenue: -1, _id: 1 } },
+      { $project: { _id: 0, productId: "$_id", name: 1, units: 1, revenue: 1 } },
+    ])
+    .toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>$match אחרי $group — כבר אין status.</li><li><code>$lookup</code> ל־products כדי לקחת מחיר — המחיר של היום, לא של ההזמנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E15">
+    <h3>P25.7-E15 · הלקוחות המובילים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קיבוץ לפי <code>customerId</code>, ואז <code>$lookup</code> ל־customers.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>$limit</code> לפני ה־<code>$lookup</code>. ותוצאת <code>$lookup</code> היא מערך — <code>$unwind</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E15
+import type { Db } from "mongodb";
+
+export async function topCustomers(db: Db, n = 3) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $ne: "cancelled" } } },
+      { $group: { _id: "$customerId", spent: { $sum: "$total" }, orders: { $sum: 1 } } },
+      { $sort: { spent: -1, _id: 1 } },
+      { $limit: n }, // לפני ה־$lookup: מצטרפים רק ל־n לקוחות, לא לכולם
+      { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "customer" } },
+      { $unwind: "$customer" },
+      { $project: { _id: 0, customerId: "$_id", name: "$customer.name", spent: 1, orders: 1 } },
+    ])
+    .toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>$lookup לפני ה־$group — מצרפים את הלקוח לכל הזמנה, ואז מקבצים.</li><li><code>name: "$customer.name"</code> בלי $unwind — מקבלים מערך של שם אחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E22">
+    <h3>P25.7-E22 · aggregation עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הרץ את ה־pipeline שלב אחרי שלב (מחק את השלבים מהסוף) ותסתכל על המסמכים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי $group יש רק <code>_id</code> והשדות שהגדרת. ו־<code>{ $sum: 1 }</code> סופר מסמכים, לא יחידות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E22
+import type { Db } from "mongodb";
+
+// כמה יחידות נמכרו מכל קטגוריה (הזמנות ששולמו או נמסרו)
+export async function unitsByCategory(db: Db) {
+  return db
+    .collection("orders")
+    .aggregate([
+      { $match: { status: { $in: ["paid", "delivered"] } } }, // תקלה 1: לסנן לפני ה־$group — אחריו כבר אין status
+      { $unwind: "$items" }, // תקלה 2: בלי $unwind, "$items.qty" הוא מערך, ו־$sum של מערך הוא 0
+      { $lookup: { from: "products", localField: "items.productId", foreignField: "_id", as: "product" } },
+      { $unwind: "$product" },
+      { $group: { _id: "$product.category", units: { $sum: "$items.qty" } } }, // תקלה 3: qty, לא 1 (1 סופר שורות)
+      { $sort: { units: -1, _id: 1 } },
+      { $project: { _id: 0, category: "$_id", units: 1 } },
+    ])
+    .toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code class="mid">status: { $first: "$status" }</code> ל־$group ולסנן אחריו — מסנן לפי הסטטוס של הזמנה <em>אחת</em> בכל קבוצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E24">
+    <h3>P25.7-E24 · אתגר: דשבורד בבקשה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">$facet: { byDay: [...], byStatus: [...], topProducts: [...] }</code> — שלושה pipelines על אותם מסמכים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">$dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone: "Asia/Jerusalem" }</code>. ו־byStatus — המרה לאובייקט ב־JS אחרי השאילתה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E24
+import type { Db } from "mongodb";
+
+// דשבורד של טווח תאריכים — בבקשה אחת: הכנסות לפי יום (בשעון ישראל), ספירה לפי סטטוס, ו־3 המוצרים המובילים
+export async function dashboard(db: Db, from: Date, to: Date) {
+  const [result] = await db
+    .collection("orders")
+    .aggregate([
+      { $match: { createdAt: { $gte: from, $lt: to } } },
+      {
+        $facet: {
+          byDay: [
+            { $match: { status: { $ne: "cancelled" } } },
+            // היום לפי ישראל, לא לפי UTC: הזמנה ב־22:10Z ב־1.11 היא 2.11 בישראל (פרק 24)
+            { $group: { _id: { $dateToString: { date: "$createdAt", format: "%Y-%m-%d", timezone: "Asia/Jerusalem" } }, revenue: { $sum: "$total" }, orders: { $sum: 1 } } },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, day: "$_id", revenue: 1, orders: 1 } },
+          ],
+          byStatus: [{ $group: { _id: "$status", n: { $sum: 1 } } }, { $sort: { _id: 1 } }],
+          topProducts: [
+            { $match: { status: { $ne: "cancelled" } } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", units: { $sum: "$items.qty" } } },
+            { $sort: { units: -1, _id: 1 } },
+            { $limit: 3 },
+            { $project: { _id: 0, productId: "$_id", units: 1 } },
+          ],
+        },
+      },
+    ])
+    .toArray();
+  return {
+    byDay: result.byDay,
+    byStatus: Object.fromEntries(result.byStatus.map((s: { _id: string; n: number }) =&gt; [s._id, s.n])),
+    topProducts: result.topProducts,
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>קיבוץ לפי יום ב־UTC — o6 (21:55Z ב־21.10) נספרת ב־21.10, אבל בישראל זה כבר 22.10.</li><li>שלוש שאילתות נפרדות — עובד, אבל שלוש סריקות של אותו טווח.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-node.html"><small>הבא</small>שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</a></div>
+</main>
+</body>
+</html>

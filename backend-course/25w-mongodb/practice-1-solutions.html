@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 1 — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ פתרונות שיעור 1</div>
+  <h1>🔒 פתרונות — תרגול שיעור 1</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.7-E01">
+    <h3>P25.7-E01 · Mongo או Postgres? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל: האם הנתונים נקראים כ"אובייקט שלם"? כמה קשרים יש, והאם השאילתות עליהם ידועות מראש? כמה חשובה עקביות בין כמה רשומות?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>וזכור ש־Postgres עם <code>jsonb</code> יודע לשמור מבנה גמיש בתוך עמודה אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>PostgreSQL.</strong> כסף: טרנזקציות על כמה טבלאות, מפתחות זרים, ודוחות עם JOIN ו־GROUP BY שלא ידועים מראש.</li>
+<li><strong>Mongo מתאים מאוד</strong> — כל מוצר הוא מסמך עם מאפיינים משלו. (Postgres עם עמודת <code>jsonb</code> ל־specs — גם עובד.)</li>
+<li><strong>שניהם.</strong> מסמך אחד שנכתב ונקרא בשלמותו — Mongo טבעי; ב־Postgres — שורה עם <code>jsonb</code>.</li>
+<li><strong>לא זה ולא זה במיוחד</strong> — "חברים של חברים" הוא שאילתת גרף. Postgres עם recursive CTE מסתדר בהתחלה; בקנה מידה — מסד גרפים. Mongo עם מערך followers שגדל לנצח — המלכודת משיעור 3.</li>
+<li><strong>שניהם יעבדו</strong> — משימות של משתמש הן מסמכים פשוטים. בחרנו Postgres כדי ללמוד SQL ו־Prisma, וזה בסדר גמור.</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Mongo כי הוא מהיר יותר" / "Mongo כי אין schema" — בלי שיקול של דפוסי גישה ועקביות. זה מה שמראיין מחכה לשמוע שלא תגיד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E06">
+    <h3>P25.7-E06 · חיפוש מוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בונים אובייקט <code>filter</code> ומוסיפים לו שדות רק כשהפרמטר הגיע.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>{ tags: tag }</code> על שדה שהוא מערך = "המערך מכיל". projection: <code>{ name: 1, price: 1 }</code> (<code>_id</code> נכלל אוטומטית).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E06
+import type { Db } from "mongodb";
+
+// בונים את ה־filter רק מהשדות שהגיעו: undefined לא נכנס, אחרת הוא היה מחפש "שדה שערכו null"
+export async function findProducts(db: Db, { category, maxPrice, inStock, tag }: { category?: string; maxPrice?: number; inStock?: boolean; tag?: string } = {}) {
+  const filter: Record&lt;string, unknown&gt; = {};
+  if (category !== undefined) filter.category = category;
+  if (maxPrice !== undefined) filter.price = { $lte: maxPrice };
+  if (inStock) filter.stock = { $gt: 0 };
+  if (tag !== undefined) filter.tags = tag; // על מערך: "המערך מכיל את הערך"
+  return db
+    .collection("products")
+    .find(filter, { projection: { _id: 1, name: 1, price: 1 } })
+    .sort({ price: 1, _id: 1 }) // שובר שוויון — סדר יציב
+    .toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>filter.category = category</code> גם כשהוא <code>undefined</code> — ה־driver שולח <code>null</code>, ו־Mongo מחפש מסמכים שבהם השדה null או חסר.</li><li>מיון בלי שובר שוויון — סדר של מוצרים באותו מחיר לא מובטח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E07">
+    <h3>P25.7-E07 · לקוח חדש, אימייל ייחודי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">createIndex({ email: 1 }, { unique: true })</code>. ההפרה מגיעה כ־<code>MongoServerError</code> עם <code>code === 11000</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>try/catch סביב <code>insertOne</code>: אם 11000 — <code class="mid">throw new DuplicateEmailError(...)</code>, אחרת <code>throw err</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E07
+import { MongoServerError, type Db } from "mongodb";
+
+export class DuplicateEmailError extends Error {}
+
+export async function setupCustomers(db: Db) {
+  // ה־UNIQUE של Mongo: אינדקס ייחודי. בלעדיו — שני לקוחות עם אותו אימייל יישמרו בשקט
+  await db.collection("customers").createIndex({ email: 1 }, { unique: true });
+}
+
+export async function createCustomer(db: Db, { name, email, city }: { name: string; email: string; city: string }) {
+  try {
+    const { insertedId } = await db.collection("customers").insertOne({ name, email: email.trim().toLowerCase(), city, createdAt: new Date() });
+    return insertedId; // לא נתנו _id ← Mongo יוצר ObjectId
+  } catch (err) {
+    if (err instanceof MongoServerError &amp;&amp; err.code === 11000) throw new DuplicateEmailError(`האימייל ${email} כבר רשום`);
+    throw err;
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "האם קיים" עם <code>findOne</code> ואז להכניס — שני רישומים במקביל עוברים את הבדיקה (המרוץ מפרק 18). רק האינדקס הייחודי מבטיח.</li><li>לבלוע כל שגיאה ולזרוק DuplicateEmailError — גם "המסד נפל" ייראה כמו "האימייל תפוס".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E11">
+    <h3>P25.7-E11 · ההזמנות של לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>projection של "הכול חוץ מ־": <code class="mid">{ items: 0, customerId: 0 }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">{ status: { $in: status } }</code> — ורק אם המערך הגיע ולא ריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E11
+import type { Db } from "mongodb";
+
+export async function customerOrders(db: Db, customerId: string, { status }: { status?: string[] } = {}) {
+  const filter: Record&lt;string, unknown&gt; = { customerId };
+  if (status?.length) filter.status = { $in: status };
+  return db
+    .collection("orders")
+    // בלי items — ברשימה מציגים סיכום; הפרטים בדף ההזמנה
+    .find(filter, { projection: { items: 0, customerId: 0 } })
+    .sort({ createdAt: -1 })
+    .toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לערבב 1 ו־0 באותו projection (<code>{ total: 1, items: 0 }</code>) — Mongo זורק שגיאה (חוץ מ־<code>_id: 0</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.7-E28">
+    <h3>P25.7-E28 · מה מסתתר ב־ObjectId 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">parseInt(id.slice(0, 8), 16)</code> ← שניות. בכיוון השני: <code class="mid">seconds.toString(16).padStart(8, "0") + "0".repeat(16)</code>. בלי <code>padStart</code>, תאריכים ישנים (לפני 1978) נותנים פחות מ־8 תווים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">day.match(/^(\d{4})-(\d{2})-(\d{2})$/)</code>, ואז <code class="mid">new Date(Date.UTC(y, m - 1, d))</code> (החודש מ־0). חצות של מחר: <code class="mid">start.getTime() + 24 * 60 * 60 * 1000</code>. ב־UTC אין שעון קיץ, ולכן כל יום הוא בדיוק 24 שעות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E28 — מה מסתתר ב־ObjectId
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+
+export function objectIdDate(id: string): Date {
+  if (!OBJECT_ID.test(id)) throw new TypeError(`ObjectId לא תקין: ${id}`);
+  const seconds = parseInt(id.slice(0, 8), 16);
+  return new Date(seconds * 1000);
+}
+
+export function objectIdFromDate(date: Date): string {
+  const seconds = Math.floor(date.getTime() / 1000);
+  return seconds.toString(16).padStart(8, "0") + "0".repeat(16);
+}
+
+export function idRangeForDay(day: string): { $gte: string; $lt: string } {
+  const match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw new TypeError(`תאריך לא תקין: ${day}`);
+  const start = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { $gte: objectIdFromDate(start), $lt: objectIdFromDate(end) };
+}
+
+console.log(objectIdDate("6af2d6084b1c2d3e4f5a6b7c").toISOString());
+console.log(objectIdFromDate(new Date("2026-11-10T08:30:00Z")));
+console.log(idRangeForDay("2026-11-10"));
+try {
+  objectIdDate("6af2d608");
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}</code></pre>
+<pre class="terminal">2026-11-10T08:30:00.000Z
+6af2d6080000000000000000
+{
+  '$gte': '6af25e800000000000000000',
+  '$lt': '6af3b0000000000000000000'
+}
+TypeError ObjectId לא תקין: 6af2d608</pre>
+<p>הבודק משווה את התוצאות שלך ל־<code>ObjectId.getTimestamp()</code> ול־<code>ObjectId.createFromTime()</code> של הדרייבר, ומריץ את הטווח על Mongo אמיתי. כדי להשתמש בו בשאילתה, הופכים את המחרוזות ל־ObjectId: <code class="long">{ _id: { $gte: new ObjectId(r.$gte), $lt: new ObjectId(r.$lt) } }</code>. השוואה בין ObjectId לפי בתים היא קודם כל השוואה לפי הזמן.</p>
+<p>למה זה שימושי? ‏<code>_id</code> תמיד מאונדקס. טווח עליו הוא "כל ההזמנות מאתמול", בלי אינדקס נוסף על <code>createdAt</code>. שני דברים להיזהר מהם: הדיוק הוא שנייה, והזמן נקבע אצל מי שיצר את ה־ObjectId (בדרך כלל הדרייבר, כלומר השעון של השרת שלך). לדוחות מדויקים עדיף שדה <code>createdAt</code> אמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>parseInt(id.slice(0, 8))</code> בלי 16 — ‏<code>6af2d608</code> נקרא כ־6.</li><li>לשכוח את <code>* 1000</code> — ‏<code>new Date</code> מקבל מילישניות, והתאריך יוצא בינואר 1970.</li><li><code>new Date("2026-11-10")</code> — עובד (מחרוזת תאריך בלבד נקראת כ־UTC), אבל <code>new Date(2026, 10, 10)</code> הוא חצות לפי השעון <em>המקומי</em>, ובישראל זה 22:00 של היום הקודם ב־UTC.</li><li><code>$lte</code> במקום <code>$lt</code> לסוף הטווח — מסמכים מהשנייה הראשונה של מחר נכנסים.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-queries.html"><small>הבא</small>שיעור 2 — שאילתות ועדכונים</a></div>
+</main>
+</body>
+</html>

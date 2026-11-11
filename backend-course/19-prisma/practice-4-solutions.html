@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 19</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 19</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>19-prisma/solutions/</code>.</p></div>
+
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P19-E24">
+    <h3>P19-E24 · אתגר: repository למוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה אחת <code>toProduct(row)</code> עם <code class="mid">include: { category: { select: { name: true } } }</code> בכל שאילתה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קטגוריה לפי שם בכתיבה: <code class="mid">category: { connect: { name } }</code> — ואם לא קיימת, Prisma זורק <code>P2025</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E24
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export interface Product { id: number; name: string; category: string; price: number; stock: number; isActive: boolean }
+export interface ListOptions { category?: string; q?: string; inStock?: boolean; sort?: "price" | "-price" | "name"; page?: number; limit?: number }
+
+export interface ProductsRepository {
+  list(options: ListOptions): Promise&lt;{ data: Product[]; total: number }&gt;;
+  get(id: number): Promise&lt;Product | undefined&gt;;
+  create(data: { name: string; category: string; price: number; stock: number }): Promise&lt;Product&gt;;
+  update(id: number, changes: Partial&lt;Omit&lt;Product, "id"&gt;&gt;): Promise&lt;Product | undefined&gt;;
+  remove(id: number): Promise&lt;boolean&gt;;
+}
+
+const withCategory = { category: { select: { name: true } } } as const;
+type Row = Prisma.ProductGetPayload&lt;{ include: typeof withCategory }&gt;;
+
+const toProduct = (r: Row): Product =&gt; ({
+  id: r.id,
+  name: r.name,
+  category: r.category.name,
+  price: Number(r.price),
+  stock: r.stock,
+  isActive: r.isActive,
+});
+
+const code = (err: unknown) =&gt; (err instanceof Prisma.PrismaClientKnownRequestError ? err.code : undefined);
+
+export class PrismaProductsRepository implements ProductsRepository {
+  prisma: PrismaClient;
+  constructor(prisma: PrismaClient) {
+    this.prisma = prisma;
+  }
+
+  async list({ category, q, inStock, sort = "name", page = 1, limit = 10 }: ListOptions) {
+    const where: Prisma.ProductWhereInput = {
+      ...(category ? { category: { name: category } } : {}),
+      ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
+      ...(inStock ? { stock: { gt: 0 } } : {}),
+    };
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] = [
+      sort === "name" ? { name: "asc" } : { price: sort === "price" ? "asc" : "desc" },
+      { id: "asc" },
+    ];
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({ where, orderBy, include: withCategory, skip: (page - 1) * limit, take: limit }),
+      this.prisma.product.count({ where }),
+    ]);
+    return { data: rows.map(toProduct), total };
+  }
+
+  async get(id: number) {
+    const row = await this.prisma.product.findUnique({ where: { id }, include: withCategory });
+    return row ? toProduct(row) : undefined;
+  }
+
+  async create({ name, category, price, stock }: { name: string; category: string; price: number; stock: number }) {
+    try {
+      const row = await this.prisma.product.create({
+        data: { name, price, stock, category: { connect: { name: category } } },
+        include: withCategory,
+      });
+      return toProduct(row);
+    } catch (err) {
+      if (code(err) === "P2025") throw new AppError("CATEGORY_NOT_FOUND");
+      throw err;
+    }
+  }
+
+  async update(id: number, { category, ...rest }: Partial&lt;Omit&lt;Product, "id"&gt;&gt;) {
+    const exists = await this.prisma.product.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return undefined;
+    try {
+      const row = await this.prisma.product.update({
+        where: { id },
+        data: { ...rest, ...(category ? { category: { connect: { name: category } } } : {}) },
+        include: withCategory,
+      });
+      return toProduct(row);
+    } catch (err) {
+      if (code(err) === "P2025") throw new AppError("CATEGORY_NOT_FOUND");
+      throw err;
+    }
+  }
+
+  async remove(id: number) {
+    try {
+      await this.prisma.product.delete({ where: { id } });
+      return true;
+    } catch (err) {
+      if (code(err) === "P2025") return false;
+      if (code(err) === "P2003") throw new AppError("PRODUCT_HAS_ORDERS");
+      throw err;
+    }
+  }
+}</code></pre>
+<p>ב־<code>update</code>, P2025 יכול לבוא משני מקומות (המוצר או הקטגוריה) — לכן בודקים קודם שהמוצר קיים. (יש בזה מרוץ קטן: מוצר שנמחק בין הבדיקה לעדכון ידווח כ"קטגוריה לא נמצאה". זה מקרה נדיר, ובשביל להבדיל באמת צריך לבדוק את שניהם באותו transaction.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את ה־row של Prisma כמו שהוא — <code>categoryId</code> במקום שם, ו־Decimal במקום מספר. ה־repository הוא המקום שמתרגם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E25">
+    <h3>P19-E25 · אתגר: דוח חודשי עם $queryRaw 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>generate_series(1, 12)</code> נותן את 12 החודשים; LEFT JOIN לסכומים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">SUM(revenue) OVER (ORDER BY m)</code> לסכום מצטבר; <code class="mid">to_char(make_date(${year}, m, 1), 'YYYY-MM')</code>. ו־<code>::int</code>/<code>::float</code> כדי לקבל מספרים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E25
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function monthlyReport(prisma: PrismaClient, year: number) {
+  return prisma.$queryRaw&lt;{ month: string; orders: number; revenue: number; runningTotal: number }[]&gt;`
+    WITH sales AS (
+      SELECT EXTRACT(MONTH FROM o.created_at AT TIME ZONE 'UTC')::int AS m,
+             COUNT(DISTINCT o.id) AS orders,
+             SUM(oi.quantity * oi.unit_price) AS revenue
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status &lt;&gt; 'cancelled'
+        AND o.created_at &gt;= make_timestamptz(${year}::int, 1, 1, 0, 0, 0, 'UTC')
+        AND o.created_at &lt;  make_timestamptz(${year}::int + 1, 1, 1, 0, 0, 0, 'UTC')
+      GROUP BY 1
+    )
+    SELECT to_char(make_date(${year}::int, g.m, 1), 'YYYY-MM') AS month,
+           COALESCE(s.orders, 0)::int AS orders,
+           COALESCE(s.revenue, 0)::float AS revenue,
+           (SUM(COALESCE(s.revenue, 0)) OVER (ORDER BY g.m))::float AS "runningTotal"
+    FROM generate_series(1, 12) AS g(m)
+    LEFT JOIN sales s ON s.m = g.m
+    ORDER BY g.m`;
+}</code></pre>
+<p>שלושה כלים מהפרקים הקודמים בשאילתה אחת: CTE, LEFT JOIN מ"רשימת כל הערכים" (כדי שחודש ריק יופיע עם 0), ופונקציית חלון. ה־<code>${year}::int</code> — פרמטר עם המרה מפורשת, כי PostgreSQL לא תמיד מנחש את הטיפוס של פרמטר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>GROUP BY ישר על orders — חודשים בלי מכירות פשוט לא יופיעו, והגרף בדשבורד "יקפוץ" מפברואר לאפריל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

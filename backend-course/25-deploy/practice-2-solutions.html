@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 25</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 25</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25-deploy/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25-E03">
+    <h3>P25-E03 · איפה שמים כל דבר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה לכל ערך: מה יקרה אם כל העולם יראה אותו? (ה־repo שלך ציבורי — זה תיק עבודות.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי צריך את הערך: השרת בזמן ריצה, ה־CI, או שניהם?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>Render</strong> (השרת צריך אותו בזמן ריצה) <strong>וגם GitHub Secrets</strong> (ה־deploy job מריץ migrations). אף פעם לא בקוד.</li><li><strong>רק ב־Render.</strong> ה־CI לא צריך אותו. מי שמחזיק אותו יכול לחתום טוקן של admin.</li><li><strong>בקוד / ב־workflow</strong> — ערך מזויף, לבדיקות בלבד (כמו <code>ci-only-secret-…</code> שלנו). הוא לא שווה כלום מחוץ ל־CI. לא צריך "להגן" עליו.</li><li><strong>GitHub Secrets.</strong> מי שמחזיק את הכתובת יכול להפעיל deploy. (כן, URL יכול להיות סוד.)</li><li><strong>GitHub Variables</strong> (<code>vars.PRODUCTION_URL</code>) — לא סוד, אבל הגדרה ולא קוד. וגם ב־README — זה הקישור החי.</li><li><strong>בקוד</strong>, כברירת מחדל (zod <code>.default(900)</code>). לא סוד. env רק אם רוצים לשנות בלי deploy.</li><li><strong>בתוך ה־workflow, גלוי.</strong> המסד הזה חי שתי דקות, ב־runner מבודד, ואין בו כלום.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ה־repo פרטי, אז אפשר בקוד." היום פרטי — מחר תהפוך אותו לציבורי לתיק העבודות, וההיסטוריה של Git זוכרת הכול. סוד שנכנס ל־commit — מחליפים (rotate), לא רק מוחקים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E06">
+    <h3>P25-E06 · הגדרות: נוח בפיתוח, קשוח בפרודקשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">z.object({...}).superRefine((e, ctx) =&gt; { if (e.NODE_ENV !== "production") return; ... ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "..." }) })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>safeParse</code> ו־<code>result.error.issues</code> — כל הבעיות, לא רק הראשונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E06
+import { z } from "zod";
+
+const schema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    DATABASE_URL: z.string().optional(),
+    JWT_SECRET: z.string().optional(),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  })
+  .superRefine((e, ctx) =&gt; {
+    if (e.NODE_ENV !== "production") return;
+    if (!e.DATABASE_URL) ctx.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "חובה בפרודקשן" });
+    if (!e.JWT_SECRET || e.JWT_SECRET.length &lt; 32) ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "בפרודקשן — לפחות 32 תווים" });
+    if (e.LOG_LEVEL === "debug") ctx.addIssue({ code: "custom", path: ["LOG_LEVEL"], message: "debug בפרודקשן כותב יותר מדי (ולפעמים מידע רגיש)" });
+  });
+
+export interface Config {
+  env: "development" | "test" | "production";
+  port: number;
+  databaseUrl: string;
+  jwtSecret: string;
+  logLevel: "debug" | "info" | "warn" | "error";
+}
+
+export function loadConfig(env: Record&lt;string, string | undefined&gt;): Config {
+  const r = schema.safeParse(env);
+  if (!r.success) {
+    // כל הבעיות בהודעה אחת — לא "תקן אחת, deploy, גלה את הבאה"
+    throw new Error(`הגדרות לא תקינות:\n${r.error.issues.map((i) =&gt; `- ${i.path.join(".")}: ${i.message}`).join("\n")}`);
+  }
+  const e = r.data;
+  return {
+    env: e.NODE_ENV,
+    port: e.PORT,
+    // בפיתוח בלבד: ברירות מחדל נוחות. בפרודקשן הן לא יגיעו לכאן — superRefine כבר נכשל
+    databaseUrl: e.DATABASE_URL ?? "postgresql://postgres@localhost:5432/dev",
+    jwtSecret: e.JWT_SECRET ?? "dev-only-secret-not-for-production!!",
+    logLevel: e.LOG_LEVEL,
+  };
+}</code></pre>
+<p>למה "כל הבעיות בהודעה אחת"? כי deploy לוקח דקות. "תקן אחת, deploy, גלה את הבאה" × שלוש = חצי שעה. ולמה להיכשל בעלייה ולא מאוחר? כי בפלטפורמה, שרת שלא עולה = deploy שנכשל — והגרסה הקודמת ממשיכה לרוץ. שרת שעולה עם הגדרה שגויה נכשל מול משתמשים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">env.JWT_SECRET ?? "dev-secret"</code> בלי לבדוק סביבה — ובפרודקשן כל אחד יכול לחתום טוקנים (E21).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E11">
+    <h3>P25-E11 · DATABASE_URL בלי לחשוף 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>new URL(url)</code> מבין <code>postgresql://</code>: <code>.username</code>, <code>.password</code>, <code>.hostname</code>, <code>.port</code>, <code>.pathname</code>, <code>.searchParams</code>. ואפשר לשנות <code>u.password</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>new URL</code> זורק <code>TypeError</code> שההודעה שלו כוללת את הכתובת המלאה. תופסים וזורקים שגיאה משלך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E11
+function parse(url: string): URL {
+  try {
+    const u = new URL(url);
+    if (!/^postgres(ql)?:$/.test(u.protocol)) throw new Error();
+    return u;
+  } catch {
+    // בלי הכתובת עצמה בהודעה: יש בה סיסמה, והודעות שגיאה מגיעות ללוגים
+    throw new Error("DATABASE_URL לא תקין (צריך postgresql://user:password@host:port/db)");
+  }
+}
+
+export function redactDatabaseUrl(url: string): string {
+  const u = parse(url);
+  if (u.password) u.password = "***";
+  return u.toString();
+}
+
+export function describeDb(url: string) {
+  const u = parse(url);
+  const sslmode = u.searchParams.get("sslmode");
+  return {
+    host: u.hostname,
+    port: Number(u.port || 5432),
+    database: decodeURIComponent(u.pathname.slice(1)),
+    user: decodeURIComponent(u.username),
+    ssl: sslmode !== null &amp;&amp; sslmode !== "disable",
+  };
+}</code></pre>
+<p>שימוש: בעלייה, <code class="mid">logger.info("db", describeDb(process.env.DATABASE_URL))</code> — ויודעים לאיזה מסד השרת מחובר, בלי שהסיסמה מגיעה ללוגים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>throw new Error(<code>כתובת לא תקינה: ${url}</code>)</code> — הסיסמה בדיוק בלוג שרצית להגן עליו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E20">
+    <h3>P25-E20 · workflow מסוכן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איזה <code>DATABASE_URL</code> רואה ה־job של הבדיקות? ומה עושה <code class="mid">prisma migrate reset --force</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה מחבר בין <code>deploy</code> ל־<code>test</code>? ומתי בכלל <code>deploy</code> רץ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P25-E20
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # תקלה 1: DATABASE_URL של הפרודקשן היה ב־env של כל ה־workflow — וה־test job הריץ עליו migrate reset.
+    # לבדיקות: מסד משלהן, שירות postgres ב־CI
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: &gt;-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate reset --force
+      - run: npm test
+
+  deploy:
+    # תקלה 2: בלי needs, deploy רץ במקביל לבדיקות — גם כשהן נכשלות
+    needs: test
+    # תקלה 3: on: [push, pull_request] בלי תנאי — deploy מכל branch ומכל pull request
+    if: github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      # הסוד של הפרודקשן — רק בצעד שצריך אותו
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"תיקון" של 1 ע"י מחיקת <code>migrate reset</code> — והבדיקות עדיין כותבות לפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E21">
+    <h3>P25-E21 · הגדרות עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הטיפוס של כל ערך ב־<code>process.env</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">"https://a.com, https://b.com".split(",")</code> — הדפס את התוצאה עם <code>JSON.stringify</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E21
+export function loadConfig(env: Record&lt;string, string | undefined&gt;) {
+  const production = env.NODE_ENV === "production";
+  // תקלה 1: בפרודקשן בלי JWT_SECRET — השרת עלה עם "dev-secret", וכל אחד יכול לחתום טוקנים
+  if (production &amp;&amp; (!env.JWT_SECRET || env.JWT_SECRET.length &lt; 32)) throw new Error("JWT_SECRET חובה בפרודקשן (32+ תווים)");
+  return {
+    production,
+    jwtSecret: env.JWT_SECRET ?? "dev-secret",
+    // תקלה 2: ב־env הכול מחרוזות. "true" === true הוא תמיד false
+    debug: env.DEBUG === "true" || env.DEBUG === "1",
+    // תקלה 3: "https://a.com, https://b.com" ← " https://b.com" עם רווח, שלא שווה ל־Origin של הדפדפן
+    corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5500").split(",").map((o) =&gt; o.trim()).filter(Boolean),
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Boolean(env.DEBUG)</code> — <code>Boolean("false")</code> הוא <code>true</code>.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-deploy.html"><small>הבא</small>שיעור 3 — פריסה: migrations, deploy, ובדיקת עשן</a></div>
+</main>
+</body>
+</html>

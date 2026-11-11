@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 14</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 14</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>14-http/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P14-E05">
+    <h3>P14-E05 · מה fetch עושה עם 404? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מבחינת fetch — הבקשה הצליחה: נשלחה, וחזרה תשובה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.ok</code> הוא true רק ל־200–299.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import http from "node:http";
+import { once } from "node:events";
+
+const server = http.createServer((req, res) =&gt; {
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "לא נמצא" }));
+});
+server.listen(0);
+await once(server, "listening");
+
+try {
+  const res = await fetch(`http://localhost:${server.address().port}/x`);
+  console.log("הגיעה תשובה:", res.ok, res.status);
+  const data = await res.json();
+  console.log(data.error);
+} catch (err) {
+  console.log("נזרקה שגיאה:", err.message);
+} finally {
+  server.close();
+}</code></pre>
+<pre class="terminal">הגיעה תשובה: false 404
+לא נמצא</pre>
+<p>ה־catch לא רץ. אם הקוד היה מניח שהגוף הוא "ההזמנה" — היה ממשיך עם <code>{ error: ... }</code> כאילו זו הזמנה. לכן תמיד: <code>if (!res.ok) ...</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתמך על try/catch סביב fetch כדי "לתפוס 404".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E11">
+    <h3>P14-E11 · השרת הראשון שלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר <code class="mid">send(res, status, body, headers)</code> חוסכת חזרות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">new URL(req.url, "http://localhost").pathname</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E11
+import http from "node:http";
+
+function send(res, status, body, headers = {}) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+const routes = {
+  "/": () =&gt; ({ message: "שלום" }),
+  "/time": () =&gt; ({ now: new Date().toISOString() }),
+};
+
+export function createHelloServer() {
+  return http.createServer((req, res) =&gt; {
+    const { pathname } = new URL(req.url, "http://localhost");
+    const route = routes[pathname];
+    if (!route) return send(res, 404, { error: "לא נמצא" });
+    if (req.method !== "GET") return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET" });
+    send(res, 200, route());
+  });
+}</code></pre>
+<p>מבנה "טבלת routes" (אובייקט של path ← פונקציה) קורא הרבה יותר טוב משרשרת if־ים, וזה בדיוק מה ש־Express עושה בשבילך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות <code>req.url === "/"</code> — <code>/?x=1</code> יחזיר 404.</li><li>לשכוח <code>return</code> אחרי <code>send</code> ← שתי תשובות לאותה בקשה, ושגיאה <code>ERR_HTTP_HEADERS_SENT</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E12">
+    <h3>P14-E12 · getJson עם timeout 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">fetch(url, { signal: AbortSignal.timeout(timeoutMs) })</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אין צורך ב־try/catch — שגיאת ה־timeout צריכה פשוט לעלות למעלה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E12
+export async function getJson(url, { timeoutMs = 3000 } = {}) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}</code></pre>
+<p>ארבע שורות — וזה ההבדל בין שרת שנתקע כשספק חיצוני איטי, לשרת שמחזיר שגיאה ברורה אחרי 3 שניות. בפרויקטים אמיתיים כל קריאה החוצה צריכה timeout.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>setTimeout</code> שרק "מדפיס שעבר זמן" — הבקשה עדיין רצה ותופסת חיבור. רק <code>signal</code> באמת מבטל אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E16">
+    <h3>P14-E16 · router עם פרמטרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמור כל route כמערך חלקים: <code class="mid">pattern.split("/").filter(Boolean)</code>. השווה חלק־חלק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חלק שמתחיל ב־<code>:</code> מתאים לכל ערך, ונכנס ל־params.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E16
+const segments = (p) =&gt; p.split("/").filter(Boolean);
+
+function matchParts(pattern, parts) {
+  if (pattern.length !== parts.length) return null;
+  const params = {};
+  for (let i = 0; i &lt; pattern.length; i++) {
+    if (pattern[i].startsWith(":")) params[pattern[i].slice(1)] = decodeURIComponent(parts[i]);
+    else if (pattern[i] !== parts[i]) return null;
+  }
+  return params;
+}
+
+export function createRouter() {
+  const routes = [];
+  return {
+    add(method, pattern, handler) {
+      routes.push({ method, pattern: segments(pattern), handler });
+    },
+    match(method, path) {
+      const parts = segments(path);
+      const allow = [];
+      for (const route of routes) {
+        const params = matchParts(route.pattern, parts);
+        if (!params) continue;
+        if (route.method === method) return { status: 200, handler: route.handler, params };
+        allow.push(route.method);
+      }
+      return allow.length &gt; 0 ? { status: 405, allow } : { status: 404 };
+    },
+  };
+}
+
+const router = createRouter();
+router.add("GET", "/products/:id", "getOne");
+router.add("DELETE", "/products/:id", "remove");
+const m = router.match("GET", "/products/7");
+console.log(m.status, m.handler, m.params);
+console.log(router.match("PUT", "/products/7"), router.match("GET", "/nope"));</code></pre>
+<pre class="terminal">200 getOne { id: '7' }
+{ status: 405, allow: [ 'GET', 'DELETE' ] } { status: 404 }</pre>
+<p>זה לב ה־routing של Express (פרק 15) — כולל <code>req.params</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 404 ברגע שה־method לא מתאים — מפספס את ה־405 ואת ה־route הבא באותו path.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E17">
+    <h3>P14-E17 · לקרוא גוף JSON בבטחה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">for await (const chunk of req)</code>; <code>Buffer.from(chunk)</code> עובד גם אם ה־chunk הוא מחרוזת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Buffer.concat(chunks).toString("utf8")</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E17
+import { Readable } from "node:stream";
+
+export class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
+export async function readJsonBody(req, { limit = 1_000_000 } = {}) {
+  if (!req.headers["content-type"]?.includes("application/json")) {
+    throw new HttpError(415, "Content-Type חייב להיות application/json");
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.from(chunk);
+    size += buf.length;
+    if (size &gt; limit) throw new HttpError(413, "הגוף גדול מדי");
+    chunks.push(buf);
+  }
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (text.trim() === "") throw new HttpError(400, "גוף ריק");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(400, "JSON לא תקין");
+  }
+}
+
+// אות עברית (2 בתים) שנחתכת בין שתי חתיכות:
+const bytes = Buffer.from('{"name":"שלום"}');
+const req = Readable.from([bytes.subarray(0, 10), bytes.subarray(10)]);
+req.headers = { "content-type": "application/json" };
+console.log(await readJsonBody(req));</code></pre>
+<pre class="terminal">{ name: 'שלום' }</pre>
+<p>עם <code>raw += chunk</code> (כמו בשרת ההדגמה) הדוגמה הזו הייתה מקבלת תו פגום. בשרת ההדגמה זה "עובד" כי הבקשות קטנות ומגיעות בחתיכה אחת — באג שמופיע רק בעומס או עם קבצים גדולים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את הגודל רק בסוף — תוקף שולח 2GB והשרת אוסף הכול לזיכרון לפני שמסרב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E18">
+    <h3>P14-E18 · שרת פתקים מלא 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התחל משרת ההדגמה (<code class="mid">14-http/files/demo-server.mjs</code>) — המבנה כמעט זהה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פונקציה אחת <code class="mid">validateNote(body, { partial })</code> משרתת גם POST וגם PATCH.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E18
+import http from "node:http";
+
+function send(res, status, body, headers = {}) {
+  if (status === 204) {
+    res.writeHead(204, headers);
+    return res.end();
+  }
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "null");
+}
+
+// מחזירה הודעת שגיאה, או null אם תקין
+function validateNote(body, { partial }) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return "הגוף חייב להיות אובייקט";
+  if (partial &amp;&amp; body.text === undefined &amp;&amp; body.done === undefined) return "צריך text או done";
+  if ((!partial || body.text !== undefined) &amp;&amp; (typeof body.text !== "string" || body.text.trim().length &lt; 1 || body.text.trim().length &gt; 200)) {
+    return "text: מחרוזת של 1–200 תווים";
+  }
+  if (body.done !== undefined &amp;&amp; typeof body.done !== "boolean") return "done: true או false";
+  return null;
+}
+
+export function createNotesServer() {
+  const notes = [];
+  let nextId = 1;
+
+  return http.createServer(async (req, res) =&gt; {
+    const parts = new URL(req.url, "http://localhost").pathname.split("/").filter(Boolean);
+    try {
+      if (parts[0] !== "notes" || parts.length &gt; 2) return send(res, 404, { error: "לא נמצא" });
+
+      if (parts.length === 1) {
+        if (req.method === "GET") return send(res, 200, notes);
+        if (req.method === "POST") {
+          const body = await readJson(req);
+          const error = validateNote(body, { partial: false });
+          if (error) return send(res, 400, { error });
+          const note = { id: nextId++, text: body.text.trim(), done: false };
+          notes.push(note);
+          return send(res, 201, note, { Location: `/notes/${note.id}` });
+        }
+        return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET, POST" });
+      }
+
+      const note = notes.find((n) =&gt; n.id === Number(parts[1]));
+      if (!["GET", "PATCH", "DELETE"].includes(req.method)) {
+        return send(res, 405, { error: "Method Not Allowed" }, { Allow: "GET, PATCH, DELETE" });
+      }
+      if (!note) return send(res, 404, { error: "הפתק לא נמצא" });
+      if (req.method === "GET") return send(res, 200, note);
+      if (req.method === "DELETE") {
+        notes.splice(notes.indexOf(note), 1);
+        return send(res, 204);
+      }
+      const body = await readJson(req);
+      const error = validateNote(body, { partial: true });
+      if (error) return send(res, 400, { error });
+      if (body.text !== undefined) note.text = body.text.trim();
+      if (body.done !== undefined) note.done = body.done;
+      return send(res, 200, note);
+    } catch (err) {
+      if (err instanceof SyntaxError) return send(res, 400, { error: "JSON לא תקין" });
+      console.error(err);
+      send(res, 500, { error: "שגיאה פנימית" });
+    }
+  });
+}</code></pre>
+<p>שים לב כמה מהקוד הוא "צנרת" (פירוק כתובת, קריאת גוף, status, headers) לעומת לוגיקה. בפרק 15 נכתוב את אותו API ב־Express — ונראה כמה ממנו נעלם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות <code>n.id === parts[1]</code> — מספר מול מחרוזת, תמיד false.</li><li>לבדוק <code>if (!body.text)</code> — מחרוזת של רווחים עוברת, ו־<code>{ "text": 5 }</code> נשמר כמספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E19">
+    <h3>P14-E19 · ניסיון חוזר חכם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאת <code class="mid">for (let attempt = 0; attempt &lt;= retries; attempt++)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">await new Promise((r) =&gt; setTimeout(r, delayMs * 2 ** attempt))</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E19
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+export async function fetchWithRetry(url, init = {}, { retries = 2, delayMs = 200 } = {}) {
+  let lastError;
+  let lastResponse;
+  for (let attempt = 0; attempt &lt;= retries; attempt++) {
+    if (attempt &gt; 0) await sleep(delayMs * 2 ** (attempt - 1));
+    try {
+      lastResponse = await fetch(url, init);
+      lastError = undefined;
+      if (!RETRYABLE.has(lastResponse.status)) return lastResponse;
+    } catch (err) {
+      lastError = err;
+      lastResponse = undefined;
+    }
+  }
+  if (lastError) throw lastError;
+  return lastResponse;
+}</code></pre>
+<p>שני דברים חשובים בעולם האמיתי: (1) ניסיון חוזר מתאים רק לבקשות idempotent — POST של הזמנה צריך "מפתח idempotency" (פרויקט הדגל); (2) מערכות גדולות מוסיפות "jitter" (רעש אקראי) להמתנה, כדי שאלף לקוחות לא ינסו שוב באותה מילישנייה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לנסות שוב על כל status שאינו ok — 400 יישלח 3 פעמים ויקבל 400 שלוש פעמים.</li><li>ניסיון חוזר בלי המתנה — מכה בשרת שכבר מתקשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E21">
+    <h3>P14-E21 · לקוח שתמיד "מצליח" 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה נשלח כשמעבירים ל־<code>body</code> אובייקט רגיל? (<code>String({})</code>)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלושה דברים: <code>JSON.stringify</code>, <code>headers</code>, <code>res.ok</code>. ועוד <code>signal</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E21: מתוקן
+export async function createProduct(baseUrl, product) {
+  const res = await fetch(`${baseUrl}/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(product),
+    signal: AbortSignal.timeout(5000),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${data.error}`);
+  return data;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן רק את ה־stringify — בלי Content-Type, שרת ההדגמה עדיין מחזיר 415.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E22">
+    <h3>P14-E22 · השרת שקורס מבקשה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>handler שהוא <code>async</code> וזורק ← unhandled rejection ← Node מפיל את התהליך. ושים לב איך נראה <code>req.url</code> כשהכתובת בעברית.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>(counts[word] ?? 0) + 1</code>, ו־<code>decodeURIComponent</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E22: מתוקן
+import http from "node:http";
+
+function send(res, status, body) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+export function createCounterServer() {
+  const counts = {};
+  return http.createServer(async (req, res) =&gt; {
+    try {
+      if (req.method === "POST" &amp;&amp; req.url === "/count") {
+        let raw = "";
+        for await (const chunk of req) raw += chunk;
+        const { word } = JSON.parse(raw);
+        if (typeof word !== "string" || word.trim() === "") return send(res, 400, { error: "word חובה" });
+        counts[word] = (counts[word] ?? 0) + 1;
+        return send(res, 200, { word, count: counts[word] });
+      }
+      if (req.method === "GET" &amp;&amp; req.url.startsWith("/count/")) {
+        const word = decodeURIComponent(req.url.slice("/count/".length));
+        return send(res, 200, { word, count: counts[word] ?? 0 });
+      }
+      send(res, 404, { error: "לא נמצא" });
+    } catch (err) {
+      if (err instanceof SyntaxError) return send(res, 400, { error: "JSON לא תקין" });
+      console.error(err);
+      send(res, 500, { error: "שגיאה פנימית" });
+    }
+  });
+}</code></pre>
+<p>באג 1 הוא שבירת שרת על ידי כל משתמש אנונימי — Denial of Service בבקשה אחת. (גם <code>JSON.parse("null")</code> היה מפיל את ה־destructuring — ה־catch תופס גם את זה, כ־500. ניסיון לשפר: לבדוק שהגוף הוא אובייקט ולהחזיר 400.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף רק את <code>JSON.parse</code> — שגיאה אחרת בהמשך עדיין מפילה את השרת. try/catch אחד סביב כל ה־handler.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E23">
+    <h3>P14-E23 · חיפוש עם query שבור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>יש מחלקה מובנית שעושה את כל זה נכון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">new URL(url, "http://x").searchParams</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E23: מתוקן
+export function parseSearch(url) {
+  const params = new URL(url, "http://x").searchParams;
+  const page = Number(params.get("page") ?? 1);
+  return { q: params.get("q") ?? "", page, nextPage: page + 1 };
+}
+
+console.log(parseSearch("/products"), parseSearch("/products?q=%D7%9E%D7%A1%D7%9A&amp;page=2"), parseSearch("/products?q=red+shoes"));</code></pre>
+<pre class="terminal">{ q: '', page: 1, nextPage: 2 } { q: 'מסך', page: 2, nextPage: 3 } { q: 'red shoes', page: 1, nextPage: 2 }</pre>
+<p>ניסיון לשפר: מה יקרה עם <code>?page=abc</code> או <code>?page=-3</code>? (רמז: NaN.) בפרק 15 נבדוק את ה־query עם Zod.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>decodeURIComponent</code> בלבד — <code>+</code> לא הופך לרווח. ב־query, <code>+</code> הוא רווח; URLSearchParams יודע את זה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E27">
+    <h3>P14-E27 · סטטיסטיקת בקשות כמחלקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>#routes = new Map()</code>. הערך לכל route: <code>{ count, totalMs, errors }</code>. ב־<code>record</code>: ‏<code class="long">const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 }</code>, מעדכנים, ו־<code>set</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>[...this.#routes]</code> נותן מערך של <code>[route, s]</code>. ‏<code>map</code> לאובייקט התוצאה, ואז <code class="long">sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route))</code>. כשההפרש הוא 0 (תיקו), ה־<code>||</code> עובר לקריטריון השני.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E27: סטטיסטיקת בקשות כמחלקה
+export class RequestStats {
+  #routes = new Map();
+
+  record(method, path, status, ms) {
+    const route = `${method} ${path}`;
+    const s = this.#routes.get(route) ?? { count: 0, totalMs: 0, errors: 0 };
+    s.count++;
+    s.totalMs += ms;
+    if (status &gt;= 500) {
+      s.errors++;
+    }
+    this.#routes.set(route, s);
+  }
+
+  get total() {
+    let sum = 0;
+    for (const s of this.#routes.values()) {
+      sum += s.count;
+    }
+    return sum;
+  }
+
+  summary() {
+    return [...this.#routes]
+      .map(([route, s]) =&gt; ({ route, count: s.count, avgMs: Math.round(s.totalMs / s.count), errors: s.errors }))
+      .sort((a, b) =&gt; b.count - a.count || a.route.localeCompare(b.route));
+  }
+}
+
+const stats = new RequestStats();
+stats.record("GET", "/users", 200, 12);
+stats.record("GET", "/users", 200, 20);
+stats.record("POST", "/users", 201, 35);
+stats.record("GET", "/orders", 500, 101);
+stats.record("GET", "/users", 503, 3);
+console.log(stats.total);
+console.log(stats.summary());</code></pre>
+<pre class="terminal">5
+[
+  { route: 'GET /users', count: 3, avgMs: 12, errors: 1 },
+  { route: 'GET /orders', count: 1, avgMs: 101, errors: 1 },
+  { route: 'POST /users', count: 1, avgMs: 35, errors: 0 }
+]</pre>
+<p>שומרים <code>totalMs</code> ולא את הממוצע. ממוצע אי אפשר לעדכן בלי לדעת על כמה בקשות הוא חושב. סכום ומונה מעדכנים בפעולה אחת, ומחשבים את הממוצע רק כשמבקשים <code>summary()</code>.</p>
+<p><code>b.count - a.count || ...</code>: ההפרש 0 הוא falsy, ולכן רק בתיקו נבדק הקריטריון השני. זה הדפוס שראית בפרק 6 למיון לפי כמה שדות.</p>
+<p>כך עובדים כלי ניטור כמו Prometheus (פרק 24): לכל route יש מונים מצטברים, ומהם מחשבים ממוצעים ואחוזי שגיאות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור <code>avgMs</code> ולעדכן אותו ב־<code>(avg + ms) / 2</code> — זה לא ממוצע. בשלוש בקשות 12, 20, 3 יוצא 9.5 במקום 11.67.</li><li>לספור <code>status &gt;= 400</code> כשגיאה — 404 היא תשובה תקינה של השרת. כאן סופרים תקלות של השרת (5xx).</li><li><code>routes = new Map()</code> בלי <code>#</code> — הבודק מגלה שדה ציבורי.</li><li><code>total()</code> כמתודה במקום <code>get total()</code> — ‏<code>stats.total</code> מחזיר פונקציה ולא מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P14-E28">
+    <h3>P14-E28 · לחכות שהשרת יעלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השהיה: <code class="long">const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));</code> (פרק 10). הלולאה: <code class="mid">let attempt = 0; while (attempt &lt; tries) { attempt++; ... }</code>, ואחרי הלולאה <code>throw</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך הלולאה: <code class="long">try { const res = await fetch(url); if (res.ok) return attempt; } catch { }</code>, ואחריו <code class="mid">if (attempt &lt; tries) await sleep(delayMs);</code>. ה־<code>catch</code> הריק בכוונה: שגיאת רשת היא בדיוק המצב שבו ממשיכים לחכות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E28: לחכות שהשרת יעלה
+import http from "node:http";
+
+const sleep = (ms) =&gt; new Promise((resolve) =&gt; setTimeout(resolve, ms));
+
+export async function waitUntilReady(url, { tries = 10, delayMs = 100 } = {}) {
+  let attempt = 0;
+  while (attempt &lt; tries) {
+    attempt++;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        return attempt;
+      }
+    } catch {
+      // השרת עוד לא מקשיב — ננסה שוב
+    }
+    if (attempt &lt; tries) {
+      await sleep(delayMs);
+    }
+  }
+  throw new Error(`השרת לא מוכן אחרי ${tries} ניסיונות`);
+}
+
+// שרת שעונה 503 בשתי הבקשות הראשונות, ואז 200
+let calls = 0;
+const server = http.createServer((req, res) =&gt; {
+  calls++;
+  res.writeHead(calls &lt;= 2 ? 503 : 200).end();
+});
+server.listen(0, async () =&gt; {
+  const url = `http://localhost:${server.address().port}/health`;
+  console.log("מוכן בניסיון", await waitUntilReady(url, { delayMs: 20 }));
+  try {
+    await waitUntilReady("http://localhost:1/health", { tries: 3, delayMs: 20 });
+  } catch (err) {
+    console.log(err.message);
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">מוכן בניסיון 3
+השרת לא מוכן אחרי 3 ניסיונות</pre>
+<p>כמה פעמים הלולאה תרוץ? לא יודעים מראש — היא נעצרת כשהשרת עונה. זה המקרה הקלאסי ל־<code>while</code> (כמו <code>fetchAll</code> ב־P10-E28). ‏<code>return</code> מתוך הלולאה יוצא גם מהפונקציה, ולכן ה־<code>throw</code> אחרי הלולאה קורה רק אם כל הניסיונות נכשלו.</p>
+<p>ההבדל מ־P14-E19 (ניסיון חוזר חכם): שם מנסים שוב פעולה שנכשלה. כאן מחכים שמשהו <em>יהיה מוכן</em>. גם 503 וגם "החיבור נדחה" פירושם "עוד לא".</p>
+<p>בפרק 23 תראה את אותו רעיון ב־<code>healthcheck</code> של Docker Compose.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>try/catch</code> סביב <code>fetch</code> — כשהשרת עוד לא מקשיב, <code>fetch</code> זורק (<code>ECONNREFUSED</code>), והפונקציה נכשלת כבר בניסיון הראשון.</li><li><code>while (true)</code> בלי תנאי עצירה — אם השרת לא עולה אף פעם, הסקריפט תקוע לנצח.</li><li>לחכות גם אחרי הניסיון האחרון — עוד <code>delayMs</code> מבוזבז לפני השגיאה.</li><li><code class="mid">setTimeout(() =&gt; {}, delayMs)</code> בלי Promise ו־<code>await</code> — לא מחכה בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P14-E24">
+    <h3>P14-E24 · אתגר: Express משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלב 1: שרת שמכין req/res (path, query, body, status, json). שלב 2: router מ־E16. שלב 3: שרשרת middleware.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>middleware: <code class="long">let i = 0; const next = async () =&gt; { const fn = stack[i++]; if (fn) await fn(req, res, next); else await runRoute(); }</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E24
+import fs from "node:fs";
+import http from "node:http";
+
+const segments = (p) =&gt; p.split("/").filter(Boolean);
+
+function matchParts(pattern, parts) {
+  if (pattern.length !== parts.length) return null;
+  const params = {};
+  for (let i = 0; i &lt; pattern.length; i++) {
+    if (pattern[i].startsWith(":")) params[pattern[i].slice(1)] = decodeURIComponent(parts[i]);
+    else if (pattern[i] !== parts[i]) return null;
+  }
+  return params;
+}
+
+async function readBody(req) {
+  if (!req.headers["content-type"]?.includes("application/json")) return undefined;
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (text === "") return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error("JSON לא תקין"), { status: 400 });
+  }
+}
+
+function enhance(res) {
+  res.status = (code) =&gt; {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (body) =&gt; {
+    if (res.statusCode === 204) return res.end();
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(body));
+  };
+}
+
+export function createApp() {
+  const middleware = [];
+  const routes = [];
+
+  async function route(req, res) {
+    const parts = segments(req.path);
+    const allow = [];
+    for (const r of routes) {
+      const params = matchParts(r.pattern, parts);
+      if (!params) continue;
+      if (r.method !== req.method) {
+        allow.push(r.method);
+        continue;
+      }
+      req.params = params;
+      return r.handler(req, res);
+    }
+    if (allow.length &gt; 0) {
+      res.setHeader("Allow", allow.join(", "));
+      return res.status(405).json({ error: "Method Not Allowed" });
+    }
+    res.status(404).json({ error: "לא נמצא" });
+  }
+
+  async function handle(req, res) {
+    enhance(res);
+    try {
+      const url = new URL(req.url, "http://localhost");
+      req.path = url.pathname;
+      req.query = Object.fromEntries(url.searchParams);
+      req.params = {};
+      req.body = await readBody(req);
+      let i = 0;
+      const next = async () =&gt; {
+        const fn = middleware[i++];
+        if (fn) await fn(req, res, next);
+        else await route(req, res);
+      };
+      await next();
+    } catch (err) {
+      if (res.headersSent) return res.end();
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      res.status(500).json({ error: "שגיאה פנימית" });
+    }
+  }
+
+  const app = {
+    use(fn) {
+      middleware.push(fn);
+    },
+    listen(port, cb) {
+      return http.createServer(handle).listen(port, cb);
+    },
+  };
+  for (const method of ["get", "post", "put", "patch", "delete"]) {
+    app[method] = (pattern, handler) =&gt; routes.push({ method: method.toUpperCase(), pattern: segments(pattern), handler });
+  }
+  return app;
+}
+
+// הדגמה — רק כשמריצים את הקובץ ישירות (node P14-E24.mjs), לא כשהבדיקות טוענות אותו
+if (fs.realpathSync(process.argv[1]) === import.meta.filename) {
+  const app = createApp();
+  app.get("/products/:id", (req, res) =&gt; res.json({ id: req.params.id, sort: req.query.sort }));
+  const server = app.listen(0, async () =&gt; {
+    const res = await fetch(`http://localhost:${server.address().port}/products/7?sort=price`);
+    console.log(res.status, await res.json());
+    server.close();
+  });
+}</code></pre>
+<pre class="terminal">200 { id: '7', sort: 'price' }</pre>
+<p>בנית את רוב מה ש־Express עושה. עכשיו, כשתראה בפרק 15 <code>app.get(...)</code>, <code>next()</code> או "error middleware" — תדע בדיוק מה קורה מאחורי הקלעים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא לעשות <code>await</code> ל־handler — שגיאה ב־handler async לא נתפסת, והשרת קורס (כמו ב־E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E25">
+    <h3>P14-E25 · אתגר: הגבלת קצב (rate limit) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Map</code> מלקוח ל־<code>{ start, count }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חלון נגמר כש־<code>now() - start &gt;= windowMs</code>. Retry-After: <code class="mid">Math.ceil((start + windowMs - now()) / 1000)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E25
+import http from "node:http";
+
+export function createLimitedServer({ limit, windowMs, now = Date.now }) {
+  const windows = new Map();
+
+  return http.createServer((req, res) =&gt; {
+    const client = req.headers["x-client-id"] ?? "anonymous";
+    const t = now();
+    let w = windows.get(client);
+    if (!w || t - w.start &gt;= windowMs) {
+      w = { start: t, count: 0 };
+      windows.set(client, w);
+    }
+    w.count++;
+
+    const headers = { "Content-Type": "application/json; charset=utf-8" };
+    if (w.count &gt; limit) {
+      headers["Retry-After"] = String(Math.ceil((w.start + windowMs - t) / 1000));
+      headers["X-RateLimit-Remaining"] = "0";
+      res.writeHead(429, headers);
+      return res.end(JSON.stringify({ error: "יותר מדי בקשות" }));
+    }
+    headers["X-RateLimit-Remaining"] = String(limit - w.count);
+    res.writeHead(200, headers);
+    res.end(JSON.stringify({ ok: true }));
+  });
+}</code></pre>
+<p>שתי חולשות לחשוב עליהן: (1) ה־Map גדל לנצח — לקוחות ישנים לא נמחקים (פתרון: ניקוי תקופתי, או Redis עם תפוגה — פרק 26); (2) עם שני עותקים של השרת, לכל אחד מונה משלו, והלקוח מקבל פי 2. גם את זה פותר Redis. ומזהה שהלקוח שולח בעצמו אפשר לזייף — בפועל מגבילים לפי IP או לפי משתמש מחובר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Retry-After</code> במילישניות — התקן מגדיר שניות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

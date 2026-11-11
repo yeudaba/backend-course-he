@@ -27,7 +27,7 @@
     <tr><td>cache ל־<code>GET /products</code></td><td>header <code>X-Cache: MISS</code> בפעם הראשונה, <code>HIT</code> בשנייה, <code>OFF</code> בלי Redis. שינוי מוצר (מנהל) או הזמנה (מלאי) ← הבקשה הבאה <code>MISS</code> עם הנתונים החדשים</td></tr>
     <tr><td>מפתחות עם קידומת</td><td>כל מפתח ב־Redis מתחיל ב־<code>REDIS_PREFIX</code> (ברירת מחדל <code>shop</code>) ונקודתיים</td></tr>
     <tr><td>מייל אישור</td><td>אחרי תשלום מוצלח — רשומה אחת ב־<code>GET /emails</code> (מנהל בלבד; 403 ללקוח): <code>to</code>, <code>subject</code> עם מספר ההזמנה, <code>body</code>. בדיוק אחת, גם עם retries</td></tr>
-    <tr><td>ביטול אוטומטי</td><td>הזמנה ב־<code>pending_payment</code> יותר מ־<code>ORDER_PAYMENT_TIMEOUT_SECONDS</code> (ברירת מחדל 1800) ← <code>cancelled</code>, והמלאי חוזר. הזמנה ששולמה — לא נוגעים</td></tr>
+    <tr><td>ביטול אוטומטי</td><td>הזמנה ב־<code>pending_payment</code> יותר מ־<code class="mid">ORDER_PAYMENT_TIMEOUT_SECONDS</code> (ברירת מחדל 1800) ← <code>cancelled</code>, והמלאי חוזר. הזמנה ששולמה — לא נוגעים</td></tr>
     <tr><td>בלי Redis</td><td>בלי <code>REDIS_URL</code> השרת עולה ועובד: <code>X-Cache: OFF</code>, המייל נכתב מיד, ואין ביטול אוטומטי. כל בודקי PR3 הקודמים עוברים</td></tr>
   </table></div>
   <p>"שליחת מייל" כאן היא כתיבה לטבלה <code>email_outbox</code>, ו־<code>GET /emails</code> מציג אותה — כמו כלי פיתוח (Mailpit, Mailtrap) שתופסים מיילים במקום לשלוח. להחליף אחר כך בספק אמיתי זה שינוי של מקום אחד.</p>
@@ -35,16 +35,16 @@
   <h2>2. המבנה</h2>
   <div class="table-wrap"><table>
     <tr><th>קובץ</th><th>מה</th></tr>
-    <tr><td><code>src/config.ts</code></td><td><code>REDIS_URL</code> (רשות), <code>REDIS_PREFIX</code>, <code>PRODUCTS_CACHE_TTL_SECONDS</code>, <code>ORDER_PAYMENT_TIMEOUT_SECONDS</code>, <code>WORKER</code></td></tr>
+    <tr><td><code>src/config.ts</code></td><td><code>REDIS_URL</code> (רשות), <code>REDIS_PREFIX</code>, <code>PRODUCTS_CACHE_TTL_SECONDS</code>, <code class="mid">ORDER_PAYMENT_TIMEOUT_SECONDS</code>, <code>WORKER</code></td></tr>
     <tr><td><code>src/redis/redis.module.ts</code></td><td>מודול <code>@Global</code>: חיבור אחד (או <code>null</code>), <code>keyPrefix</code>, ו־<code>quit</code> ב־<code>onApplicationShutdown</code></td></tr>
-    <tr><td><code>src/redis/cache.service.ts</code></td><td><code>getOrSet(group, key, ttl, load)</code> ← <code>{ value, status }</code>; <code>invalidate(group)</code> = <code>INCR</code> לגרסה (שיעור 2)</td></tr>
-    <tr><td><code>src/jobs/jobs.service.ts</code></td><td>Queue של BullMQ: <code>add(name, orderId, delayMs)</code> עם <code>jobId</code> קבוע, 5 ניסיונות, backoff</td></tr>
+    <tr><td><code>src/redis/cache.service.ts</code></td><td><code class="mid">getOrSet(group, key, ttl, load)</code> ← <code>{ value, status }</code>; <code>invalidate(group)</code> = <code>INCR</code> לגרסה (שיעור 2)</td></tr>
+    <tr><td><code>src/jobs/jobs.service.ts</code></td><td>Queue של BullMQ: <code class="mid">add(name, orderId, delayMs)</code> עם <code>jobId</code> קבוע, 5 ניסיונות, backoff</td></tr>
     <tr><td><code>src/jobs/jobs.processor.ts</code></td><td>Worker: <code>order-confirmation</code> ← <code>EmailsService</code>, <code>expire-order</code> ← <code>OrdersService.expire</code></td></tr>
     <tr><td><code>src/emails/*</code> · migration <code>email_outbox</code></td><td>הטבלה עם <code>@@unique([kind, orderId])</code>, ו־<code>GET /emails</code></td></tr>
     <tr><td><code>orders.service.ts</code> · <code>products.*</code></td><td>ביטול cache אחרי כל שינוי, עבודות אחרי <code>COMMIT</code>, <code>X-Cache</code></td></tr>
     <tr><td><code>compose.yaml</code></td><td>שירות <code>redis</code> (<code>redis:8-alpine</code>, healthcheck), וה־api תלוי בו</td></tr>
   </table></div>
-  <p>הפתרון המלא: <code>26-redis/solutions/coffee-shop</code>. כמו בשלבים הקודמים — הבודק עובד רק מבחוץ (HTTP ו־Redis), אז מבנה הקוד שלך יכול להיות אחר.</p>
+  <p>הפתרון המלא: <code class="mid">26-redis/solutions/coffee-shop</code>. כמו בשלבים הקודמים — הבודק עובד רק מבחוץ (HTTP ו־Redis), אז מבנה הקוד שלך יכול להיות אחר.</p>
 
   <h2>3. שלוש החלטות שכדאי לשים לב אליהן</h2>
   <p><strong>Redis אופציונלי.</strong> החיבור נוצר רק אם יש <code>REDIS_URL</code>, וכל שימוש בודק <code>null</code>. ב־cache, שגיאה של Redis לא מפילה בקשה — חוזרים למסד. לכן החיבור מוגדר עם <code>maxRetriesPerRequest: 2</code> ו־<code>enableOfflineQueue: false</code>: כש־Redis למטה, פקודה נכשלת מהר במקום לחכות בתור, והבקשה ממשיכה בלעדיו.</p>
@@ -58,7 +58,7 @@
 
   <h2>4. לראות את זה עובד</h2>
 <pre class="terminal"><span class="prompt">% </span>docker compose up --build</pre>
-  <p>(או מקומית: <code>REDIS_URL=redis://localhost:6379</code> ב־<code>.env</code>, ו־<code>npm run start:dev</code>.) הרצתי את הזרימה המלאה מול הפתרון, עם <code>ORDER_PAYMENT_TIMEOUT_SECONDS=20</code> כדי לא לחכות חצי שעה: לקוחה מזמינה 2 פילטרים ומשלמת, ואז מזמינה 3 ולא משלמת. הלוג של השרת:</p>
+  <p>(או מקומית: <code class="mid">REDIS_URL=redis://localhost:6379</code> ב־<code>.env</code>, ו־<code>npm run start:dev</code>.) הרצתי את הזרימה המלאה מול הפתרון, עם <code class="mid">ORDER_PAYMENT_TIMEOUT_SECONDS=20</code> כדי לא לחכות חצי שעה: לקוחה מזמינה 2 פילטרים ומשלמת, ואז מזמינה 3 ולא משלמת. הלוג של השרת:</p>
 <pre class="terminal"><span class="dim">[Nest] 8362  - 11/08/2026, 7:58:46 AM     LOG [JobsService] queued expire-order #1 in 20000ms</span>
 <span class="dim">[Nest] 8362  - 11/08/2026, 7:58:46 AM     LOG [JobsService] queued order-confirmation #1</span>
 <span class="dim">[Nest] 8362  - 11/08/2026, 7:58:46 AM     LOG [EmailsService] order-confirmation → dana@example.com (#1)</span>
@@ -75,7 +75,7 @@
     "createdAt": "2026-11-08T07:58:46.517Z"
   }
 ]</code></pre>
-  <p>ומה יש ב־Redis? <code>docker compose exec redis redis-cli --scan --pattern 'shop:*'</code> אחרי בקשה אחת לקטלוג:</p>
+  <p>ומה יש ב־Redis? <code class="long">docker compose exec redis redis-cli --scan --pattern 'shop:*'</code> אחרי בקשה אחת לקטלוג:</p>
 <pre class="terminal"><span class="dim">shop:bull:shop:meta</span>
 <span class="dim">shop:bull:shop:stalled-check</span>
 <span class="dim">shop:cache:products:0:{"q":"V60","sort":"newest","page":1,"limit":20}</span></pre>
@@ -86,7 +86,7 @@
 <span class="prompt">% </span>cd ~/dev/backend-course
 <span class="prompt">% </span>npm run check PR3-REDIS -- --dir ~/dev/coffee-shop
 <span class="prompt">% </span>npm run check PR3 -- --dir ~/dev/coffee-shop</pre>
-  <p><strong>PR3-REDIS</strong> מעלה את השרת שלך עם <code>REDIS_URL</code> ו־<code>REDIS_PREFIX</code> ייחודי, ובודק: (1) cache — MISS ואז HIT עם אותו גוף, query אחר = MISS, מפתחות תחת הקידומת, ושינוי של מנהל או הזמנה מבטלים; (2) מייל — אין לפני תשלום, יש אחד אחרי, רק למנהל, ונשאר אחד; (3) עם <code>ORDER_PAYMENT_TIMEOUT_SECONDS=2</code> — הזמנה שלא שולמה מתבטלת והמלאי חוזר, וששולמה נשארת <code>paid</code>. הפקודה השנייה מריצה את כל בודקי הפרויקט — הם רצים בלי Redis, וחייבים להמשיך לעבור.</p>
+  <p><strong>PR3-REDIS</strong> מעלה את השרת שלך עם <code>REDIS_URL</code> ו־<code>REDIS_PREFIX</code> ייחודי, ובודק: (1) cache — MISS ואז HIT עם אותו גוף, query אחר = MISS, מפתחות תחת הקידומת, ושינוי של מנהל או הזמנה מבטלים; (2) מייל — אין לפני תשלום, יש אחד אחרי, רק למנהל, ונשאר אחד; (3) עם <code class="mid">ORDER_PAYMENT_TIMEOUT_SECONDS=2</code> — הזמנה שלא שולמה מתבטלת והמלאי חוזר, וששולמה נשארת <code>paid</code>. הפקודה השנייה מריצה את כל בודקי הפרויקט — הם רצים בלי Redis, וחייבים להמשיך לעבור.</p>
   <p>ב־README של הפרויקט: עדכן את דיאגרמת הארכיטקטורה (Redis, worker), הוסף את <code>GET /emails</code> לטבלת ה־API, ושלוש שורות תחת "החלטות": Redis אופציונלי, ביטול בגרסה, ו"בדיקה בזמן הריצה" בביטול האוטומטי. ותחת "מה הייתי משפר" — outbox.</p>
 
   <div class="box job">

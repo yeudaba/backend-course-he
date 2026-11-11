@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 12</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 12</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>12-design/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P12-E04">
+    <h3>P12-E04 · איזו שכבה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>repository — רק "איך שומרים/מביאים". service — "מה מותר". ממשק — "קלט/פלט".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חוק עסקי ("אימייל לא תפוס") — service, גם אם הוא משתמש ב־repository.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>repository</li><li>service</li><li>route</li><li>service</li><li>repository</li><li>route (או error handler מרכזי — עדיין שכבת הממשק)</li></ol>
+<p>מבחן פשוט: אם תחליף את המסד ב־API אחר — אילו פונקציות ישתנו? (repository). אם תחליף HTTP ב־CLI? (route). מה שלא משתנה באף אחד מהמקרים — service.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים בדיקת "אימייל תפוס" ב־route — אז ה־CLI או worker אחר יכולים לעקוף אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E11">
+    <h3>P12-E11 · repository גנרי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">#items = new Map&lt;number, T&gt;();</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עותק: <code>{ ...item }</code> — TypeScript מקבל את זה כ־T.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E11
+export class InMemoryRepository&lt;T extends { id: number }&gt; {
+  #items = new Map&lt;number, T&gt;();
+
+  async findById(id: number): Promise&lt;T | null&gt; {
+    const item = this.#items.get(id);
+    return item ? { ...item } : null;
+  }
+
+  async findAll(): Promise&lt;T[]&gt; {
+    return [...this.#items.values()].sort((a, b) =&gt; a.id - b.id).map((x) =&gt; ({ ...x }));
+  }
+
+  async save(item: T): Promise&lt;void&gt; {
+    this.#items.set(item.id, { ...item });
+  }
+
+  async delete(id: number): Promise&lt;boolean&gt; {
+    return this.#items.delete(id);
+  }
+
+  async count(): Promise&lt;number&gt; {
+    return this.#items.size;
+  }
+}
+
+const repo = new InMemoryRepository&lt;{ id: number; name: string }&gt;();
+await repo.save({ id: 2, name: "b" });
+await repo.save({ id: 1, name: "a" });
+console.log(await repo.findAll(), await repo.count());</code></pre>
+<pre class="terminal">[ { id: 1, name: 'a' }, { id: 2, name: 'b' } ] 2</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>save שמאחסן את האובייקט עצמו — מי ששמר וממשיך לשנות אותו, משנה את "המסד".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E15">
+    <h3>P12-E15 · UserService 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">constructor(users: UserRepository) { this.#users = users; }</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>register: <code class="long">const existing = await this.#users.findByEmail(email); if (existing) throw ...</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E15
+export type User = { id: number; email: string; name: string };
+
+export interface UserRepository {
+  findById(id: number): Promise&lt;User | null&gt;;
+  findByEmail(email: string): Promise&lt;User | null&gt;;
+  count(): Promise&lt;number&gt;;
+  save(user: User): Promise&lt;void&gt;;
+}
+
+export class InMemoryUserRepository implements UserRepository {
+  #users = new Map&lt;number, User&gt;();
+  async findById(id: number) {
+    const u = this.#users.get(id);
+    return u ? { ...u } : null;
+  }
+  async findByEmail(email: string) {
+    for (const u of this.#users.values()) if (u.email === email) return { ...u };
+    return null;
+  }
+  async count() {
+    return this.#users.size;
+  }
+  async save(user: User) {
+    this.#users.set(user.id, { ...user });
+  }
+}
+
+export class NotFoundError extends Error {
+  constructor(entity: string, id: number) {
+    super(`${entity} ${id} לא נמצא`);
+    this.name = "NotFoundError";
+  }
+}
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = "ValidationError";
+    this.field = field;
+  }
+}
+
+export class UserService {
+  #users: UserRepository;
+
+  constructor(users: UserRepository) {
+    this.#users = users;
+  }
+
+  async register(input: { email: string; name: string }): Promise&lt;User&gt; {
+    const email = input.email.trim().toLowerCase();
+    if (await this.#users.findByEmail(email)) {
+      throw new ConflictError("האימייל כבר רשום");
+    }
+    const user: User = { id: (await this.#users.count()) + 1, email, name: input.name.trim() };
+    await this.#users.save(user);
+    return user;
+  }
+
+  async getById(id: number): Promise&lt;User&gt; {
+    const user = await this.#users.findById(id);
+    if (!user) {
+      throw new NotFoundError("משתמש", id);
+    }
+    return user;
+  }
+
+  async rename(id: number, name: string): Promise&lt;User&gt; {
+    if (name.trim() === "") {
+      throw new ValidationError("name", "שם חובה");
+    }
+    const user = await this.getById(id);
+    const updated = { ...user, name: name.trim() };
+    await this.#users.save(updated);
+    return updated;
+  }
+}
+
+const service = new UserService(new InMemoryUserRepository());
+await service.register({ email: "Dana@X.com", name: "דנה" });
+console.log(await service.rename(1, "דנה כהן"));</code></pre>
+<pre class="terminal">{ id: 1, email: 'dana@x.com', name: 'דנה כהן' }</pre>
+<p>(id = count + 1 שביר אם מוחקים משתמשים — זוכר את פרויקט 1? כאן אין מחיקה; במסד, ה־id ייווצר אוטומטית.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק כפילות לפני נרמול — <code>Dana@x.com</code> ו־<code>dana@x.com</code> שניהם נרשמים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E16">
+    <h3>P12-E16 · OrderService עם צילום מחיר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלב 1: שלוף את כל המוצרים ובדוק. שלב 2: הורד מלאי ושמור הזמנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>id להזמנה: <code>(await orders.count()) + 1</code>. total מעוגל ל־2 ספרות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E16
+export type Product = { id: number; name: string; price: number; stock: number };
+export type OrderLine = { productId: number; qty: number; unitPrice: number };
+export type Order = { id: number; userId: number; createdAt: Date; lines: OrderLine[]; total: number };
+
+export interface Repo&lt;T extends { id: number }&gt; {
+  findById(id: number): Promise&lt;T | null&gt;;
+  save(item: T): Promise&lt;void&gt;;
+  count(): Promise&lt;number&gt;;
+}
+
+export class MemoryRepo&lt;T extends { id: number }&gt; implements Repo&lt;T&gt; {
+  #items = new Map&lt;number, T&gt;();
+  async findById(id: number) {
+    const x = this.#items.get(id);
+    return x ? structuredClone(x) : null;
+  }
+  async save(item: T) {
+    this.#items.set(item.id, structuredClone(item));
+  }
+  async count() {
+    return this.#items.size;
+  }
+}
+
+export class NotFoundError extends Error {}
+export class ConflictError extends Error {}
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.field = field;
+  }
+}
+
+export class OrderService {
+  #products: Repo&lt;Product&gt;;
+  #orders: Repo&lt;Order&gt;;
+  #now: () =&gt; Date;
+
+  constructor(deps: { products: Repo&lt;Product&gt;; orders: Repo&lt;Order&gt;; now: () =&gt; Date }) {
+    this.#products = deps.products;
+    this.#orders = deps.orders;
+    this.#now = deps.now;
+  }
+
+  async placeOrder(userId: number, items: { productId: number; qty: number }[]): Promise&lt;Order&gt; {
+    if (items.length === 0) {
+      throw new ValidationError("items", "הזמנה ריקה");
+    }
+    const products: Product[] = [];
+    for (const { productId, qty } of items) {
+      const product = await this.#products.findById(productId);
+      if (!product) {
+        throw new NotFoundError(`מוצר ${productId} לא נמצא`);
+      }
+      if (product.stock &lt; qty) {
+        throw new ConflictError(`אין מספיק מלאי למוצר ${productId}`);
+      }
+      products.push(product);
+    }
+
+    const lines: OrderLine[] = items.map((item, i) =&gt; ({ ...item, unitPrice: products[i].price }));
+    for (let i = 0; i &lt; items.length; i++) {
+      await this.#products.save({ ...products[i], stock: products[i].stock - items[i].qty });
+    }
+    const total = Math.round(lines.reduce((s, l) =&gt; s + l.unitPrice * l.qty, 0) * 100) / 100;
+    const order: Order = { id: (await this.#orders.count()) + 1, userId, createdAt: this.#now(), lines, total };
+    await this.#orders.save(order);
+    return order;
+  }
+}
+
+const products = new MemoryRepo&lt;Product&gt;();
+await products.save({ id: 1, name: "עט", price: 5, stock: 10 });
+const service = new OrderService({ products, orders: new MemoryRepo&lt;Order&gt;(), now: () =&gt; new Date("2026-11-01T10:00:00Z") });
+const order = await service.placeOrder(7, [{ productId: 1, qty: 3 }]);
+console.log(order.total, order.lines[0].unitPrice, (await products.findById(1))?.stock);</code></pre>
+<pre class="terminal">15 5 7</pre>
+<p>שים לב לשתי הגבלות בפתרון: (1) אם אותו מוצר מופיע פעמיים בהזמנה — הבדיקה לא מצרפת כמויות (תרגיל להרחבה); (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E17">
+    <h3>P12-E17 · repository עם cache (הרכבה) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">#cache = new Map&lt;number, T | null&gt;()</code>; בדוק עם <code>has</code> (ולא עם הערך — כי null הוא ערך שמור).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החזר עותקים גם מה־cache.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E17
+export interface Repo&lt;T extends { id: number }&gt; {
+  findById(id: number): Promise&lt;T | null&gt;;
+  save(item: T): Promise&lt;void&gt;;
+}
+
+export class CachedRepository&lt;T extends { id: number }&gt; implements Repo&lt;T&gt; {
+  #inner: Repo&lt;T&gt;;
+  #cache = new Map&lt;number, T | null&gt;();
+  #hits = 0;
+  #misses = 0;
+
+  constructor(inner: Repo&lt;T&gt;) {
+    this.#inner = inner;
+  }
+
+  get hits(): number {
+    return this.#hits;
+  }
+  get misses(): number {
+    return this.#misses;
+  }
+
+  async findById(id: number): Promise&lt;T | null&gt; {
+    if (this.#cache.has(id)) {
+      this.#hits++;
+      const cached = this.#cache.get(id) ?? null;
+      return cached ? { ...cached } : null;
+    }
+    this.#misses++;
+    const item = await this.#inner.findById(id);
+    this.#cache.set(id, item ? { ...item } : null);
+    return item;
+  }
+
+  async save(item: T): Promise&lt;void&gt; {
+    await this.#inner.save(item);
+    this.#cache.set(item.id, { ...item });
+  }
+}
+
+const calls: number[] = [];
+const slow: Repo&lt;{ id: number; v: string }&gt; = {
+  async findById(id) {
+    calls.push(id);
+    return id === 1 ? { id: 1, v: "a" } : null;
+  },
+  async save() {},
+};
+const repo = new CachedRepository(slow);
+await repo.findById(1);
+await repo.findById(1);
+await repo.findById(2);
+await repo.findById(2);
+console.log(repo.hits, repo.misses, calls);</code></pre>
+<pre class="terminal">2 2 [ 1, 2 ]</pre>
+<p>זה דפוס "decorator": אותו חוזה, התנהגות נוספת. בפרק 26 נעשה את אותו דבר עם Redis — ונגלה שהחלק הקשה הוא דווקא מתי לנקות את ה־cache.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (this.#cache.get(id))</code> — null שמור נחשב "לא בזיכרון", ושוב פונים ל־inner.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E22">
+    <h3>P12-E22 · repository שדולף ו־service שלא ניתן לבדוק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>החזר עותקים, ושמור עותקים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>constructor שמקבל <code>ProductRepo</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E22: מתוקן
+export type Product = { id: number; price: number };
+
+export interface ProductRepo {
+  findById(id: number): Promise&lt;Product | null&gt;;
+  save(p: Product): Promise&lt;void&gt;;
+}
+
+export class MemoryProductRepo implements ProductRepo {
+  #items = new Map&lt;number, Product&gt;();
+  async findById(id: number) {
+    const p = this.#items.get(id);
+    return p ? { ...p } : null;
+  }
+  async save(p: Product) {
+    this.#items.set(p.id, { ...p });
+  }
+}
+
+export class PricingService {
+  #repo: ProductRepo;
+  constructor(repo: ProductRepo) {
+    this.#repo = repo;
+  }
+  async priceWithVat(id: number): Promise&lt;number&gt; {
+    const p = await this.#repo.findById(id);
+    if (!p) throw new Error(`מוצר ${id} לא נמצא`);
+    return Math.round(p.price * 1.18 * 100) / 100;
+  }
+}
+
+const repo = new MemoryProductRepo();
+await repo.save({ id: 1, price: 100 });
+const p = await repo.findById(1);
+if (p) p.price = 1;
+console.log(await new PricingService(repo).priceWithVat(1));</code></pre>
+<pre class="terminal">118</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר ב־PricingService ברירת מחדל <code class="mid">repo = new MemoryProductRepo()</code> "לנוחות" — מקובל לפעמים, אבל קל לשכוח להעביר את האמיתי ולעבוד בייצור עם זיכרון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E28">
+    <h3>P12-E28 · דוח הלקוחות הגדולים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה שלבים בתוך <code>topCustomers</code>: (1) <code class="mid">await this.#orders.findAll()</code> ← <code>filter</code> ← קיבוץ ל־<code>Map&lt;number, number&gt;</code> של userId ← סכום. (2) <code>[...totals]</code> (מערך של זוגות) ← <code>sort</code> ← <code>slice(0, n)</code>. (3) <code>findByIds</code> על ה־ids שנבחרו, ו־<code>Map</code> מ־id לשם.</p>
+<p>(כמו שראית בשיעור 1: את השדות כותבים במפורש — <code>#orders: OrderRepository;</code> ובתוך ה־constructor ‏<code>this.#orders = orders;</code>.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון זוגות: <code class="mid">.sort(([idA, a], [idB, b]) =&gt; b - a || idA - idB)</code> — אם ההפרש 0, ה־<code>||</code> עובר להשוואה השנייה. בסוף: <code class="long">top.map(([id, total]) =&gt; ({ name: names.get(id) ?? "לא ידוע", total }))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E28: דוח הלקוחות הגדולים
+export type Order = { id: number; userId: number; total: number; status: "paid" | "cancelled" };
+export type User = { id: number; name: string };
+
+export interface OrderRepository {
+  findAll(): Promise&lt;Order[]&gt;;
+}
+export interface UserRepository {
+  findByIds(ids: number[]): Promise&lt;User[]&gt;;
+}
+
+export class ReportService {
+  #orders: OrderRepository;
+  #users: UserRepository;
+
+  constructor(orders: OrderRepository, users: UserRepository) {
+    this.#orders = orders;
+    this.#users = users;
+  }
+
+  async topCustomers(n: number): Promise&lt;{ name: string; total: number }[]&gt; {
+    const orders = await this.#orders.findAll();
+
+    const totals = new Map&lt;number, number&gt;();
+    for (const o of orders.filter((o) =&gt; o.status === "paid")) {
+      totals.set(o.userId, (totals.get(o.userId) ?? 0) + o.total);
+    }
+
+    const top = [...totals].sort(([idA, a], [idB, b]) =&gt; b - a || idA - idB).slice(0, n);
+
+    const users = await this.#users.findByIds(top.map(([id]) =&gt; id));
+    const names = new Map(users.map((u) =&gt; [u.id, u.name]));
+
+    return top.map(([id, total]) =&gt; ({ name: names.get(id) ?? "לא ידוע", total }));
+  }
+}
+
+const orders: OrderRepository = {
+  findAll: async () =&gt; [
+    { id: 1, userId: 7, total: 100, status: "paid" },
+    { id: 2, userId: 8, total: 300, status: "paid" },
+    { id: 3, userId: 7, total: 250, status: "paid" },
+    { id: 4, userId: 9, total: 999, status: "cancelled" },
+  ],
+};
+const users: UserRepository = {
+  findByIds: async (ids) =&gt; [{ id: 7, name: "דנה" }, { id: 8, name: "עומר" }].filter((u) =&gt; ids.includes(u.id)),
+};
+
+console.log(await new ReportService(orders, users).topCustomers(5));</code></pre>
+<pre class="terminal">[ { name: 'דנה', total: 350 }, { name: 'עומר', total: 300 } ]</pre>
+<p>ה־service לא יודע מאיפה מגיעים הנתונים: ממסד, מקובץ או מאובייקט מזויף בבדיקה. הוא יודע רק את ה־interface. בזכות זה הבודק יכול להזריק repository שסופר קריאות, ולוודא שלא נוצרה בעיית <strong>N+1</strong>: קריאה למסד לכל לקוח בנפרד, במקום קריאה אחת לכולם (תפגוש אותה שוב בפרקים 17 ו־19).</p>
+<p><code>[...totals]</code> הופך <code>Map</code> למערך של זוגות <code>[userId, total]</code>, ומשם זה מיון רגיל (פרק 6). ‏<code>new Map(users.map(...))</code> הוא הדרך הקצרה לבנות מילון מ־id לשם, כדי שהחיפוש בסוף לא יסרוק את המערך כל פעם מחדש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="long">for (const [id] of top) { await this.#users.findByIds([id]); }</code> — ‏N קריאות במקום אחת. הבודק סופר.</li><li>לשלוף שמות לכל הלקוחות לפני ה־<code>slice</code> — עובד, אבל מבקש מהמסד אלפי שמות כדי להציג חמישה.</li><li><code class="mid">.sort((a, b) =&gt; b[1] - a[1])</code> בלי שובר שוויון — הסדר בין לקוחות עם אותו סכום תלוי בסדר ההזמנות.</li><li><code class="mid">constructor(private orders: OrderRepository)</code> — Node לא מריץ את הכתיב המקוצר הזה ישירות מקובץ <code>.ts</code> (שיעור 1).</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-boundary.html"><small>הבא</small>שיעור 4 — גישור: טיפוסים מול בדיקה בזמן ריצה</a></div>
+</main>
+</body>
+</html>

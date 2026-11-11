@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 29</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 29</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>29-ai-backend/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P29-E04">
+    <h3>P29-E04 · מה שולחים, ומה רושמים בלוג <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מינימום הכרחי: מה המודל צריך כדי לענות? (פרק 24 — redact בלוגים.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פרק 25 — סודות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>לשלוח:</strong> מספר הזמנה, סטטוס, תאריכים, שמות המוצרים. <strong>לא:</strong> כתובת מלאה, טלפון, אימייל, ארבע ספרות כרטיס, הערות פנימיות של צוות. כל מה שנשלח לספק חיצוני — עובר אליו; בדוק מה תנאי השמירה, ואם יש דרישות רגולציה (מידע אישי, GDPR).</li>
+<li><strong>לרשום:</strong> request ID (פרק 24), מודל, <code>usage</code> (טוקנים → עלות, E08), זמן, <code>stop_reason</code>, משתמש (id), ושגיאות. <strong>לא</strong> את הטקסט המלא של כל prompt ותשובה כברירת מחדל — הוא מכיל מידע של לקוחות; אם צריך לדיבאג, עם redact ותוקף קצר.</li>
+<li><strong>במשתנה סביבה בשרת</strong> (<code>ANTHROPIC_API_KEY</code>), כמו כל סוד (פרק 25) — אף פעם לא בקוד, ב־Git, או בדפדפן. בדפדפן כל משתמש יכול לפתוח DevTools ולהעתיק. דלף? מבטלים את המפתח בקונסולה ומייצרים חדש — ובודקים בדוח השימוש מה נעשה בו.</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־API ישר מהדפדפן "כי זה מהיר יותר לפתח" — המפתח חשוף, ואין הגבלת קצב, תקציב או הרשאות. תמיד דרך השרת שלך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E12">
+    <h3>P29-E12 · מודל חלופי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">err instanceof Anthropic.APIError</code> ו־<code>err.status</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה לא על 429? כי ה־SDK כבר ניסה שוב (E05), ולרוב המגבלה היא על החשבון — לא על המודל. ו־400 ייכשל בכל מודל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E12
+import Anthropic from "@anthropic-ai/sdk";
+
+// ה־SDK כבר מנסה שוב לבד (maxRetries, ברירת מחדל 2) על 408/409/429/5xx. מה שנשאר לנו: מה עושים אחרי שגם זה נכשל.
+// עומס או תקלה אצל הספק (5xx, 529 overloaded) ← מודל חלופי. בקשה שגויה (4xx) — אותה בקשה תיכשל גם שם ← זורקים
+export async function createWithFallback(
+  client: Anthropic,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  fallbackModel: string,
+): Promise&lt;{ message: Anthropic.Message; usedFallback: boolean }&gt; {
+  try {
+    return { message: await client.messages.create(params), usedFallback: false };
+  } catch (err) {
+    const overloaded = err instanceof Anthropic.InternalServerError || (err instanceof Anthropic.APIError &amp;&amp; (err.status ?? 0) &gt;= 500);
+    if (!overloaded || params.model === fallbackModel) throw err;
+    return { message: await client.messages.create({ ...params, model: fallbackModel }), usedFallback: true };
+  }
+}</code></pre>
+<p>(ב־Opus 5.5 יש גם <code>fallbacks</code> בצד השרת — למקרה של <em>סירוב</em>, לא של עומס. שני מנגנונים לשתי בעיות שונות.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>fallback בלי לרשום בלוג שהוא קרה — "הכול עובד", ואף אחד לא יודע ש־30% מהבקשות רצות על מודל אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E15">
+    <h3>P29-E15 · streaming ללקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">event.type === "content_block_delta" &amp;&amp; event.delta.type === "text_delta"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שהתחלת לכתוב תשובה — אי אפשר להחזיר status 500. השגיאה חייבת לעבור בתוך הזרם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E15
+import type Anthropic from "@anthropic-ai/sdk";
+
+// streaming ללקוח: האירועים של ה־SDK ← Server-Sent Events. רק טקסט יוצא החוצה (לא thinking, לא tool input),
+// כל שורת data היא JSON (כך ירידות שורה בטקסט לא שוברות את הפורמט), ובסוף — event: done עם stop_reason
+export async function streamToSse(events: AsyncIterable&lt;Anthropic.MessageStreamEvent&gt;, write: (chunk: string) =&gt; void): Promise&lt;{ chars: number }&gt; {
+  let chars = 0;
+  let stopReason: string | null = null;
+  try {
+    for await (const event of events) {
+      if (event.type === "content_block_delta" &amp;&amp; event.delta.type === "text_delta") {
+        chars += event.delta.text.length;
+        write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
+      } else if (event.type === "message_delta") {
+        stopReason = event.delta.stop_reason ?? stopReason;
+      }
+    }
+  } catch (err) {
+    // הזרם כבר התחיל — אי אפשר להחזיר 500. מודיעים בתוך הזרם, והלקוח מציג "משהו השתבש"
+    write(`event: error\ndata: ${JSON.stringify({ message: "התשובה נקטעה" })}\n\n`);
+    throw err;
+  }
+  write(`event: done\ndata: ${JSON.stringify({ stop_reason: stopReason })}\n\n`);
+  return { chars };
+}</code></pre>
+<p>ב־Nest: <code>@Sse()</code> מחזיר Observable, או ידנית עם <code class="mid">res.setHeader("content-type", "text/event-stream")</code> ו־<code>res.write</code>. ובדפדפן: <code>EventSource</code>, או <code>fetch</code> וקריאה של <code>response.body</code>. (זכור את ה־reverse proxy — nginx צריך <code>proxy_buffering off</code>, אחרת הוא מחזיק את כל התשובה עד הסוף.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח <code>data: ${text}</code> בלי JSON — ירידת שורה בטקסט מסיימת את האירוע באמצע.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E16">
+    <h3>P29-E16 · cache לתשובות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>cache-aside מפרק 26 — אותו דפוס בדיוק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה hash ולא השאלה עצמה? מפתח קצר וקבוע, ובלי מידע אישי בשמות מפתחות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E16
+import { createHash } from "node:crypto";
+import type Anthropic from "@anthropic-ai/sdk";
+
+export interface KV {
+  get(key: string): Promise&lt;string | null&gt;;
+  set(key: string, value: string, ttlSeconds: number): Promise&lt;void&gt;;
+}
+
+// cache לתשובות (cache-aside, פרק 26) — לשאלות שחוזרות ("מה שעות המשלוח?").
+// המפתח: hash של כל מה שמשפיע על התשובה — מודל, system, והשאלה המנורמלת. שומרים רק תשובה שלמה (end_turn)
+export function createCachedAsk(client: Anthropic, kv: KV, { model, system, ttlSeconds = 3600 }: { model: string; system: string; ttlSeconds?: number }) {
+  const stats = { hits: 0, misses: 0 };
+  async function askCached(question: string): Promise&lt;string&gt; {
+    const normalized = question.trim().replace(/\s+/g, " ").toLowerCase();
+    const key = "ai:" + createHash("sha256").update(JSON.stringify([model, system, normalized])).digest("hex");
+    const hit = await kv.get(key);
+    if (hit !== null) {
+      stats.hits++;
+      return hit;
+    }
+    stats.misses++;
+    const response = await client.messages.create({ model, max_tokens: 2048, system, messages: [{ role: "user", content: question.trim() }] });
+    const text = response.content.filter((b): b is Anthropic.TextBlock =&gt; b.type === "text").map((b) =&gt; b.text).join("");
+    if (response.stop_reason === "end_turn" &amp;&amp; text) await kv.set(key, text, ttlSeconds);
+    return text;
+  }
+  return { ask: askCached, stats };
+}</code></pre>
+<p>מתי זה עובד? כששאלות באמת חוזרות (FAQ, תיאורי מוצרים) והתשובה לא אישית. "איפה ההזמנה <em>שלי</em>" — אסור ב־cache משותף (פרק 26). וזה שונה מ<strong>prompt caching</strong> של ה־API (שיעור 4): שם ה־API זוכר את תחילת ה־prompt ומוזיל את הקלט; כאן אנחנו לא קוראים בכלל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מפתח בלי המודל או ה־system — מחליפים prompt, והתשובות הישנות ממשיכות לצאת שעה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E17">
+    <h3>P29-E17 · תקציב יומי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מפתח <code>${day}:${userId}</code>, כש־day הוא <code>toISOString().slice(0, 10)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שומרים במיקרו־דולרים — מספרים שלמים (כמו אגורות בפרויקט 3).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E17
+// תקציב יומי למשתמש: כל קריאה עולה כסף, ומשתמש אחד (או סקריפט) יכול לשרוף את התקציב של כולם.
+// בודקים לפני הקריאה, רושמים אחרי (לפי usage אמיתי), ומתאפסים בחצות UTC
+export function createBudget({ dailyUsdPerUser, now = () =&gt; Date.now() }: { dailyUsdPerUser: number; now?: () =&gt; number }) {
+  const spent = new Map&lt;string, number&gt;(); // `${day}:${userId}` ← מיקרו־דולרים (שלמים — בלי שגיאות עיגול)
+  const day = () =&gt; new Date(now()).toISOString().slice(0, 10);
+  const key = (userId: string) =&gt; `${day()}:${userId}`;
+  const limit = Math.round(dailyUsdPerUser * 1_000_000);
+  return {
+    check(userId: string): { allowed: boolean; remainingUsd: number } {
+      const used = spent.get(key(userId)) ?? 0;
+      return { allowed: used &lt; limit, remainingUsd: Math.max(0, limit - used) / 1_000_000 };
+    },
+    record(userId: string, usd: number) {
+      if (!(usd &gt;= 0)) throw new Error("עלות לא תקינה");
+      const k = key(userId);
+      spent.set(k, (spent.get(k) ?? 0) + Math.round(usd * 1_000_000));
+      for (const old of spent.keys()) if (!old.startsWith(day() + ":")) spent.delete(old); // לא שומרים ימים קודמים
+    },
+  };
+}</code></pre>
+<p>בשרת עם כמה עותקים — המונה ב־Redis (<code>INCRBY</code> ו־<code>EXPIRE</code>, פרק 26). ובדרך כלל עוד שכבה: מגבלה של כל הארגון בקונסולה של הספק, כרשת ביטחון אחרונה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק תקציב רק <em>אחרי</em> הקריאה — הכסף כבר הוצא. בודקים לפני, רושמים אחרי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E18">
+    <h3>P29-E18 · קיצור היסטוריה עם כלים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מהסוף להתחלה, מצטברים עד שעוברים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">Array.isArray(m.content) &amp;&amp; m.content.some((b) =&gt; b.type === "tool_result")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E18
+import type Anthropic from "@anthropic-ai/sdk";
+
+// קיצור היסטוריה לפי תקציב טוקנים: משאירים את הסוף. אסור לחתוך בין tool_use לבין ה־tool_result שלו
+// (ה־API דוחה tool_result בלי tool_use לפניו), וההודעה הראשונה חייבת להיות user עם טקסט — לא tool_result
+const hasToolResult = (m: Anthropic.MessageParam) =&gt; Array.isArray(m.content) &amp;&amp; m.content.some((b) =&gt; b.type === "tool_result");
+
+export function trimHistory(messages: readonly Anthropic.MessageParam[], maxTokens: number, estimate: (m: Anthropic.MessageParam) =&gt; number): Anthropic.MessageParam[] {
+  let total = 0;
+  let start = messages.length;
+  for (let i = messages.length - 1; i &gt;= 0; i--) {
+    const cost = estimate(messages[i]);
+    if (total + cost &gt; maxTokens) break;
+    total += cost;
+    start = i;
+  }
+  // מקדמים את ההתחלה עד הודעת user "נקייה" — כך לא נשאר tool_result יתום ולא assistant ראשון
+  while (start &lt; messages.length &amp;&amp; (messages[start].role !== "user" || hasToolResult(messages[start]))) start++;
+  return messages.slice(start);
+}</code></pre>
+<p>(להערכת טוקנים מדויקת יש <code class="mid">client.messages.countTokens</code> — קריאה ל־API, חינם אבל עם רשת. לחיתוך, הערכה גסה בקוד מספיקה — אבל את היחס בין תווים לטוקנים בעברית כדאי למדוד פעם אחת עם countTokens, ולא לנחש לפי אנגלית.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחתוך באמצע זוג tool_use/tool_result — ה־API מחזיר 400, והשיחה "נתקעת" אחרי שעה של שימוש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E23">
+    <h3>P29-E23 · cache ועלות — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>prompt caching הוא התאמה של <em>תחילת</em> הבקשה, בית אחרי בית. מה משתנה בכל בקשה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה <code>cache_control</code>? ובחישוב — באיזה מחיר מחויב הקלט?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E23
+import type Anthropic from "@anthropic-ai/sdk";
+
+export const POLICY = "You answer questions about the shop's shipping, returns and warranty policy. ...";
+
+export function buildRequest(policyDocument: string, question: string, now: Date): Anthropic.MessageCreateParamsNonStreaming {
+  return {
+    model: "claude-opus-5-5",
+    max_tokens: 2048,
+    system: [
+      // תקלה 1: התאריך היה בתוך ה־system ← כל בקשה עם prefix שונה, וה־cache לא נקרא אף פעם.
+      // החלק הקבוע ראשון ועם cache_control (תקלה 2: לא היה בכלל), והמשתנה — אחריו
+      { type: "text", text: `${POLICY}\n\n&lt;policy&gt;\n${policyDocument}\n&lt;/policy&gt;`, cache_control: { type: "ephemeral" } },
+    ],
+    messages: [{ role: "user", content: `(today is ${now.toISOString().slice(0, 10)})\n\n${question}` }],
+  };
+}
+
+export function costUsd(usage: Anthropic.Usage, prices = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 }): number {
+  // תקלה 3: היה (input + output) * prices.output ← הקלט חויב במחיר הפלט, ו־cache לא נספר בכלל
+  return (
+    (usage.input_tokens * prices.input +
+      usage.output_tokens * prices.output +
+      (usage.cache_creation_input_tokens ?? 0) * prices.cacheWrite +
+      (usage.cache_read_input_tokens ?? 0) * prices.cacheRead) /
+    1_000_000
+  );
+}</code></pre>
+<p>הבדיקה שמוצאת את זה: <code class="mid">usage.cache_read_input_tokens</code> בבקשה השנייה. אפס ← משהו ב־prefix משתנה. החשודים הרגילים: תאריך או שעה, מזהה בקשה, JSON עם סדר מפתחות משתנה, או רשימת כלים שמשתנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף cache_control ונראה" — בלי למדוד hit rate. caching שלא פוגע הוא תוספת עלות (כתיבה ל־cache יקרה מקלט רגיל).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P29-E27">
+    <h3>P29-E27 · בדיקות ל־redactPII 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל "כולל" בתיאור — בדיקה: אימייל עם <code>+</code>, אימייל עם <code>.co.il</code>, כרטיס עם רווחים, כרטיס עם מקפים, טלפון עם <code>+972</code>. ושתי הופעות באותו טקסט: regex בלי הדגל <code>g</code> מחליף רק את הראשונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החצי השני של הבדיקות הוא מה ש<em>לא</em> משתנה: <code class="mid">assert.equal(redactPII(s), s)</code> על רשימה. גבולות: 13 ספרות (כרטיס) מול 12 (מספר הזמנה). ומספר ארוך מאוד (20 ספרות): אסור שחלק ממנו יוחלף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { redactPII } from "./P29-E27.ts";
+
+test("אימיילים — כולל + ודומיין עם כמה חלקים, וכולם (לא רק הראשון)", () =&gt; {
+  assert.equal(redactPII("כתבו לי ל־dana@example.com"), "כתבו לי ל־[EMAIL]");
+  assert.equal(redactPII("dana.levi+shop@mail.co.il"), "[EMAIL]");
+  assert.equal(redactPII("a@x.io, b@y.io"), "[EMAIL], [EMAIL]");
+});
+
+test("כרטיס אשראי: 13–16 ספרות, עם רווחים או מקפים", () =&gt; {
+  assert.equal(redactPII("כרטיס 4580123456789012 בבקשה"), "כרטיס [CARD] בבקשה");
+  assert.equal(redactPII("4580 1234 5678 9012"), "[CARD]");
+  assert.equal(redactPII("4580-1234-5678-9012"), "[CARD]");
+  assert.equal(redactPII("1234567890123"), "[CARD]", "13 ספרות");
+});
+
+test("טלפון נייד: עם ובלי מקפים, ועם +972", () =&gt; {
+  assert.equal(redactPII("התקשרו ל־0521234567"), "התקשרו ל־[PHONE]");
+  assert.equal(redactPII("052-123-4567"), "[PHONE]");
+  assert.equal(redactPII("052 123 4567"), "[PHONE]");
+  assert.equal(redactPII("+972-52-123-4567"), "[PHONE]");
+  assert.equal(redactPII("+972521234567"), "[PHONE]");
+  assert.equal(redactPII("0521234567 ו־0549876543"), "[PHONE] ו־[PHONE]");
+});
+
+test("מה שלא מוחלפים", () =&gt; {
+  for (const s of ["הזמנה מספר 123456789012", "ת.ז. 123456782", "טלפון בבית 03-1234567", "ב־2026 קניתי 3 שקיות", "dana at example dot com", "05212345678901234567"]) {
+    assert.equal(redactPII(s), s, s);
+  }
+});</code></pre>
+<p>הבדיקה האחרונה, "מה שלא מוחלף", תופסת שלושה באגים לבד: כרטיס מ־12 ספרות (מספר ההזמנה נמחק), כרטיס בלי <code>\b</code> (חלק מהמספר בן 20 הספרות נמחק), וטלפון שמקבל גם קווי. ב־redaction, החלפה מיותרת היא באג אמיתי: מספר הזמנה שנמחק מהפנייה הופך את התשובה של המודל לחסרת תועלת.</p>
+<p>regex הוא הקוד שהכי קל לשבור בשינוי קטן, ואף אחד לא קורא אותו ב־code review. בדיקות עם דוגמאות אמיתיות הן התיעוד היחיד שלו. כשמישהו "מתקן" את הטלפון כדי לתפוס גם קווי, הבדיקה של <code>03-1234567</code> מראה לו מה עוד השתנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>רק מקרים שצריכים להתחלף — מימוש שמחליף <em>כל</em> רצף ספרות עובר את כולם.</li><li>טקסט עם הופעה אחת של כל סוג — באג של דגל <code>g</code> חסר עובר.</li><li><code class="mid">assert.match(out, /\[EMAIL\]/)</code> — לא בודק ששאר הטקסט נשאר. ‏<code>assert.equal</code> על כל המחרוזת.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-testing.html"><small>הבא</small>שיעור 5 — לבדוק AI: לקוח מדומה, evals, וזרימות</a></div>
+</main>
+</body>
+</html>

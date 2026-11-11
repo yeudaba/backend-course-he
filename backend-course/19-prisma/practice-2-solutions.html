@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 19</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 19</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>19-prisma/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P19-E03">
+    <h3>P19-E03 · איזו פקודה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>dev / deploy / reset / generate.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>יש דגל שיוצר migration בלי להריץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code class="mid">npx prisma migrate dev --name add_customer_phone</code> (ואז <code>generate</code>).</li><li><code>npx prisma migrate dev</code> — מריץ את מה שעוד לא רץ אצלך (בלי ליצור חדש, אם הסכמה תואמת). ו־<code>generate</code>.</li><li><code>npx prisma migrate deploy</code> — לעולם לא <code>dev</code> בייצור.</li><li><code>npx prisma migrate reset</code> ואז <code>npx prisma db seed</code>.</li><li><code>npx prisma generate</code> — ב־Prisma 7 migrate לא מייצר את ה־client.</li><li><code class="mid">npx prisma migrate dev --create-only --name ...</code> — קוראים (ואם צריך עורכים) את ה־SQL, ואז <code>migrate dev</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>migrate reset</code> "כדי שיעבוד" — על מסד משותף או ייצור, זה מוחק את כל הנתונים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E19">
+    <h3>P19-E19 · seed שאפשר להריץ שוב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>upsert</code> לכל דבר שיש לו שדה ייחודי (קטגוריה לפי name, לקוח לפי email).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למוצר אין שדה ייחודי חוץ מ־id. <code>findFirst</code> לפי שם וקטגוריה, ו־create רק אם אין.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E19
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+const PRODUCTS = [
+  { name: "Cold Brew Bottle 1L", price: 59.9, stock: 20 },
+  { name: "Cold Brew Filter Bags", price: 34.9, stock: 100 },
+];
+
+export async function seedDemoData(prisma: PrismaClient) {
+  const category = await prisma.category.upsert({ where: { name: "cold brew" }, create: { name: "cold brew" }, update: {} });
+  for (const p of PRODUCTS) {
+    const existing = await prisma.product.findFirst({ where: { name: p.name, categoryId: category.id } });
+    if (!existing) await prisma.product.create({ data: { ...p, categoryId: category.id } });
+  }
+  const customer = await prisma.customer.upsert({
+    where: { email: "demo@example.com" },
+    create: { email: "demo@example.com", fullName: "Demo User", city: "Tel Aviv", joinedOn: new Date("2026-01-01") },
+    update: {},
+  });
+  return { categoryId: category.id, customerId: customer.id };
+}</code></pre>
+<p>seed שאפשר להריץ שוב ("idempotent") חוסך המון כאב: אפשר להריץ אותו בכל הפעלה של סביבת פיתוח, בלי "קודם תמחק".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>create</code> לכל דבר — הרצה שנייה נכשלת על unique (או יוצרת מוצרים כפולים).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P19-E26">
+    <h3>P19-E26 · הספרייה כ־schema של Prisma 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>העתק את המבנה מ־<code>files/prisma/schema.prisma</code>: ‏<code>Product</code>/<code>Category</code> הם דוגמה לקשר "רבים לאחד", ו־<code>ProductTag</code> היא בדיוק טבלת קישור כמו <code>BookAuthor</code>. שדה לא חובה: <code>Int?</code>. תאריך עם ברירת מחדל: <code class="mid">DateTime @default(now()) @map("loaned_on") @db.Date</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לכל קשר יש שני צדדים. ב־<code>Loan</code>: ‏<code>bookId Int @map("book_id")</code> ו־<code class="mid">book Book @relation(fields: [bookId], references: [id])</code>. ב־<code>Book</code>: ‏<code>loans Loan[]</code>. אם תשכח את הצד של המערך, Prisma יגיד בדיוק מה חסר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">// P19-E26: הספרייה (P17-E26) כ־schema של Prisma
+datasource db {
+  provider = "postgresql"
+}
+
+model Author {
+  id       Int          @id @default(autoincrement())
+  fullName String       @map("full_name")
+  books    BookAuthor[]
+
+  @@map("authors")
+}
+
+model Book {
+  id            Int          @id @default(autoincrement())
+  title         String
+  isbn          String       @unique
+  publishedYear Int?         @map("published_year")
+  authors       BookAuthor[]
+  loans         Loan[]
+
+  @@map("books")
+}
+
+model BookAuthor {
+  bookId   Int    @map("book_id")
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  authorId Int    @map("author_id")
+  author   Author @relation(fields: [authorId], references: [id])
+
+  @@id([bookId, authorId])
+  @@map("book_authors")
+}
+
+model Member {
+  id       Int    @id @default(autoincrement())
+  fullName String @map("full_name")
+  email    String @unique
+  loans    Loan[]
+
+  @@map("members")
+}
+
+model Loan {
+  id         Int       @id @default(autoincrement())
+  bookId     Int       @map("book_id")
+  book       Book      @relation(fields: [bookId], references: [id])
+  memberId   Int       @map("member_id")
+  member     Member    @relation(fields: [memberId], references: [id])
+  loanedOn   DateTime  @default(now()) @map("loaned_on") @db.Date
+  returnedOn DateTime? @map("returned_on") @db.Date
+
+  @@index([memberId])
+  @@map("loans")
+}</code></pre>
+<p>שלוש שורות ב־schema שוות כאן הרבה SQL: ‏<code>@relation</code> הופך ל־<code>FOREIGN KEY</code>, ‏<code>@unique</code> ל־<code>UNIQUE INDEX</code>, ו־<code>@@id</code> ל־<code>PRIMARY KEY</code> על שתי עמודות. בלי <code>onDelete</code>, Prisma כותב <code>ON DELETE RESTRICT</code>, ולכן היסטוריית ההשאלות מוגנת כמו ב־P17-E26.</p>
+<p>השדות <code>books BookAuthor[]</code> ו־<code>loans Loan[]</code> לא יוצרים עמודות. הם קיימים רק ב־Prisma Client, כדי שתוכל לכתוב <code>include: { loans: true }</code>. העמודה עצמה (<code>book_id</code>) נמצאת תמיד בצד ה"רבים".</p>
+<p>מה <strong>לא</strong> עבר מ־P17-E26? ה־<code class="mid">CHECK (returned_on &gt;= loaned_on)</code>. ב־schema של Prisma אין דרך לכתוב CHECK. בפרויקט אמיתי יוצרים migration עם <code>--create-only</code>, ומוסיפים את ה־CHECK ביד לקובץ ה־SQL (שיעור 2). עוד הבדל: Prisma יוצר <code>SERIAL</code> ולא <code class="mid">GENERATED ALWAYS AS IDENTITY</code>.</p>
+<p>ה־<code>@@index([memberId])</code> לא חובה כאן, אבל הוא הרגל טוב. PostgreSQL לא יוצר index על foreign key לבד (‏P18-E16), ו"כל ההשאלות של חבר" היא שאילתה נפוצה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>@@map("books")</code> — הטבלה נקראת <code>"Book"</code> (באות גדולה ובמירכאות), וכל SQL שכתבת עד עכשיו לא מוצא אותה.</li><li><code>onDelete: Cascade</code> גם ב־<code>Loan</code> — מחיקת ספר מוחקת בשקט את ההיסטוריה שלו.</li><li><code>DateTime</code> בלי <code>@db.Date</code> — העמודה היא <code>timestamp(3)</code>, ו"השאלות של היום" צריכות טווח שעות.</li><li><code>id</code> נוסף ב־<code>BookAuthor</code> בלי <code>@@id([bookId, authorId])</code> — אותו קישור יכול להופיע פעמיים.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-queries.html"><small>הבא</small>שיעור 3 — שאילתות, transactions ושגיאות</a></div>
+</main>
+</body>
+</html>

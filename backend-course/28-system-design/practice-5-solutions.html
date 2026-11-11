@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — פרק 28</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 28</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code class="mid">28-system-design/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28-E05">
+    <h3>P28-E05 · ביקורת על מסמך תכנון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה כשיש 5 שרתים, ו־Map בכל אחד?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ומה קורה ל־Apple כשהיא חוזרת מתקלה, ואלף שרתים "מנסים שוב מיד"?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>שליחה בתוך הבקשה</strong> — הלקוח מחכה לספק חיצוני. ← תור ו־worker (פרק 26).</li>
+<li><strong>ניסיון חוזר מיד, 10 פעמים</strong> — מכה את הספק בדיוק כשהוא חלש, וחוסם את הבקשה. ← backoff אקספוננציאלי עם jitter (E12), מספר ניסיונות סביר, ו־circuit breaker (E15).</li>
+<li><strong>Map בזיכרון</strong> — עם 5 שרתים, כל אחד יודע רק על עצמו; ואחרי restart — שוכח הכול. ← ייחודיות במסד (<code>UNIQUE</code>) או ב־Redis (<code>SET NX</code>, פרק 26).</li>
+<li><strong><code>Date.now()</code> כמזהה</strong> — שתי התראות באותה מילישנייה, או בשני שרתים = אותו מזהה. ← UUID, מזהה מהמסד, או Snowflake (E24).</li>
+<li><strong>"נוסיף שרתים"</strong> — לפני שיודעים מה צוואר הבקבוק. אם הבעיה היא ההמתנה לספק, עוד שרתים רק יכפילו את ההמתנה. ← למדוד; ועם תור — מגדילים workers, לא API.</li>
+<li>(בונוס) אין התייחסות לטוקן שפג (משתמש מחק את האפליקציה) — ספקי push מחזירים שגיאה שצריך לטפל בה ולמחוק את הטוקן, לא "לנסות שוב".</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ביקורת בלי הצעה ("זה לא יעבוד"). בצוות, ובראיון, מה שעוזר הוא "הבעיה היא X, והייתי עושה Y כי Z".</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E19">
+    <h3>P28-E19 · פיד היברידי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Maps: עוקבים, נעקבים, פיד לכל משתמש, פוסטים לכל מחבר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כפילות: פוסט של מי שהפך לסלבריטי <em>אחרי</em> שפרסם — כבר בפיד, וגם נמשך. Map לפי id.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E19
+// פיד: fan-out on write (כל פוסט נכתב לפיד של כל עוקב) — קריאה מהירה; אבל לסלבריטי עם מיליון עוקבים זה מיליון כתיבות.
+// היברידי: לסלבריטאים — fan-out on read (מושכים את הפוסטים שלהם בזמן הקריאה וממזגים)
+export interface Post {
+  id: number;
+  author: string;
+  at: number;
+}
+
+export function createFeed({ celebrityThreshold = 1000, timelineCap = 500 }: { celebrityThreshold?: number; timelineCap?: number } = {}) {
+  const followers = new Map&lt;string, Set&lt;string&gt;&gt;();
+  const following = new Map&lt;string, Set&lt;string&gt;&gt;();
+  const timelines = new Map&lt;string, Post[]&gt;(); // החדש ראשון
+  const postsBy = new Map&lt;string, Post[]&gt;(); // החדש ראשון
+  const stats = { timelineWrites: 0 };
+  let nextId = 1;
+
+  const set = (m: Map&lt;string, Set&lt;string&gt;&gt;, k: string) =&gt; m.get(k) ?? m.set(k, new Set()).get(k)!;
+  const isCelebrity = (u: string) =&gt; (followers.get(u)?.size ?? 0) &gt;= celebrityThreshold;
+  const newestFirst = (a: Post, b: Post) =&gt; b.at - a.at || b.id - a.id;
+
+  return {
+    stats,
+    follow(user: string, target: string) {
+      set(followers, target).add(user);
+      set(following, user).add(target);
+    },
+    post(author: string, at: number): Post {
+      const p = { id: nextId++, author, at };
+      (postsBy.get(author) ?? postsBy.set(author, []).get(author)!).unshift(p);
+      if (!isCelebrity(author)) {
+        for (const f of followers.get(author) ?? []) {
+          const tl = timelines.get(f) ?? timelines.set(f, []).get(f)!;
+          tl.unshift(p);
+          if (tl.length &gt; timelineCap) tl.length = timelineCap;
+          stats.timelineWrites++;
+        }
+      }
+      return p;
+    },
+    timeline(user: string, limit = 20): Post[] {
+      // Map לפי id: פוסט של מי שהפך לסלבריטי אחרי שפרסם — כבר בפיד, וגם נמשך עכשיו. לא להציג פעמיים
+      const merged = new Map((timelines.get(user) ?? []).map((p) =&gt; [p.id, p]));
+      for (const t of following.get(user) ?? []) {
+        if (isCelebrity(t)) for (const p of (postsBy.get(t) ?? []).slice(0, limit)) merged.set(p.id, p);
+      }
+      return [...merged.values()].sort(newestFirst).slice(0, limit);
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>fan-out on read לכולם — כל פתיחה של האפליקציה = שאילתה על מאות חשבונות, ממוזגת. איטי בדיוק בפעולה הנפוצה.</li></ul>
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

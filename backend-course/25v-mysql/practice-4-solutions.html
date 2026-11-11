@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E05">
+    <h3>P25.5-E05 · מה mysql2 מחזיר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>DECIMAL יכול להיות מדויק יותר מ־number של JavaScript — אז mysql2 לא ממיר אותו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>affectedRows — שורות שהתאימו; changedRows — שורות שהערך בהן השתנה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import mysql from "mysql2/promise";
+
+const admin = await mysql.createConnection(process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306");
+await admin.query("CREATE DATABASE IF NOT EXISTS e05_demo");
+const conn = await mysql.createConnection({ uri: process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306", database: "e05_demo" });
+await conn.query("CREATE TABLE IF NOT EXISTS t (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(10))");
+await conn.query("TRUNCATE t");
+
+const [rows] = await conn.query&lt;any[]&gt;("SELECT CAST(89.90 AS DECIMAL(10,2)) AS price, TRUE AS flag, CAST('{\"a\":1}' AS JSON) AS doc, COUNT(*) AS n, CAST('2026-03-01 10:00:00' AS DATETIME) AS at FROM DUAL");
+for (const [k, v] of Object.entries(rows[0])) console.log(k, typeof v, v instanceof Date ? "Date" : JSON.stringify(v));
+const [ins] = await conn.query&lt;any&gt;("INSERT INTO t (name) VALUES ('a'), ('b')");
+console.log("insert:", ins.insertId, ins.affectedRows);
+const [upd] = await conn.query&lt;any&gt;("UPDATE t SET name = 'a' WHERE id IN (1, 2)");
+console.log("update:", upd.affectedRows, upd.changedRows);
+
+await conn.end();
+await admin.query("DROP DATABASE e05_demo");
+await admin.end();</code></pre>
+<pre class="terminal">price string "89.90"
+flag number 1
+doc object {"a":1}
+n number 1
+at object Date
+insert: 1 2
+update: 2 1</pre>
+<ul><li><code>DECIMAL</code> ← מחרוזת. סכום של מחרוזות הוא שרשור (E21). או <code>decimalNumbers: true</code> בחיבור (מאבד דיוק מעל 15 ספרות), או המרה במקום אחד (E10).</li><li><code>TRUE</code> ← 1: אין boolean ב־MySQL.</li><li><code>COUNT(*)</code> ← number (BIGINT קטן). JSON ← אובייקט.</li><li><code>DATETIME</code> ← <code>Date</code> — ומפורש לפי אזור הזמן של <em>התהליך</em> (בשרת שמוגדר לישראל — שעתיים הפרש). <code>dateStrings: true</code> או <code>timezone: "Z"</code> בחיבור — החלטה אחת לכל האפליקציה.</li><li><code>insertId</code> — ה־id של השורה <em>הראשונה</em> ב־INSERT מרובה. <code>changedRows</code> = 1 — רק שורה 2 השתנתה ('b' ← 'a'); <code>affectedRows</code> = 2.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>insertId</code> של INSERT עם כמה שורות כ"ה־id של האחרונה" — הוא של הראשונה; השאר עוקבים (ברוב ההגדרות), אבל עדיף לא להסתמך.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E09">
+    <h3>P25.5-E09 · הזמנה בטרנזקציה עם mysql2 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const conn = await pool.getConnection()</code>; <code>beginTransaction</code> / <code>commit</code> / <code>rollback</code>; <code>finally { conn.release() }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אין RETURNING: <code class="mid">const [res] = await conn.execute(…)</code> ואז <code>res.insertId</code>. ו־INSERT מרובה: <code class="mid">conn.query("… VALUES ?", [rows])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E09
+import type { Pool } from "mysql2/promise";
+
+export class OutOfStock extends Error {}
+
+// הזמנה בטרנזקציה ב־mysql2: חיבור אחד מה־pool לכל הטרנזקציה (getConnection), ו־release בכל מקרה.
+// execute = prepared statement עם ? — אף פעם לא שרשור מחרוזות. ואין RETURNING: את ה־id נותן insertId
+export async function insertOrder(pool: Pool, order: { customerId: number; items: { productId: number; quantity: number }[] }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const ids = order.items.map((i) =&gt; i.productId).sort((a, b) =&gt; a - b); // נועלים תמיד באותו סדר — פחות deadlocks
+    const [rows] = await conn.query&lt;any[]&gt;("SELECT id, price, stock FROM products WHERE id IN (?) ORDER BY id FOR UPDATE", [ids]);
+    const byId = new Map(rows.map((r) =&gt; [r.id, r]));
+    let totalCents = 0;
+    for (const item of order.items) {
+      const p = byId.get(item.productId);
+      if (!p || p.stock &lt; item.quantity) throw new OutOfStock(`אין מספיק מלאי למוצר ${item.productId}`);
+      totalCents += Math.round(Number(p.price) * 100) * item.quantity;
+    }
+    const [res] = await conn.execute&lt;any&gt;("INSERT INTO orders (customer_id, status, total) VALUES (?, 'pending_payment', ?)", [order.customerId, (totalCents / 100).toFixed(2)]);
+    const orderId: number = res.insertId;
+    await conn.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES ?", [
+      order.items.map((i) =&gt; [orderId, i.productId, i.quantity, byId.get(i.productId).price]),
+    ]);
+    for (const item of order.items) {
+      await conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [item.quantity, item.productId]);
+    }
+    await conn.commit();
+    return { orderId, totalCents };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">pool.query("START TRANSACTION")</code> ואז <code>pool.query(…)</code> — כל קריאה ל־pool יכולה לקבל חיבור <em>אחר</em>. טרנזקציה חיה על חיבור אחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E10">
+    <h3>P25.5-E10 · טיפוסים מ־mysql2 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Math.round(Number("89.90") * 100)</code> — round, כי 89.9 × 100 = 8990.000000000001.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>E05 מראה בדיוק מה חוזר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E10
+import type { Connection } from "mysql2/promise";
+
+export interface Product {
+  id: number;
+  name: string;
+  priceCents: number;
+  isActive: boolean;
+  attributes: Record&lt;string, unknown&gt; | null;
+}
+
+// mysql2 בברירת מחדל: DECIMAL ← מחרוזת ("89.90" — כדי לא לאבד דיוק), BOOLEAN (TINYINT(1)) ← 0/1,
+// JSON ← אובייקט מפוענח. ממירים פעם אחת, במקום אחד, לטיפוסים של האפליקציה
+export function toProduct(row: { id: number; name: string; price: string | number; is_active: number | boolean; attributes: unknown }): Product {
+  const priceCents = Math.round(Number(row.price) * 100); // 89.9 * 100 = 8990.000000000001 — לכן round
+  return {
+    id: row.id,
+    name: row.name,
+    priceCents,
+    isActive: row.is_active === 1 || row.is_active === true,
+    attributes: typeof row.attributes === "string" ? JSON.parse(row.attributes) : ((row.attributes as Record&lt;string, unknown&gt; | null) ?? null),
+  };
+}
+
+export async function listProducts(conn: Connection, category: string): Promise&lt;Product[]&gt; {
+  const [rows] = await conn.execute&lt;any[]&gt;("SELECT id, name, price, is_active, attributes FROM products WHERE category = ? ORDER BY id", [category]);
+  return rows.map(toProduct);
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל <code>decimalNumbers: true</code> "וזהו" — מעל 15 ספרות משמעותיות מאבדים דיוק בשקט. לכסף — אגורות כמספר שלם, או מחרוזת עד הרגע האחרון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E21">
+    <h3>P25.5-E21 · דוח יומי — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הטיפוס של <code>r.total</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>changedRows</code> כשהערך כבר זהה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E21
+import type { Connection } from "mysql2/promise";
+
+export async function dailyReport(conn: Connection, day: string) {
+  const [rows] = await conn.execute&lt;any[]&gt;(
+    "SELECT total FROM orders WHERE status IN ('paid', 'shipped') AND created_at &gt;= ? AND created_at &lt; ? + INTERVAL 1 DAY",
+    [day, day],
+  );
+  // תקלה 1: היה rows.reduce((s, r) =&gt; s + r.total, 0) ← total הוא מחרוזת ("89.90"), והתוצאה "089.90119.00"
+  const cents = rows.reduce((s, r) =&gt; s + Math.round(Number(r.total) * 100), 0);
+  return { day, orders: rows.length, totalCents: cents };
+}
+
+export async function markShipped(conn: Connection, orderId: number): Promise&lt;boolean&gt; {
+  const [res] = await conn.execute&lt;any&gt;("UPDATE orders SET status = 'shipped' WHERE id = ? AND status IN ('paid', 'shipped')", [orderId]);
+  // תקלה 2: היה changedRows === 1 ← הזמנה שכבר shipped (ערך זהה) החזירה false, כאילו לא קיימת או לא שולמה.
+  // affectedRows — כמה שורות התאימו ל־WHERE (ב־mysql2 ברירת המחדל: CLIENT_FOUND_ROWS)
+  return res.affectedRows === 1;
+}
+
+// תקלה 3: היה new Date(day) ← "2026-03-01" כ־Date ב־UTC, ו־mysql2 שולח אותו לפי אזור הזמן של התהליך —
+// בשרת בישראל השאילתה התחילה ב־"2026-03-01 02:00". מחרוזת 'YYYY-MM-DD' עוברת כמו שהיא
+export const dayParam = (day: string) =&gt; {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("תאריך בפורמט YYYY-MM-DD");
+  return day;
+};</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את הסכום עם <code>parseFloat</code> ולחבר שברים — אחרי אלף הזמנות מגיעים לאגורה חסרה. אגורות כמספר שלם.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-indexes.html"><small>הבא</small>שיעור 5 — אינדקסים, EXPLAIN, migrations והעברת נתונים</a></div>
+</main>
+</body>
+</html>

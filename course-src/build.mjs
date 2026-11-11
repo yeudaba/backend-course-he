@@ -172,8 +172,21 @@ function checkRun(run, expected, ctx) {
 }
 
 // ---------- תבנית דף ----------
+// קוד בתוך משפט לא נשבר באמצע (style.css: white-space: nowrap). קוד ארוך (long) — בשורה משלו;
+// קוד בינוני (mid) — בשורה משלו רק במסך צר (טלפון), כדי שלא יברח מהמסך.
+const LONG_INLINE = 60;
+const MID_INLINE = 26;
+const unesc = (t) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+function markLongCode(html) {
+  return html.replace(/<code>([^<]*)<\/code>/g, (all, t) => {
+    const n = unesc(t).length;
+    return n > LONG_INLINE ? `<code class="long">${t}</code>` : n > MID_INLINE ? `<code class="mid">${t}</code>` : all;
+  });
+}
+
 function page({ title, depth, crumbs, body }) {
   const up = depth ? "../" : "";
+  body = markLongCode(body);
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -221,6 +234,14 @@ function parseExercises(text) {
       cur.type = ty[1];
       continue;
     }
+    const pl = line.match(/^@(lesson|part|kind)\s+(\S+)\s*$/);
+    if (pl && cur) {
+      if (pl[1] === "kind") {
+        if (!["understand", "code"].includes(pl[2])) problems.push(`${cur.id}: @kind לא מוכר "${pl[2]}" (מותר: understand, code)`);
+        cur.kind = pl[2];
+      } else cur[pl[1]] = +pl[2];
+      continue;
+    }
     const f = line.match(/^@(task|hint1|hint2|solution|mistakes)\s*$/);
     if (f && cur) {
       field = f[1];
@@ -231,69 +252,127 @@ function parseExercises(text) {
   return list;
 }
 
-function exercisesPages(ch, exs, chapterHref) {
-  const counts = [1, 2, 3, 4, 5].map((l) => exs.filter((e) => e.level === l).length);
-  const total = exs.reduce((s, e) => s + e.minutes, 0);
-  const tags = [1, 2, 3, 4, 5].map((l) => `<span class="tag l${l}">${l} · ${LEVELS[l]} (${counts[l - 1]})</span>`).join("\n");
-  const intro = `<div class="box goal">
-    <span class="box-title">איך עובדים עם הדף</span>
-    <ul>
-      <li>כל הפקודות נכתבות ב־Terminal של VS Code, מתוך <code>~/dev/backend-course</code>.</li>
-      <li>קובצי התחלה: <code>${ch.slug}/starter/</code>. ${ch.checker ? "את רוב התרגילים כותבים <strong>ישירות בקובץ ההתחלה</strong>, ובודקים עם <code>npm run check P" + ch.code + "-E07</code> (לפי מזהה התרגיל)." : "קבצים שאתה יוצר בעצמך — ב־<code>playground/</code>."}</li>
-      <li>אין צורך לפתור הכול בישיבה אחת: פתור את התרגילים שמסומנים בשיעור שסיימת, והשלם את השאר בסוף הפרק.</li>
-      <li>נתקעת? <a href="solutions.html">דף הפתרונות</a>: רמז 1 ← רמז 2 ← פתרון. <strong>פתח רמז רק אחרי 5–10 דקות של ניסיון אמיתי.</strong></li>
-    </ul>
-    <p>${tags}</p>
-  </div>`;
-  // תרגילים עם @type מקובצים בבלוק "✍️ תרגול כתיבה" בראש הדף; תרגילים בלי סוג — כמו קודם, לפי הסדר
-  const typed = exs.filter((e) => e.type);
-  const plain = exs.filter((e) => !e.type);
-  const ordered = typed.length ? [...typed, ...plain] : exs;
-  const typedMinutes = typed.reduce((s, e) => s + e.minutes, 0);
-  const typedIntro = `  <h2>✍️ תרגול כתיבה</h2>
-  <div class="box tip">
-    <p>${typed.length} תרגילים קצרים (כ־${typedMinutes} דק׳) שבהם <strong>אתה כותב את כל הקוד</strong> — מקובץ שיש בו רק הערה עם המשימה. לכל אחד יש בודק: <code>npm run check ${typed[0]?.id ?? ""}</code>.</p>
-    <p>${Object.entries(TYPES).filter(([k]) => typed.some((e) => e.type === k)).map(([k, v]) => `<span class="tag type ${k}">${v}</span> ${{ warmup: "תרגיל קצר על נושא הפרק — 5–10 דקות", scratch: "בעיה במילים, אתה בוחר את המבנה", review: "תחביר מפרקים קודמים, כדי שהיד לא תשכח" }[k]}`).join("<br>")}</p>
-  </div>`;
+// לאיזה שיעור שייך תרגיל, ובאיזה חלק של התרגול שלו:
+// חלק 1 — השיעור עצמו; חלק 2 — משלב את השיעור עם מה שנלמד קודם.
+// אפשר לקבוע במפורש עם "@lesson 2" ו־"@part 2"; אחרת — לפי "ידע נדרש" שבכותרת.
+function placeExercise(e, lessonCount) {
+  const nums = [...e.requires.matchAll(/\d+/g)].map((m) => +m[0]).filter((n) => n >= 1 && n <= lessonCount);
+  const whole = /כל הפרק|כל היחידה/.test(e.requires);
+  let lesson = e.lesson ?? (whole || !nums.length ? lessonCount : Math.max(...nums));
+  lesson = Math.min(Math.max(lesson, 1), lessonCount);
+  const part = e.part ?? (whole || new Set(nums).size > 1 ? 2 : 1);
+  return { lesson, part };
+}
+
+const practiceFile = (n) => `practice-${n}.html`;
+const practiceSolFile = (n) => `practice-${n}-solutions.html`;
+
+function exercisesPages(ch, exs, lessons) {
+  const lessonCount = Math.max(lessons.length, 1);
+  const hasTest = (e) => fs.existsSync(path.join(ch.dir, "tests", `${e.id}.test.mjs`));
+  for (const e of exs) {
+    Object.assign(e, placeExercise(e, lessonCount));
+    e.kind = e.kind ?? (hasTest(e) || e.level > 1 ? "code" : "understand");
+  }
+  const KIND = { understand: "🧠 הבנה", code: "💻 כתיבת קוד" };
+  const kindTag = (e) => `<span class="tag kind ${e.kind}">${KIND[e.kind]}${hasTest(e) ? " 🤖" : ""}</span>`;
+  const byLesson = (n, part) => {
+    const list = exs.filter((e) => e.lesson === n && e.part === part);
+    return [...list.filter((e) => e.kind === "understand"), ...list.filter((e) => e.kind === "code")];
+  };
+  const crumbs = (last) => `<a href="../README.html">דף הבית</a> ‹ <a href="index.html">${lbl(ch)}</a> ‹ ${last}`;
   const exCard = (e) => `<div class="ex${e.type ? " typed" : ""}" id="${e.id}">
     <h3>${e.id} · ${e.title}</h3>
-    <div class="ex-meta">${typeTag(e)}<span class="tag l${e.level}">רמה ${e.level}</span><span class="tag">⏱ ${e.minutes} דק׳</span><span class="tag">ידע נדרש: ${e.requires}</span></div>
+    <div class="ex-meta">${kindTag(e)}${typeTag(e)}<span class="tag l${e.level}">רמה ${e.level}</span><span class="tag">⏱ ${e.minutes} דק׳</span><span class="tag">ידע נדרש: ${e.requires}</span></div>
 ${renderFences(e.task, `${e.id} task`)}
   </div>`;
-  const exHtml = typed.length
-    ? `${typedIntro}\n${typed.map(exCard).join("\n")}\n  <h2>📚 תרגילי הפרק</h2>\n${plain.map(exCard).join("\n")}`
-    : exs.map(exCard).join("\n");
-  const exBody = `  <h1>✍️ ${lbl(ch)} — דף תרגילים</h1>
-  <p class="subtitle">${exs.length} תרגילים · ⏱ סה״כ כ־${Math.round(total / 60 * 2) / 2} שעות · מומלץ לפצל לכמה מפגשים</p>
-${intro}
-${exHtml}
-  <h2>🏁 מבחן מעבר</h2>
-  <div class="box tip">${renderFences(ch.passTest, "pass")}</div>
-${pager({ href: "index.html", small: "חזרה", label: `פתיחת ${lbl(ch)}` }, { href: "solutions.html", small: "🔒 רק אחרי ניסיון", label: "דף הפתרונות" })}`;
-
-  const solHtml = ordered
-    .map((e) => {
-      const d = (summary, content) => (content.trim() ? `<details><summary>${summary}</summary><div>\n${renderFences(content, `${e.id} ${summary}`)}\n</div></details>` : "");
-      return `<div class="ex${e.type ? " typed" : ""}" id="${e.id}">
-    <h3>${e.id} · ${e.title} ${e.type ? typeTag(e) + " " : ""}<span class="tag l${e.level}">רמה ${e.level}</span></h3>
+  const solCard = (e) => {
+    const d = (summary, content) => (content.trim() ? `<details><summary>${summary}</summary><div>\n${renderFences(content, `${e.id} ${summary}`)}\n</div></details>` : "");
+    return `<div class="ex${e.type ? " typed" : ""}" id="${e.id}">
+    <h3>${e.id} · ${e.title} ${kindTag(e)} <span class="tag l${e.level}">רמה ${e.level}</span></h3>
     ${d("💡 רמז 1", e.hint1)}
     ${d("💡 רמז 2", e.hint2)}
     ${d("✅ פתרון", e.solution)}
     ${d("⚠️ טעויות נפוצות", e.mistakes)}
   </div>`;
-    })
-    .join("\n");
-  const solBody = `  <h1>🔒 ${lbl(ch)} — דף פתרונות</h1>
+  };
+  const counts = (list) => {
+    const u = list.filter((e) => e.kind === "understand").length;
+    return `${list.length} שאלות · ${u} הבנה · ${list.length - u} קוד · ⏱ כ־${list.reduce((s, e) => s + e.minutes, 0)} דק׳`;
+  };
+  const partHead = (n, part, list) =>
+    part === 1
+      ? `  <h2>🎯 חלק 1 — שיעור ${n}: ${lessons[n - 1]?.title ?? ""}</h2>
+  <p class="subtitle">${counts(list)} · רק על מה שלמדת בשיעור הזה</p>`
+      : `  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">${counts(list)} · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>`;
+
+  const pages = {};
+  const idToPage = {};
+  for (let n = 1; n <= lessonCount; n++) {
+    const p1 = byLesson(n, 1);
+    const p2 = byLesson(n, 2);
+    const all = [...p1, ...p2];
+    if (!all.length) continue;
+    for (const e of all) idToPage[e.id] = n;
+    const lessonTitle = lessons[n - 1]?.title ?? "";
+    const isLast = n === lessonCount;
+    const intro = `<div class="box goal">
+    <span class="box-title">איך עובדים עם התרגול</span>
+    <ul>
+      <li><strong>חלק 1</strong> סוגר את השיעור: שאלות הבנה (🧠 — עונים במילים, על דף או בהערה) ושאלות כתיבת קוד (💻).</li>
+      <li><strong>חלק 2</strong> מחבר את השיעור למה שלמדת קודם — כדי לראות איך הדברים משתלבים.</li>
+      <li>קובצי התחלה: <code>${ch.slug}/starter/</code>. ${ch.checker ? "בשאלות עם 🤖 כותבים ישירות בקובץ ההתחלה ובודקים עם <code>npm run check</code> ומזהה השאלה, למשל <code>npm run check " + (all.find(hasTest)?.id ?? "P" + ch.code + "-E06") + "</code>." : "קבצים שאתה יוצר בעצמך — ב־<code>playground/</code>."}</li>
+      <li>נתקעת? <a href="${practiceSolFile(n)}">דף הפתרונות של התרגול</a>: רמז 1 ← רמז 2 ← פתרון. <strong>פתח רמז רק אחרי 5–10 דקות של ניסיון אמיתי.</strong></li>
+    </ul>
+  </div>`;
+    const next = !isLast
+      ? { href: lessons[n].file, small: "הבא", label: `שיעור ${n + 1} — ${lessons[n].title}` }
+      : { href: "index.html#pass", small: "סוף הפרק", label: "🏁 מבחן מעבר" };
+    const exBody = `  <h1>✍️ תרגול שיעור ${n} — ${lessonTitle}</h1>
+  <p class="subtitle">${lbl(ch)} · ${counts(all)}</p>
+${intro}
+${p1.length ? partHead(n, 1, p1) + "\n" + p1.map(exCard).join("\n") : ""}
+${p2.length ? partHead(n, 2, p2) + "\n" + p2.map(exCard).join("\n") : ""}
+${pager({ href: lessons[n - 1]?.file ?? "index.html", small: "חזרה לשיעור", label: `שיעור ${n} — ${lessonTitle}` }, next)}`;
+    const solBody = `  <h1>🔒 פתרונות — תרגול שיעור ${n}</h1>
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>${ch.slug}/solutions/</code>.</p></div>
-${solHtml}
-${pager({ href: "exercises.html", small: "חזרה", label: "דף התרגילים" }, { href: "index.html", small: "", label: `פתיחת ${lbl(ch)}` })}`;
-  const crumbs = (last) => `<a href="../README.html">דף הבית</a> ‹ <a href="index.html">${lbl(ch)}</a> ‹ ${last}`;
-  return {
-    exercises: page({ title: `${lbl(ch)} — תרגילים`, depth: 1, crumbs: crumbs("תרגילים"), body: exBody }),
-    solutions: page({ title: `${lbl(ch)} — פתרונות`, depth: 1, crumbs: crumbs("פתרונות"), body: solBody }),
-  };
+${p1.length ? `  <h2>🎯 חלק 1</h2>\n${p1.map(solCard).join("\n")}` : ""}
+${p2.length ? `  <h2>🔗 חלק 2</h2>\n${p2.map(solCard).join("\n")}` : ""}
+${pager({ href: practiceFile(n), small: "חזרה", label: `תרגול שיעור ${n}` }, next)}`;
+    pages[practiceFile(n)] = page({ title: `תרגול שיעור ${n} — ${lbl(ch)}`, depth: 1, crumbs: crumbs(`תרגול שיעור ${n}`), body: exBody });
+    pages[practiceSolFile(n)] = page({ title: `פתרונות שיעור ${n} — ${lbl(ch)}`, depth: 1, crumbs: crumbs(`פתרונות שיעור ${n}`), body: solBody });
+  }
+
+  // הדפים הישנים (exercises.html, solutions.html) — תוכן עניינים, וקישור ישן עם #P01-E07 עובר לדף הנכון
+  const redirect = (sol) => `<script>
+  (function () {
+    var map = ${JSON.stringify(idToPage)};
+    var id = decodeURIComponent(location.hash.slice(1));
+    if (map[id]) location.replace("practice-" + map[id] + "${sol ? "-solutions" : ""}.html#" + id);
+  })();
+  </script>`;
+  const toc = (sol) =>
+    lessons
+      .map((l, i) => {
+        const n = i + 1;
+        const list = exs.filter((e) => e.lesson === n);
+        if (!list.length) return "";
+        return `<a class="card" href="${sol ? practiceSolFile(n) : practiceFile(n)}"><span class="num">${sol ? "🔒 " : "✍️ "}שיעור ${n} · ${list.length} שאלות</span><br><strong>${l.title}</strong></a>`;
+      })
+      .join("\n    ");
+  const indexBody = (sol) => `  <h1>${sol ? "🔒" : "✍️"} ${lbl(ch)} — ${sol ? "פתרונות" : "תרגול"} לפי שיעור</h1>
+  <p class="subtitle">התרגול נמצא בסוף כל שיעור: חלק 1 על השיעור עצמו, חלק 2 משלב עם מה שלמדת קודם.</p>
+${redirect(sol)}
+  <div class="cards">
+    ${toc(sol)}
+  </div>
+${pager({ href: "index.html", small: "חזרה", label: `פתיחת ${lbl(ch)}` }, null)}`;
+  pages["exercises.html"] = page({ title: `${lbl(ch)} — תרגול`, depth: 1, crumbs: crumbs("תרגול"), body: indexBody(false) });
+  pages["solutions.html"] = page({ title: `${lbl(ch)} — פתרונות`, depth: 1, crumbs: crumbs("פתרונות"), body: indexBody(true) });
+  return { pages, idToPage };
 }
 
 // ---------- פרק ----------
@@ -322,27 +401,9 @@ function buildChapter(ch, prevCh, nextCh) {
   const lessons = ch.lessons || [];
   const hasEx = fs.existsSync(path.join(ch.dir, "exercises.txt"));
 
-  // שיעורים
-  lessons.forEach((l, i) => {
-    const src = fs.readFileSync(path.join(ch.dir, l.file), "utf8");
-    const body = `  <h1>שיעור ${i + 1} — ${l.title}</h1>
-  <p class="subtitle">⏱ ~${l.minutes} דקות${l.note ? " · " + l.note : ""}</p>
-${renderFences(src, `${ch.slug}/${l.file}`)}
-${pager(
-  i === 0 ? { href: "index.html", small: "הקודם", label: `פתיחת ${lbl(ch)}` } : { href: lessons[i - 1].file, small: "הקודם", label: `שיעור ${i} — ${lessons[i - 1].title}` },
-  i < lessons.length - 1
-    ? { href: lessons[i + 1].file, small: "הבא", label: `שיעור ${i + 2} — ${lessons[i + 1].title}` }
-    : hasEx
-    ? { href: "exercises.html", small: "הבא", label: "✍️ דף התרגילים של הפרק" }
-    : nextCh
-    ? { href: `../${nextCh.slug}/index.html`, small: "הפרק הבא", label: `${lbl(nextCh)} — ${nextCh.title}` }
-    : null
-)}`;
-    fs.writeFileSync(path.join(outDir, l.file), page({ title: `${l.title} — ${lbl(ch)}`, depth: 1, crumbs: crumbs(`שיעור ${i + 1}`), body }));
-  });
-
   // תרגילים ופתרונות
   let exs = [];
+  let idToPage = {};
   if (hasEx) {
     exs = parseExercises(fs.readFileSync(path.join(ch.dir, "exercises.txt"), "utf8"));
     const ids = new Set();
@@ -352,10 +413,42 @@ ${pager(
       if (!e.solution.trim()) problems.push(`${ch.slug}: אין פתרון ל־${e.id}`);
     });
     if (ch.expectedExercises && exs.length !== ch.expectedExercises) problems.push(`${ch.slug}: ${exs.length} תרגילים במקום ${ch.expectedExercises}`);
-    const { exercises, solutions } = exercisesPages(ch, exs);
-    fs.writeFileSync(path.join(outDir, "exercises.html"), exercises);
-    fs.writeFileSync(path.join(outDir, "solutions.html"), solutions);
+    const r = exercisesPages(ch, exs, lessons);
+    idToPage = r.idToPage;
+    for (const [f, html] of Object.entries(r.pages)) fs.writeFileSync(path.join(outDir, f), html);
   }
+
+  // שיעורים
+  lessons.forEach((l, i) => {
+    const n = i + 1;
+    const practice = exs.filter((e) => e.lesson === n);
+    // קופסאות "עכשיו בדף התרגילים" שבשיעור מוחלפות בקופסת התרגול של השיעור; קישורים לתרגילים — לדף התרגול הנכון
+    let src = fs.readFileSync(path.join(ch.dir, l.file), "utf8")
+      .replace(/\s*<div class="box practice">(?:(?!<div)[\s\S])*?<\/div>/g, "")
+      .replace(/exercises\.html#(P[\w.]+-E\d+)/g, (all, id) => (idToPage[id] ? `${practiceFile(idToPage[id])}#${id}` : all));
+    if (practice.length) {
+      const p1 = practice.filter((e) => e.part === 1).length;
+      src += `\n  <div class="box practice">
+    <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
+    <p><strong>${practice.length} שאלות</strong>: חלק 1 — ${p1} שאלות על השיעור הזה (הבנה + כתיבת קוד).${practice.length - p1 ? ` חלק 2 — ${practice.length - p1} שאלות שמשלבות אותו עם מה שלמדת קודם.` : ""}</p>
+    <p><a href="${practiceFile(n)}">← לתרגול של שיעור ${n}</a></p>
+  </div>\n`;
+    }
+    const body = `  <h1>שיעור ${i + 1} — ${l.title}</h1>
+  <p class="subtitle">⏱ ~${l.minutes} דקות${l.note ? " · " + l.note : ""}</p>
+${renderFences(src, `${ch.slug}/${l.file}`)}
+${pager(
+  i === 0 ? { href: "index.html", small: "הקודם", label: `פתיחת ${lbl(ch)}` } : { href: lessons[i - 1].file, small: "הקודם", label: `שיעור ${i} — ${lessons[i - 1].title}` },
+  practice.length
+    ? { href: practiceFile(n), small: "הבא", label: `✍️ תרגול שיעור ${n}` }
+    : i < lessons.length - 1
+    ? { href: lessons[i + 1].file, small: "הבא", label: `שיעור ${i + 2} — ${lessons[i + 1].title}` }
+    : nextCh
+    ? { href: `../${nextCh.slug}/index.html`, small: "הפרק הבא", label: `${lbl(nextCh)} — ${nextCh.title}` }
+    : null
+)}`;
+    fs.writeFileSync(path.join(outDir, l.file), page({ title: `${l.title} — ${lbl(ch)}`, depth: 1, crumbs: crumbs(`שיעור ${i + 1}`), body }));
+  });
 
   // קבצים נלווים
   for (const sub of ["starter", "solutions", "tests", "files"]) copyDir(path.join(ch.dir, sub), path.join(outDir, sub));
@@ -382,11 +475,13 @@ ${ch.intro ? renderFences(ch.intro, `${ch.slug} intro`) : ""}
   <div class="cards">
     ${lessonCards}
   </div>
-${hasEx ? `  <h2>תרגול וסיכום</h2>
+${hasEx ? `  <h2>✍️ תרגול לפי שיעור</h2>
   <div class="cards">
-    <a class="card" href="exercises.html"><span class="num">✍️</span><br><strong>דף התרגילים — ${exs.length} תרגילים</strong></a>
-    <a class="card" href="solutions.html"><span class="num">🔒 רק אחרי ניסיון</span><br><strong>דף הפתרונות</strong></a>
-  </div>` : ""}
+    ${lessons.map((l, i) => { const k = exs.filter((e) => e.lesson === i + 1).length; return k ? `<a class="card" href="${practiceFile(i + 1)}"><span class="num">תרגול שיעור ${i + 1} · ${k} שאלות</span><br><strong>${l.title}</strong></a>` : ""; }).join("\n    ")}
+  </div>
+  <h2 id="pass">🏁 מבחן מעבר</h2>
+  <div class="box tip">${renderFences(ch.passTest, "pass")}</div>
+` : ""}
 ${glossary ? `  <h2>📘 מילון המושגים של הפרק</h2>
   <div class="table-wrap"><table>
     <tr><th>מונח</th><th>הגייה</th><th>פירוש</th></tr>

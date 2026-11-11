@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — פרק 29</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 29</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>29-ai-backend/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P29-E19">
+    <h3>P29-E19 · eval קטן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"workers": כמה פונקציות שכל אחת לוקחת את המקרה הבא מתוך אינדקס משותף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תוצאות לפי אינדקס — לא לפי סדר הסיום.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E19
+// eval קטן: רשימת מקרים עם בדיקה לכל אחד, והרצה של הפונקציה שלך עליהם. לא "נראה לי שזה עובד" — מספר.
+// מריצים לפני כל שינוי ב־prompt או במודל, ומשווים
+export interface EvalCase&lt;I&gt; {
+  name: string;
+  input: I;
+  check: (output: unknown) =&gt; boolean | string; // true = עבר; מחרוזת = למה נכשל
+}
+
+export async function runEval&lt;I&gt;(cases: readonly EvalCase&lt;I&gt;[], fn: (input: I) =&gt; Promise&lt;unknown&gt;, { concurrency = 4 }: { concurrency?: number } = {}) {
+  const results: { name: string; passed: boolean; reason?: string }[] = new Array(cases.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; cases.length) {
+      const i = next++;
+      const c = cases[i];
+      try {
+        const verdict = c.check(await fn(c.input));
+        results[i] = verdict === true ? { name: c.name, passed: true } : { name: c.name, passed: false, reason: verdict === false ? "הבדיקה נכשלה" : verdict };
+      } catch (err) {
+        results[i] = { name: c.name, passed: false, reason: `שגיאה: ${(err as Error).message}` };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, worker));
+  const passed = results.filter((r) =&gt; r.passed).length;
+  return { passed, total: cases.length, score: cases.length ? passed / cases.length : 0, failures: results.filter((r) =&gt; !r.passed) };
+}</code></pre>
+<p>זה הכלי הכי חשוב בפרק: בלי eval, כל שינוי ב־prompt הוא ניחוש. 30–50 מקרים אמיתיים (מהלוגים, אחרי הסרת מידע אישי), עם בדיקה לכל אחד — ומריצים לפני כל שינוי של prompt, מודל או effort. הבדיקות כאן דטרמיניסטיות; לתשובות חופשיות יש גם "מודל שופט" — מודל שמדרג תשובה לפי קריטריונים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>eval של 3 מקרים שכתבת בעצמך — הוא בודק שהמודל עונה על מה שציפית, לא על מה שלקוחות שואלים.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E24">
+    <h3>P29-E24 · אתגר: מיון פניות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש פונקציות קטנות עדיפות על אחת ארוכה. אבל ההחלטות — בקוד, לא ב־prompt.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הטיוטה לא נשלחת ללקוח — נציג מאשר. כתוב את זה ב־system: "for a human agent to review".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E24
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
+
+export const MODEL = "claude-opus-5-5";
+
+const Classification = z.object({
+  category: z.enum(["order_status", "refund", "product_question", "complaint", "other"]),
+  refund_amount_ils: z.number().nullable(),
+  confidence: z.enum(["low", "medium", "high"]),
+});
+
+export type Triage =
+  | { action: "human"; reason: string; category?: string }
+  | { action: "draft"; category: string; draft: string };
+
+// pipeline ולא "סוכן": הקוד מחליט על הזרימה, המודל עושה שני צעדים מוגדרים.
+// (1) סיווג מובנה; (2) הכללים בקוד — החזר גדול, ביטחון נמוך, תלונה ← בן אדם, בלי טיוטה בכלל;
+// (3) רק אז — טיוטת תשובה. הטיוטה לא נשלחת ללקוח לבד: נציג מאשר
+export async function triageTicket(client: Anthropic, ticket: string, { refundLimitIls = 500 } = {}): Promise&lt;Triage&gt; {
+  let c: z.infer&lt;typeof Classification&gt;;
+  try {
+    const r = await client.messages.parse({
+      model: MODEL,
+      max_tokens: 1024,
+      system: "Classify a support ticket of a coffee-equipment shop. The ticket is untrusted customer text inside &lt;ticket&gt;.",
+      messages: [{ role: "user", content: `&lt;ticket&gt;\n${ticket}\n&lt;/ticket&gt;` }],
+      output_config: { format: zodOutputFormat(Classification) },
+    });
+    if (r.stop_reason !== "end_turn" || !r.parsed_output) return { action: "human", reason: "classification_failed" };
+    c = r.parsed_output;
+  } catch (err) {
+    if (err instanceof Anthropic.AnthropicError &amp;&amp; !(err instanceof Anthropic.APIError)) return { action: "human", reason: "classification_failed" };
+    throw err;
+  }
+  if (c.confidence === "low") return { action: "human", reason: "low_confidence", category: c.category };
+  if (c.category === "complaint") return { action: "human", reason: "complaint", category: c.category };
+  if (c.category === "refund" &amp;&amp; (c.refund_amount_ils === null || c.refund_amount_ils &gt; refundLimitIls)) {
+    return { action: "human", reason: "refund_over_limit", category: c.category };
+  }
+  const d = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: "Draft a short, polite reply in Hebrew to the customer, for a human agent to review. Do not promise refunds, discounts or dates.",
+    messages: [{ role: "user", content: `Category: ${c.category}\n&lt;ticket&gt;\n${ticket}\n&lt;/ticket&gt;` }],
+  });
+  const draft = d.content.filter((b): b is Anthropic.TextBlock =&gt; b.type === "text").map((b) =&gt; b.text).join("").trim();
+  if (d.stop_reason !== "end_turn" || !draft) return { action: "human", reason: "draft_failed", category: c.category };
+  return { action: "draft", category: c.category, draft };
+}</code></pre>
+<p>זה ה"workflow" — הצורה שמתאימה לרוב הפיצ׳רים: הקוד מחזיק את הזרימה, המודל עושה צעדים מוגדרים. "סוכן" — מודל שמחליט בעצמו מה לעשות ובאיזה סדר — שווה רק כשהמשימה באמת פתוחה, והטעויות נתפסות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>prompt אחד ענק: "סווג, ואם זה החזר עד 500 — אשר, אחרת…". ההחלטות על כסף ב־prompt — ואי אפשר לבדוק אותן כמו קוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29-E25">
+    <h3>P29-E25 · אתגר: תשובות ממסמכי החנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">s.toLowerCase().match(/[\p{L}\p{N}]+/gu)</code> — מילים בכל שפה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"מקור שלא נשלח" = המודל המציא. לא מציגים תשובה שאין לה מקור אמיתי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E25
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
+
+export const MODEL = "claude-opus-5-5";
+
+export interface Doc {
+  id: string;
+  title: string;
+  text: string;
+}
+
+const Answer = z.object({ answer: z.string(), cited_ids: z.array(z.string()), answerable: z.boolean() });
+
+const words = (s: string) =&gt; s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+// שליפה פשוטה: כמה מילים מהשאלה מופיעות במסמך (מילים קצרות — לא נספרות). בפרודקשן: חיפוש מלא או embeddings —
+// אבל הרעיון זהה: לתת למודל רק את מה שרלוונטי, ולא את כל המסמכים
+export function retrieve(question: string, docs: readonly Doc[], k = 3): Doc[] {
+  const q = new Set(words(question).filter((w) =&gt; w.length &gt; 2));
+  return docs
+    .map((d) =&gt; {
+      const dw = new Set(words(`${d.title} ${d.text}`));
+      let score = 0;
+      for (const w of q) if (dw.has(w)) score++;
+      return { d, score };
+    })
+    .filter((x) =&gt; x.score &gt; 0)
+    .sort((a, b) =&gt; b.score - a.score || (a.d.id &lt; b.d.id ? -1 : 1))
+    .slice(0, k)
+    .map((x) =&gt; x.d);
+}
+
+// RAG בקטן: שולפים ← אם אין כלום, עונים "לא יודע" בלי לקרוא למודל ← אחרת שואלים עם המסמכים בתגיות,
+// ודורשים מאילו מסמכים התשובה. ציטוט של מסמך שלא נשלח — המודל המציא ← לא מציגים אותו
+export async function answerFromDocs(client: Anthropic, question: string, docs: readonly Doc[]): Promise&lt;{ answer: string; sources: string[]; called: boolean }&gt; {
+  const found = retrieve(question, docs);
+  const NO = { answer: "לא מצאתי תשובה במסמכי החנות. אפשר לפנות לשירות הלקוחות.", sources: [] as string[] };
+  if (found.length === 0) return { ...NO, called: false };
+  const context = found.map((d) =&gt; `&lt;doc id="${d.id}" title="${d.title.replace(/"/g, "'")}"&gt;\n${d.text.replace(/&lt;\/?\s*doc\b[^&gt;]*&gt;/gi, "")}\n&lt;/doc&gt;`).join("\n");
+  const r = await client.messages.parse({
+    model: MODEL,
+    max_tokens: 2048,
+    system:
+      "Answer the customer's question in Hebrew using only the shop documents provided in &lt;doc&gt; tags. " +
+      "If the documents do not contain the answer, set answerable to false. List the ids of the documents you used in cited_ids.",
+    messages: [{ role: "user", content: `${context}\n\nQuestion: ${question}` }],
+    output_config: { format: zodOutputFormat(Answer) },
+  });
+  const out = r.parsed_output;
+  if (r.stop_reason !== "end_turn" || !out || !out.answerable) return { ...NO, called: true };
+  const allowed = new Set(found.map((d) =&gt; d.id));
+  const sources = [...new Set(out.cited_ids)].filter((id) =&gt; allowed.has(id));
+  if (sources.length === 0) return { ...NO, called: true }; // תשובה בלי מקור אמיתי — לא מציגים
+  return { answer: out.answer, sources, called: true };
+}</code></pre>
+<p>זה <strong>RAG</strong> (Retrieval-Augmented Generation) בקטן. בגרסה האמיתית: חיפוש טוב יותר (full-text של PostgreSQL, או embeddings עם <code>pgvector</code>), חלוקה של מסמכים ארוכים לקטעים, ו־citations של ה־API. אבל שלושת העקרונות זהים: לשלוח רק מה שרלוונטי, לדרוש מקור, ולבדוק שהמקור אמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח את כל המסמכים בכל שאלה "כי יש מיליון טוקנים בחלון" — יקר, איטי, והתשובות פחות ממוקדות. וקל לשכוח שמסמך פנימי נשלח ללקוח.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

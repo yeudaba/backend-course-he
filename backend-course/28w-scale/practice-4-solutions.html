@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28w-scale/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28.5-E02">
+    <h3>P28.5-E02 · OLTP או OLAP? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>OLTP: הרבה פעולות קטנות על שורות בודדות, עם טרנזקציות. OLAP: מעט שאילתות שסורקות מיליונים — אבל רק כמה עמודות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאלה "על מצב ברגע זה, שמשפיע על פעולה של משתמש" — איפה הנתון הכי עדכני?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>OLTP.</strong> שורה אחת לפי מפתח, ב־1ms, והנתון חייב להיות עדכני.</li><li><strong>OLAP.</strong> סורק את כל ההזמנות אבל רק 3–4 עמודות. ב־PostgreSQL של האפליקציה זה גם איטי וגם מאט את הלקוחות שקונים באותו רגע.</li><li><strong>OLTP.</strong> כתיבה קטנה עם טרנזקציה — מחסני נתונים לא בנויים לזה (ומשלמים בהם לפי סריקה, לא לפי כתיבה).</li><li><strong>OLAP</strong>, ועם <code>APPROX_COUNT_DISTINCT</code> (HyperLogLog, E18) — ספירה מדויקת של ייחודיים על 2 מיליארד שורות יקרה מאוד, והערכה של כמה אחוזים מספיקה לדוח (שיעור 4 מראה כמה היא סוטה בפועל).</li><li><strong>OLTP</strong> — ובתוך הטרנזקציה של ה־checkout (פרק 18). מחסן נתונים מתעדכן בדרך כלל באיחור של דקות־שעות (ETL).</li></ol>
+<p>הדפוס הנפוץ: האפליקציה כותבת ל־OLTP; תהליך (ETL/CDC) מעתיק למחסן; דוחות ואנליטיקה רצים שם. E25 בונה גרסה קטנה של זה.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E04">
+    <h3>P28.5-E04 · שורות מול עמודות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>CSV שומר שורה אחרי שורה, כטקסט. Parquet שומר עמודה אחרי עמודה, בינארי ודחוס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עמודה עם 5 ערכים שחוזרים מיליון פעמים — כמה מקום היא צריכה, אם שומרים אותה ביחד?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "e04-"));
+const db = await DuckDBInstance.create(":memory:");
+const c = await db.connect();
+await c.run(`CREATE TABLE events AS
+  SELECT range AS id,
+         ['view', 'click', 'add_to_cart', 'checkout', 'purchase'][1 + range % 5] AS type,
+         1 + (range * 7919) % 50000 AS user_id,
+         '/products/' || (range % 300) AS path,
+         TIMESTAMP '2026-10-01' + to_seconds(range * 3) AS ts,
+         (range * 31) % 1000 AS duration_ms
+  FROM range(1000000)`);
+await c.run(`COPY events TO '${dir}/events.csv' (HEADER)`);
+await c.run(`COPY events TO '${dir}/events.parquet' (FORMAT parquet)`);
+const mb = (f: string) =&gt; (fs.statSync(path.join(dir, f)).size / 1e6).toFixed(1) + " MB";
+console.log("csv:    ", mb("events.csv"));
+console.log("parquet:", mb("events.parquet"));
+
+const r = await c.runAndReadAll(`SELECT type, count(*)::INTEGER AS n FROM '${dir}/events.parquet' GROUP BY type ORDER BY type`);
+console.log(r.getRowObjects().map((x) =&gt; `${x.type}=${x.n}`).join(" "));
+c.closeSync();
+fs.rmSync(dir, { recursive: true });</code></pre>
+<pre class="terminal">csv:     58.4 MB
+parquet: 14.6 MB
+add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000</pre>
+<p>הקובץ קטן פי כמה, ועוד יותר חשוב — מה נקרא: לשאילתה על <code>type</code>, DuckDB קורא מה־Parquet <strong>רק את העמודה type</strong> (ועמודה עם 5 ערכים שונים נדחסת כמעט לאפס — dictionary encoding). מה־CSV הוא חייב לקרוא ולפרש את כל הקובץ, כל העמודות, כטקסט. כך בדיוק עובדים BigQuery, Snowflake ו־Databricks — ולכן שם משלמים לפי <em>עמודות שנסרקו</em> (E05, E17).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E05">
+    <h3>P28.5-E05 · כמה עולה שאילתה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>LIMIT מקטין את מה שמוחזר — לא את מה שנסרק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>partition pruning עובד רק כשה־WHERE על עמודת ה־partition עצמה, בצורה שהמנוע מזהה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>2TB.</strong> כל העמודות, כל השורות — ה־LIMIT מופעל אחרי הסריקה. (בקונסולה של BigQuery יש "preview" חינמי בדיוק בשביל זה.)</li><li><strong>~100GB</strong> — עמודה אחת, כל השנה.</li><li><strong>~270MB</strong> — עמודה אחת, יום אחד (100GB / 365).</li><li><strong>~100GB</strong> — המנוע לא יודע שיום ב־<code>ts</code> שווה ל־<code>day</code>, אז אין pruning. אותה תוצאה, פי 365 בעלות.</li></ol>
+<p>כללי אצבע: לא <code>SELECT *</code>; תמיד WHERE על עמודת ה־partition; ו־clustering (מיון לפי עמודה שמסננים עליה הרבה, כמו <code>customer_id</code>) מקטין עוד. E17 מחשב את זה בקוד.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E15">
+    <h3>P28.5-E15 · SQL אנליטי ב־DuckDB 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הכנסה של שורה: <code>quantity * price_cents</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחוז מהסך הכולל — window function על האגרגציה: <code>sum(sum(x)) OVER ()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P28.5-E15: דוח קטגוריות על 60,000 הזמנות (orders = files/orders.parquet)
+SELECT
+  category,
+  count(*) AS orders,
+  sum(quantity) AS units,
+  round(sum(quantity * price_cents) / 100.0, 2) AS revenue,
+  round(100.0 * sum(quantity * price_cents) / sum(sum(quantity * price_cents)) OVER (), 1) AS share_pct
+FROM orders
+GROUP BY category
+ORDER BY revenue DESC;</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E16">
+    <h3>P28.5-E16 · Parquet מחולק לפי יום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">COPY (SELECT …, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day FROM read_parquet(…)) TO 'dir' (FORMAT parquet, PARTITION_BY (day))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קריאה: <code class="mid">read_parquet('dir/**/*.parquet', hive_partitioning = true)</code> — עמודת <code>day</code> חוזרת מתוך שמות התיקיות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E16: ייצוא ל־Parquet מחולק לפי יום — כך שאילתה על יום אחד קוראת קובץ אחד
+import type { DuckDBConnection } from "@duckdb/node-api";
+
+const q = (s: string) =&gt; `'${s.replaceAll("'", "''")}'`; // מחרוזת SQL בטוחה (נתיבים)
+
+export async function exportByDay(conn: DuckDBConnection, sourceParquet: string, outDir: string): Promise&lt;void&gt; {
+  await conn.run(`
+    COPY (
+      SELECT *, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day
+      FROM read_parquet(${q(sourceParquet)})
+    ) TO ${q(outDir)} (FORMAT parquet, PARTITION_BY (day), OVERWRITE_OR_IGNORE)`);
+}
+
+export async function ordersPerDay(conn: DuckDBConnection, outDir: string): Promise&lt;Record&lt;string, number&gt;&gt; {
+  const r = await conn.runAndReadAll(`
+    SELECT day::VARCHAR AS day, count(*)::INTEGER AS n
+    FROM read_parquet(${q(outDir + "/**/*.parquet")}, hive_partitioning = true)
+    GROUP BY day ORDER BY day`);
+  return Object.fromEntries(r.getRowObjects().map((x) =&gt; [String(x.day), Number(x.n)]));
+}</code></pre>
+<p>זו בדיוק הצורה של data lake על S3 (יחידה 26.3): <code class="mid">s3://lake/orders/day=2026-10-01/part-0.parquet</code>. שאילתה עם <code>WHERE day = '2026-10-15'</code> קוראת תיקייה אחת מתוך 32 — partition pruning, כמו ב־BigQuery (E05).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E17">
+    <h3>P28.5-E17 · הערכת עלות סריקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">rows × (days/totalDays) × Σ bytes של העמודות</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טבלה בלי partitions + <code>days</code> בשאילתה ← אין pruning.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E17: כמה בתים שאילתה סורקת במחסן נתונים עמודתי — וכמה זה עולה
+export interface TableStats {
+  rows: number;
+  columns: Record&lt;string, number&gt;; // ממוצע בתים לערך, לכל עמודה
+  partitionedBy?: string; // עמודת תאריך
+  days?: number; // כמה ימים יש בטבלה (פרטישן לכל יום)
+}
+
+export interface QueryShape {
+  columns: string[] | "*";
+  days?: number; // WHERE על עמודת ה־partition: כמה ימים נבחרו
+  limit?: number; // לא משנה את הסריקה!
+}
+
+const TiB = 2 ** 40;
+
+export function estimateScan(t: TableStats, q: QueryShape, { pricePerTiB = 6.25 } = {}) {
+  const cols = q.columns === "*" ? Object.keys(t.columns) : q.columns;
+  for (const c of cols) if (!(c in t.columns)) throw new Error(`עמודה לא קיימת: ${c}`);
+  const bytesPerRow = cols.reduce((s, c) =&gt; s + t.columns[c], 0); // עמודתי: רק העמודות שנבחרו
+  const fraction = t.partitionedBy &amp;&amp; t.days &amp;&amp; q.days !== undefined ? Math.min(1, q.days / t.days) : 1; // partition pruning
+  const bytes = Math.round(t.rows * fraction * bytesPerRow);
+  return { bytes, costUsd: Math.round((bytes / TiB) * pricePerTiB * 100) / 100 };
+}</code></pre>
+<p>(המחיר כאן — פרמטר. מחירים של שירותי ענן משתנים; בעבודה — מהדף הרשמי, ובדרך כלל דרך "dry run" שמחזיר את מספר הבתים לפני שמריצים.)</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E18">
+    <h3>P28.5-E18 · HyperLogLog 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>idx = x &gt;&gt;&gt; (32 − p)</code>; <code>w = (x &lt;&lt; p) &gt;&gt;&gt; 0</code>; <code>ρ = Math.clz32(w) + 1</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האינטואיציה: אם ראית hash שמתחיל ב־10 אפסים, כנראה ראית בסביבות 2<sup>10</sup> ערכים שונים. m רגיסטרים — m ניסויים, וממוצע הרמוני שלהם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E18: HyperLogLog — כמה ערכים שונים, ב־4KB זיכרון
+import { createHash } from "node:crypto";
+
+export interface HLL {
+  p: number;
+  registers: Uint8Array;
+}
+
+export const createHLL = (p = 12): HLL =&gt; ({ p, registers: new Uint8Array(1 &lt;&lt; p) });
+
+export const hash32 = (value: string | number): number =&gt; createHash("sha1").update(String(value)).digest().readUInt32BE(0);
+
+export function add(h: HLL, value: string | number): void {
+  const x = hash32(value);
+  const idx = x &gt;&gt;&gt; (32 - h.p); // p הביטים העליונים ← איזה רגיסטר
+  const w = (x &lt;&lt; h.p) &gt;&gt;&gt; 0; // השאר
+  const rho = w === 0 ? 32 - h.p + 1 : Math.clz32(w) + 1; // מיקום ה־1 הראשון
+  if (rho &gt; h.registers[idx]) h.registers[idx] = rho;
+}
+
+export function count(h: HLL): number {
+  const m = h.registers.length;
+  let sum = 0;
+  let zeros = 0;
+  for (const r of h.registers) {
+    sum += 2 ** -r;
+    if (r === 0) zeros++;
+  }
+  const alpha = 0.7213 / (1 + 1.079 / m);
+  const e = (alpha * m * m) / sum;
+  if (e &lt;= 2.5 * m &amp;&amp; zeros &gt; 0) return Math.round(m * Math.log(m / zeros)); // מעט ערכים: linear counting
+  return Math.round(e);
+}
+
+export function mergeHLL(a: HLL, b: HLL): HLL {
+  if (a.p !== b.p) throw new Error("p שונה");
+  const out = createHLL(a.p);
+  for (let i = 0; i &lt; out.registers.length; i++) out.registers[i] = Math.max(a.registers[i], b.registers[i]);
+  return out;
+}</code></pre>
+<p>זה מה שמאחורי <code>PFADD</code>/<code>PFCOUNT</code> ב־Redis, <code>APPROX_COUNT_DISTINCT</code> ב־BigQuery ו־<code>approx_count_distinct</code> ב־DuckDB ו־Spark. ו־merge הוא הקסם: HLL לכל יום ← איחוד ← ייחודיים לחודש, בלי לספור מחדש.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E22">
+    <h3>P28.5-E22 · דוח יומי — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>created_at::DATE</code> — באיזה אזור זמן?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>price_cents</code> הוא מחיר ליחידה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P28.5-E22: לקוחות פעילים והכנסה לכל יום (בשעון ישראל) — אחרי התיקון
+SELECT
+  strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day, -- תיקון 1: יום בישראל, לא UTC
+  count(DISTINCT customer_id) AS active_customers,                      -- תיקון 2: לקוחות שונים, לא הזמנות
+  round(sum(quantity * price_cents) / 100.0, 2) AS revenue               -- תיקון 3: כמות × מחיר
+FROM orders
+WHERE country = 'IL'
+GROUP BY day
+ORDER BY day
+LIMIT 10;</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P28.5-E27">
+    <h3>P28.5-E27 · סיכום יומי של צפיות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני CTE. ‏<code>daily</code>: ‏<code>GROUP BY day</code> עם <code>COUNT(*)</code> ו־<code>COUNT(DISTINCT user_id)</code>. ‏<code>by_path</code>: ‏<code>GROUP BY day, path</code> עם <code>COUNT(*)</code>, ועליו חלון. אחר כך <code>JOIN</code> ביניהם, רק לשורה הראשונה בכל יום.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אפשר לשים חלון על תוצאה של <code>GROUP BY</code> באותה שאילתה: <code class="long">ROW_NUMBER() OVER (PARTITION BY viewed_at::date ORDER BY COUNT(*) DESC, path) AS rn</code>. החלון רץ <em>אחרי</em> הקיבוץ, ולכן <code>COUNT(*)</code> בתוכו הוא הספירה של הקבוצה. ‏<code>path</code> שני ב־<code>ORDER BY</code> שובר את התיקו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH daily AS (
+  SELECT viewed_at::date AS day, COUNT(*) AS views, COUNT(DISTINCT user_id) AS users
+  FROM page_views
+  GROUP BY day
+),
+by_path AS (
+  SELECT
+    viewed_at::date AS day,
+    path,
+    COUNT(*) AS path_views,
+    ROW_NUMBER() OVER (PARTITION BY viewed_at::date ORDER BY COUNT(*) DESC, path) AS rn
+  FROM page_views
+  GROUP BY viewed_at::date, path
+)
+SELECT d.day, d.views, d.users, p.path AS top_path, p.path_views AS top_path_views
+FROM daily d
+JOIN by_path p ON p.day = d.day AND p.rn = 1
+ORDER BY d.day;</code></pre>
+<pre class="terminal">    day     | views | users |  top_path   | top_path_views
+------------+-------+-------+-------------+----------------
+ 2026-11-01 |     6 |     3 | /products   |              3
+ 2026-11-02 |     5 |     3 | /cart       |              2
+ 2026-11-03 |     6 |     4 | /products/9 |              3
+(3 rows)</pre>
+<p>ב־2 בנובמבר יש תיקו: ‏<code>/cart</code> ו־<code>/checkout</code> עם 2 צפיות כל אחד. בלי <code>path</code> ב־<code>ORDER BY</code> של החלון, הבחירה ביניהם תלויה בסדר הפיזי של השורות. היום יוצא <code>/cart</code>, ואחרי <code>VACUUM</code> אולי <code>/checkout</code>. דשבורד שמחליף ערך בלי שהנתונים השתנו מאבד אמון מהר.</p>
+<p>‏<code>COUNT(DISTINCT user_id)</code> הוא החלק היקר בשאילתה: צריך לזכור כל משתמש שנראה באותו יום. על מיליארד שורות משתמשים במקומו ב־HyperLogLog (‏E18), שנותן אומדן בזיכרון קבוע. ב־DuckDB (שיעור 4) זה <code>approx_count_distinct</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>COUNT(user_id)</code> — סופר צפיות, לא משתמשים.</li><li>לשים <code>COUNT(DISTINCT user_id)</code> ב־CTE של הנתיבים ולצרף — מקבלים משתמשים לנתיב, לא ליום.</li><li><code>MAX(COUNT(*))</code> — אי אפשר לקנן פונקציות צבירה. ובכל מקרה זה נותן את המספר, לא את הנתיב.</li><li><code class="mid">date_trunc('day', viewed_at)</code> — עובד, אבל מחזיר <code>timestamptz</code> (חצות), לא תאריך.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-pipeline.html"><small>הבא</small>שיעור 5 — מ־PostgreSQL ל־data lake ובחזרה ל־API</a></div>
+</main>
+</body>
+</html>

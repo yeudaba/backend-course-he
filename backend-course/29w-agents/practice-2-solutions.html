@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 29.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 29.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>29w-agents/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P29.5-E03">
+    <h3>P29.5-E03 · MCP: מי מדבר עם מי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה תפקידים: host (האפליקציה), client (חיבור אחד לשרת, בתוך ה־host), server (חושף tools, resources ו־prompts).</p>
+
+</div></details>
+    
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>לא.</strong> השרת חושף כלים ונתונים; המודל רץ אצל ה־host (שקורא ל־API של Claude). השרת לא יודע איזה מודל משתמש בו.</li><li><strong>נכון</strong> — זו כל הנקודה: כותבים את הכלים פעם אחת, וכל host שמדבר MCP משתמש בהם.</li><li><strong>נכון.</strong> stdio — השרת הוא תהליך־ילד של ה־host (כלים מקומיים: קבצים, git). Streamable HTTP — שרת מרוחק, עם אימות (OAuth). הכלים עצמם זהים; בבדיקות שלנו — transport בזיכרון.</li><li><strong>לא.</strong> השם, התיאור וה־schema הם בדיוק מה שנשלח למודל ב־<code>tools</code> — לפיהם הוא מחליט מתי ואיך לקרוא (E09, E21). תיאור גרוע = שימוש גרוע.</li><li><strong>לא.</strong> שרת MCP הוא קוד שרץ אצלך עם ההרשאות שלך — ותיאורי הכלים שלו נכנסים להקשר של המודל (אפשר להחביא בהם הוראות). מתקינים כמו כל תלות: ממקור מוכר, עם גרסה קבועה, ומעט ככל האפשר.</li><li><strong>נכון.</strong> המודל עושה מה שמבקשים ממנו — כולל מה שמשתמש זדוני ביקש. השרת מקבל את זהות המשתמש מה־host (לא מהמודל), ובודק כל קריאה (E08).</li></ol>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E04">
+    <h3>P29.5-E04 · שרת MCP ראשון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>את ה־schema כתבת ב־zod — מה המודל מקבל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קלט שלא עובר את ה־schema — מי בודק אותו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { z } from "zod";
+
+const server = new McpServer({ name: "coffee", version: "1.0.0" });
+server.registerTool(
+  "check_stock",
+  { description: "How many units of a product are in stock", inputSchema: { productId: z.number().int().positive() } },
+  async ({ productId }) =&gt; {
+    const stock: Record&lt;number, number&gt; = { 1: 12, 3: 4 };
+    if (!(productId in stock)) return { content: [{ type: "text", text: `no product ${productId}` }], isError: true };
+    return { content: [{ type: "text", text: `${stock[productId]} units` }] };
+  },
+);
+
+const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+await server.connect(serverSide);
+const client = new Client({ name: "demo-agent", version: "1.0.0" });
+await client.connect(clientSide);
+
+const { tools } = await client.listTools();
+console.log(tools[0].name, "|", tools[0].description, "|", JSON.stringify(tools[0].inputSchema.properties), tools[0].inputSchema.required);
+for (const args of [{ productId: 3 }, { productId: 99 }, { productId: "3" }]) {
+  const r = await client.callTool({ name: "check_stock", arguments: args });
+  console.log(JSON.stringify(args), "→", r.isError ? "ERROR:" : "", (r.content as { text: string }[])[0].text);
+}
+await client.close();</code></pre>
+<pre class="terminal">check_stock | How many units of a product are in stock | {"productId":{"type":"integer","exclusiveMinimum":0,"maximum":9007199254740991}} [ 'productId' ]
+{"productId":3} →  4 units
+{"productId":99} → ERROR: no product 99
+{"productId":"3"} → ERROR: MCP error -32602: Input validation error: Invalid arguments for tool check_stock: Invalid input: expected number, received string at productId</pre>
+<p>ה־schema של zod הפך ל־JSON Schema — זה מה שהמודל רואה (E09 מעביר אותו כמו שהוא ל־<code>tools</code> של Claude). קלט לא תקין לא מגיע לקוד שלך: ה־SDK בודק ומחזיר שגיאה עם <code>isError</code>. ושגיאה "עסקית" (מוצר שלא קיים) — אתה מחזיר <code>isError: true</code> בעצמך. בשני המקרים: תשובה, לא exception — כך המודל יכול לתקן ולנסות שוב.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E08">
+    <h3>P29.5-E08 · שרת MCP לחנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">server.registerTool(name, { description, inputSchema: { query: z.string()… } }, async (args) =&gt; ({ content: [{ type: "text", text }] }))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>customerId</code> הוא פרמטר של <em>השרת</em> — לא שדה בקלט של הכלי. המודל לא יכול לבחור אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E08: שרת MCP — הכלים של החנות, לכל סוכן שמדבר MCP
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { Store } from "../files/store.ts";
+
+const text = (t: string) =&gt; ({ content: [{ type: "text" as const, text: t }] });
+const error = (t: string) =&gt; ({ ...text(t), isError: true });
+
+// customerId מגיע מהשרת (מי מחובר), לא מהמודל — המודל לא יכול לבקש הזמנה של לקוח אחר
+export function createCoffeeMcpServer(store: Store, customerId: number): McpServer {
+  const server = new McpServer({ name: "coffee-shop", version: "1.0.0" });
+
+  server.registerTool(
+    "search_products",
+    {
+      description: "Search the coffee shop catalog by name. Returns id, name, price in ILS and whether it is in stock.",
+      inputSchema: { query: z.string().min(2).max(50) },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ query }) =&gt; {
+      const q = query.toLowerCase();
+      const found = store.products
+        .filter((p) =&gt; p.name.toLowerCase().includes(q))
+        .map((p) =&gt; ({ id: p.id, name: p.name, price: p.priceCents / 100, inStock: p.stock &gt; 0 }));
+      return text(JSON.stringify(found));
+    },
+  );
+
+  server.registerTool(
+    "get_order",
+    {
+      description: "Get one of the signed-in customer's orders by order id: status, total in ILS and items.",
+      inputSchema: { orderId: z.number().int().positive() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      // הזמנה של לקוח אחר — בדיוק כמו "לא קיימת": לא מגלים שהיא קיימת
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`);
+      return text(JSON.stringify({ id: o.id, status: o.status, total: o.totalCents / 100, items: o.items }));
+    },
+  );
+
+  server.registerTool(
+    "list_my_orders",
+    {
+      description: "List the signed-in customer's orders (id, status, total in ILS), newest first.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () =&gt; {
+      const mine = [...store.orders.values()].filter((o) =&gt; o.customerId === customerId).sort((a, b) =&gt; b.id - a.id);
+      return text(JSON.stringify(mine.map((o) =&gt; ({ id: o.id, status: o.status, total: o.totalCents / 100 }))));
+    },
+  );
+  return server;
+}</code></pre>
+<p>להריץ את השרת הזה ב־Claude Code או בכל host אחר — מוסיפים בסוף <code class="mid">await server.connect(new StdioServerTransport())</code> (מ־<code class="mid">@modelcontextprotocol/sdk/server/stdio.js</code>), ומגדירים את הפקודה בהגדרות ה־MCP של ה־host. ושימו לב ל־<code>annotations</code>: <code>readOnlyHint</code> אומר ל־host שהכלי לא משנה כלום — host יכול להחליט לא לבקש עליו אישור.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E09">
+    <h3>P29.5-E09 · גשר MCP ← Claude 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">await mcp.listTools({ cursor })</code>, <code class="mid">await mcp.callTool({ name, arguments })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>prefix (<code>shop_</code>, <code>crm_</code>) מונע התנגשות כששני שרתים חושפים כלי באותו שם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E09: גשר בין MCP ל־Messages API — הכלים של שרת MCP, כלים של Claude
+import type Anthropic from "@anthropic-ai/sdk";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+
+export async function mcpToolsForClaude(mcp: Client, { prefix = "" } = {}): Promise&lt;Anthropic.Tool[]&gt; {
+  const out: Anthropic.Tool[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await mcp.listTools(cursor ? { cursor } : {}); // שרת יכול להחזיר רשימה בעמודים
+    for (const t of page.tools) {
+      const { $schema, ...schema } = t.inputSchema as Record&lt;string, unknown&gt;;
+      out.push({ name: prefix + t.name, description: t.description ?? "", input_schema: schema as Anthropic.Tool.InputSchema });
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return out;
+}
+
+export async function callMcpTool(mcp: Client, call: Anthropic.ToolUseBlock, { prefix = "" } = {}): Promise&lt;Anthropic.ToolResultBlockParam&gt; {
+  const name = call.name.startsWith(prefix) ? call.name.slice(prefix.length) : call.name;
+  try {
+    const res = await mcp.callTool({ name, arguments: call.input as Record&lt;string, unknown&gt; });
+    const content = (res.content as { type: string; text?: string }[])
+      .map((c) =&gt; (c.type === "text" ? c.text : `[${c.type}]`))
+      .join("\n");
+    return { type: "tool_result", tool_use_id: call.id, content, ...(res.isError ? { is_error: true } : {}) };
+  } catch (err) {
+    // שרת שנפל / timeout — עדיין tool_result, כדי שהשיחה תישאר תקינה
+    return { type: "tool_result", tool_use_id: call.id, content: `שרת ה־MCP נכשל: ${(err as Error).message}`, is_error: true };
+  }
+}</code></pre>
+<p>(ה־Messages API יודע גם להתחבר לשרתי MCP מרוחקים בעצמו — "MCP connector", עם <code>mcp_servers</code> ו־<code>mcp_toolset</code>. הגשר כאן נחוץ כשהשרת מקומי, או כשאתה רוצה לשלוט בכל קריאה: אישורים, הרשאות, logging.)</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E21">
+    <h3>P29.5-E21 · שרת MCP — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני הכלים בודקים בעלות?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"Cancel order" — מתי מותר לבטל? המודל יודע?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E21: שרת MCP של הזמנות — אחרי התיקון
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { Store } from "../files/store.ts";
+
+const text = (t: string) =&gt; ({ content: [{ type: "text" as const, text: t }] });
+const error = (t: string) =&gt; ({ ...text(t), isError: true });
+
+export function createOrdersMcpServer(store: Store, customerId: number): McpServer {
+  const server = new McpServer({ name: "orders", version: "1.0.0" });
+  server.registerTool(
+    "get_order",
+    { description: "Get one of the signed-in customer's orders by id: status, total in ILS, items.", inputSchema: { orderId: z.number().int().positive() } },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`); // תיקון 1: רק הזמנות של הלקוח המחובר
+      return text(JSON.stringify({ id: o.id, status: o.status, total: o.totalCents / 100 }));
+    },
+  );
+  server.registerTool(
+    "cancel_order",
+    {
+      // תיקון 2: בלי תיאור המודל מנחש מתי להשתמש בכלי, ומה הוא עושה
+      description: "Cancel one of the signed-in customer's orders. Only orders that were not shipped yet (status placed or paid) can be cancelled.",
+      inputSchema: { orderId: z.number().int().positive() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`);
+      if (o.status !== "placed" &amp;&amp; o.status !== "paid") return error(`אי אפשר לבטל הזמנה בסטטוס ${o.status}`); // תיקון 3
+      o.status = "cancelled";
+      return text(`הזמנה ${orderId} בוטלה`);
+    },
+  );
+  return server;
+}</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P29.5-E27">
+    <h3>P29.5-E27 · בודק קלט של כלי לפי JSON Schema 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>switch (schema.type)</code>. בכל <code>case</code>, ‏TypeScript יודע איזה חלק של ה־union זה: ב־<code>case "array"</code> יש <code>schema.items</code>, וב־<code>case "object"</code> יש <code>schema.properties</code>. מערך: <code>value.flatMap((item, i) =&gt; validate(schema.items, item, <code>${path}[${i}]</code>))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אובייקט: קודם <code class="mid">for (const key of schema.required ?? [])</code> ← חסרים. אחר כך <code class="mid">for (const key of Object.keys(obj))</code>: אין <code>properties[key]</code> ← "שדה לא מוכר", ואחרת <code>errors.push(...validate(sub, obj[key], <code>${path}.${key}</code>))</code>. ‏<code class="mid">case "number": case "integer": { ... }</code> — שני case עם אותו קוד, וסוגריים בגלל ה־<code>const</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E27 — בודק קלט של כלי לפי JSON Schema (חלק קטן)
+export type Schema =
+  | { type: "string"; enum?: string[] }
+  | { type: "number" | "integer"; minimum?: number; maximum?: number }
+  | { type: "boolean" }
+  | { type: "array"; items: Schema }
+  | { type: "object"; properties: Record&lt;string, Schema&gt;; required?: string[] };
+
+export function validate(schema: Schema, value: unknown, path = "input"): string[] {
+  switch (schema.type) {
+    case "string":
+      if (typeof value !== "string") return [`${path}: צריך להיות string`];
+      if (schema.enum &amp;&amp; !schema.enum.includes(value)) return [`${path}: חייב להיות אחד מ־${schema.enum.join(", ")}`];
+      return [];
+    case "number":
+    case "integer": {
+      if (typeof value !== "number" || !Number.isFinite(value)) return [`${path}: צריך להיות number`];
+      if (schema.type === "integer" &amp;&amp; !Number.isInteger(value)) return [`${path}: צריך להיות מספר שלם`];
+      if (schema.minimum !== undefined &amp;&amp; value &lt; schema.minimum) return [`${path}: לפחות ${schema.minimum}`];
+      if (schema.maximum !== undefined &amp;&amp; value &gt; schema.maximum) return [`${path}: לכל היותר ${schema.maximum}`];
+      return [];
+    }
+    case "boolean":
+      return typeof value === "boolean" ? [] : [`${path}: צריך להיות boolean`];
+    case "array":
+      if (!Array.isArray(value)) return [`${path}: צריך להיות array`];
+      return value.flatMap((item, i) =&gt; validate(schema.items, item, `${path}[${i}]`));
+    case "object": {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return [`${path}: צריך להיות object`];
+      const obj = value as Record&lt;string, unknown&gt;;
+      const errors: string[] = [];
+      for (const key of schema.required ?? []) if (!(key in obj)) errors.push(`${path}.${key}: חסר`);
+      for (const key of Object.keys(obj)) {
+        const sub = schema.properties[key];
+        if (!sub) errors.push(`${path}.${key}: שדה לא מוכר`);
+        else errors.push(...validate(sub, obj[key], `${path}.${key}`));
+      }
+      return errors;
+    }
+  }
+}
+
+const createOrder: Schema = {
+  type: "object",
+  required: ["customerEmail", "items"],
+  properties: {
+    customerEmail: { type: "string" },
+    items: {
+      type: "array",
+      items: { type: "object", required: ["productId", "qty"], properties: { productId: { type: "integer" }, qty: { type: "integer", minimum: 1, maximum: 10 } } },
+    },
+    shipping: { type: "string", enum: ["standard", "express"] },
+  },
+};
+console.log(validate(createOrder, { customerEmail: "dana@example.com", items: [{ productId: 3, qty: 2 }] }));
+console.log(validate(createOrder, { items: [{ productId: 3, qty: 0 }, { productId: "4", qty: 1.5 }], shipping: "drone", discount: 100 }));</code></pre>
+<pre class="terminal">[]
+[
+  'input.customerEmail: חסר',
+  'input.items[0].qty: לפחות 1',
+  'input.items[1].productId: צריך להיות number',
+  'input.items[1].qty: צריך להיות מספר שלם',
+  'input.shipping: חייב להיות אחד מ־standard, express',
+  'input.discount: שדה לא מוכר'
+]</pre>
+<p>שש שגיאות בבת אחת, כל אחת עם נתיב מדויק. זה מה שמחזירים למודל ב־<code>tool_result</code> עם <code>is_error: true</code>. מודל שמקבל "input.items[1].productId: צריך להיות number" מתקן בניסיון הבא. מודל שמקבל "invalid input" מנחש.</p>
+<p>הרקורסיה היא העיקר: <code>validate</code> של אובייקט קוראת ל־<code>validate</code> על כל שדה, וזו של מערך על כל איבר. כך מבנה בכל עומק עובד עם אותן חמש שורות. זה גם ה־"discriminated union" של פרק 11 במיטבו: ‏<code>switch</code> על <code>type</code>, ו־TypeScript מוודא שלא שכחת אף מקרה (אם תוסיף <code>"null"</code> ל־union ולא תטפל בו, ‏tsc יתלונן שהפונקציה לא מחזירה ערך).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>typeof value === "object"</code> בלבד — ‏<code>null</code> ומערכים עוברים כאובייקט.</li><li>לעצור בשגיאה הראשונה — המודל מתקן שגיאה אחת בכל סיבוב, וכל סיבוב עולה כסף.</li><li>להתעלם משדות לא מוכרים — המודל שולח <code>discount: 100</code>, והקוד שלך מתעלם ממנו בשקט, או גרוע מזה, מעביר אותו הלאה.</li><li><code>typeof value === "number"</code> בלי <code>Number.isFinite</code> — ‏<code>NaN</code> עובר.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-safety.html"><small>הבא</small>שיעור 3 — אישורים, guardrails ותוכן לא אמין</a></div>
+</main>
+</body>
+</html>

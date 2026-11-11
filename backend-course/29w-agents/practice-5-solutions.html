@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 29.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 29.5</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>29w-agents/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P29.5-E05">
+    <h3>P29.5-E05 · לקרוא trace <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה דברים: חזרה, שגיאה שמתעלמים ממנה, ומספר אחד שנראה חשוד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>89900 אגורות — כמה זה בשקלים, ומה היה סכום ההזמנה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>לולאה:</strong> <code>get_order(101)</code> שלוש פעמים — כנראה התוצאה לא ברורה למודל (חסר שדה? פורמט מבלבל?). קוראים את ה־tool_result ב־trace המלא, ומתקנים את הכלי או את התיאור. ובינתיים: זיהוי של קריאה זהה שחוזרת, ותקרת צעדים.</li><li><strong>שגיאה איטית:</strong> הקריאה השלישית לקחה 3 שניות ונכשלה — timeout של השירות. צריך timeout קצר לכלי, ו־is_error ברור.</li><li><strong>הסכום:</strong> 89,900 אגורות = 899 ₪, על הזמנה של 89.90 ₪ — טעות של פי 10 ביחידות. guardrail בקוד (E16) היה חוסם; וטוב שיש אישור אנושי (E10). וגם: לתאר את היחידה בשם השדה (<code>amountCents</code>) ובתיאור.</li><li><strong>הקשר שגדל:</strong> 3,210 ← 5,820 טוקנים בשש קריאות; כל צעד שולח את כל ההיסטוריה. עם prompt caching (פרק 29) רוב זה נקרא מה־cache — ב־Claude Opus 5.5, ‏0.20$ למיליון טוקנים במקום 4$.</li></ul>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E12">
+    <h3>P29.5-E12 · tracing 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Proxy על ה־client שמחליף רק את <code>messages</code>; ו־<code class="mid">Object.create(client.messages)</code> עם <code>create</code> משלך.</p>
+
+</div></details>
+    
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E12: tracing לסוכן — כל קריאה למודל וכל כלי: זמן, טוקנים ועלות
+import type Anthropic from "@anthropic-ai/sdk";
+
+export interface Price {
+  input: number; // $ למיליון טוקנים
+  output: number;
+  cacheRead: number;
+}
+export const PRICES: Record&lt;string, Price&gt; = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01 },
+};
+
+export interface ModelSpan {
+  kind: "model";
+  step: number;
+  model: string;
+  stopReason: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  costUsd: number;
+  ms: number;
+}
+export interface ToolSpan {
+  kind: "tool";
+  name: string;
+  ms: number;
+  isError: boolean;
+}
+
+export function createTracer(prices: Record&lt;string, Price&gt; = PRICES) {
+  const spans: (ModelSpan | ToolSpan)[] = [];
+  let step = 0;
+  const round = (x: number) =&gt; Math.round(x * 1e6) / 1e6;
+  return {
+    spans,
+    // עוטף את client.messages.create בלי לשנות את הקוד שקורא לו
+    wrapClient(client: Anthropic): Anthropic {
+      const create = client.messages.create.bind(client.messages);
+      const messages = Object.create(client.messages);
+      messages.create = async (params: any, opts?: any) =&gt; {
+        const t0 = performance.now();
+        const res = (await create(params, opts)) as Anthropic.Message;
+        const p = prices[params.model];
+        if (!p) throw new Error(`אין מחיר למודל ${params.model}`);
+        const u = res.usage;
+        const cacheRead = u.cache_read_input_tokens ?? 0;
+        spans.push({
+          kind: "model",
+          step: ++step,
+          model: params.model,
+          stopReason: res.stop_reason,
+          inputTokens: u.input_tokens,
+          outputTokens: u.output_tokens,
+          cacheReadTokens: cacheRead,
+          costUsd: round((u.input_tokens * p.input + u.output_tokens * p.output + cacheRead * p.cacheRead) / 1e6),
+          ms: Math.round(performance.now() - t0),
+        });
+        return res;
+      };
+      return new Proxy(client, { get: (t, k) =&gt; (k === "messages" ? messages : Reflect.get(t, k)) });
+    },
+    wrapTool&lt;I&gt;(name: string, run: (input: I) =&gt; Promise&lt;string&gt;) {
+      return async (input: I) =&gt; {
+        const t0 = performance.now();
+        try {
+          const out = await run(input);
+          spans.push({ kind: "tool", name, ms: Math.round(performance.now() - t0), isError: false });
+          return out;
+        } catch (err) {
+          spans.push({ kind: "tool", name, ms: Math.round(performance.now() - t0), isError: true });
+          throw err;
+        }
+      };
+    },
+    summary() {
+      const m = spans.filter((s): s is ModelSpan =&gt; s.kind === "model");
+      const t = spans.filter((s): s is ToolSpan =&gt; s.kind === "tool");
+      return {
+        steps: m.length,
+        toolCalls: t.length,
+        toolErrors: t.filter((x) =&gt; x.isError).length,
+        inputTokens: m.reduce((s, x) =&gt; s + x.inputTokens, 0),
+        outputTokens: m.reduce((s, x) =&gt; s + x.outputTokens, 0),
+        costUsd: round(m.reduce((s, x) =&gt; s + x.costUsd, 0)),
+      };
+    },
+  };
+}</code></pre>
+<p>בפרודקשן שולחים את זה ל־OpenTelemetry (ה־SDK של Anthropic יודע להוציא spans בעצמו) — וכל שיחה של סוכן נראית כמו בקשה מבוזרת בפרק 24: עץ של צעדים, עם זמן ועלות לכל אחד (E05).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E13">
+    <h3>P29.5-E13 · eval על המסלול 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>indexOf</code> על רשימת השמות.</p>
+
+</div></details>
+    
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E13: eval על המסלול — לא רק "מה ענה", אלא "איך הגיע לשם"
+export interface Trajectory {
+  toolCalls: { name: string; input: unknown }[];
+  finalText: string;
+  steps: number;
+}
+
+export interface Expectations {
+  mustCall?: string[];
+  mustNotCall?: string[];
+  order?: [string, string][]; // [a, b]: הקריאה הראשונה ל־a לפני הקריאה הראשונה ל־b
+  maxSteps?: number;
+  maxToolCalls?: number;
+  finalIncludes?: string[];
+  finalExcludes?: string[];
+}
+
+export function evaluateTrajectory(t: Trajectory, e: Expectations): { pass: boolean; failures: string[] } {
+  const failures: string[] = [];
+  const names = t.toolCalls.map((c) =&gt; c.name);
+  for (const n of e.mustCall ?? []) if (!names.includes(n)) failures.push(`לא קרא ל־${n}`);
+  for (const n of e.mustNotCall ?? []) if (names.includes(n)) failures.push(`קרא ל־${n}, שאסור`);
+  for (const [a, b] of e.order ?? []) {
+    const ia = names.indexOf(a);
+    const ib = names.indexOf(b);
+    if (ib !== -1 &amp;&amp; (ia === -1 || ia &gt; ib)) failures.push(`קרא ל־${b} לפני ${a}`);
+  }
+  if (e.maxSteps !== undefined &amp;&amp; t.steps &gt; e.maxSteps) failures.push(`${t.steps} צעדים (מותר ${e.maxSteps})`);
+  if (e.maxToolCalls !== undefined &amp;&amp; names.length &gt; e.maxToolCalls) failures.push(`${names.length} קריאות לכלים (מותר ${e.maxToolCalls})`);
+  const text = t.finalText.toLowerCase();
+  for (const s of e.finalIncludes ?? []) if (!text.includes(s.toLowerCase())) failures.push(`התשובה לא כוללת "${s}"`);
+  for (const s of e.finalExcludes ?? []) if (text.includes(s.toLowerCase())) failures.push(`התשובה כוללת "${s}"`);
+  return { pass: failures.length === 0, failures };
+}</code></pre>
+<p>תשובה נכונה במסלול שגוי היא באג שמחכה לקרות: "הוחזרו 89.90 ₪" — אבל בלי <code>get_order</code> לפני, כלומר הסכום נוחש. evals של מסלול תופסים את זה לפני הלקוחות.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E19">
+    <h3>P29.5-E19 · אירועי התקדמות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>async function*</code> ו־<code>yield</code>. try/catch סביב הכול.</p>
+
+</div></details>
+    
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E19: אירועי התקדמות — כדי שהמשתמש יראה מה הסוכן עושה (SSE, WebSocket)
+import type Anthropic from "@anthropic-ai/sdk";
+
+export type AgentEvent =
+  | { type: "model"; step: number; stopReason: string | null }
+  | { type: "tool_start"; id: string; name: string }
+  | { type: "tool_end"; id: string; name: string; isError: boolean }
+  | { type: "done"; text: string }
+  | { type: "error"; message: string };
+
+export async function* agentEvents(
+  client: Anthropic,
+  { system, tools, prompt, maxSteps = 10 }: { system: string; tools: Record&lt;string, { definition: Anthropic.Tool; run: (input: any) =&gt; Promise&lt;string&gt; }&gt;; prompt: string; maxSteps?: number },
+): AsyncGenerator&lt;AgentEvent&gt; {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+  try {
+    for (let step = 1; step &lt;= maxSteps; step++) {
+      const res = await client.messages.create({ model: "claude-opus-5-5", max_tokens: 16000, system, tools: Object.values(tools).map((t) =&gt; t.definition), messages });
+      yield { type: "model", step, stopReason: res.stop_reason };
+      messages.push({ role: "assistant", content: res.content });
+      if (res.stop_reason !== "tool_use") {
+        yield { type: "done", text: res.content.flatMap((b) =&gt; (b.type === "text" ? [b.text] : [])).join("") };
+        return;
+      }
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const c of res.content.filter((b): b is Anthropic.ToolUseBlock =&gt; b.type === "tool_use")) {
+        yield { type: "tool_start", id: c.id, name: c.name };
+        let r: Anthropic.ToolResultBlockParam;
+        try {
+          const t = tools[c.name];
+          if (!t) throw new Error(`אין כלי בשם ${c.name}`);
+          r = { type: "tool_result", tool_use_id: c.id, content: await t.run(c.input) };
+        } catch (err) {
+          r = { type: "tool_result", tool_use_id: c.id, content: `שגיאה: ${(err as Error).message}`, is_error: true };
+        }
+        results.push(r);
+        yield { type: "tool_end", id: c.id, name: c.name, isError: !!r.is_error };
+      }
+      messages.push({ role: "user", content: results });
+    }
+    yield { type: "error", message: "עבר את תקרת הצעדים" };
+  } catch (err) {
+    yield { type: "error", message: (err as Error).message };
+  }
+}</code></pre>
+<p>בשרת: <code>for await (const e of agentEvents(…)) res.write(<code class="mid">data: ${JSON.stringify(e)}\n\n</code>)</code> — Server-Sent Events, כמו ה־streaming בפרק 29. ואם הלקוח מתנתק — <code>break</code> מהלולאה עוצר את ה־generator — הסוכן מסיים את הצעד הנוכחי ולא מתחיל את הבא (ולא ממשיך לעלות כסף).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E25">
+    <h3>P29.5-E25 · אתגר: חבילת evals 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>רשימת jobs = תרחיש × ניסיון; "עובדים" שלוקחים job אחרי job (כמו E08 ביחידה 28.5).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">makeClient(scenario, trial)</code> — בבדיקה, client מדומה שמתנהג אחרת בניסיונות שונים; בפרודקשן — client אמיתי, ואז כל ריצה עולה כסף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E25: חבילת evals לסוכן — כמה תרחישים, כמה ניסיונות לכל אחד, ודוח
+import type Anthropic from "@anthropic-ai/sdk";
+import { evaluateTrajectory, type Expectations, type Trajectory } from "./P29.5-E13.ts";
+
+export interface Scenario {
+  name: string;
+  prompt: string;
+  expect: Expectations;
+}
+
+export interface RunOutput extends Trajectory {
+  costUsd: number;
+}
+
+export async function runEvalSuite({
+  scenarios,
+  makeClient,
+  agent,
+  trials = 3,
+  concurrency = 4,
+}: {
+  scenarios: Scenario[];
+  makeClient: (scenario: Scenario, trial: number) =&gt; Anthropic;
+  agent: (client: Anthropic, prompt: string) =&gt; Promise&lt;RunOutput&gt;;
+  trials?: number;
+  concurrency?: number;
+}) {
+  const jobs = scenarios.flatMap((s) =&gt; Array.from({ length: trials }, (_, t) =&gt; ({ s, t })));
+  const outcomes = new Map&lt;string, { pass: boolean; failures: string[]; costUsd: number }[]&gt;();
+  let next = 0;
+  async function worker() {
+    while (next &lt; jobs.length) {
+      const { s, t } = jobs[next++];
+      let r: { pass: boolean; failures: string[]; costUsd: number };
+      try {
+        const out = await agent(makeClient(s, t), s.prompt);
+        r = { ...evaluateTrajectory(out, s.expect), costUsd: out.costUsd };
+      } catch (err) {
+        r = { pass: false, failures: [`הריצה נכשלה: ${(err as Error).message}`], costUsd: 0 }; // קריסה היא כישלון — לא מדלגים
+      }
+      outcomes.set(s.name, [...(outcomes.get(s.name) ?? []), r]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
+
+  const results = scenarios.map((s) =&gt; {
+    const rs = outcomes.get(s.name)!;
+    const passes = rs.filter((r) =&gt; r.pass).length;
+    return {
+      name: s.name,
+      trials: rs.length,
+      passes,
+      passRate: passes / rs.length,
+      failures: [...new Set(rs.flatMap((r) =&gt; r.failures))],
+      avgCostUsd: Math.round((rs.reduce((x, r) =&gt; x + r.costUsd, 0) / rs.length) * 1e6) / 1e6,
+    };
+  });
+  const totalPasses = results.reduce((x, r) =&gt; x + r.passes, 0);
+  return {
+    results,
+    passRate: totalPasses / jobs.length,
+    flaky: results.filter((r) =&gt; r.passRate &gt; 0 &amp;&amp; r.passRate &lt; 1).map((r) =&gt; r.name), // עובר לפעמים — הכי מסוכן
+    failing: results.filter((r) =&gt; r.passRate === 0).map((r) =&gt; r.name),
+  };
+}</code></pre>
+<p>flaky הוא המדד החשוב: תרחיש שעובר ב־2 מתוך 3 "עובד בהדגמה" ונכשל אצל כל לקוח שלישי. מודלים לא דטרמיניסטיים — לכן כמה ניסיונות לכל תרחיש, ולכן מריצים את החבילה לפני כל שינוי ב־prompt, בכלים או במודל.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P29.5-E28">
+    <h3>P29.5-E28 · trace כעץ טקסט 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם קיבוץ: <code>Map&lt;string | null, Span[]&gt;</code> מהורה לילדים. ‏<code>null</code> הוא מפתח חוקי ב־<code>Map</code>, והוא מייצג "שורש". הורה שלא קיים: <code class="mid">const ids = new Set(spans.map((s) =&gt; s.id))</code>, ו־<code class="mid">ids.has(parentId) ? parentId : null</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחר כך פונקציה פנימית <code>walk(parent, depth)</code>: לוקחת את הילדים, ממיינת עותק (<code>[...list].sort(...)</code>), ולכל אחד מוסיפה שורה וקוראת ל־<code>walk(span.id, depth + 1)</code>. השורה: <code><code class="mid">${"  ".repeat(depth)}${span.name}</code>.padEnd(32) + <code>${span.end - span.start}ms</code>.padStart(8)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E28 — trace כעץ טקסט
+export type Span = { id: string; parentId: string | null; name: string; start: number; end: number };
+
+export function renderTrace(spans: Span[]): string {
+  const children = new Map&lt;string | null, Span[]&gt;();
+  const ids = new Set(spans.map((s) =&gt; s.id));
+  for (const span of spans) {
+    // הורה שלא נמצא ב־trace (נחתך, או עוד לא הגיע) — מציגים את ה־span כשורש
+    const parent = span.parentId !== null &amp;&amp; ids.has(span.parentId) ? span.parentId : null;
+    const list = children.get(parent) ?? [];
+    list.push(span);
+    children.set(parent, list);
+  }
+  const lines: string[] = [];
+  const walk = (parent: string | null, depth: number) =&gt; {
+    const list = [...(children.get(parent) ?? [])].sort((a, b) =&gt; a.start - b.start || a.name.localeCompare(b.name));
+    for (const span of list) {
+      lines.push(`${"  ".repeat(depth)}${span.name}`.padEnd(32) + `${span.end - span.start}ms`.padStart(8));
+      walk(span.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return lines.join("\n");
+}
+
+console.log(
+  renderTrace([
+    { id: "t3", parentId: "t2", name: "tool:search_orders", start: 1210, end: 1290 },
+    { id: "t1", parentId: null, name: "agent.run", start: 1000, end: 2950 },
+    { id: "t2", parentId: "t1", name: "llm.call#1", start: 1005, end: 1200 },
+    { id: "t5", parentId: "t1", name: "llm.call#2", start: 1300, end: 2900 },
+    { id: "t4", parentId: "t2", name: "tool:get_order", start: 1210, end: 1250 },
+    { id: "t9", parentId: "lost", name: "retry", start: 3000, end: 3010 },
+  ]),
+);</code></pre>
+<pre class="terminal">agent.run                         1950ms
+  llm.call#1                       195ms
+    tool:get_order                  40ms
+    tool:search_orders              80ms
+  llm.call#2                      1600ms
+retry                               10ms</pre>
+<p>מהעץ רואים מיד מה שקשה לראות ברשימה: ‏<code>llm.call#2</code> לקח 1.6 שניות מתוך 1.95, כלומר הזמן הלך על המודל ולא על הכלים. שני הכלים בתוך הקריאה הראשונה התחילו באותו רגע (‏1210). הם רצו במקביל, ולכן הם ממוינים לפי שם.</p>
+<p>‏<code>retry</code> הוא span שההורה שלו לא הגיע. זה קורה כשה־trace נחתך, או כשה־span של ההורה עדיין פתוח. כלי שמעלים spans כאלה מציג עץ שחסר בו מידע, בלי שום סימן. מי שמציג אותם כשורש לפחות רואה שמשהו קרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לולאה בתוך לולאה (לכל span — לחפש את הילדים ב־<code>filter</code>) — עובד, אבל O(n²). קיבוץ ב־<code>Map</code> פעם אחת הוא O(n).</li><li>להניח שההורה מופיע לפני הילדים ברשימה — spans נשלחים כשהם <em>נגמרים</em>, ולכן ילדים מגיעים בדרך כלל לפני ההורה.</li><li>לדלג על span עם הורה חסר — הוא נעלם מהתצוגה.</li><li>להזיח רק את השם אחרי <code>padEnd</code> — העמודה של הזמנים זזה בכל רמה.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

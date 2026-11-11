@@ -31,7 +31,7 @@
     <li>מחשב <code>totalCents</code>.</li>
     <li>מרוקן את העגלה.</li>
   </ol>
-  <p>מוצר אחד חסר ← 409 <code>OUT_OF_STOCK</code> עם <code>details: [{ productId, requested, available }]</code> — ו<strong>שום דבר</strong> לא השתנה: גם המלאי של מוצרים אחרים שכבר "ירד" חוזר, והעגלה נשארת. זו טרנזקציה (פרק 18). ב־Prisma: <code>prisma.$transaction(async (tx) =&gt; { … })</code> — שגיאה שנזרקת בתוכה = ROLLBACK.</p>
+  <p>מוצר אחד חסר ← 409 <code>OUT_OF_STOCK</code> עם <code class="mid">details: [{ productId, requested, available }]</code> — ו<strong>שום דבר</strong> לא השתנה: גם המלאי של מוצרים אחרים שכבר "ירד" חוזר, והעגלה נשארת. זו טרנזקציה (פרק 18). ב־Prisma: <code class="mid">prisma.$transaction(async (tx) =&gt; { … })</code> — שגיאה שנזרקת בתוכה = ROLLBACK.</p>
 
   <h2>3. המרוץ</h2>
   <p>יחידה אחת במלאי. שני לקוחות לוחצים "הזמן" באותה שנייה. הגרסה ה"טבעית":</p>
@@ -41,7 +41,7 @@ await tx.product.update({ where: { id }, data: { stock: product.stock - quantity
   <p>שתי הבקשות קוראות <code>stock = 1</code>, שתיהן עוברות את הבדיקה, ושתיהן כותבות <code>0</code>. הרצנו בדיוק את זה על הפתרון לדוגמה (עם השהיה קטנה בין הקריאה לכתיבה, כמו שקורה תחת עומס) — 12 לקוחות, 3 יחידות במלאי (פלט אמיתי של הבודק):</p>
 <pre class="terminal"><span class="err">AssertionError [ERR_ASSERTION]: בדיוק 3 הצליחו, השאר 409 OUT_OF_STOCK: 201,201,201,201,201,201,201,201,201,201,201,201</span></pre>
   <p><strong>12 הזמנות על 3 יחידות.</strong> והמלאי? לא שלילי — כל אחד כתב "מה שקראתי פחות אחד". זה <em>lost update</em>: גם ה־CHECK במסד לא עוזר, כי אף ערך שנכתב לא שלילי. טרנזקציה לבד גם לא — ב־READ COMMITTED (ברירת המחדל) הקריאה לא נועלת.</p>
-  <p>הפתרונות (פרק 18): <strong>עדכון מותנה</strong> — <code>UPDATE products SET stock = stock - $q WHERE id = $id AND stock &gt;= $q</code>, ואם 0 שורות עודכנו ← אין מספיק. ב־Prisma: <code>updateMany</code> עם <code>stock: { gte: q }</code> ו־<code>decrement</code>, ובדיקה של <code>count</code>. PostgreSQL נועל את השורה בעדכון, הבקשה השנייה מחכה, ואחרי ה־COMMIT של הראשונה התנאי נבדק שוב על הערך העדכני. (חלופה: <code>SELECT … FOR UPDATE</code> — נועל כבר בקריאה.) ועוד שני דברים:</p>
+  <p>הפתרונות (פרק 18): <strong>עדכון מותנה</strong> — <code class="long">UPDATE products SET stock = stock - $q WHERE id = $id AND stock &gt;= $q</code>, ואם 0 שורות עודכנו ← אין מספיק. ב־Prisma: <code>updateMany</code> עם <code>stock: { gte: q }</code> ו־<code>decrement</code>, ובדיקה של <code>count</code>. PostgreSQL נועל את השורה בעדכון, הבקשה השנייה מחכה, ואחרי ה־COMMIT של הראשונה התנאי נבדק שוב על הערך העדכני. (חלופה: <code>SELECT … FOR UPDATE</code> — נועל כבר בקריאה.) ועוד שני דברים:</p>
   <ul>
     <li><strong>סדר קבוע</strong>: עגלה עם מוצרים 3 ו־7, ועגלה עם 7 ו־3 — אם כל אחת נועלת בסדר אחר, הן יכולות לחכות זו לזו לנצח (deadlock). ממיינים לפי <code>productId</code>.</li>
     <li><strong>רשת ביטחון</strong>: <code>CHECK (stock &gt;= 0)</code> ב־migration. Prisma לא יודע להגדיר CHECK — מוסיפים ביד לקובץ ה־<code>migration.sql</code> (<code>--create-only</code>, עורכים, ואז <code>migrate dev</code>).</li>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28w-scale/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28.5-E03">
+    <h3>P28.5-E03 · מי חוסם את ה־event loop? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־event loop הוא thread אחד. timer יכול לרוץ רק כשה־JavaScript הנוכחי מסתיים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>pbkdf2 עם callback רץ ב־thread pool של libuv — לא ב־thread של JavaScript.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { pbkdf2, pbkdf2Sync } from "node:crypto";
+
+// מתזמנים timer של 10ms, ומיד מתחילים עבודה. השאלה: ה־timer רץ בזמן העבודה, או רק אחריה?
+function measure(label: string, work: (done: () =&gt; void) =&gt; void) {
+  return new Promise&lt;void&gt;((resolve) =&gt; {
+    let timerAt = 0;
+    let doneAt = 0;
+    const report = () =&gt; {
+      if (!timerAt || !doneAt) return;
+      console.log(`${label.padEnd(16)} ${timerAt &lt; doneAt ? "timer fired while the work was running" : "timer waited until the work finished"}`);
+      resolve();
+    };
+    setTimeout(() =&gt; ((timerAt = performance.now()), report()), 10);
+    work(() =&gt; ((doneAt = performance.now()), report()));
+  });
+}
+
+await measure("pbkdf2Sync", (done) =&gt; {
+  pbkdf2Sync("pw", "salt", 1_000_000, 32, "sha256");
+  done();
+});
+await measure("pbkdf2 (async)", (done) =&gt; pbkdf2("pw", "salt", 1_000_000, 32, "sha256", () =&gt; done()));
+await measure("busy loop", (done) =&gt; {
+  let x = 0;
+  for (let i = 0; i &lt; 300_000_000; i++) x += i;
+  done();
+});</code></pre>
+<pre class="terminal">pbkdf2Sync       timer waited until the work finished
+pbkdf2 (async)   timer fired while the work was running
+busy loop        timer waited until the work finished</pre>
+<p><code>pbkdf2Sync</code> ולולאת החישוב תופסים את ה־thread היחיד של JavaScript — שום timer, שום בקשת HTTP ושום health check לא ייענו עד שיסתיימו. ב־API עם 100 משתמשים, התחברות אחת "מקפיאה" את כולם. <code>pbkdf2</code> האסינכרוני עושה בדיוק את אותה עבודה — ב־thread אחר. עבודת CPU של JavaScript עצמו (הלולאה) — מעבירים ל־worker thread (E13).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E13">
+    <h3>P28.5-E13 · worker threads 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">new Worker(WORKER_CODE, { eval: true })</code>, <code class="mid">worker.postMessage([from, to])</code>, <code>worker.on("message", …)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תור משותף של טווחים: כל worker שמסיים — מקבל את הבא. Promise לכל worker שמסתיים כשהתור ריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E13: עבודת CPU ב־worker threads — כדי שה־event loop ימשיך לענות
+import { Worker } from "node:worker_threads";
+
+// הקוד שרץ בכל worker (מוכן): מקבל [from, to] ומחזיר כמה ראשוניים יש בטווח
+export const WORKER_CODE = `
+const { parentPort } = require("node:worker_threads");
+parentPort.on("message", ([from, to]) =&gt; {
+  let count = 0;
+  for (let n = Math.max(2, from); n &lt; to; n++) {
+    let prime = true;
+    for (let d = 2; d * d &lt;= n; d++) if (n % d === 0) { prime = false; break; }
+    if (prime) count++;
+  }
+  parentPort.postMessage(count);
+});`;
+
+export async function countPrimesParallel(limit: number, { threads = 4, chunks = 16 } = {}): Promise&lt;number&gt; {
+  const size = Math.ceil(limit / chunks);
+  const ranges: [number, number][] = Array.from({ length: chunks }, (_, i) =&gt; [i * size, Math.min(limit, (i + 1) * size)]);
+  let next = 0;
+  let total = 0;
+  const workers = Array.from({ length: Math.min(threads, ranges.length) }, () =&gt; new Worker(WORKER_CODE, { eval: true }));
+  try {
+    // כל worker לוקח את הטווח הבא כשהוא מסיים — כך אף אחד לא יושב בטל
+    await Promise.all(
+      workers.map(
+        (w) =&gt;
+          new Promise&lt;void&gt;((resolve, reject) =&gt; {
+            const giveNext = () =&gt; {
+              if (next &gt;= ranges.length) return resolve();
+              w.postMessage(ranges[next++]);
+            };
+            w.on("message", (count: number) =&gt; {
+              total += count;
+              giveNext();
+            });
+            w.on("error", reject);
+            giveNext();
+          }),
+      ),
+    );
+  } finally {
+    await Promise.all(workers.map((w) =&gt; w.terminate()));
+  }
+  return total;
+}</code></pre>
+<p>worker threads הם לא "async": כל worker הוא thread נוסף עם V8 משלו (כ־10MB זיכרון, ועשרות ms לעלות). לכן — pool קבוע, לא worker לכל בקשה (בפרודקשן: <code>piscina</code>). ולעבודה ש־Node כבר מריץ ב־thread pool (crypto, zlib, fs) — מספיקה הגרסה האסינכרונית (E03, E23).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E14">
+    <h3>P28.5-E14 · מוניטור ל־event loop 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־histogram מודד בננו־שניות: <code>h.max / 1e6</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>timer.unref()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E14: מוניטור ל־event loop — מתריע כשמשהו חוסם
+import { monitorEventLoopDelay } from "node:perf_hooks";
+
+export interface LagReport {
+  p99Ms: number;
+  maxMs: number;
+}
+
+export function startLagMonitor({ thresholdMs, intervalMs = 1000, onLag }: { thresholdMs: number; intervalMs?: number; onLag: (r: LagReport) =&gt; void }): () =&gt; void {
+  const h = monitorEventLoopDelay({ resolution: 10 });
+  h.enable();
+  const timer = setInterval(() =&gt; {
+    const report = { p99Ms: Math.round(h.percentile(99) / 1e6), maxMs: Math.round(h.max / 1e6) }; // ננו־שניות ← מילי
+    h.reset(); // כל חלון נמדד בנפרד
+    if (report.maxMs &gt;= thresholdMs) onLag(report);
+  }, intervalMs);
+  timer.unref(); // מוניטור לא אמור להשאיר את התהליך חי
+  return () =&gt; {
+    clearInterval(timer);
+    h.disable();
+  };
+}</code></pre>
+<p>בפרודקשן מייצאים את זה כמדד (<code class="mid">nodejs_eventloop_lag_seconds</code> ב־prom-client) ומתריעים עליו: p99 lag של 200ms אומר שכל בקשה בשרת הזה מחכה עד 200ms — לפני שהקוד שלה בכלל התחיל.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E23">
+    <h3>P28.5-E23 · שרת שנתקע — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל פונקציה שנגמרת ב־<code>Sync</code> רצה על ה־event loop.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">import { setTimeout as sleep } from "node:timers/promises"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E23: שרת שה־event loop שלו פנוי — אחרי התיקון
+import http from "node:http";
+import { pbkdf2 } from "node:crypto";
+import { gzip } from "node:zlib";
+import { promisify } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const pbkdf2Async = promisify(pbkdf2);
+const gzipAsync = promisify(gzip);
+const SALT = "coffee-salt";
+const EXPORT = Buffer.from(JSON.stringify(Array.from({ length: 200_000 }, (_, i) =&gt; ({ id: i, name: `order-${i}`, total: i % 997 }))));
+
+export function createServer(): http.Server {
+  return http.createServer(async (req, res) =&gt; {
+    try {
+      if (req.url === "/health") return void res.end("ok");
+      if (req.url === "/login") {
+        // תיקון 1: pbkdf2 האסינכרוני רץ ב־thread pool של libuv, לא על ה־event loop
+        const hash = await pbkdf2Async("secret-password", SALT, 200_000, 32, "sha256");
+        return void res.end(hash.toString("hex").slice(0, 8));
+      }
+      if (req.url === "/export") {
+        const body = await gzipAsync(EXPORT); // תיקון 2: גם gzip — ב־thread pool
+        res.setHeader("content-encoding", "gzip");
+        return void res.end(body);
+      }
+      if (req.url === "/slow") {
+        await sleep(300); // תיקון 3: המתנה שלא חוסמת (במקום while על Date.now)
+        return void res.end("done");
+      }
+      res.statusCode = 404;
+      res.end();
+    } catch {
+      res.statusCode = 500;
+      res.end();
+    }
+  });
+}</code></pre>
+<p>איך מוצאים את זה בפרודקשן: מוניטור lag (E14) מראה שה־event loop נחסם; ואז <code>node --cpu-prof</code> (או <code>clinic flame</code>) — פרופיל שמראה באיזו פונקציה ה־CPU בילה. <code>pbkdf2Sync</code> בראש ה־flame graph — וזהו.</p>
+
+
+</div></details>
+    
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-streams.html"><small>הבא</small>שיעור 3 — נתונים גדולים בזרם</a></div>
+</main>
+</body>
+</html>

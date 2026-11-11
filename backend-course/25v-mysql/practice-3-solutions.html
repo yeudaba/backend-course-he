@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E03">
+    <h3>P25.5-E03 · REPEATABLE READ <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־REPEATABLE READ, SELECT רגיל קורא מ"תמונה" שנלקחה בקריאה הראשונה של הטרנזקציה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>UPDATE ו־FOR UPDATE קוראים את הגרסה המחויבת האחרונה ("locking read").</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>10</strong> — אותה תמונה. (ב־PostgreSQL, READ COMMITTED: 7.)</li>
+<li><strong>7</strong> — קריאה נועלת רואה את האחרון.</li>
+<li><strong>6</strong> — ה־UPDATE עובד על 7, ואחריו A רואה את השינוי שלו עצמו.</li>
+</ol>
+<p>המסקנה: ב־MySQL, "SELECT ואז החלטה ואז UPDATE" גרוע עוד יותר מב־PostgreSQL — ה־SELECT יכול להחזיר ערך ישן <em>בתוך</em> הטרנזקציה. ההחלטה צריכה להיות בתוך ה־UPDATE (<code>WHERE stock &gt;= ?</code>, E13) או אחרי <code>FOR UPDATE</code> (E09). בשיעור 3 — ההרצה האמיתית של התרחיש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אני בטרנזקציה, אז אני מוגן" — טרנזקציה לא נועלת שורות שרק קראת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E13">
+    <h3>P25.5-E13 · מלאי תחת עומס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">UPDATE … SET stock = stock - ? WHERE id = ? AND stock &gt;= ?</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>affectedRows</code> — לא <code>changedRows</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E13
+import type { Pool } from "mysql2/promise";
+
+// הורדת מלאי בפקודה אחת, מותנית. ב־MySQL: affectedRows = כמה שורות *התאימו* ל־WHERE ושונו.
+// (changedRows — רק שורות שהערך בהן באמת השתנה. כאן זה אותו דבר, אבל ב־UPDATE שקובע ערך זהה — changedRows הוא 0)
+export async function reserveStock(pool: Pool, productId: number, quantity: number): Promise&lt;boolean&gt; {
+  if (!Number.isInteger(quantity) || quantity &lt;= 0) throw new Error("כמות לא תקינה");
+  const [res] = await pool.execute&lt;any&gt;("UPDATE products SET stock = stock - ? WHERE id = ? AND stock &gt;= ?", [quantity, productId, quantity]);
+  return res.affectedRows === 1;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SELECT stock</code> ואז <code>UPDATE</code> — ב־REPEATABLE READ ה־SELECT יכול אפילו להחזיר ערך ישן מתוך הטרנזקציה שלך (E03).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E14">
+    <h3>P25.5-E14 · תור עבודות: SKIP LOCKED 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>טרנזקציה: <code class="mid">SELECT id … ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED</code>, ואז UPDATE על ה־ids, ו־COMMIT.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי SKIP LOCKED — worker שני מחכה לראשון (ואז מוצא את אותן שורות כבר running). עם — מדלג ולוקח את הבאות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E14
+import type { Pool } from "mysql2/promise";
+
+// תור עבודות על טבלה: כמה workers לוקחים עבודות במקביל, בלי שאותה עבודה תילקח פעמיים.
+// FOR UPDATE נועל את השורות שנבחרו; SKIP LOCKED (MySQL 8.0+) מדלג על נעולות במקום לחכות להן
+export async function claimJobs(pool: Pool, workerId: string, limit: number): Promise&lt;number[]&gt; {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query&lt;any[]&gt;("SELECT id FROM jobs WHERE status = 'queued' ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED", [limit]);
+    const ids = rows.map((r) =&gt; r.id as number);
+    if (ids.length) await conn.query("UPDATE jobs SET status = 'running', locked_by = ? WHERE id IN (?)", [workerId, ids]);
+    await conn.commit();
+    return ids;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>זה דפוס שמאפשר תור בלי Redis ובלי broker — כשהעומס צנוע. ביחידה 26.5 נראה מתי עוברים ל־RabbitMQ, Kafka או SQS.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח שהנעילה חיה רק עד ה־COMMIT — אם הסימון (UPDATE) לא באותה טרנזקציה, אחרים יראו את העבודות כ־queued.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E15">
+    <h3>P25.5-E15 · deadlock, ואיך חיים איתו 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">(err as { errno?: number }).errno</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־fn הוא <em>כל</em> הטרנזקציה — InnoDB ביטל את כולה, אז מנסים את כולה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E15
+// InnoDB מזהה deadlock ומבטל את אחת הטרנזקציות (errno 1213, ER_LOCK_DEADLOCK); המתנה ארוכה לנעילה — 1205.
+// שתיהן "בטוחות לנסות שוב": הטרנזקציה בוטלה כולה. מנסים שוב את *כל* הטרנזקציה, עם המתנה קצרה ואקראית
+export const RETRYABLE = new Set([1213, 1205]);
+
+export async function withDeadlockRetry&lt;T&gt;(
+  fn: (attempt: number) =&gt; Promise&lt;T&gt;,
+  { retries = 3, sleep = (ms: number) =&gt; new Promise&lt;void&gt;((r) =&gt; setTimeout(r, ms)), random = Math.random } = {},
+): Promise&lt;T&gt; {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      const errno = (err as { errno?: number }).errno;
+      if (attempt &gt;= retries || errno === undefined || !RETRYABLE.has(errno)) throw err;
+      await sleep(Math.floor(random() * 20 * 2 ** attempt));
+    }
+  }
+}</code></pre>
+<p>מה עדיף על retry: שה־deadlock לא יקרה — לנעול תמיד באותו סדר (<code>ORDER BY id FOR UPDATE</code>, כמו ב־E09 ו־E24), טרנזקציות קצרות, ואינדקסים שמונעים נעילה של יותר שורות מהנדרש. אבל במערכת עמוסה deadlock יקרה בסוף — ו־retry הוא חלק מהתשובה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>retry על פקודה בודדת מתוך הטרנזקציה — אחרי deadlock כל הטרנזקציה בוטלה, והפקודות שלפני כבר לא קיימות.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E17">
+    <h3>P25.5-E17 · idempotency ב־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>INSERT IGNORE</code> ואז <code>affectedRows</code>: 1 = אני הראשון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>mysql2 מחזיר JSON כאובייקט — אבל אם בעתיד תשנה טיפוס עמודה, בדוק גם מחרוזת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E17
+import type { Pool } from "mysql2/promise";
+
+export class InProgress extends Error {}
+
+// Idempotency ב־MySQL: INSERT IGNORE על מפתח ראשי — affectedRows 1 = "אני הראשון", 0 = כבר קיים.
+// (ב־PostgreSQL: ON CONFLICT DO NOTHING RETURNING.) התוצאה נשמרת כ־JSON, והבקשה החוזרת מקבלת אותה
+export async function once&lt;T&gt;(pool: Pool, key: string, fn: () =&gt; Promise&lt;T&gt;): Promise&lt;{ result: T; replayed: boolean }&gt; {
+  const [ins] = await pool.execute&lt;any&gt;("INSERT IGNORE INTO idempotency (idem_key, status) VALUES (?, 'pending')", [key]);
+  if (ins.affectedRows === 1) {
+    try {
+      const result = await fn();
+      await pool.execute("UPDATE idempotency SET status = 'done', result = ? WHERE idem_key = ?", [JSON.stringify(result), key]);
+      return { result, replayed: false };
+    } catch (err) {
+      await pool.execute("DELETE FROM idempotency WHERE idem_key = ?", [key]); // נכשל ← אפשר לנסות שוב עם אותו מפתח
+      throw err;
+    }
+  }
+  const [rows] = await pool.execute&lt;any[]&gt;("SELECT status, result FROM idempotency WHERE idem_key = ?", [key]);
+  if (!rows[0] || rows[0].status !== "done") throw new InProgress(`בקשה ${key} עדיין בטיפול`);
+  const stored = rows[0].result;
+  return { result: (typeof stored === "string" ? JSON.parse(stored) : stored) as T, replayed: true };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>INSERT IGNORE</code> מתעלם לא רק מכפילות — גם משגיאות אחרות (ערך ארוך מדי נחתך, ועוד). כאן זה בטוח (מפתח קצר), אבל בכל מקום אחר — <code class="mid">ON DUPLICATE KEY UPDATE idem_key = idem_key</code> מדויק יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E22">
+    <h3>P25.5-E22 · תור עבודות — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איפה הטרנזקציה? ובאיזה חיבור רצה כל פקודה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כמה שורות ה־SELECT מחזיר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E22
+import type { Pool } from "mysql2/promise";
+
+export async function claimJobs(pool: Pool, workerId: string, limit: number): Promise&lt;number[]&gt; {
+  const conn = await pool.getConnection(); // תקלה 1: היה pool.query ישירות ← כל פקודה בחיבור אחר, בלי טרנזקציה — הנעילה משתחררת מיד אחרי ה־SELECT
+  try {
+    await conn.beginTransaction();
+    // תקלה 2: בלי FOR UPDATE SKIP LOCKED ← שני workers קוראים אותן שורות ושניהם "לוקחים"
+    // תקלה 3: לא היה LIMIT ← worker אחד "לקח" את כל התור, והשאר עמדו בטלים
+    const [rows] = await conn.query&lt;any[]&gt;("SELECT id FROM jobs WHERE status = 'queued' ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED", [limit]);
+    const ids = rows.map((r) =&gt; r.id as number);
+    if (ids.length) await conn.query("UPDATE jobs SET status = 'running', locked_by = ? WHERE id IN (?)", [workerId, ids]);
+    await conn.commit();
+    return ids;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>FOR UPDATE</code> בלי טרנזקציה — ב־autocommit הנעילה משתחררת בסוף ה־SELECT עצמו.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-node.html"><small>הבא</small>שיעור 4 — Node.js מול MySQL עם mysql2</a></div>
+</main>
+</body>
+</html>

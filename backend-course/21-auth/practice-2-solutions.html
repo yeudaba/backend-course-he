@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 21</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 21</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>21-auth/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P21-E02">
+    <h3>P21-E02 · לפרק JWT ביד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה חלקים, מופרדים בנקודה. שני הראשונים — JSON.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>exp</code> הוא שניות מאז 1970 ב־UTC: <code>new Date(exp * 1000)</code>. בנובמבר ישראל ב־UTC+2.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>(א) כל אחד יכול לקרוא את ה־header ואת ה־payload:</p>
+<pre><code class="lang-ts">const [h, p] = token.split(".");
+console.log(Buffer.from(h, "base64url").toString()); // {"alg":"HS256","typ":"JWT"}
+console.log(Buffer.from(p, "base64url").toString()); // {"sub":7,"role":"user","iat":1793872800,"exp":1793873700}</code></pre>
+<p>משתמש 7, תפקיד user, נוצר ב־<code>1793872800</code>. מה שאי אפשר בלי הסוד: לבדוק שהחתימה אמיתית, או ליצור חתימה חדשה.</p>
+<p>(ב) <code class="mid">new Date(1793873700 * 1000).toISOString()</code> ← <code>2026-11-05T10:15:00.000Z</code>, כלומר 12:15 בשעון ישראל. 900 שניות (15 דקות) אחרי <code>iat</code>.</p>
+<p>(ג) השרת מחשב את החתימה מחדש על ה־header וה־payload <em>ששונו</em>, ומקבל משהו אחר ממה שכתוב בחלק השלישי ← <code>invalid signature</code> ← 401. (אלא אם השרת משתמש ב־<code>decode</code> במקום <code>verify</code> — ראה E20.)</p>
+<p>(ד) לא. ה־payload קריא לכל מי שמחזיק את הטוקן — כולל תוספי דפדפן, לוגים של proxy, וכל מי שהטוקן דלף אליו. ובנוסף: אם המשתמש מחליף טלפון, הטוקן ממשיך "לטעון" את הישן עד שיפוג. ב־JWT שמים מזהים וזכויות (<code>sub</code>, <code>role</code>), לא פרטים אישיים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שה־payload מוצפן כי "הוא נראה כמו ג'יבריש". זה Base64url.</li><li>לשכוח ש־<code>exp</code> בשניות, ו־<code>new Date()</code> מצפה למילישניות ← תאריך ב־1970.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E09">
+    <h3>P21-E09 · כניסה ו־JWT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־<code>JwtService</code> מוזרק (כי <code>JwtModule</code> ב־imports): <code class="mid">this.jwt.signAsync(payload, { expiresIn: 900 })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>POST מחזיר 201 כברירת מחדל — כניסה לא "יוצרת משאב", אז <code>@HttpCode(200)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E09
+import { Body, Controller, HttpCode, Injectable, Module, OnModuleInit, Post, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import bcrypt from "bcryptjs";
+
+export const JWT_SECRET = "e09-secret-for-exercises-only-0123456789";
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: "user" | "admin";
+}
+
+@Injectable()
+export class UsersService implements OnModuleInit {
+  private users: User[] = [];
+
+  async onModuleInit() {
+    this.users = [
+      { id: 1, email: "dana@example.com", passwordHash: await bcrypt.hash("dana-password-1", 4), role: "user" },
+      { id: 2, email: "admin@example.com", passwordHash: await bcrypt.hash("admin-password-1", 4), role: "admin" },
+    ];
+  }
+
+  findByEmail(email: string) {
+    return this.users.find((u) =&gt; u.email === email);
+  }
+}
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  async login(email: string, password: string) {
+    const user = this.users.findByEmail(String(email).trim().toLowerCase());
+    // אותה שגיאה לשני המקרים
+    if (!user || !(await bcrypt.compare(String(password), user.passwordHash))) {
+      throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    }
+    const accessToken = await this.jwt.signAsync({ sub: user.id, role: user.role }, { expiresIn: 900 });
+    return { accessToken, tokenType: "Bearer", expiresIn: 900 };
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  @Post("login")
+  @HttpCode(200)
+  login(@Body() body: { email: string; password: string }) {
+    return this.auth.login(body.email, body.password);
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [AuthController],
+  providers: [UsersService, AuthService],
+})
+export class AuthModule {}</code></pre>
+<p>שים לב שהבודק מאמת את הטוקן עם <code class="mid">new JwtService({ secret: JWT_SECRET }).verifyAsync(...)</code> — כלומר כל שרת שמכיר את הסוד יכול לבדוק אותו, בלי לשאול את המסד. זה כל הרעיון של JWT. (בפרויקט גם משווים זמנים עם hash דמה — E18.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להכניס את האימייל ל־payload "בשביל הנוחות".</li><li>לשכוח <code>expiresIn</code> ← טוקן לנצח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E10">
+    <h3>P21-E10 · guard של JWT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">/^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>verifyAsync</code> זורק על כל בעיה. תפוס, וזרוק <code>UnauthorizedException</code> משלך — אחרת השגיאה של הספרייה הופכת ל־500.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E10
+import { CanActivate, Controller, ExecutionContext, Get, Injectable, Module, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e10-secret-for-exercises-only-0123456789";
+
+export interface AuthUser {
+  id: number;
+  role: string;
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly jwt: JwtService) {}
+
+  async canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest&lt;Request &amp; { user?: AuthUser }&gt;();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync&lt;{ sub: number; role: string }&gt;(match[1], { algorithms: ["HS256"] });
+      req.user = { id: payload.sub, role: payload.role };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller()
+export class ProfileController {
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  me(@Req() req: { user: AuthUser }) {
+    return req.user;
+  }
+
+  @Get("hello")
+  hello() {
+    return { hello: "world" };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [ProfileController],
+  providers: [JwtAuthGuard],
+})
+export class ProfileModule {}</code></pre>
+<p><code>algorithms: ["HS256"]</code> — רשימה מפורשת של מה שמקבלים. טוקן שה־header שלו מצהיר על אלגוריתם אחר נדחה, גם אם מישהו ינסה טריקים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return false</code> במקום לזרוק ← Nest מחזיר 403 "Forbidden resource" (E21).</li><li><code class="mid">authorization.split(" ")[1]</code> — עם שני רווחים, או בלי רווח, מקבלים <code>undefined</code> או מחרוזת ריקה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E11">
+    <h3>P21-E11 · guard גלובלי ו־@Public 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">this.reflector.getAllAndOverride(IS_PUBLIC, [context.getHandler(), context.getClass()])</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־guard צריך <code>Reflector</code> ו־<code>JwtService</code> ב־constructor. עם <code>APP_GUARD</code> + <code>useClass</code>, Nest מזריק אותם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E11
+import {
+  CanActivate, Controller, createParamDecorator, ExecutionContext, Get, Injectable, Module, SetMetadata, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e11-secret-for-exercises-only-0123456789";
+
+export interface AuthUser {
+  id: number;
+  role: string;
+}
+
+export const IS_PUBLIC = "isPublic";
+export const Public = () =&gt; SetMetadata(IS_PUBLIC, true);
+
+export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext): AuthUser =&gt; {
+  return ctx.switchToHttp().getRequest().user;
+});
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext) {
+    // getAllAndOverride: קודם המתודה, אחר כך ה־class
+    if (this.reflector.getAllAndOverride&lt;boolean&gt;(IS_PUBLIC, [context.getHandler(), context.getClass()])) return true;
+    const req = context.switchToHttp().getRequest&lt;Request &amp; { user?: AuthUser }&gt;();
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync&lt;{ sub: number; role: string }&gt;(match[1]);
+      req.user = { id: payload.sub, role: payload.role };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller("notes")
+export class NotesController {
+  @Get("mine")
+  mine(@CurrentUser() user: AuthUser) {
+    return { owner: user.id, notes: [`הפתק של משתמש ${user.id}`] };
+  }
+
+  @Public()
+  @Get("public")
+  publicNotes() {
+    return { notes: ["פתק לכולם"] };
+  }
+}
+
+@Public()
+@Controller("info")
+export class InfoController {
+  @Get()
+  info() {
+    return { name: "notes-api", version: "1.0" };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [NotesController, InfoController],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+})
+export class NotesModule {}</code></pre>
+<p>"default deny": controller חדש שמישהו יוסיף מחר מוגן אוטומטית. כדי לפתוח משהו — צריך לכתוב <code>@Public()</code> במפורש, וזה בולט ב־code review.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">reflector.get(IS_PUBLIC, context.getHandler())</code> בלבד ← <code>@Public()</code> על class לא עובד (E21).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E12">
+    <h3>P21-E12 · תוקף לפי שעון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>signAsync</code>, <code>iat</code> שבתוך ה־payload קובע גם ממנו נספר <code>expiresIn</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">verifyAsync(token, { clockTimestamp })</code>, ו־<code class="mid">err.name === "TokenExpiredError"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E12
+import { Inject, Injectable, Module, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+
+export const CLOCK = "CLOCK";
+export const ACCESS_TTL_SECONDS = 900;
+export interface Clock {
+  now(): Date;
+}
+
+@Injectable()
+export class TokenService {
+  constructor(
+    private readonly jwt: JwtService,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  private nowSeconds() {
+    return Math.floor(this.clock.now().getTime() / 1000);
+  }
+
+  issue(userId: number): Promise&lt;string&gt; {
+    // iat מהשעון שלנו — ו־exp מחושב ממנו
+    return this.jwt.signAsync({ sub: userId, iat: this.nowSeconds() }, { expiresIn: ACCESS_TTL_SECONDS });
+  }
+
+  async verify(token: string): Promise&lt;{ userId: number }&gt; {
+    try {
+      const payload = await this.jwt.verifyAsync&lt;{ sub: number }&gt;(token, { clockTimestamp: this.nowSeconds() });
+      return { userId: payload.sub };
+    } catch (err) {
+      const expired = err instanceof Error &amp;&amp; err.name === "TokenExpiredError";
+      throw new UnauthorizedException(expired ? "פג תוקף הטוקן" : "טוקן לא תקין");
+    }
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: "e12-secret-for-exercises-only-0123456789" })],
+  providers: [TokenService, { provide: CLOCK, useValue: { now: () =&gt; new Date() } }],
+  exports: [TokenService],
+})
+export class TokensModule {}</code></pre>
+<p>למה זה חשוב? בלי שעון מוזרק, הבדיקה של "פג תוקף" צריכה לחכות 15 דקות, או ליצור טוקן עם תאריך בעבר ולקוות שהחישוב נכון. עם <code>CLOCK</code> — בודקים את הגבול בדיוק, בשנייה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Date.now()</code> במקום <code>Math.floor(... / 1000)</code> ← <code>iat</code> במילישניות, וכל טוקן "נוצר בעתיד הרחוק".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E20">
+    <h3>P21-E20 · שלוש תקלות של כניסה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>(2): מה יש ב־<code>user.passwordHash</code>, ולמה הוא אף פעם לא שווה לסיסמה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(3): <code>decode</code> מול <code>verifyAsync</code> — שיעור 2, סעיף 3.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E20: מתוקן
+import { Body, Controller, Get, Headers, HttpCode, Injectable, Module, Post, UnauthorizedException } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import bcrypt from "bcryptjs";
+
+export const JWT_SECRET = "e20-secret-for-exercises-only-0123456789";
+
+interface User {
+  id: number;
+  email: string;
+  passwordHash: string;
+  role: "user" | "admin";
+}
+
+@Injectable()
+export class AuthService {
+  private readonly users: User[] = [];
+
+  constructor(private readonly jwt: JwtService) {}
+
+  async register(email: string, password: string) {
+    const user: User = { id: this.users.length + 1, email, passwordHash: await bcrypt.hash(password, 4), role: "user" };
+    this.users.push(user);
+    const { passwordHash, ...publicUser } = user; // ← תקלה 3: ה־hash יצא בתשובה
+    return publicUser;
+  }
+
+  async login(email: string, password: string) {
+    const user = this.users.find((u) =&gt; u.email === email);
+    // ← תקלה 2: היה password === user.passwordHash — סיסמה אף פעם לא שווה ל־hash שלה
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) throw new UnauthorizedException("אימייל או סיסמה שגויים");
+    return { accessToken: await this.jwt.signAsync({ sub: user.id, role: user.role }, { expiresIn: 900 }) };
+  }
+
+  async whoAmI(authorization: string | undefined) {
+    const token = /^Bearer\s+(\S+)$/i.exec(authorization ?? "")?.[1];
+    if (!token) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      // ← תקלה 1: היה jwt.decode — מפענח בלי לבדוק חתימה. כל אחד יכול "להיות" admin
+      const payload = await this.jwt.verifyAsync&lt;{ sub: number; role: string }&gt;(token);
+      return { id: payload.sub, role: payload.role };
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  @Post("register")
+  register(@Body() body: { email: string; password: string }) {
+    return this.auth.register(body.email, body.password);
+  }
+
+  @Post("login")
+  @HttpCode(200)
+  login(@Body() body: { email: string; password: string }) {
+    return this.auth.login(body.email, body.password);
+  }
+
+  @Get("me")
+  me(@Headers("authorization") authorization?: string) {
+    return this.auth.whoAmI(authorization);
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [AuthController],
+  providers: [AuthService],
+})
+export class AuthModule {}</code></pre>
+<p>(3) הוא באג אמיתי ונפוץ: מי שרוצה "רק לקרוא את ה־id מהטוקן" ומשתמש ב־<code>decode</code> — כי זה סינכרוני, כי לא צריך סוד, כי "בטח בדקנו את זה במקום אחר". <code>decode</code> רק לתצוגה (למשל בצד הלקוח, להציג שם). בשרת — תמיד <code>verify</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (2) עם <code class="mid">await bcrypt.hash(password) === user.passwordHash</code> — salt שונה, תמיד false.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E21">
+    <h3>P21-E21 · guard עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>(1) מה ה־regex? (2) מאיפה ה־Reflector קורא?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(3) מה Nest עושה כש־<code>canActivate</code> מחזיר <code>false</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E21: מתוקן
+import {
+  CanActivate, Controller, ExecutionContext, Get, Injectable, Module, SetMetadata, UnauthorizedException,
+} from "@nestjs/common";
+import { APP_GUARD, Reflector } from "@nestjs/core";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+
+export const JWT_SECRET = "e21-secret-for-exercises-only-0123456789";
+export const IS_PUBLIC = "isPublic";
+export const Public = () =&gt; SetMetadata(IS_PUBLIC, true);
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext) {
+    // ← תקלה 2: היה reflector.get(IS_PUBLIC, context.getHandler()) — @Public() על ה־class לא נקרא
+    if (this.reflector.getAllAndOverride&lt;boolean&gt;(IS_PUBLIC, [context.getHandler(), context.getClass()])) return true;
+    const req = context.switchToHttp().getRequest&lt;Request &amp; { user?: unknown }&gt;();
+    // ← תקלה 1: היה /^Bearer (.+)$/ — "bearer" באותיות קטנות נכשל
+    const match = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") ?? "");
+    if (!match) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync&lt;{ sub: number }&gt;(match[1]);
+      req.user = { id: payload.sub };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין"); // ← תקלה 3: היה return false ← 403 במקום 401
+    }
+  }
+}
+
+@Controller("tasks")
+export class TasksController {
+  @Get()
+  list() {
+    return [{ id: 1, title: "משימה סודית" }];
+  }
+}
+
+@Public()
+@Controller("status")
+export class StatusController {
+  @Get()
+  status() {
+    return { ok: true };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: JWT_SECRET })],
+  controllers: [TasksController, StatusController],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+})
+export class AppModule {}</code></pre>
+<p>(3) הוא הקטן והמבלבל: 403 אומר ללקוח "אתה מחובר, ואסור לך" — אז הוא לא ינסה refresh. 401 אומר "הטוקן שלך לא טוב" — והדף מבצע refresh או שולח לכניסה. ה־status הוא חלק מהחוזה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (2) עם <code>@Public()</code> על כל מתודה — עובד, עד שמישהו מוסיף מתודה ושוכח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P21-E26">
+    <h3>P21-E26 · JWT ביד, עם node:crypto 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי פונקציות עזר: <code class="long">b64 = (v) =&gt; Buffer.from(JSON.stringify(v)).toString("base64url")</code> ו־<code class="long">sign = (data, secret) =&gt; createHmac("sha256", secret).update(data).digest("base64url")</code>. אחר כך <code>signJwt</code> היא שתי שורות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>verifyJwt</code>: מחשבים מחדש את החתימה מ־<code>header.payload</code>, ומשווים לזו שבטוקן. ‏<code>timingSafeEqual</code> מקבלת שני <code>Buffer</code> <em>באותו אורך</em>, אחרת היא זורקת. לכן קודם בודקים את האורך: <code class="long">expected.length !== actual.length || !timingSafeEqual(expected, actual)</code>. רק אחרי שהחתימה תקינה מפענחים JSON.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E26: JWT ביד — HS256 עם node:crypto
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export type Claims = { sub: number; role: string; iat: number; exp: number };
+
+const b64 = (value: unknown) =&gt; Buffer.from(JSON.stringify(value)).toString("base64url");
+const sign = (data: string, secret: string) =&gt; createHmac("sha256", secret).update(data).digest("base64url");
+
+export function signJwt(payload: { sub: number; role: string }, secret: string, expiresInSec: number, now = Math.floor(Date.now() / 1000)): string {
+  const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ ...payload, iat: now, exp: now + expiresInSec })}`;
+  return `${data}.${sign(data, secret)}`;
+}
+
+export function verifyJwt(token: string, secret: string, now = Math.floor(Date.now() / 1000)): Claims {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("טוקן לא תקין");
+  const [header, payload, signature] = parts;
+
+  const expected = Buffer.from(sign(`${header}.${payload}`, secret));
+  const actual = Buffer.from(signature);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    throw new Error("חתימה לא תקינה");
+  }
+
+  let head: { alg?: string };
+  let claims: Claims;
+  try {
+    head = JSON.parse(Buffer.from(header, "base64url").toString());
+    claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch {
+    throw new Error("טוקן לא תקין");
+  }
+  if (head.alg !== "HS256") throw new Error("טוקן לא תקין");
+  if (typeof claims.exp !== "number" || now &gt;= claims.exp) throw new Error("פג תוקף");
+  return claims;
+}
+
+const SECRET = "dev-secret-at-least-32-characters-long!!";
+const token = signJwt({ sub: 7, role: "user" }, SECRET, 900, 1793872800);
+console.log(token);
+console.log(verifyJwt(token, SECRET, 1793872900));
+for (const [t, now] of [[token, 1793873700], [token.slice(0, -2) + "xx", 1793872900]] as const) {
+  try {
+    verifyJwt(t, SECRET, now);
+  } catch (err) {
+    console.log((err as Error).message);
+  }
+}</code></pre>
+<pre class="terminal">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjcsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkzODcyODAwLCJleHAiOjE3OTM4NzM3MDB9.BtQfGhYiwcPBa9fXaOY0yRlRwSCbE_mwFGlsBvczPig
+{ sub: 7, role: 'user', iat: 1793872800, exp: 1793873700 }
+פג תוקף
+חתימה לא תקינה</pre>
+<p>הטוקן בשורה הראשונה זהה לטוקן ש־<code>jsonwebtoken</code> מייצר מאותם נתונים. אין בספרייה קסם: שני JSON ב־base64url, וחתימת HMAC על שניהם.</p>
+<p>הסדר ב־<code>verifyJwt</code> הוא העיקר: <strong>קודם החתימה</strong>, ורק אחר כך מאמינים לתוכן. מי שבודק <code>exp</code> או קורא <code>role</code> לפני שבדק חתימה, פועל לפי נתונים שכל אחד יכול לכתוב. בדיקת <code>alg</code> סוגרת את התקיפה הקלאסית עם <code>"alg": "none"</code> (שיעור 2, ‏<code>algorithms: ["HS256"]</code>).</p>
+<p>למה <code>timingSafeEqual</code>? ‏<code>===</code> על מחרוזות עוצר בתו הראשון ששונה. תוקף שמודד זמני תגובה יכול לנחש חתימה תו אחרי תו. ‏<code>timingSafeEqual</code> משווה תמיד את כל הבתים. בפרויקט עדיין משתמשים בספרייה, אבל עכשיו אתה יודע מה היא בודקת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפענח את ה־payload ולבדוק <code>exp</code> לפני החתימה — טוקן מזויף מקבל "פג תוקף" במקום "חתימה לא תקינה", ובקוד אמיתי היית כבר משתמש בנתונים שלו.</li><li><code>toString("base64")</code> במקום <code>"base64url"</code> — מופיעים <code>+</code>, ‏<code>/</code> ו־<code>=</code>, והטוקן לא תואם לאף ספרייה.</li><li><code>timingSafeEqual</code> בלי בדיקת אורך — חתימה קצרה מפילה את השרת ב־<code>RangeError</code> במקום להחזיר 401.</li><li><code>Date.now()</code> בלי חלוקה ל־1000 — ‏<code>exp</code> של JWT הוא בשניות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P21-E27">
+    <h3>P21-E27 · פירוק header של Authorization 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const match = header?.trim().match(/^(\S+)\s+(\S+)$/);</code> — ‏<code>?.</code> מטפל ב־<code>undefined</code>. אחר כך <code class="mid">const [, scheme, value] = match;</code> ו־<code class="mid">switch (scheme.toLowerCase())</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טוקן: <code>/^[A-Za-z0-9._~+/-]+=*$/</code> (המקף בסוף הסוגריים, כדי שלא ייקרא כטווח). ‏basic: ‏<code class="mid">Buffer.from(value, "base64").toString("utf8")</code>, ואז <code>indexOf(":")</code> ו־<code>slice</code>, כמו בעוגיות. בתוך <code>case</code> שמגדיר <code>const</code> צריך סוגריים מסולסלים: <code>case "basic": { ... }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E27: פירוק header של Authorization
+export type Credentials =
+  | { scheme: "bearer"; token: string }
+  | { scheme: "basic"; username: string; password: string };
+
+export function parseAuthorization(header: string | undefined): Credentials | null {
+  const match = header?.trim().match(/^(\S+)\s+(\S+)$/);
+  if (!match) return null;
+  const [, scheme, value] = match;
+
+  switch (scheme.toLowerCase()) {
+    case "bearer":
+      return /^[A-Za-z0-9._~+/-]+=*$/.test(value) ? { scheme: "bearer", token: value } : null;
+    case "basic": {
+      const decoded = Buffer.from(value, "base64").toString("utf8");
+      const i = decoded.indexOf(":");
+      if (i &lt;= 0) return null;
+      return { scheme: "basic", username: decoded.slice(0, i), password: decoded.slice(i + 1) };
+    }
+    default:
+      return null;
+  }
+}
+
+console.log(parseAuthorization("Bearer eyJhbGciOi.eyJzdWIiOjd9.c2ln"));
+console.log(parseAuthorization("basic " + Buffer.from("dana:pa:ss").toString("base64")));
+console.log(parseAuthorization("Token abc"), parseAuthorization(undefined), parseAuthorization("Bearer"));</code></pre>
+<pre class="terminal">{ scheme: 'bearer', token: 'eyJhbGciOi.eyJzdWIiOjd9.c2ln' }
+{ scheme: 'basic', username: 'dana', password: 'pa:ss' }
+null null null</pre>
+<p>ה־union ב־<code>Credentials</code> (פרק 11) עושה עבודה: אחרי <code>if (c.scheme === "basic")</code> ‏TypeScript יודע שיש <code>username</code>, ושאין <code>token</code>. מי שמשתמש בפונקציה לא יכול לבלבל בין שני הסוגים.</p>
+<p><code>case "basic": { ... }</code> עם סוגריים: בלי הסוגריים, ה־<code>const</code> של case אחד "נראה" בכל ה־switch. TypeScript ו־ESLint מתריעים על זה.</p>
+<p>למה <code>indexOf</code> ולא <code>split(":")</code>? מאותה סיבה כמו בעוגיות (P14-E26): בסיסמה מותר <code>:</code>, ו־<code>split</code> חותך אותה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>header.split(" ")</code> — שני רווחים באמצע נותנים מילה ריקה, ו־<code>undefined</code> בלי <code>?.</code> מפיל את השרת.</li><li><code>if (scheme === "Bearer")</code> — לקוחות ששולחים <code>bearer</code> נדחים. לפי התקן ה־scheme לא תלוי באותיות.</li><li><code class="mid">const [user, pass] = decoded.split(":")</code> — הסיסמה <code>pa:ss</code> נחתכת ל־<code>pa</code>.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-refresh.html"><small>הבא</small>שיעור 3 — refresh tokens ויציאה</a></div>
+</main>
+</body>
+</html>

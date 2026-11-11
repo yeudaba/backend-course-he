@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 26.3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.3</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26c-cloud/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.3-E16">
+    <h3>P26.3-E16 · Jenkinsfile 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: '…', passwordVariable: '…')]) { … }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך <code>sh</code>, מרכאות <strong>בודדות</strong>: ה־shell מציב את המשתנה, לא Groovy — אז הסוד לא נכנס למחרוזת של ה־pipeline.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-groovy">// P26.3-E16: pipeline של coffee-api ב־Jenkins
+pipeline {
+  agent { docker { image 'node:24-alpine' } }
+
+  options {
+    timeout(time: 20, unit: 'MINUTES')
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    IMAGE = 'ghcr.io/noa-cohen/coffee-shop'
+    TAG = "${env.GIT_COMMIT.take(7)}"
+  }
+
+  stages {
+    stage('Install') {
+      steps {
+        sh 'npm ci'
+      }
+    }
+    stage('Lint &amp; Typecheck') {
+      steps {
+        sh 'npm run lint'
+        sh 'npm run typecheck'
+      }
+    }
+    stage('Test') {
+      steps {
+        sh 'npm test'
+      }
+    }
+    stage('Build image') {
+      steps {
+        sh 'docker build -t $IMAGE:$TAG .'
+      }
+    }
+    stage('Push image') {
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: 'REG_USER', passwordVariable: 'REG_TOKEN')]) {
+          sh 'echo $REG_TOKEN | docker login ghcr.io -u $REG_USER --password-stdin'
+          sh 'docker push $IMAGE:$TAG'
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+    }
+    failure {
+      echo "Build failed: ${env.BUILD_URL}"
+    }
+  }
+}</code></pre>
+<p>זה אותו CI מפרק 25, בשפה אחרת: stages ← jobs/steps, <code>when { branch 'main' }</code> ← <code class="mid">if: github.ref == 'refs/heads/main'</code>, Credentials ← Secrets. Jenkins נפוץ בחברות עם שרתים משלהן ו־pipelines בני עשר שנים — מי שמכיר אחד, לומד את השני ביום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">sh "docker login -p ${REG_TOKEN}"</code> — Groovy מציב את הסוד לתוך הפקודה, Jenkins מזהיר "insecure interpolation", והסיסמה גלויה ב־<code>ps</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E23">
+    <h3>P26.3-E23 · pipeline "שעובד" — ארבע תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה כשמישהו עושה push לענף <code>feature/try-something</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>credentials('ghcr')</code> ב־<code>environment</code> של משתמש וסיסמה יוצר שני משתנים: <code>REG_USR</code> ו־<code>REG_PSW</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-groovy">// P26.3-E23: אחרי התיקון
+pipeline {
+  agent { docker { image 'node:24-alpine' } }
+  options {
+    timeout(time: 20, unit: 'MINUTES') // תיקון 4: build תקוע לא תופס executor לנצח
+  }
+  environment {
+    REG = credentials('ghcr') // תיקון 1: מ־Jenkins Credentials — יוצר REG_USR ו־REG_PSW, ומסתיר בלוג
+  }
+  stages {
+    stage('Install') {
+      steps {
+        sh 'npm ci' // תיקון 2: בדיוק לפי package-lock
+      }
+    }
+    stage('Test') {
+      steps {
+        sh 'npm test'
+      }
+    }
+    stage('Push') {
+      when { branch 'main' } // תיקון 3: רק מ־main
+      steps {
+        sh 'echo $REG_PSW | docker login ghcr.io -u $REG_USR --password-stdin'
+        sh 'docker build -t ghcr.io/noa-cohen/coffee-shop:$GIT_COMMIT .'
+        sh 'docker push ghcr.io/noa-cohen/coffee-shop:$GIT_COMMIT'
+      }
+    }
+  }
+}</code></pre>
+<p>וה־token שהיה בקובץ — <strong>מבטלים ב־GitHub עכשיו</strong>. הוא ב־history של ה־repo לתמיד, גם אחרי שמחקת את השורה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את ה־token ל־<code>environment</code> של ה־job בממשק של Jenkins כטקסט רגיל — הוא עדיין לא מוסתר בלוג. Credentials בלבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E24">
+    <h3>P26.3-E24 · אתגר: חנות הקפה ב־Kubernetes 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התחל מ־E09 ו־E10 ו־E11 — ואז הוסף namespace לכל אובייקט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־port ב־Ingress הוא של ה־<strong>Service</strong> (80 או השם שלו), לא של הקונטיינר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E24: coffee-shop ב־Kubernetes — כל ה־manifests
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: coffee
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coffee-config
+  namespace: coffee
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  PORT: "3000"
+  TRUST_PROXY: "1"
+  CORS_ORIGINS: https://shop.coffee.example
+---
+# migrations רצות פעם אחת לפני ה־rollout (Argo CD: sync wave קודם; ידנית: kubectl apply ל־Job, ואז ל־Deployment)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coffee-migrate
+  namespace: coffee
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          command: ["npx", "prisma", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  namespace: coffee
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: coffee-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: redis-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  selector:
+    app: coffee-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.coffee.example
+      secretName: coffee-api-tls
+  rules:
+    - host: api.coffee.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: coffee-api
+                port:
+                  name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coffee-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coffee-api
+  namespace: coffee
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coffee-api</code></pre>
+<p>ה־Secret עצמו נוצר מחוץ ל־Git: <code class="long">kubectl create secret generic coffee-secrets --from-literal=…</code>, או — בצורה המקובלת — <strong>External Secrets Operator</strong> שמושך מ־AWS Secrets Manager. ולהריץ את זה באמת על המחשב: <code>kind create cluster</code> (Kubernetes בתוך Docker), <code class="mid">kubectl apply -f P26.3-E24.yaml</code>, ו־<code class="mid">kubectl get pods -n coffee -w</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>migrations בתוך ה־<code>CMD</code> של ה־API — עם 3 עותקים, שלושה תהליכים מריצים את אותו migration במקביל.</li><li>Secret עם <code>data:</code> ב־YAML שב־Git — base64 הוא קידוד, לא הצפנה.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

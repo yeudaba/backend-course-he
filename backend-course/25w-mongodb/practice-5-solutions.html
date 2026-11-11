@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.7-E17">
+    <h3>P25.7-E17 · הזמנה בטרנזקציה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>client.startSession()</code> ו־<code class="mid">session.withTransaction(async () =&gt; …)</code>. <code>endSession</code> ב־finally.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>findOneAndUpdate</code> עם התנאי מ־E13 ו־<code class="mid">{ session, returnDocument: "after" }</code> — מחזיר את name ו־price. null ← זורקים, ו־withTransaction מבטל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E17
+import type { Db, MongoClient } from "mongodb";
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+}
+
+export class OutOfStockError extends Error {}
+
+// הזמנה = הורדת מלאי בכמה מוצרים + מסמך הזמנה. או הכול, או כלום — טרנזקציה
+export async function placeOrder(client: MongoClient, db: Db, customerId: string, cart: { productId: string; qty: number }[]) {
+  if (!cart.length) throw new RangeError("עגלה ריקה");
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () =&gt; {
+      const items = [];
+      for (const { productId, qty } of cart) {
+        // כל פעולה בתוך הטרנזקציה — עם { session }. בלי זה היא רצה מחוץ לטרנזקציה ולא מתבטלת
+        const p = await db.collection&lt;Product&gt;("products").findOneAndUpdate(
+          { _id: productId, stock: { $gte: qty } },
+          { $inc: { stock: -qty } },
+          { session, returnDocument: "after", projection: { name: 1, price: 1 } }
+        );
+        if (!p) throw new OutOfStockError(`אין מספיק ${productId}`); // זריקה ← withTransaction מבטל הכול
+        items.push({ productId, name: p.name, price: p.price, qty }); // מחיר מהמסד, לא מהלקוח
+      }
+      const order = { customerId, status: "pending", createdAt: new Date(), items, total: items.reduce((s, i) =&gt; s + i.price * i.qty, 0) };
+      const { insertedId } = await db.collection("orders").insertOne(order, { session });
+      return { _id: insertedId, ...order };
+    });
+  } finally {
+    await session.endSession();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>{ session }</code> בפעולה אחת — היא לא מתבטלת.</li><li>לקחת <code>price</code> מהעגלה — הלקוח קובע מחיר.</li><li>לתפוס את השגיאה בתוך ה־callback ולהחזיר null — withTransaction חושב שהכול הצליח ועושה commit.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E19">
+    <h3>P25.7-E19 · router של פתקים עם ObjectId 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>insertedId.toHexString()</code>, ו־<code class="mid">new ObjectId(req.params.id)</code> לחיפוש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">ObjectId.isValid("aaaaaaaaaaaa")</code> — true (12 תווים = 12 בתים). בדוק גם אורך 24.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E19
+import express from "express";
+import { ObjectId, type Db } from "mongodb";
+
+export function notesRouter(db: Db) {
+  const notes = db.collection("notes");
+  const router = express.Router();
+
+  router.post("/", async (req, res) =&gt; {
+    const text = req.body?.text;
+    if (typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text חובה" });
+    const { insertedId } = await notes.insertOne({ text: text.trim(), createdAt: new Date() });
+    res.status(201).json({ id: insertedId.toHexString() }); // ללקוח — מחרוזת, לא אובייקט
+  });
+
+  router.get("/:id", async (req, res) =&gt; {
+    // "abc" זה לא ObjectId: new ObjectId("abc") זורק. 400 — לא 500, ולא 404
+    if (!ObjectId.isValid(req.params.id) || req.params.id.length !== 24) return res.status(400).json({ error: "מזהה לא תקין" });
+    const note = await notes.findOne({ _id: new ObjectId(req.params.id) });
+    if (!note) return res.status(404).json({ error: "לא נמצא" });
+    res.json({ id: note._id.toHexString(), text: note.text, createdAt: note.createdAt.toISOString() });
+  });
+
+  return router;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">findOne({ _id: req.params.id })</code> — מחפש מחרוזת, ולא מוצא אף פעם.</li><li><code>new ObjectId("abc")</code> בלי בדיקה — זורק, ו־Express מחזיר 500.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E20">
+    <h3>P25.7-E20 · חיפוש עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>נסה: <code class="mid">{ category: { $ne: "merch" } }</code>, <code>{ q: "(" }</code>, ו־<code>{}</code> על קטלוג של 30 מוצרים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>escaping ל־regex: <code class="mid">s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E20
+import type { Db } from "mongodb";
+
+const escapeRegex = (s: string) =&gt; s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;");
+
+// חיפוש מוצרים לפי ה־query string: ?q=&amp;category=
+export async function searchProducts(db: Db, query: Record&lt;string, unknown&gt;) {
+  const filter: Record&lt;string, unknown&gt; = {};
+  // תקלה 1: ב־Express, ?category[$ne]=x הופך לאובייקט { $ne: "x" } — NoSQL injection. רק מחרוזות
+  for (const k of ["q", "category"]) {
+    if (query[k] !== undefined &amp;&amp; typeof query[k] !== "string") throw new RangeError(`${k} חייב להיות מחרוזת`);
+  }
+  if (query.category) filter.category = query.category;
+  if (typeof query.q === "string" &amp;&amp; query.q.trim()) {
+    // תקלה 2: הטקסט של המשתמש הוא טקסט, לא regex: "(" שובר, ו־".*" מחזיר הכול
+    filter.name = { $regex: escapeRegex(query.q.trim()), $options: "i" };
+  }
+  // תקלה 3: בלי limit — "חיפוש ריק" מחזיר את כל הקטלוג
+  return db.collection("products").find(filter, { projection: { name: 1, price: 1 } }).sort({ name: 1 }).limit(20).toArray();
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמיר ל־<code>String(query.category)</code> — <code>"[object Object]"</code> לא מסוכן, אבל מסתיר באג אצל הלקוח. עדיף 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E23">
+    <h3>P25.7-E23 · ביטול הזמנה עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני ביטולים של אותה הזמנה במקביל: כמה פעמים חוזר המלאי? ואם עדכון המלאי של הפריט השני נכשל — מה קורה לראשון?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ובלי קשר לכל זה: הזמנה של 1 יחידה, מלאי 5 — כמה במלאי אחרי הביטול?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E23
+import type { Db, MongoClient } from "mongodb";
+
+interface Order {
+  _id: string;
+  status: string;
+  items: { productId: string; qty: number }[];
+}
+interface Product {
+  _id: string;
+  stock: number;
+}
+
+// ביטול הזמנה: מחזירים את הכמויות למלאי ומסמנים cancelled — באותה טרנזקציה
+export async function cancelOrder(client: MongoClient, db: Db, orderId: string) {
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () =&gt; {
+      // תקלה 1: התנאי על הסטטוס בתוך העדכון — כך שני ביטולים במקביל לא יחזירו מלאי פעמיים
+      const order = await db.collection&lt;Order&gt;("orders").findOneAndUpdate(
+        { _id: orderId, status: { $in: ["pending", "paid"] } },
+        { $set: { status: "cancelled", cancelledAt: new Date() } },
+        { session }
+      );
+      if (!order) return false;
+      for (const it of order.items) {
+        // תקלה 2: { session } — אחרת ההחזרה למלאי לא חלק מהטרנזקציה
+        // תקלה 3: $inc ולא $set: מחזירים את הכמות, לא דורסים את המלאי
+        await db.collection&lt;Product&gt;("products").updateOne({ _id: it.productId }, { $inc: { stock: it.qty } }, { session });
+      }
+      return true;
+    });
+  } finally {
+    await session.endSession();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את ה־findOne לתוך הטרנזקציה בלי לשנות אותו — שתי טרנזקציות עדיין יכולות לקרוא "paid" (snapshot). התנאי צריך להיות בעדכון עצמו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E25">
+    <h3>P25.7-E25 · אתגר: מעבר מ־PostgreSQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאילתה אחת עם <code class="mid">json_agg(json_build_object(...) ORDER BY i.id)</code> ו־<code>GROUP BY o.id</code> — הזמנה לשורה, עם הפריטים כמערך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>idempotent: <code class="mid">replaceOne({ _id }, doc, { upsert: true })</code>, וכולם ב־<code>bulkWrite</code> אחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E25
+import type { Db } from "mongodb";
+import type pg from "pg";
+
+// מעבר מ־PostgreSQL ל־MongoDB: הזמנה + השורות שלה (order_items) ← מסמך אחד עם מערך items.
+// אפשר להריץ שוב ושוב (idempotent): upsert לפי ה־id המקורי
+export async function migrateOrders(pool: pg.Pool, db: Db) {
+  const { rows } = await pool.query(`
+    SELECT o.id, o.customer_id, o.status, o.created_at,
+           json_agg(json_build_object('productId', i.product_id, 'name', p.name, 'price', i.unit_price, 'qty', i.quantity) ORDER BY i.id) AS items
+    FROM orders o
+    JOIN order_items i ON i.order_id = o.id
+    JOIN products p ON p.id = i.product_id
+    GROUP BY o.id
+    ORDER BY o.id`);
+  if (rows.length === 0) return { migrated: 0 };
+  const ops = rows.map((r) =&gt; {
+    const items = r.items.map((i: { productId: number; name: string; price: string | number; qty: number }) =&gt; ({ productId: `p${i.productId}`, name: i.name, price: Number(i.price), qty: i.qty }));
+    const doc = {
+      customerId: `c${r.customer_id}`,
+      status: r.status,
+      createdAt: r.created_at, // timestamptz ← Date (pg ממיר לבד) ← BSON Date
+      items,
+      total: Math.round(items.reduce((s: number, i: { price: number; qty: number }) =&gt; s + i.price * i.qty, 0) * 100) / 100,
+    };
+    return { replaceOne: { filter: { _id: `o${r.id}` }, replacement: doc, upsert: true } } as const;
+  });
+  // bulkWrite: פקודה אחת לשרת במקום אלף
+  await db.collection&lt;{ _id: string }&gt;("orders").bulkWrite(ops, { ordered: false });
+  return { migrated: rows.length };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>insertMany</code> — הרצה שנייה נכשלת על <code>_id</code> כפול (או, בלי _id קבוע — כפילויות).</li><li><code>numeric</code> מ־pg מגיע כמחרוזת ("60.50") — בלי <code>Number()</code> נשמר מחרוזת, ו־<code>$sum</code> מתעלם ממנה.</li><li>שאילתה לכל הזמנה בלולאה (N+1, פרק 18).</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

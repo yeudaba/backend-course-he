@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28w-scale/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28.5-E24">
+    <h3>P28.5-E24 · אתגר: API אנליטיקה תחת עומס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>DuckDB בתוך התהליך: בעלייה — <code class="long">CREATE TABLE orders AS SELECT *, &lt;day בישראל&gt; AS day FROM read_parquet($1)</code>. מחשבים את היום פעם אחת, לא בכל שאילתה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פרמטרים (<code>$1</code>, <code>$2</code>) — לא שרשור של ה־query string ל־SQL. LRU פשוט: <code>Map</code> שומר סדר הכנסה; מחיקה והכנסה מחדש = "הכי חדש".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E24: API אנליטיקה מעל Parquet — DuckDB בתוך התהליך, cache, ו־p95 נמוך תחת עומס
+import http from "node:http";
+import { DuckDBInstance } from "@duckdb/node-api";
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (s: string | null): s is string =&gt; !!s &amp;&amp; DAY.test(s) &amp;&amp; !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) &amp;&amp; new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+const daysBetween = (a: string, b: string) =&gt; (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000;
+
+class TtlLru&lt;V&gt; {
+  private map = new Map&lt;string, { value: V; expires: number }&gt;();
+  private max: number;
+  private ttlMs: number;
+  private now: () =&gt; number;
+  constructor(max: number, ttlMs: number, now: () =&gt; number) {
+    this.max = max;
+    this.ttlMs = ttlMs;
+    this.now = now;
+  }
+  get(k: string): V | undefined {
+    const e = this.map.get(k);
+    if (!e) return undefined;
+    if (e.expires &lt;= this.now()) {
+      this.map.delete(k);
+      return undefined;
+    }
+    this.map.delete(k); // LRU: הכי חדש בסוף
+    this.map.set(k, e);
+    return e.value;
+  }
+  set(k: string, value: V) {
+    this.map.delete(k);
+    this.map.set(k, { value, expires: this.now() + this.ttlMs });
+    if (this.map.size &gt; this.max) this.map.delete(this.map.keys().next().value!);
+  }
+}
+
+export async function createAnalyticsServer({ parquetPath, cacheTtlMs = 60_000, cacheSize = 100, now = Date.now }: { parquetPath: string; cacheTtlMs?: number; cacheSize?: number; now?: () =&gt; number }): Promise&lt;http.Server&gt; {
+  const db = await DuckDBInstance.create(":memory:");
+  const conn = await db.connect();
+  // טוענים פעם אחת לזיכרון, עם עמודת יום מחושבת (שעון ישראל) — כל שאילתה אחר כך מהירה
+  await conn.run(
+    `CREATE TABLE orders AS SELECT *, strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day FROM read_parquet($1)`,
+    [parquetPath],
+  );
+  const cache = new TtlLru&lt;string&gt;(cacheSize, cacheTtlMs, now);
+
+  async function revenue(from: string, to: string) {
+    const r = await conn.runAndReadAll(
+      `SELECT day, count(*)::INTEGER AS orders, round(sum(quantity * price_cents) / 100.0, 2)::DOUBLE AS revenue
+       FROM orders WHERE day BETWEEN $1 AND $2 GROUP BY day ORDER BY day`,
+      [from, to],
+    );
+    const days = r.getRowObjects().map((x) =&gt; ({ day: String(x.day), orders: Number(x.orders), revenue: Number(x.revenue) }));
+    const total = { orders: days.reduce((s, d) =&gt; s + d.orders, 0), revenue: Math.round(days.reduce((s, d) =&gt; s + d.revenue * 100, 0)) / 100 };
+    return { from, to, days, total };
+  }
+  async function topProducts(day: string, limit: number) {
+    const r = await conn.runAndReadAll(
+      `SELECT product, sum(quantity)::INTEGER AS units, round(sum(quantity * price_cents) / 100.0, 2)::DOUBLE AS revenue
+       FROM orders WHERE day = $1 GROUP BY product ORDER BY revenue DESC, product LIMIT $2`,
+      [day, limit],
+    );
+    return r.getRowObjects().map((x) =&gt; ({ product: String(x.product), units: Number(x.units), revenue: Number(x.revenue) }));
+  }
+
+  const send = (res: http.ServerResponse, status: number, body: unknown, cacheState?: string) =&gt; {
+    res.statusCode = status;
+    res.setHeader("content-type", "application/json");
+    if (cacheState) res.setHeader("x-cache", cacheState);
+    res.end(typeof body === "string" ? body : JSON.stringify(body));
+  };
+
+  const server = http.createServer(async (req, res) =&gt; {
+    const url = new URL(req.url ?? "/", "http://x");
+    try {
+      if (url.pathname === "/health") return send(res, 200, { ok: true });
+      let key: string;
+      let compute: () =&gt; Promise&lt;unknown&gt;;
+      if (url.pathname === "/revenue") {
+        const from = url.searchParams.get("from");
+        const to = url.searchParams.get("to");
+        if (!isDay(from) || !isDay(to)) return send(res, 400, { error: "from ו־to בפורמט YYYY-MM-DD" });
+        if (daysBetween(from, to) &lt; 0) return send(res, 400, { error: "from אחרי to" });
+        if (daysBetween(from, to) &gt; 92) return send(res, 400, { error: "עד 92 ימים" });
+        key = `revenue:${from}:${to}`;
+        compute = () =&gt; revenue(from, to);
+      } else if (url.pathname === "/top-products") {
+        const day = url.searchParams.get("day");
+        const limit = Number(url.searchParams.get("limit") ?? 5);
+        if (!isDay(day)) return send(res, 400, { error: "day בפורמט YYYY-MM-DD" });
+        if (!Number.isInteger(limit) || limit &lt; 1 || limit &gt; 20) return send(res, 400, { error: "limit בין 1 ל־20" });
+        key = `top:${day}:${limit}`;
+        compute = () =&gt; topProducts(day, limit);
+      } else return send(res, 404, { error: "not found" });
+
+      const hit = cache.get(key);
+      if (hit !== undefined) return send(res, 200, hit, "HIT");
+      const body = JSON.stringify(await compute());
+      cache.set(key, body);
+      send(res, 200, body, "MISS");
+    } catch {
+      send(res, 500, { error: "internal" });
+    }
+  });
+  server.on("close", () =&gt; {
+    conn.closeSync();
+    db.closeSync();
+  });
+  return server;
+}</code></pre>
+<p>הארכיטקטורה הזו — Parquet (על S3) + DuckDB בתוך שירות — נפוצה יותר ויותר לדשבורדים פנימיים: בלי cluster של מחסן נתונים, ושאילתות של מילי־שניות על מיליוני שורות. כשהנתונים גדלים לטרה־בייטים — אותן שאילתות עוברות ל־BigQuery/Snowflake כמעט בלי שינוי.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E25">
+    <h3>P28.5-E25 · אתגר: data lake מצטבר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>watermark על <code>(updated_at, id)</code> ולא רק <code>updated_at</code>: עשרים שורות עם אותו <code>updated_at</code> בעמודים של 3 — <code class="mid">WHERE (updated_at, id) &gt; ($1, $2) ORDER BY updated_at, id</code>. ו־<code>updated_at::text</code> שומר מיקרו־שניות, שה־<code>Date</code> של JavaScript מאבד.</p>
+<p>כתיבה: טבלה זמנית ב־DuckDB, <code>conn.createAppender</code>, ו־<code class="mid">COPY batch TO 'file' (FORMAT parquet)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגרסה האחרונה: <code class="long">QUALIFY row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E25: סנכרון מצטבר מ־PostgreSQL ל־data lake (קובצי Parquet), ודוח שמתעלם מגרסאות ישנות
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { Pool } from "pg";
+import type { DuckDBConnection } from "@duckdb/node-api";
+
+interface State {
+  seq: number;
+  updatedAt: string | null; // ה־watermark: (updated_at, id) של השורה האחרונה שיוצאה
+  id: number;
+}
+
+const q = (s: string) =&gt; `'${s.replaceAll("'", "''")}'`;
+
+async function readState(dir: string): Promise&lt;State&gt; {
+  try {
+    return JSON.parse(await fs.readFile(path.join(dir, "_state.json"), "utf8"));
+  } catch {
+    return { seq: 0, updatedAt: null, id: 0 };
+  }
+}
+
+export async function syncOrders({ pool, conn, lakeDir, pageSize = 1000 }: { pool: Pool; conn: DuckDBConnection; lakeDir: string; pageSize?: number }): Promise&lt;{ exported: number; file: string | null }&gt; {
+  await fs.mkdir(lakeDir, { recursive: true });
+  const state = await readState(lakeDir);
+  const rows: any[] = [];
+  let cursor = { updatedAt: state.updatedAt, id: state.id };
+  for (;;) {
+    // keyset על (updated_at, id): שורות עם אותו updated_at לא הולכות לאיבוד בין עמודים
+    const { rows: page } = await pool.query(
+      `SELECT id, customer_id, total_cents, status, created_at, updated_at, updated_at::text AS updated_at_text
+       FROM orders
+       WHERE $1::timestamptz IS NULL OR (updated_at, id) &gt; ($1::timestamptz, $2::int)
+       ORDER BY updated_at, id LIMIT $3`,
+      [cursor.updatedAt, cursor.id, pageSize],
+    );
+    rows.push(...page);
+    if (page.length &lt; pageSize) break;
+    const last = page.at(-1);
+    cursor = { updatedAt: last.updated_at_text, id: last.id };
+  }
+  if (rows.length === 0) return { exported: 0, file: null }; // אין חדש ← אין קובץ ריק
+
+  await conn.run(`CREATE OR REPLACE TEMP TABLE batch (id INTEGER, customer_id INTEGER, total_cents INTEGER, status VARCHAR, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)`);
+  const app = await conn.createAppender("batch");
+  for (const r of rows) {
+    app.appendInteger(r.id);
+    app.appendInteger(r.customer_id);
+    app.appendInteger(r.total_cents);
+    app.appendVarchar(r.status);
+    app.appendVarchar(r.created_at.toISOString());
+    app.appendVarchar(r.updated_at_text);
+    app.endRow();
+  }
+  app.closeSync();
+  const seq = state.seq + 1;
+  const file = path.join(lakeDir, `part-${String(seq).padStart(5, "0")}.parquet`);
+  await conn.run(`COPY batch TO ${q(file)} (FORMAT parquet)`);
+  // ה־state נכתב רק אחרי שהקובץ קיים; ובכתיבה אטומית (קובץ זמני ← rename)
+  const last = rows.at(-1);
+  const tmp = path.join(lakeDir, "_state.json.tmp");
+  await fs.writeFile(tmp, JSON.stringify({ seq, updatedAt: last.updated_at_text, id: last.id }));
+  await fs.rename(tmp, path.join(lakeDir, "_state.json"));
+  return { exported: rows.length, file };
+}
+
+export async function lakeReport(conn: DuckDBConnection, lakeDir: string) {
+  const r = await conn.runAndReadAll(`
+    WITH latest AS (
+      SELECT * FROM read_parquet(${q(path.join(lakeDir, "part-*.parquet"))})
+      QUALIFY row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1 -- הגרסה האחרונה של כל הזמנה
+    )
+    SELECT strftime(timezone('Asia/Jerusalem', created_at), '%Y-%m-%d') AS day,
+           count(*)::INTEGER AS orders, (sum(total_cents) / 100.0)::DOUBLE AS revenue
+    FROM latest WHERE status &lt;&gt; 'cancelled'
+    GROUP BY day ORDER BY day`);
+  return r.getRowObjects().map((x) =&gt; ({ day: String(x.day), orders: Number(x.orders), revenue: Number(x.revenue) }));
+}</code></pre>
+<p>זה ETL מצטבר "אמיתי" בקטן: Fivetran, Airbyte ו־Debezium עושים את אותו דבר (Debezium — מה־WAL, בלי לשאול את הטבלה). ו־"append-only + גרסה אחרונה בקריאה" הוא הבסיס של פורמטים כמו Delta Lake (Databricks) ו־Apache Iceberg — שמוסיפים מעל Parquet טרנזקציות ו־time travel.</p>
+
+
+</div></details>
+    
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

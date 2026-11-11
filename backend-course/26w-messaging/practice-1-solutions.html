@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 1 — יחידה 26.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.5</a> ‹ פתרונות שיעור 1</div>
+  <h1>🔒 פתרונות — תרגול שיעור 1</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26w-messaging/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.5-E01">
+    <h3>P26.5-E01 · איזה כלי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי שאלות מכריעות: האם ההודעה "נמחקת" אחרי שטופלה (תור), או נשארת כדי שאחרים יקראו גם, ושוב (log)? ומי מנהל את התשתית?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Kafka שומר את האירועים לפי זמן (retention) — לא לפי "מישהו קרא".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>BullMQ</strong> — כבר יש Redis, ו־BullMQ נותן delayed jobs ו־retries מובנים. להוסיף RabbitMQ או Kafka בשביל זה — תשתית בלי סיבה.</li><li><strong>RabbitMQ</strong> (fanout/topic exchange — תור לכל שירות) או <strong>Kafka</strong> (topic אחד, consumer group לכל שירות). ב־AWS: <strong>SNS ← SQS</strong> (תור SQS לכל שירות שמנוי ל־topic של SNS).</li><li><strong>Kafka.</strong> נפח גבוה, כמה צרכנים עצמאיים, ו־<em>replay</em>: מזיזים את ה־offset של ה־group אחורה ומעבדים שוב. בתור רגיל ההודעות כבר נמחקו.</li><li><strong>SQS</strong> — מנוהל לגמרי, משלמים לפי בקשות, DLQ מובנה.</li><li><strong>RabbitMQ</strong> עם topic exchange: ישראל — <code>order.*.il</code>; ביטולים — <code>order.cancelled.*</code> (E03, E06). "מחו״ל" קשה יותר: binding לא יודע להגיד "הכול חוץ מ־il" — אז מכניסים את זה למפתח (<code>order.created.abroad</code>), או משתמשים ב־headers exchange. ניתוב גמיש הוא החוזקה של RabbitMQ.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Kafka כי זה מה שחברות גדולות משתמשות" — Kafka דורש תפעול (או שירות מנוהל יקר), ותור עבודות פשוט לא צריך אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E02">
+    <h3>P26.5-E02 · מה קורה כשה־consumer נופל? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הודעה שלא אושרה — חוזרת (לתור, או אחרי visibility timeout, או מה־offset האחרון).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החיוב קורה בעולם החיצוני — ה־broker לא יודע עליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ההודעה אושרה ונמחקה, החיוב לא קרה ← <strong>הלקוח לא חויב, לתמיד</strong>. זה at-most-once: כל הודעה מטופלת לכל היותר פעם אחת — לפעמים אפס.</li><li>החיוב קרה, ה־ack לא ← ההודעה חוזרת ← <strong>חיוב כפול</strong>. זה at-least-once: לפחות פעם אחת — לפעמים יותר.</li><li>הכול בסדר.</li></ol>
+<p>at-least-once הוא ברירת המחדל הנכונה כמעט תמיד (עדיף כפול מחסר), <strong>בתנאי שה־consumer אידמפוטנטי</strong>: אותה הודעה פעמיים ← אותה תוצאה כמו פעם אחת. איך: מזהה ייחודי לכל אירוע, ו"כבר טיפלתי ב־X" שנשמר <em>באותה טרנזקציה</em> עם הפעולה (E15) — ולספק התשלומים שולחים idempotency key (פרק 21). "exactly-once" של Kafka חל רק בתוך Kafka (קריאה ← כתיבה ל־topic אחר); ברגע שיש צד שלישי — מסד, API, מייל — חוזרים לאידמפוטנטיות.</p>
+
+
+</div></details>
+    
+  </div>
+
+<div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-rabbitmq.html"><small>הבא</small>שיעור 2 — RabbitMQ: exchanges, ack ו־dead letters</a></div>
+</main>
+</body>
+</html>

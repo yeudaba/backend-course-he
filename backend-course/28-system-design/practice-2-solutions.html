@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 28</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 28</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code class="mid">28-system-design/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28-E03">
+    <h3>P28-E03 · איזו קופסה פותרת? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל קודם: מה הבעיה — חישוב, קריאה חוזרת, מרחק, עבודה איטית, תלות שנופלת, או חיפוש?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפחות אחד מהם הוא לא "קופסה" חדשה בכלל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>load balancer</strong> (או אלגוריתם אחר בו — least connections, E08).</li>
+<li><strong>cache</strong> (פרק 26) — אותה תשובה לכולם.</li>
+<li><strong>CDN</strong> — קבצים סטטיים מעותקים קרובים למשתמש.</li>
+<li><strong>תור</strong> ו־worker (פרק 26) — הלקוח מקבל תשובה מיד.</li>
+<li><strong>timeout קצר + circuit breaker</strong> (E15) — נכשלים מהר במקום לחכות.</li>
+<li><strong>אינדקס</strong> — לא קופסה בכלל. לפני כל רכיב חדש — EXPLAIN (פרק 18).</li>
+<li><strong>replica לקריאה</strong> — הדוחות רצים עליה (מותר להם להיות שנייה מאחור).</li>
+<li><strong>הגבלת קצב</strong> לפי IP ולפי חשבון (פרקים 24, 26).</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף cache לבעיה 6. הבקשה הראשונה עדיין איטית, וכל email אחר — miss.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E08">
+    <h3>P28-E08 · load balancer: שני אלגוריתמים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>round robin: מונה ו־<code>% length</code>, בתוך closure.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>least connections: Map של שרת ← מונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E08
+// שני אלגוריתמים של load balancer: round robin (בתורות) ו־least connections (למי שהכי פנוי)
+export function roundRobin(servers: readonly string[]) {
+  if (servers.length === 0) throw new Error("אין שרתים");
+  let next = 0;
+  return () =&gt; servers[next++ % servers.length];
+}
+
+export function leastConnections(servers: readonly string[]) {
+  if (servers.length === 0) throw new Error("אין שרתים");
+  const active = new Map(servers.map((s) =&gt; [s, 0]));
+  return {
+    // בתיקו — הראשון ברשימה (סדר קבוע)
+    acquire(): string {
+      let best = servers[0];
+      for (const s of servers) if (active.get(s)! &lt; active.get(best)!) best = s;
+      active.set(best, active.get(best)! + 1);
+      return best;
+    },
+    release(server: string) {
+      const n = active.get(server);
+      if (n === undefined) throw new Error(`שרת לא מוכר: ${server}`);
+      if (n &gt; 0) active.set(server, n - 1);
+    },
+    active: (server: string) =&gt; active.get(server) ?? 0,
+  };
+}</code></pre>
+<p>מתי מה? round robin — כשכל הבקשות דומות. least connections — כשיש בקשות ארוכות (העלאת קבצים, WebSocket), ושרת אחד "נתקע" עם הכבדות. ב־nginx: <code>least_conn;</code>. ב־load balancers של הענן — הגדרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מונה גלובלי משותף לכמה load balancers — עם הרבה מופעים, round robin "מושלם" הוא לא המטרה; פיזור סביר כן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E09">
+    <h3>P28-E09 · health checks 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני Maps: כישלונות ברצף, ו"למטה מאז".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"כישלון אחד נוסף מוציא שוב": כשמחזירים שרת, קבע את מונה הכישלונות שלו ל־<code>failThreshold − 1</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E09
+// load balancer עם health checks: אחרי failThreshold כישלונות ברצף — השרת יוצא מהסבב; אחרי recoverAfterMs — מקבל הזדמנות
+export function createBalancer(servers: readonly string[], { failThreshold = 3, recoverAfterMs = 10_000, now = () =&gt; Date.now() } = {}) {
+  const fails = new Map(servers.map((s) =&gt; [s, 0]));
+  const downSince = new Map&lt;string, number&gt;();
+  let next = 0;
+
+  const isUp = (s: string) =&gt; {
+    const since = downSince.get(s);
+    if (since === undefined) return true;
+    if (now() - since &gt;= recoverAfterMs) {
+      downSince.delete(s); // הזדמנות שנייה; כישלון אחד נוסף יוריד שוב
+      fails.set(s, failThreshold - 1);
+      return true;
+    }
+    return false;
+  };
+
+  return {
+    pick(): string | null {
+      for (let i = 0; i &lt; servers.length; i++) {
+        const s = servers[next++ % servers.length];
+        if (isUp(s)) return s;
+      }
+      return null; // כולם למטה — 503 ללקוח
+    },
+    report(server: string, ok: boolean) {
+      if (ok) {
+        fails.set(server, 0);
+        return;
+      }
+      const n = (fails.get(server) ?? 0) + 1;
+      fails.set(server, n);
+      if (n &gt;= failThreshold &amp;&amp; !downSince.has(server)) downSince.set(server, now());
+    },
+    healthy: () =&gt; servers.filter((s) =&gt; !downSince.has(s) || now() - downSince.get(s)! &gt;= recoverAfterMs),
+  };
+}</code></pre>
+<p>זה מה שה־HEALTHCHECK ב־Dockerfile (פרק 23) ו־<code>/ready</code> (פרק 25) מזינים: ה־load balancer שואל, ושרת שלא עונה — לא מקבל תנועה. ולכן <code>/ready</code> מחזיר 503 כשהמסד לא זמין: "אל תשלחו אליי".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוציא שרת אחרי כישלון בודד — בעומס, שגיאה אחת "מזיזה" תנועה לשרת השני, שגם הוא נכשל פעם, וכולם יוצאים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E12">
+    <h3>P28-E12 · retry נכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">for (let attempt = 0; ; attempt++)</code> עם try/catch, ו־<code>throw</code> בתנאי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למה לא לנסות שוב 400? כי אותה בקשה תיכשל באותה דרך. ו־429 — "לאט יותר", לא "לא".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E12
+// retry עם exponential backoff ו־jitter: לא כל הלקוחות חוזרים באותה שנייה (thundering herd)
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message = `HTTP ${status}`) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// מה שווה לנסות שוב: רשת, 5xx, 429. 4xx אחר — הבקשה שגויה, ניסיון נוסף ייכשל באותה דרך
+export const isRetryable = (err: unknown) =&gt; !(err instanceof HttpError) || err.status &gt;= 500 || err.status === 429;
+
+export async function retry&lt;T&gt;(
+  fn: (attempt: number) =&gt; Promise&lt;T&gt;,
+  {
+    retries = 3,
+    baseMs = 100,
+    maxMs = 5000,
+    random = Math.random,
+    sleep = (ms: number) =&gt; new Promise&lt;void&gt;((r) =&gt; setTimeout(r, ms)),
+  }: { retries?: number; baseMs?: number; maxMs?: number; random?: () =&gt; number; sleep?: (ms: number) =&gt; Promise&lt;void&gt; } = {},
+): Promise&lt;T&gt; {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      if (attempt &gt;= retries || !isRetryable(err)) throw err; // לא ישנים אחרי הניסיון האחרון
+      const cap = Math.min(maxMs, baseMs * 2 ** attempt);
+      await sleep(Math.floor(random() * cap)); // "full jitter": בין 0 לתקרה
+    }
+  }
+}</code></pre>
+<p>ולמה jitter? אם אלף לקוחות נכשלו באותו רגע (השירות נפל), בלי jitter כולם חוזרים יחד אחרי 100ms, ושוב יחד אחרי 200ms — "עדר" שמפיל את השירות בכל פעם שהוא מנסה לקום. ועוד כלל: מנסים שוב רק פעולות idempotent — או עם <code>Idempotency-Key</code> (פרק 24).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>retry בכמה שכבות — הלקוח 3, ה־API 3, ה־worker 3 ← 27 קריאות לשירות שנפל. מנסים שוב בשכבה אחת.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E14">
+    <h3>P28-E14 · replicas וקריאה אחרי כתיבה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Map של userId ← זמן הכתיבה האחרונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>now() - at &lt; stickyMs</code> — ב־2999 עוד primary, ב־3000 כבר replica.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E14
+// primary + replicas: כתיבות ל־primary, קריאות ל־replicas — חוץ מ"קריאה אחרי כתיבה":
+// משתמש שכתב עכשיו קורא מה־primary לזמן קצר, כי ה־replica עוד לא קיבלה את השינוי (replication lag)
+export function createDbRouter({ primary, replicas, stickyMs = 2000, now = () =&gt; Date.now() }: { primary: string; replicas: readonly string[]; stickyMs?: number; now?: () =&gt; number }) {
+  const lastWrite = new Map&lt;string, number&gt;();
+  let next = 0;
+  return {
+    forWrite(userId: string): string {
+      lastWrite.set(userId, now());
+      return primary;
+    },
+    forRead(userId: string): string {
+      const at = lastWrite.get(userId);
+      if (at !== undefined &amp;&amp; now() - at &lt; stickyMs) return primary;
+      if (replicas.length === 0) return primary;
+      return replicas[next++ % replicas.length];
+    },
+  };
+}</code></pre>
+<p>replica מקבלת שינויים מה־primary באיחור קטן (replication lag) — בדרך כלל מילישניות, בעומס שניות. בלי הכלל הזה: לקוח משלם, הדף מתרענן מ־replica, ורואה "ממתין לתשלום". ב־Prisma יש תוסף (<code class="mid">@prisma/extension-read-replicas</code>) שעושה את הניתוב, ו־<code>$primary()</code> לקריאה שחייבת להיות עדכנית.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>sticky לפי <em>שרת</em> במקום לפי משתמש — משתמש אחד שכתב שולח את כולם ל־primary.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E15">
+    <h3>P28-E15 · circuit breaker 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־getter של <code>state</code> מחליף open ל־half-open כשהזמן עבר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>דגל <code>trialRunning</code>, ו־<code>finally</code> שמנקה אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E15
+// circuit breaker: שירות שנופל שוב ושוב — מפסיקים לקרוא לו לזמן מה (נכשלים מיד), ואז מנסים בזהירות
+export type BreakerState = "closed" | "open" | "half-open";
+
+export function createBreaker&lt;T&gt;(call: () =&gt; Promise&lt;T&gt;, { failureThreshold = 5, openMs = 30_000, now = () =&gt; Date.now() } = {}) {
+  let state: BreakerState = "closed";
+  let failures = 0;
+  let openedAt = 0;
+  let trialRunning = false;
+
+  return {
+    get state(): BreakerState {
+      if (state === "open" &amp;&amp; now() - openedAt &gt;= openMs) state = "half-open";
+      return state;
+    },
+    async exec(): Promise&lt;T&gt; {
+      const s = this.state;
+      if (s === "open" || (s === "half-open" &amp;&amp; trialRunning)) throw new Error("circuit open");
+      if (s === "half-open") trialRunning = true; // רק בקשת ניסיון אחת עוברת
+      try {
+        const result = await call();
+        state = "closed";
+        failures = 0;
+        return result;
+      } catch (err) {
+        failures++;
+        if (s === "half-open" || failures &gt;= failureThreshold) {
+          state = "open";
+          openedAt = now();
+        }
+        throw err;
+      } finally {
+        if (s === "half-open") trialRunning = false;
+      }
+    },
+  };
+}</code></pre>
+<p>הבעיה שזה פותר: ספק משלוחים נופל ועונה אחרי 30 שניות (timeout). כל בקשה שלנו מחזיקה חיבור 30 שניות ← אחרי דקה נגמרים החיבורים, ו<em>השרת שלנו</em> נופל — גם לבקשות שלא קשורות למשלוחים. עם breaker: אחרי 5 כישלונות, נכשלים מיד ("המשלוח יחושב מאוחר יותר"), והשרת חי. ובשילוב: timeout קצר, retry עם jitter, breaker.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ב־half-open לשחרר את כל הבקשות — שירות שרק קם מקבל את כל העומס בבת אחת ונופל שוב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E21">
+    <h3>P28-E21 · retry עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה בודקים לפני שמנסים שוב? ומתי?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה <code>random</code> בחישוב ההמתנה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E21
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+    this.status = status;
+  }
+}
+
+export async function retry&lt;T&gt;(
+  fn: () =&gt; Promise&lt;T&gt;,
+  { retries = 3, baseMs = 100, random = Math.random, sleep = (ms: number) =&gt; new Promise&lt;void&gt;((r) =&gt; setTimeout(r, ms)) } = {},
+): Promise&lt;T&gt; {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      // תקלה 1: היה ניסיון חוזר על כל שגיאה ← 400/404/409 נשלחים שוב ושוב, ותשלום שנדחה "מנסים שוב"
+      const retryable = !(err instanceof HttpError) || err.status &gt;= 500 || err.status === 429;
+      // תקלה 2: הבדיקה הייתה אחרי ה־sleep ← אחרי הניסיון האחרון ישנו לחינם לפני שזרקו
+      if (attempt &gt;= retries || !retryable) throw err;
+      // תקלה 3: היה baseMs * 2 ** attempt בדיוק ← אלף לקוחות חוזרים יחד באותה מילישנייה. jitter מפזר אותם
+      await sleep(Math.floor(random() * baseMs * 2 ** attempt));
+    }
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>retry על 402 במערכת תשלומים — במקרה הגרוע, חיוב כפול כשה"דחייה" הייתה בעצם timeout של התשובה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E23">
+    <h3>P28-E23 · circuit breaker עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הצלחה עושה למונה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה בודקים "open" — לפני הקריאה, או אחרי?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E23
+export function createBreaker&lt;T&gt;(call: () =&gt; Promise&lt;T&gt;, { failureThreshold = 3, openMs = 10_000, now = () =&gt; Date.now() } = {}) {
+  let state: "closed" | "open" | "half-open" = "closed";
+  let failures = 0;
+  let openedAt = 0;
+  return {
+    get state() {
+      if (state === "open" &amp;&amp; now() - openedAt &gt;= openMs) state = "half-open";
+      return state;
+    },
+    async exec(): Promise&lt;T&gt; {
+      const s = this.state;
+      // תקלה 2: הבדיקה הייתה רק אחרי שהקריאה נכשלה ← כשהמעגל פתוח, כל בקשה עדיין פנתה לשירות המת (וחיכתה ל־timeout שלו)
+      if (s === "open") throw new Error("circuit open");
+      try {
+        const result = await call();
+        failures = 0; // תקלה 1: הצלחה לא איפסה את המונה ← 3 כישלונות "מפוזרים" לאורך יום פותחים את המעגל
+        state = "closed";
+        return result;
+      } catch (err) {
+        failures++;
+        // תקלה 3: התנאי היה רק s === "closed" ← כישלון של בקשת הניסיון ב־half-open השאיר אותו half-open, וכל הבקשות עברו לשירות
+        if (s === "half-open" || failures &gt;= failureThreshold) {
+          state = "open";
+          openedAt = now();
+        }
+        throw err;
+      }
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "open" רק אחרי כישלון — כל הטעם הוא <em>לא</em> לחכות ל־timeout של שירות שאנחנו כבר יודעים שהוא מת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P28-E27">
+    <h3>P28-E27 · בדיקות ל־GET /health 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר חוסכת הרבה רעש: <code class="long">const check = (name, over = {}) =&gt; ({ name, ok: true, critical: false, latencyMs: 10, ...over })</code>. כל בדיקה מציינת רק את מה שמעניין אותה: <code class="mid">check("db", { critical: true, ok: false })</code>. ב־TypeScript: ‏<code>over: Partial&lt;Check&gt;</code>, ו־<code class="mid">import { overallHealth, type Check }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חפש את המקרים שבהם שני כללים מתנגשים: בדיקה קריטית שנכשלה <em>וגם</em> לא קריטית שנכשלה, בדיקה קריטית איטית שעברה, ובדיקה קריטית שנכשלה וגם איטית. לגבול: בדיוק 1000 ← לא איטי, ‏1001 ← איטי. ולפרמטר: קריאה עם <code>slowMs</code> אחר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { overallHealth, type Check } from "./P28-E27.ts";
+
+const check = (name: string, over: Partial&lt;Check&gt; = {}): Check =&gt; ({ name, ok: true, critical: false, latencyMs: 10, ...over });
+
+test("הכול תקין ← up, ובלי בדיקות ← up", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true }), check("mail")]), { status: "up", failing: [], slow: [] });
+  assert.deepEqual(overallHealth([]), { status: "up", failing: [], slow: [] });
+});
+
+test("בדיקה קריטית שנכשלה ← down, גם כשיש גם לא קריטית שנכשלה", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true, ok: false }), check("mail")]), { status: "down", failing: ["db"], slow: [] });
+  assert.deepEqual(overallHealth([check("mail", { ok: false }), check("db", { critical: true, ok: false })]), { status: "down", failing: ["mail", "db"], slow: [] });
+});
+
+test("בדיקה לא קריטית שנכשלה ← degraded", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true }), check("mail", { ok: false })]), { status: "degraded", failing: ["mail"], slow: [] });
+});
+
+test("איטיות: מעל slowMs ← degraded; בדיוק slowMs — עוד לא", () =&gt; {
+  assert.deepEqual(overallHealth([check("db", { critical: true, latencyMs: 1001 })]), { status: "degraded", failing: [], slow: ["db"] });
+  assert.equal(overallHealth([check("db", { critical: true, latencyMs: 1000 })]).status, "up");
+  assert.deepEqual(overallHealth([check("a", { latencyMs: 300 }), check("b", { latencyMs: 600 })], 500), { status: "degraded", failing: [], slow: ["b"] });
+  assert.deepEqual(overallHealth([check("db", { critical: true, ok: false, latencyMs: 5000 })]), { status: "down", failing: ["db"], slow: ["db"] });
+});</code></pre>
+<p>‏<code>failing: ["mail", "db"]</code>, בסדר שבו הבדיקות הגיעו (ולא לפי ABC), תופס מימוש שממיין. והבדיקה הקריטית שנכשלה וגם איטית (5000ms) תופסת מימוש ששם ב־<code>slow</code> רק בדיקות שעברו.</p>
+<p>הבאגים המסוכנים כאן הם בסדר העדיפויות. מימוש שקובע <code>"down"</code> ואחר כך דורס ל־<code>"degraded"</code> מחזיר 200 כשהמסד למטה, וה־load balancer ממשיך לשלוח תעבורה לשרת שלא יכול לענות. ומימוש שמחזיר <code>"down"</code> על כל כישלון מוציא את כל השרתים מה־load balancer כששירות המיילים מתעכב. זו תקלה שמערכת שלמה נפלה בגללה, ולא רק "באג בבריאות".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק כל כלל לבד — באגים בסדר העדיפויות עוברים.</li><li>לבנות כל בדיקה עם כל ארבעת השדות — קשה לראות מה הבדיקה בודקת. פונקציית עזר עם ברירות מחדל ו־<code>...over</code> מראה רק את מה שחשוב.</li><li><code class="mid">assert.ok(result.status !== "up")</code> — עובר גם על <code>"down"</code> כשציפית ל־<code>"degraded"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P28-E28">
+    <h3>P28-E28 · hedged request: בקשה שנייה אם הראשונה מתעכבת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">return new Promise((resolve, reject) =&gt; { ... })</code>, ובתוכו משתנים משותפים: <code>settled</code>, ‏<code>started</code>, ‏<code>failures</code>, ‏<code>timer</code>. פונקציה פנימית <code>start()</code> מעלה את <code>started</code> וקוראת ל־<code class="mid">fn(started).then(onValue, onError)</code>. בכל אחת מהן, השורה הראשונה היא <code>if (settled) return;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>onError</code>: אם <code>started === 1</code>, זו הראשונה, והשנייה עוד לא יצאה ← <code class="mid">clearTimeout(timer); start();</code>. אחרת, אם <code>failures === 2</code> ← <code class="mid">settled = true; reject(err)</code>. הטיימר: ‏<code class="long">setTimeout(() =&gt; { if (!settled &amp;&amp; started === 1) start(); }, delayMs)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E28 — hedged request: בקשה שנייה אם הראשונה מתעכבת
+export function hedged&lt;T&gt;(fn: (attempt: number) =&gt; Promise&lt;T&gt;, delayMs: number): Promise&lt;T&gt; {
+  return new Promise&lt;T&gt;((resolve, reject) =&gt; {
+    let settled = false;
+    let failures = 0;
+    let started = 0;
+    let timer: ReturnType&lt;typeof setTimeout&gt; | undefined;
+
+    const start = () =&gt; {
+      started++;
+      fn(started).then(
+        (value) =&gt; {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) =&gt; {
+          if (settled) return;
+          failures++;
+          if (started === 1) {
+            clearTimeout(timer);
+            start(); // הראשונה נכשלה לפני שהשנייה התחילה — מתחילים אותה מיד
+          } else if (failures === 2) {
+            settled = true;
+            reject(err);
+          }
+        },
+      );
+    };
+
+    start();
+    timer = setTimeout(() =&gt; {
+      if (!settled &amp;&amp; started === 1) start();
+    }, delayMs);
+  });
+}
+
+async function demo() {
+  const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+  const t0 = Date.now();
+  const slowFirst = await hedged(async (attempt) =&gt; {
+    await sleep(attempt === 1 ? 300 : 40);
+    return `תשובה מניסיון ${attempt}`;
+  }, 50);
+  console.log(slowFirst, "· לפני שהראשונה סיימה?", Date.now() - t0 &lt; 300);
+  const fastFirst = await hedged(async (attempt) =&gt; `תשובה מניסיון ${attempt}`, 50);
+  console.log(fastFirst);
+  try {
+    await hedged(async (attempt) =&gt; {
+      throw new Error(`נכשל ${attempt}`);
+    }, 50);
+  } catch (err) {
+    console.log((err as Error).message);
+  }
+}
+demo();</code></pre>
+<pre class="terminal">תשובה מניסיון 2 · לפני שהראשונה סיימה? true
+תשובה מניסיון 1
+נכשל 2</pre>
+<p>שורה 1: הניסיון הראשון "תקוע" ל־300ms, השני יצא אחרי 50ms וענה תוך 40ms. התשובה חזרה בערך אחרי 90ms. שורה 2: הראשון מהיר, ולכן השני לא יצא בכלל. שורה 3: שניהם נכשלו. השני נכשל אחרון, כי הוא התחיל מיד אחרי הכישלון של הראשון.</p>
+<p>‏<code>settled</code> הוא הלב: ‏<code>resolve</code> ו־<code>reject</code> של Promise מתעלמים ממילא מקריאה שנייה, אבל בלי הדגל, כישלון מאוחר היה מתחיל ניסיון שלישי, או סופר כישלונות לא נכון. ‏<code>.then(onValue, onError)</code> עם שתי פונקציות, ולא <code>.then().catch()</code>: כך שגיאה בתוך <code>onValue</code> לא נתפסת כ"כישלון של <code>fn</code>".</p>
+<p>מתי לא להשתמש בזה? רק על פעולות שבטוח לשלוח פעמיים: קריאות (<code>GET</code>), או פעולות idempotent עם מפתח (פרק 24). והמחיר: עוד עומס על השרתים. לכן <code>delayMs</code> נבחר לפי p95. כך רק 5% מהבקשות שולחות עותק שני.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Promise.race([fn(1), delay.then(() =&gt; fn(2))])</code> — ‏<code>race</code> מחזיר גם את ה<em>כישלון</em> הראשון. ‏<code>fn(1)</code> שנכשלה מהר מפילה הכול, למרות ש־<code>fn(2)</code> הייתה מצליחה.</li><li>לא לבטל את הטיימר — אחרי הצלחה מהירה, ‏<code>fn(2)</code> יוצאת בכל זאת (עומס כפול על כל בקשה).</li><li>‏reject בכישלון הראשון כש־<code>fn(2)</code> עוד רצה.</li><li>לחכות ל־<code>delayMs</code> גם אחרי שהראשונה נכשלה — זמן המתנה מיותר בדיוק כשמשהו לא בסדר.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-url-shortener.html"><small>הבא</small>שיעור 3 — תכנון מלא: קיצור קישורים</a></div>
+</main>
+</body>
+</html>

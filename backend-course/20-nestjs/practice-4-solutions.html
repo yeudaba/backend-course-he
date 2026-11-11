@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 20</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>20-nestjs/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P20-E19">
+    <h3>P20-E19 · Swagger 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד בשיעור 4, סעיף 1.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי <code>@ApiProperty</code>, Swagger לא "רואה" את השדות: TypeScript נמחק, ו־class-validator לא מדבר עם Swagger לבד (בלי ה־plugin של ה־CLI).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E19
+import { Body, Controller, Get, Module, Post, type INestApplication } from "@nestjs/common";
+import { ApiCreatedResponse, ApiProperty, ApiTags, DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+
+export class CreateBookDto {
+  @ApiProperty({ example: "Dune", minLength: 1, maxLength: 200 })
+  @IsString()
+  @Length(1, 200)
+  title: string;
+
+  @ApiProperty({ example: 1965, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2100)
+  year?: number;
+}
+
+export class BookDto extends CreateBookDto {
+  @ApiProperty({ example: 1 })
+  id: number;
+}
+
+@ApiTags("books")
+@Controller("books")
+export class BooksController {
+  private readonly books: BookDto[] = [];
+
+  @Get()
+  list() {
+    return this.books;
+  }
+
+  @Post()
+  @ApiCreatedResponse({ type: BookDto })
+  create(@Body() dto: CreateBookDto): BookDto {
+    const book = { id: this.books.length + 1, ...dto };
+    this.books.push(book);
+    return book;
+  }
+}
+
+@Module({ controllers: [BooksController] })
+export class BooksModule {}
+
+export function setupDocs(app: INestApplication) {
+  const config = new DocumentBuilder().setTitle("Library API").setDescription("ספרים").setVersion("1.0").build();
+  SwaggerModule.setup("docs", app, () =&gt; SwaggerModule.createDocument(app, config));
+}</code></pre>
+<p>מה הבודק מצפה לראות ב־<code>/docs-json</code>: <code class="mid">components.schemas.CreateBookDto</code> עם <code>properties</code> של title ו־year, <code>required: ["title"]</code> (בזכות <code>required: false</code> על year), וה־tag <code>books</code> על <code>POST /books</code>. מזה Swagger UI בונה טופס, ו־Frontend יכול לייצר לקוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>required: false</code> על שדה אופציונלי ← בתיעוד הוא חובה, והלקוח מבולבל.</li><li>לכתוב את התיעוד ביד (קובץ YAML) — הוא מתיישן אחרי השינוי הראשון בקוד. כאן התיעוד נוצר מה־DTOs עצמם.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P20-E24">
+    <h3>P20-E24 · אתגר: ספרייה ב־Nest 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קח מ־E12 את ה־filter ואת ה־<code>exceptionFactory</code>, ומ־E10 את ה־Query DTO. התחל מה־service, בלי controllers.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>code מותאם: <code class="long">throw new NotFoundException({ code: "BOOK_NOT_FOUND", message: "..." })</code> — ה־filter מחזיר אובייקט עם <code>code</code> כמו שהוא. ו־<code>@HttpCode(200)</code> על ה־return, כי זה POST.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E24
+import {
+  ArgumentsHost, BadRequestException, Body, Catch, ConflictException, Controller, ExceptionFilter, Get, HttpCode,
+  HttpException, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, Query, ValidationPipe,
+  type ValidationError,
+} from "@nestjs/common";
+import { APP_FILTER, APP_PIPE } from "@nestjs/core";
+import { Type } from "class-transformer";
+import { IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import type { Response } from "express";
+
+// ---------- tokens ----------
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+// ---------- שגיאות: { error: { code, message, details? } } ----------
+const apiError = (code: string, message: string, details?: unknown) =&gt; ({ code, message, ...(details ? { details } : {}) });
+const CODES: Record&lt;number, string&gt; = { 400: "BAD_REQUEST", 404: "NOT_FOUND", 409: "CONFLICT" };
+
+@Catch(HttpException)
+export class ApiExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const status = exception.getStatus();
+    const body = exception.getResponse();
+    const error = typeof body === "object" &amp;&amp; body !== null &amp;&amp; "code" in body ? body : apiError(CODES[status] ?? "ERROR", exception.message);
+    res.status(status).json({ error });
+  }
+}
+
+export function createValidationPipe() {
+  return new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    exceptionFactory: (errors: ValidationError[]) =&gt;
+      new BadRequestException(apiError("VALIDATION_ERROR", "קלט לא תקין", errors.map((e) =&gt; ({ field: e.property, messages: Object.values(e.constraints ?? {}) })))),
+  });
+}
+
+// ---------- DTOs ----------
+export class CreateBookDto {
+  @IsString() @Length(1, 200) title: string;
+  @IsString() @Length(1, 200) author: string;
+  @IsInt() @Min(1) @Max(100) copies: number;
+}
+
+export class ListBooksQuery {
+  @IsOptional() @IsString() author?: string;
+  @IsOptional() @IsIn(["true", "false"]) available?: string;
+  @IsOptional() @Type(() =&gt; Number) @IsInt() @Min(1) page: number = 1;
+  @IsOptional() @Type(() =&gt; Number) @IsInt() @Min(1) @Max(50) limit: number = 10;
+}
+
+export class CreateLoanDto {
+  @IsString() @Length(1, 100) member: string;
+}
+
+// ---------- service ----------
+export interface Book {
+  id: number;
+  title: string;
+  author: string;
+  copies: number;
+  available: number;
+}
+export interface Loan {
+  id: number;
+  bookId: number;
+  member: string;
+  loanedAt: string;
+  dueAt: string;
+  returnedAt: string | null;
+}
+
+const LOAN_DAYS = 14;
+
+@Injectable()
+export class LibraryService {
+  private readonly books: Book[] = [];
+  private readonly loans: Loan[] = [];
+
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  createBook(dto: CreateBookDto): Book {
+    const book = { id: this.books.length + 1, title: dto.title, author: dto.author, copies: dto.copies, available: dto.copies };
+    this.books.push(book);
+    return book;
+  }
+
+  listBooks({ author, available, page, limit }: ListBooksQuery) {
+    let books = this.books;
+    if (author) books = books.filter((b) =&gt; b.author.toLowerCase().includes(author.toLowerCase()));
+    if (available === "true") books = books.filter((b) =&gt; b.available &gt; 0);
+    return { data: books.slice((page - 1) * limit, page * limit), meta: { page, limit, total: books.length, totalPages: Math.ceil(books.length / limit) } };
+  }
+
+  getBook(id: number): Book {
+    const book = this.books.find((b) =&gt; b.id === id);
+    if (!book) throw new NotFoundException(apiError("BOOK_NOT_FOUND", `ספר ${id} לא נמצא`));
+    return book;
+  }
+
+  lend(bookId: number, member: string): Loan {
+    const book = this.getBook(bookId);
+    if (this.loans.some((l) =&gt; l.bookId === bookId &amp;&amp; l.member === member &amp;&amp; l.returnedAt === null)) {
+      throw new ConflictException(apiError("ALREADY_BORROWED", `${member} כבר מחזיק/ה את הספר`));
+    }
+    if (book.available === 0) throw new ConflictException(apiError("NO_COPIES", "אין עותק פנוי"));
+    const now = this.clock.now();
+    const loan = {
+      id: this.loans.length + 1,
+      bookId,
+      member,
+      loanedAt: now.toISOString(),
+      dueAt: new Date(now.getTime() + LOAN_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      returnedAt: null,
+    };
+    this.loans.push(loan);
+    book.available--;
+    return loan;
+  }
+
+  returnLoan(id: number): Loan {
+    const loan = this.loans.find((l) =&gt; l.id === id);
+    if (!loan) throw new NotFoundException(apiError("LOAN_NOT_FOUND", `השאלה ${id} לא נמצאה`));
+    if (loan.returnedAt) throw new ConflictException(apiError("ALREADY_RETURNED", "ההשאלה כבר הוחזרה"));
+    loan.returnedAt = this.clock.now().toISOString();
+    this.getBook(loan.bookId).available++;
+    return loan;
+  }
+
+  overdue(): Loan[] {
+    const now = this.clock.now().getTime();
+    return this.loans.filter((l) =&gt; l.returnedAt === null &amp;&amp; new Date(l.dueAt).getTime() &lt; now);
+  }
+}
+
+// ---------- controllers ----------
+@Controller("books")
+export class BooksController {
+  constructor(private readonly library: LibraryService) {}
+
+  @Post()
+  create(@Body() dto: CreateBookDto) {
+    return this.library.createBook(dto);
+  }
+
+  @Get()
+  list(@Query() query: ListBooksQuery) {
+    return this.library.listBooks(query);
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    return this.library.getBook(id);
+  }
+
+  @Post(":id/loans")
+  lend(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateLoanDto) {
+    return this.library.lend(id, dto.member);
+  }
+}
+
+@Controller("loans")
+export class LoansController {
+  constructor(private readonly library: LibraryService) {}
+
+  @Get("overdue") // לפני כל ":id"
+  overdue() {
+    return this.library.overdue();
+  }
+
+  @Post(":id/return")
+  @HttpCode(200)
+  returnLoan(@Param("id", ParseIntPipe) id: number) {
+    return this.library.returnLoan(id);
+  }
+}
+
+@Module({
+  controllers: [BooksController, LoansController],
+  providers: [
+    LibraryService,
+    { provide: CLOCK, useValue: { now: () =&gt; new Date() } },
+    { provide: APP_FILTER, useClass: ApiExceptionFilter },
+    { provide: APP_PIPE, useFactory: createValidationPipe },
+  ],
+})
+export class LibraryModule {}</code></pre>
+<p>השווה ל־P15-E24: אותה לוגיקה בדיוק ב־service — ומה שנעלם הוא כל קוד ה"צנרת": אין parse ידני של params, אין middleware לולידציה, אין <code>next(err)</code>. מה שנוסף: מבנה קבוע. ושני פרטים שקל לפספס: <code>@Get("overdue")</code> לפני כל route עם <code>:id</code>, ובדיקת <code>ALREADY_BORROWED</code> <strong>לפני</strong> <code>NO_COPIES</code> (אחרת מי שמחזיק את העותק האחרון מקבל "אין עותקים").</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>APP_PIPE</code> עם <code>useClass: ValidationPipe</code> ← בלי האופציות (whitelist, transform). צריך <code>useFactory</code>.</li><li>לשמור את <code>dueAt</code> כ־<code>Date</code> ← ב־JSON הוא יוצא נכון, אבל ההשוואה ב־overdue והבדיקות מסתבכות. ISO מההתחלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

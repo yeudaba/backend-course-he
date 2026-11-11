@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — יחידה 25.7</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.7-E02">
+    <h3>P25.7-E02 · embed או reference? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש שאלות: נקרא תמיד ביחד עם ההורה? יש לכמות גבול טבעי? משתנה לבד, או משותף לרבים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפעמים התשובה היא "reference — ועותק של שדה או שניים".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>embed</strong> — מעט, שייכות רק ללקוח, נקראות עם הפרופיל.</li>
+<li><strong>reference</strong> — אין גבול. collection <code>orders</code> עם <code>customerId</code> ואינדקס <code class="mid">{ customerId: 1, createdAt: -1 }</code>.</li>
+<li><strong>reference + עותק</strong> — <code>productId</code>, ועותק של <code>name</code> ו־<code>price</code> בזמן הקנייה (שיעור 3, סעיף 3).</li>
+<li><strong>reference</strong> — collection <code>comments</code> עם <code>postId</code>. מערך מוטמע יעבוד לרוב הפוסטים ויישבר בדיוק בפוסט שכולם קוראים. ואפשר להטמיע את 3 האחרונות לתצוגה מהירה ("subset pattern").</li>
+<li><strong>reference + עותק של השם</strong> — הקטגוריה היא ישות עם דף משלה. במוצר: <code>categoryId</code> ו־<code>categoryName</code> לתצוגה. שינוי שם של קטגוריה (נדיר) — <code>updateMany</code>.</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להטמיע הכול "כי ככה Mongo" — ואז לקוח עם 3,000 הזמנות בתוך מסמך אחד.</li><li>להפריד הכול "כמו בטבלאות" — ואז כל דף צריך חמישה $lookup.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E16">
+    <h3>P25.7-E16 · דירוגים עם תקציר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הכול ב־<code>updateOne</code> אחד: התנאי "עוד לא דירג" ב־filter, <code>$push</code> ו־<code>$inc</code> ב־update.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"reviews.by": { $ne: by }</code> — "אין במערך דירוג של by".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E16
+import type { Db } from "mongodb";
+
+interface Review {
+  by: string;
+  rating: number;
+}
+interface Product {
+  _id: string;
+  reviews: Review[];
+  ratingCount: number;
+  ratingSum: number;
+}
+
+export async function addReview(db: Db, productId: string, { by, rating }: { by: string; rating: number }) {
+  if (!Number.isInteger(rating) || rating &lt; 1 || rating &gt; 5) throw new RangeError("rating: 1 עד 5");
+  // פקודה אחת: התנאי "הלקוח עוד לא דירג", הוספת הדירוג, ועדכון הסיכום — הכול אטומי על המסמך.
+  // כך הממוצע (ratingSum / ratingCount) תמיד תואם למערך, גם בשתי בקשות במקביל
+  const r = await db.collection&lt;Product&gt;("products").updateOne(
+    { _id: productId, "reviews.by": { $ne: by } },
+    { $push: { reviews: { by, rating } }, $inc: { ratingCount: 1, ratingSum: rating } }
+  );
+  return r.modifiedCount === 1;
+}
+
+export async function averageRating(db: Db, productId: string) {
+  const p = await db.collection&lt;Product&gt;("products").findOne({ _id: productId }, { projection: { ratingCount: 1, ratingSum: 1 } });
+  if (!p) return null;
+  return p.ratingCount === 0 ? 0 : Math.round((p.ratingSum / p.ratingCount) * 10) / 10;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשב ממוצע מכל המערך בכל קריאה — עובד, ומאט ככל שיש יותר דירוגים.</li><li>$push בפקודה אחת ו־$inc בשנייה — בין שתיהן, התקציר לא תואם, ושגיאה באמצע משאירה אותו שגוי לתמיד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E18">
+    <h3>P25.7-E18 · schema validation 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">db.createCollection("books", { validator: { $jsonSchema: { … } } })</code>. מספר שלם — <code>bsonType: "int"</code>; כל מספר — <code>["double", "int"]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">additionalProperties: false</code> חוסם גם את <code>_id</code> — צריך <code>properties: { _id: {} }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E18
+import type { Db } from "mongodb";
+
+// $jsonSchema: Mongo בודק כל insert ו־update. מסמך לא תקין ← שגיאה 121 (Document failed validation)
+export async function createBooksCollection(db: Db) {
+  await db.createCollection("books", {
+    validator: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["title", "price", "stock", "format"],
+        additionalProperties: false,
+        properties: {
+          _id: {},
+          title: { bsonType: "string", minLength: 1 },
+          price: { bsonType: ["double", "int"], minimum: 0 },
+          stock: { bsonType: "int", minimum: 0 },
+          format: { enum: ["paperback", "hardcover", "ebook"] },
+          tags: { bsonType: "array", items: { bsonType: "string" } },
+        },
+      },
+    },
+    validationAction: "error",
+  });
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>bsonType: "number"</code> ל־stock — מקבל גם 1.5.</li><li>לשכוח את <code>_id</code> ב־properties כשיש additionalProperties: false — אף מסמך לא נכנס.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-aggregation.html"><small>הבא</small>שיעור 4 — aggregation ואינדקסים</a></div>
+</main>
+</body>
+</html>

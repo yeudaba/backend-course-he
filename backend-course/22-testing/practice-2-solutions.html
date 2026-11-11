@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 22</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 22</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>22-testing/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P22-E04">
+    <h3>P22-E04 · stub, fake, spy או mock? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>stub — מחזיר תשובה קבועה. fake — מימוש אמיתי ופשוט (בזיכרון). spy — מקליט קריאות. mock — spy עם ציפיות על הקריאות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מחליפים מה ש<em>איטי, לא צפוי או חיצוני</em>. לא מחליפים את הקוד של עצמך רק כי אפשר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>fake</strong> — <code>InMemoryTasksRepository</code>: מתנהג כמו האמיתי, רק בזיכרון. בדיקות דרכו בודקות התנהגות, לא קריאות.</li><li><strong>spy</strong> (<code>mock.fn</code>) — כאן הקריאה <em>היא</em> התוצאה: מה נשלח, למי, כמה פעמים.</li><li><strong>stub</strong> — <code class="mid">{ now: () =&gt; new Date("2026-11-04T10:00:00Z") }</code>.</li><li><strong>stub</strong> שזורק <code>HttpStatusError(503)</code> — כך בודקים מסלול שגיאה שקשה לייצר במציאות.</li><li><strong>לא מחליפים.</strong> היא מהירה, צפויה, ושלך. החלפה שלה רק תקשור את הבדיקה למימוש.</li><li><strong>לא מחליפים</strong> — בודקים מול PostgreSQL אמיתי (integration). mock של Prisma יבדוק שקראת ל־<code>findMany</code> עם אובייקט מסוים — לא שה־SQL מחזיר את השורות הנכונות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>mock לכל דבר ← בדיקות שבודקות "קראת לפונקציה X עם Y" ונשברות בכל שינוי פנימי, בלי לתפוס באגים (E23).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E09">
+    <h3>P22-E09 · async ו־spy 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const fn = mock.fn(async () =&gt; ...)</code>, ואז <code>fn.mock.callCount()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">await assert.rejects(promise, { message: "..." })</code> — עם <code>await</code>!</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E09 — הבדיקות
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { HttpStatusError, withRetry } from "./P22-E09.ts";
+
+test("הצלחה מיד — קריאה אחת", async () =&gt; {
+  const fn = mock.fn(async () =&gt; "ok");
+  assert.equal(await withRetry(fn), "ok");
+  assert.equal(fn.mock.callCount(), 1);
+});
+
+test("נכשל פעמיים עם 503, ואז מצליח", async () =&gt; {
+  let calls = 0;
+  const fn = mock.fn(async () =&gt; {
+    calls++;
+    if (calls &lt; 3) throw new HttpStatusError(503);
+    return "ok";
+  });
+  assert.equal(await withRetry(fn), "ok");
+  assert.equal(fn.mock.callCount(), 3);
+});
+
+test("נכשל תמיד — 1 + retries ניסיונות, וזורק את השגיאה האחרונה", async () =&gt; {
+  let calls = 0;
+  const fn = mock.fn(async () =&gt; {
+    calls++;
+    throw new Error(`ניסיון ${calls}`);
+  });
+  await assert.rejects(withRetry(fn, 2), { message: "ניסיון 3" });
+  assert.equal(fn.mock.callCount(), 3);
+});
+
+test("4xx — לא מנסים שוב", async () =&gt; {
+  const fn = mock.fn(async () =&gt; {
+    throw new HttpStatusError(404);
+  });
+  await assert.rejects(withRetry(fn), HttpStatusError);
+  assert.equal(fn.mock.callCount(), 1);
+});
+
+test("retries=0 — ניסיון אחד", async () =&gt; {
+  const fn = mock.fn(async () =&gt; {
+    throw new HttpStatusError(500);
+  });
+  await assert.rejects(withRetry(fn, 0));
+  assert.equal(fn.mock.callCount(), 1);
+});</code></pre>
+<p>כאן <code>callCount</code> הוא באמת חלק מההתנהגות (כמה ניסיונות), אז spy הוא הכלי הנכון. ובשביל "השגיאה האחרונה" — fn שזורקת הודעה שונה בכל ניסיון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>assert.rejects(...)</code> בלי <code>await</code>: הבדיקה מסתיימת לפני הבדיקה עצמה. ב־<code>node:test</code> הקובץ ייכשל עם "generated asynchronous activity after the test ended" — הודעה מבלבלת שכדאי להכיר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E10">
+    <h3>P22-E10 · זמן ואזורי זמן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הפונקציה מקבלת <code>now</code> — זה כל הטריק. לכל בדיקה — שעה קבועה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איזו שעה ב־UTC היא כבר "מחר" בישראל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E10 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { dueStatus } from "./P22-E10.ts";
+
+const now = new Date("2026-11-04T10:00:00Z");
+
+test("כל המצבים, והגבולות", () =&gt; {
+  assert.equal(dueStatus(null, now), "none");
+  assert.equal(dueStatus("2026-11-03", now), "overdue");
+  assert.equal(dueStatus("2026-11-04", now), "today");
+  assert.equal(dueStatus("2026-11-05", now), "soon");
+  assert.equal(dueStatus("2026-11-07", now), "soon"); // בדיוק 3 ימים
+  assert.equal(dueStatus("2026-11-08", now), "later");
+});
+
+test("\"היום\" לפי UTC — גם כשבישראל כבר מחר", () =&gt; {
+  const lateNight = new Date("2026-11-04T23:30:00Z"); // 01:30 ב־5 בנובמבר בישראל
+  assert.equal(dueStatus("2026-11-04", lateNight), "today");
+});</code></pre>
+<p>הבדיקה השנייה היא החשובה: 23:30 UTC הוא 01:30 של היום הבא בישראל. קוד שמשתמש בשעון המקומי יחשוב שהמשימה "באיחור". בלי בדיקה כזו — הבאג מופיע רק אצל משתמשים בלילה, ורק בפרודקשן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>new Date()</code> בתוך הבדיקה — עוברת היום, נכשלת מחר (E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E11">
+    <h3>P22-E11 · fake mailer 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const send = mock.fn&lt;Mailer["send"]&gt;(async () =&gt; {})</code> — ו־<code>{ send }</code> הוא mailer שלם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">send.mock.calls[0].arguments</code> — כל הארגומנטים של הקריאה הראשונה, במערך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E11 — הבדיקות
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { notifyOverdue, type Mailer } from "./P22-E11.ts";
+
+// fake שמקליט — במקום שרת מיילים אמיתי
+function fakeMailer() {
+  const send = mock.fn&lt;Mailer["send"]&gt;(async () =&gt; {});
+  return { send };
+}
+
+const users = [
+  { id: 1, email: "dana@example.com", wantsEmails: true },
+  { id: 2, email: "yossi@example.com", wantsEmails: false },
+  { id: 3, email: "rona@example.com", wantsEmails: true },
+];
+
+test("שולח רק למי שרוצה ויש לו משימות באיחור", async () =&gt; {
+  const mailer = fakeMailer();
+  const overdue = new Map([
+    [1, ["לשלם חשבון", "להתקשר לבנק"]],
+    [2, ["משהו"]],
+  ]);
+  const sent = await notifyOverdue(users, overdue, mailer);
+  assert.equal(sent, 1);
+  assert.equal(mailer.send.mock.callCount(), 1);
+  assert.deepEqual(mailer.send.mock.calls[0].arguments, ["dana@example.com", "יש לך 2 משימות באיחור", "לשלם חשבון\nלהתקשר לבנק"]);
+});
+
+test("אין משימות באיחור — לא שולחים כלום", async () =&gt; {
+  const mailer = fakeMailer();
+  assert.equal(await notifyOverdue(users, new Map(), mailer), 0);
+  assert.equal(mailer.send.mock.callCount(), 0);
+});
+
+test("רשימה ריקה לא נחשבת", async () =&gt; {
+  const mailer = fakeMailer();
+  assert.equal(await notifyOverdue(users, new Map([[3, []]]), mailer), 0);
+});</code></pre>
+<p>שים לב שבודקים גם <em>מה לא קרה</em>: משתמש שלא רוצה מיילים, ורשימה ריקה. מוטנטים רבים נתפסים רק ככה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את ערך ההחזרה (<code>1</code>) — אז מייל לכתובת הלא נכונה עובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E12">
+    <h3>P22-E12 · טיימרים מזויפים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">t.mock.timers.enable({ apis: ["setTimeout"] })</code> בתוך הבדיקה, ואז <code>t.mock.timers.tick(299)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדוק את הרגע <em>לפני</em> (299) ואת הרגע עצמו (300).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E12 — הבדיקות
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { debounce } from "./P22-E12.ts";
+
+test("רץ פעם אחת, אחרי ההמתנה, עם הארגומנטים האחרונים", (t) =&gt; {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fn = mock.fn();
+  const save = debounce(fn, 300);
+  save("a");
+  t.mock.timers.tick(200);
+  save("ab");
+  t.mock.timers.tick(299);
+  assert.equal(fn.mock.callCount(), 0, "עוד לא עברו 300ms מהקריאה האחרונה");
+  t.mock.timers.tick(1);
+  assert.equal(fn.mock.callCount(), 1);
+  assert.deepEqual(fn.mock.calls[0].arguments, ["ab"]);
+});
+
+test("cancel מבטל", (t) =&gt; {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fn = mock.fn();
+  const save = debounce(fn, 300);
+  save("x");
+  save.cancel();
+  t.mock.timers.tick(1000);
+  assert.equal(fn.mock.callCount(), 0);
+});
+
+test("שתי סדרות נפרדות ← שתי קריאות", (t) =&gt; {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fn = mock.fn();
+  const save = debounce(fn, 100);
+  save(1);
+  t.mock.timers.tick(100);
+  save(2);
+  t.mock.timers.tick(100);
+  assert.equal(fn.mock.callCount(), 2);
+});</code></pre>
+<p>שלוש הבדיקות רצות במילישניות, למרות שהן "מחכות" שניות. ו־<code>t.mock</code> (של הבדיקה) מחזיר את הטיימרים האמיתיים לבד בסוף — בלי <code>afterEach</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">await new Promise(r =&gt; setTimeout(r, 300))</code> — בדיקה איטית ושבירה (במחשב עמוס 300ms הם לפעמים 350).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E13">
+    <h3>P22-E13 · לשנות קוד כדי שיהיה בדיק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>closure: <code>let counter = 0</code> בתוך <code>createInvoiceNumberer</code>, לא ברמת הקובץ.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ברירות מחדל בפרמטר שהוא אובייקט: <code class="mid">({ now = () =&gt; new Date(), random = Math.random } = {})</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E13 — אחרי השינוי: כל מה שלא צפוי (שעה, אקראיות) מוזרק, וה־counter שייך למופע
+export interface InvoiceDeps {
+  now?: () =&gt; Date;
+  random?: () =&gt; number; // [0, 1)
+}
+
+export function createInvoiceNumberer({ now = () =&gt; new Date(), random = Math.random }: InvoiceDeps = {}) {
+  let counter = 0;
+  return function next(): string {
+    counter++;
+    const d = now();
+    const month = String(d.getUTCMonth() + 1).padStart(2, "0"); // UTC: אותה תוצאה בכל אזור זמן
+    const rand = String(Math.floor(random() * 1000)).padStart(3, "0");
+    return `INV-${d.getUTCFullYear()}${month}-${String(counter).padStart(4, "0")}-${rand}`;
+  };
+}</code></pre>
+<p>זה הרעיון המרכזי של השיעור: <strong>קוד בדיק הוא קוד שמקבל את התלויות שלו</strong>, במקום לקחת אותן מהעולם. אותו דבר עשינו עם <code>CLOCK</code> בפרויקט — רק בלי Nest.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר את <code>counter</code> גלובלי — הבדיקות תלויות בסדר שלהן.</li><li><code>getMonth()</code> (מקומי) — בסוף חודש, בלילה, המספר קופץ לחודש הבא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E19">
+    <h3>P22-E19 · בדיקות אבטחה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>logger מזויף: <code class="mid">{ info: mock.fn(), warn: mock.fn() }</code>, ואז כל מה שנכתב — <code class="mid">[...info.mock.calls, ...warn.mock.calls]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אף פעם לא סיסמה" — בדוק בהצלחה וגם בכישלון, עם סיסמה ייחודית שקל לחפש.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E19 — הבדיקות
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { AuthError, createLogin, type Logger } from "./P22-E19.ts";
+
+const PASSWORD = "dana-password-1";
+function setup() {
+  const log = { info: mock.fn&lt;Logger["info"]&gt;(), warn: mock.fn&lt;Logger["warn"]&gt;() };
+  const login = createLogin([{ id: 1, email: "dana@example.com", password: PASSWORD }], log);
+  // כל מה שנכתב ללוג, בכל הרמות
+  const written = () =&gt; [...log.info.mock.calls, ...log.warn.mock.calls].map((c) =&gt; String(c.arguments[0]));
+  return { log, login, written };
+}
+
+test("הצלחה, עם אימייל לא מנורמל", async () =&gt; {
+  const { login, log } = setup();
+  assert.deepEqual(await login("  Dana@Example.COM ", PASSWORD), { userId: 1 });
+  assert.equal(log.info.mock.callCount(), 1);
+});
+
+test("אותה שגיאה בדיוק לאימייל לא רשום ולסיסמה שגויה", async () =&gt; {
+  const { login } = setup();
+  const wrong = await login("dana@example.com", "nope").catch((e) =&gt; e);
+  const unknown = await login("ghost@example.com", "nope").catch((e) =&gt; e);
+  assert.ok(wrong instanceof AuthError);
+  assert.ok(unknown instanceof AuthError);
+  assert.equal(unknown.message, wrong.message);
+});
+
+test("כישלון נכתב ללוג", async () =&gt; {
+  const { login, log } = setup();
+  await login("dana@example.com", "nope").catch(() =&gt; {});
+  assert.equal(log.warn.mock.callCount(), 1);
+});
+
+test("סיסמה לא מגיעה ללוג — לא בהצלחה ולא בכישלון", async () =&gt; {
+  const { login, written } = setup();
+  await login("dana@example.com", PASSWORD);
+  await login("dana@example.com", "secret-typo-123").catch(() =&gt; {});
+  for (const line of written()) {
+    assert.ok(!line.includes(PASSWORD) &amp;&amp; !line.includes("secret-typo-123"), `סיסמה בלוג: ${line}`);
+  }
+});</code></pre>
+<p>דרישות אבטחה הן הכי קלות לשבור בלי שאף אחד ישים לב: הקוד "עובד", המשתמשים מרוצים — והסיסמאות בלוגים. בדיקה שמחפשת את הסיסמה בכל מה שנכתב היא הדרך היחידה לוודא שזה לא יקרה במעבר הבא על הקוד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק ש־<code>warn</code> נקרא — לא <em>מה</em> נכתב בו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E22">
+    <h3>P22-E22 · בדיקה שנכשלת רק בסוף החודש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי הפונקציות מקבלות <code>now</code> כפרמטר אופציונלי. השתמש בו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בחר תאריכים שמכסים את המקרים: חודש של 30, של 31, פברואר רגיל ומעובר, שישי/שבת/ראשון, ושעה שבה UTC ושעון ישראל ביום שונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E22 — מתוקן: כל בדיקה קובעת בעצמה "מה השעה"
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { daysLeftInMonth, isWeekend } from "./P22-E22.ts";
+
+const at = (iso: string) =&gt; new Date(iso);
+
+test("ימים עד סוף החודש — חודשים באורכים שונים", () =&gt; {
+  assert.equal(daysLeftInMonth(at("2026-11-07T12:00:00Z")), 23); // נובמבר: 30
+  assert.equal(daysLeftInMonth(at("2026-12-07T12:00:00Z")), 24); // דצמבר: 31
+  assert.equal(daysLeftInMonth(at("2026-02-07T12:00:00Z")), 21); // פברואר 2026: 28
+  assert.equal(daysLeftInMonth(at("2028-02-07T12:00:00Z")), 22); // שנה מעוברת: 29
+  assert.equal(daysLeftInMonth(at("2026-12-31T23:30:00Z")), 0);
+});
+
+test("סוף שבוע — שישי ושבת, לפי UTC", () =&gt; {
+  assert.equal(isWeekend(at("2026-11-06T12:00:00Z")), true); // שישי
+  assert.equal(isWeekend(at("2026-11-07T12:00:00Z")), true); // שבת
+  assert.equal(isWeekend(at("2026-11-08T12:00:00Z")), false); // ראשון
+  assert.equal(isWeekend(at("2026-11-05T22:30:00Z")), false); // חמישי ב־UTC (ובישראל כבר שישי)
+});</code></pre>
+<p>הבעיה בבדיקה המקורית היא כפולה: היא תלויה בזמן, <em>וגם</em> מחשבת את הציפייה בנוסחה (<code>30 - getUTCDate()</code>) — שגויה בחצי מהחודשים. בדיקה טובה: קלט קבוע, וציפייה כתובה כמספר שבדקת בלוח שנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code class="mid">if (new Date().getUTCDate() !== 31)</code> — מסתיר את הבעיה במקום לפתור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E23">
+    <h3>P22-E23 · בדיקה שבודקת "איך" 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>fake: <code>{ findByMonth: async (y, m) =&gt; data[<code>${y}-${m}</code>] ?? [] }</code>. כך גם "חודש לא נכון" יתגלה — דרך התוצאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בנתונים: כמה קטגוריות, מכירה כפולה באותה קטגוריה, והחזר (סכום שלילי).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E23 — כתוב מחדש: fake עם נתונים, ובודקים את התוצאה
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { monthlyReport, type Sale, type SalesRepository } from "./P22-E23.ts";
+
+// fake אמיתי: מחזיר רק מכירות של החודש שביקשו. לא אכפת לו כמה פעמים קוראים לו
+function fakeRepo(data: Record&lt;string, Sale[]&gt;): SalesRepository {
+  return { findByMonth: async (year, month) =&gt; data[`${year}-${month}`] ?? [] };
+}
+
+test("סיכום לפי קטגוריה, כולל החזרים", async () =&gt; {
+  const repo = fakeRepo({
+    "2026-11": [
+      { category: "coffee", amount: 40 },
+      { category: "coffee", amount: 25 },
+      { category: "tea", amount: 15 },
+      { category: "coffee", amount: -10 },
+    ],
+    "2026-10": [{ category: "tea", amount: 999 }],
+  });
+  assert.deepEqual(await monthlyReport(repo, 2026, 11), { count: 4, total: 70, byCategory: { coffee: 55, tea: 15 } });
+});
+
+test("חודש בלי מכירות", async () =&gt; {
+  assert.deepEqual(await monthlyReport(fakeRepo({}), 2026, 1), { count: 0, total: 0, byCategory: {} });
+});</code></pre>
+<p>הבדיקה החדשה לא יודעת <em>איך</em> הדוח מחושב — רק מה צריך לצאת. לכן היא שורדת כל שיפור פנימי (cache, לולאה אחת במקום שתיים, שאילתה אחרת) ותופסת כל טעות בתוצאה. זו ההבחנה בין fake (התנהגות) ל־mock (קריאות) — ולמה בדרך כלל עדיף fake.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק רק את <code>callCount</code> ולהשאיר את השאר — עדיין לא נבדקת התוצאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E25">
+    <h3>P22-E25 · אתגר: חלון נע 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שעון פשוט: <code class="mid">{ t: 1_000_000, now() { return this.t } }</code>, ו־<code>clock.t += 4_000</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגבול: ב־t + windowMs − 1 עדיין חסום, ב־t + windowMs כבר מותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E25 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { SlidingWindowLimiter } from "./P22-E25.ts";
+
+function setup(limit = 3, windowMs = 10_000) {
+  const clock = { t: 1_000_000, now() { return this.t; } };
+  return { limiter: new SlidingWindowLimiter(limit, windowMs, clock), clock };
+}
+
+test("עד limit בקשות; remaining יורד", () =&gt; {
+  const { limiter } = setup();
+  assert.deepEqual([1, 2, 3].map(() =&gt; limiter.hit("a").remaining), [2, 1, 0]);
+  assert.deepEqual(limiter.hit("a"), { allowed: false, remaining: 0, retryAfterMs: 10_000 });
+});
+
+test("החלון נע: בקשה ישנה יוצאת בדיוק אחרי windowMs", () =&gt; {
+  const { limiter, clock } = setup();
+  limiter.hit("a"); // t=0
+  clock.t += 4_000;
+  limiter.hit("a"); // t=4s
+  limiter.hit("a");
+  clock.t += 5_999; // t=9.999s
+  assert.equal(limiter.hit("a").allowed, false);
+  clock.t += 1; // t=10s — הראשונה יצאה
+  assert.equal(limiter.hit("a").allowed, true);
+});
+
+test("retryAfterMs — עד שהבקשה הוותיקה יוצאת", () =&gt; {
+  const { limiter, clock } = setup();
+  limiter.hit("a");
+  clock.t += 3_000;
+  limiter.hit("a");
+  limiter.hit("a");
+  clock.t += 1_000;
+  assert.equal(limiter.hit("a").retryAfterMs, 6_000);
+});
+
+test("בקשה שנדחתה לא נספרת", () =&gt; {
+  const { limiter, clock } = setup(1, 1_000);
+  limiter.hit("a");
+  clock.t += 500;
+  assert.equal(limiter.hit("a").allowed, false);
+  clock.t += 500;
+  assert.equal(limiter.hit("a").allowed, true, "הדחויה ב־500 לא מאריכה את החסימה");
+});
+
+test("כל מפתח — לבד", () =&gt; {
+  const { limiter } = setup(1);
+  assert.equal(limiter.hit("a").allowed, true);
+  assert.equal(limiter.hit("b").allowed, true);
+  assert.equal(limiter.hit("a").allowed, false);
+});</code></pre>
+<p>זה ההבדל מה"חלון הקבוע" של P20-E25: אין "התחלה של חלון" — כל בקשה יוצאת בזמן משלה. לכן הבדיקות בודקות זמנים <em>בין</em> בקשות, ולא רק "אחרי 10 שניות הכול מתאפס".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקדם את השעון בקפיצות עגולות בלבד (10 שניות) — אף באג של "&gt;" מול "&gt;=" לא נתפס.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P22-E27">
+    <h3>P22-E27 · מטמון LRU עם Map 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שדות: <code>#items = new Map&lt;K, V&gt;()</code> ו־<code>#capacity</code>. ב־<code>get</code>: ‏<code class="mid">if (!this.#items.has(key)) return undefined;</code> (לא <code>if (!value)</code>, בגלל <code>0</code>), ואז <code>delete</code> ו־<code>set</code> מחדש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הישן ביותר: <code class="mid">this.#items.keys().next().value</code> — האיבר הראשון של ה־iterator. ‏TypeScript לא יודע שהוא קיים, ולכן <code>as K</code>. ב־<code>set</code>: קודם <code>delete(key)</code> (אם הוא קיים, כדי שיעבור לסוף), אחר כך <code>set</code>, ורק אז בודקים אם <code>size &gt; capacity</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E27: מטמון LRU עם Map
+export class LruCache&lt;K, V&gt; {
+  #items = new Map&lt;K, V&gt;();
+  #capacity: number;
+
+  constructor(capacity: number) {
+    if (!Number.isInteger(capacity) || capacity &lt; 1) throw new RangeError("capacity חייב להיות מספר שלם חיובי");
+    this.#capacity = capacity;
+  }
+
+  get(key: K): V | undefined {
+    if (!this.#items.has(key)) return undefined;
+    const value = this.#items.get(key) as V;
+    // "נגיעה": מוציאים ומכניסים מחדש — עכשיו הוא האחרון בסדר של ה־Map
+    this.#items.delete(key);
+    this.#items.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    this.#items.delete(key);
+    this.#items.set(key, value);
+    if (this.#items.size &gt; this.#capacity) {
+      const oldest = this.#items.keys().next().value as K;
+      this.#items.delete(oldest);
+    }
+  }
+
+  get size(): number {
+    return this.#items.size;
+  }
+
+  keys(): K[] {
+    return [...this.#items.keys()];
+  }
+}
+
+const cache = new LruCache&lt;string, number&gt;(2);
+cache.set("a", 1);
+cache.set("b", 2);
+cache.get("a"); // a נהיה "האחרון שנגעו בו"
+cache.set("c", 3); // אין מקום — b יוצא
+console.log(cache.keys(), cache.get("b"), cache.size);</code></pre>
+<pre class="terminal">[ 'a', 'c' ] undefined 2</pre>
+<p>כל פעולה היא כמה פעולות על <code>Map</code>, וכל אחת מהן מהירה (O(1)). מימוש עם מערך של מפתחות (<code>indexOf</code> ו־<code>splice</code> בכל <code>get</code>) עובד, אבל לאט יותר ככל שהמטמון גדל.</p>
+<p>ה־<code>&lt;K, V&gt;</code> אומר ש־<code class="mid">new LruCache&lt;string, number&gt;(2)</code> מקבל רק מספרים, ו־<code>get</code> מחזיר <code>number | undefined</code>. ה־<code>undefined</code> בטיפוס מכריח את מי שמשתמש במטמון לטפל במקרה של "לא נמצא".</p>
+<p>למה זה בפרק הבדיקות? כי זו מחלקה שקל לבדוק: אין שעון, אין רשת, רק קלט ופלט. כדאי לכתוב לעצמך בדיקה לפני שמריצים את הבודק: מה ייצא כשמוסיפים פריט שלישי ל־capacity 2?</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>set</code> למפתח קיים בלי <code>delete</code> קודם — ‏<code>Map.set</code> משאיר אותו במקום הישן, והוא ייצא ראשון למרות שעדכנו אותו.</li><li><code class="mid">if (!value) return undefined</code> — ‏<code>0</code> ו־<code>""</code> "לא נמצאים", ולא עוברים לסוף.</li><li>להוציא את הישן <em>לפני</em> ה־<code>set</code> גם כשהמפתח כבר קיים — מוציאים פריט בלי סיבה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P22-E28">
+    <h3>P22-E28 · memoizeAsync עם שעון מוזרק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שומרים במטמון את ה־<strong>Promise</strong>, לא את התוצאה: ‏<code class="mid">Map&lt;A, { promise, expiresAt }&gt;</code>. כך מי שמגיע בזמן ההמתנה מקבל את אותו Promise. ה־Map חי בתוך <code>memoizeAsync</code>, והפונקציה המוחזרת סוגרת עליו (closure).</p>
+<p>חתימה עם generics: <code class="long">memoizeAsync&lt;A extends string | number, R&gt;(fn: (arg: A) =&gt; Promise&lt;R&gt;, { ttlMs, now = Date.now }: { ttlMs: number; now?: () =&gt; number }): (arg: A) =&gt; Promise&lt;R&gt;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שגיאה: <code class="mid">promise.catch(() =&gt; cache.delete(arg))</code> מיד אחרי השמירה. ה־<code>catch</code> הזה לא "בולע" את השגיאה למי שקרא: הוא יוצר Promise חדש, ומי שקרא קיבל את המקורי. בדיקה זהירה יותר: למחוק רק אם במטמון עדיין יושב אותו Promise.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E28: memoizeAsync — מטמון לפונקציה אסינכרונית, עם שעון מוזרק
+export function memoizeAsync&lt;A extends string | number, R&gt;(
+  fn: (arg: A) =&gt; Promise&lt;R&gt;,
+  { ttlMs, now = Date.now }: { ttlMs: number; now?: () =&gt; number },
+): (arg: A) =&gt; Promise&lt;R&gt; {
+  const cache = new Map&lt;A, { promise: Promise&lt;R&gt;; expiresAt: number }&gt;();
+
+  return (arg: A) =&gt; {
+    const hit = cache.get(arg);
+    if (hit &amp;&amp; hit.expiresAt &gt; now()) return hit.promise;
+
+    const promise = fn(arg);
+    cache.set(arg, { promise, expiresAt: now() + ttlMs });
+    // שגיאה לא נשמרת: הקריאה הבאה תנסה שוב
+    promise.catch(() =&gt; {
+      if (cache.get(arg)?.promise === promise) cache.delete(arg);
+    });
+    return promise;
+  };
+}
+
+let clock = 0;
+let calls = 0;
+const getRate = memoizeAsync(
+  async (currency: string) =&gt; {
+    calls++;
+    return currency === "USD" ? 3.7 : 4;
+  },
+  { ttlMs: 60_000, now: () =&gt; clock },
+);
+
+Promise.all([getRate("USD"), getRate("USD")])
+  .then(([a, b]) =&gt; {
+    console.log(a, b, "קריאות:", calls);
+    clock = 60_000;
+    return getRate("USD");
+  })
+  .then(() =&gt; console.log("אחרי דקה — קריאות:", calls));</code></pre>
+<pre class="terminal">3.7 3.7 קריאות: 1
+אחרי דקה — קריאות: 2</pre>
+<p>שמירת ה־Promise היא העיקר. אילו שמרנו את התוצאה (אחרי <code>await</code>), שתי הקריאות הראשונות היו מגיעות לפני שיש תוצאה, ושתיהן היו קוראות ל־<code>fn</code>. בשרת עמוס זה נקרא <em>cache stampede</em>: מאה בקשות בבת אחת מפעילות מאה שאילתות זהות, בדיוק כשהמטמון התרוקן.</p>
+<p>השעון המוזרק הופך "אחרי דקה" לשורה אחת בבדיקה (<code>clock = 60_000</code>), בלי לחכות דקה ובלי טיימרים מזויפים. זה הדפוס של שיעור 2: כל מה שתלוי בזמן מקבל <code>now</code> מבחוץ.</p>
+<p>בפרק 26 תראה את אותו רעיון עם Redis: ‏<code>GET</code>, ואם אין — מחשבים ושומרים עם <code>EX</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">const value = await fn(arg); cache.set(arg, value)</code> — קריאות במקביל קוראות כולן ל־<code>fn</code>.</li><li>לשמור גם שגיאות — תקלה רגעית ברשת "נתקעת" במטמון לכל ה־TTL.</li><li><code>Date.now()</code> ישירות בתוך הפונקציה במקום <code>now()</code> — הבודק לא יכול "להזיז את השעון".</li><li><code>expiresAt &gt;= now()</code> — התשובה תקפה גם ברגע שהיא אמורה לפוג.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-integration.html"><small>הבא</small>שיעור 3 — בדיקות HTTP ומסד בדיקות</a></div>
+</main>
+</body>
+</html>

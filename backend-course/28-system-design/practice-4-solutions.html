@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 28</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 28</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code class="mid">28-system-design/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28-E04">
+    <h3>P28-E04 · מה מותר להיות ישן? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה המחיר של טעות? לקוח רואה מחיר ישן לדקה, או מוכרים יחידה שאין?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"קריאה אחרי כתיבה": משתמש ששילם ורואה "ממתין לתשלום" — יחשוב שזה לא עבד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<div class="table-wrap"><table>
+<tr><th>נתון</th><th>ישן?</th><th>מאיפה</th></tr>
+<tr><td>רשימת המוצרים</td><td>דקה — בסדר</td><td>cache (פרק 26)</td></tr>
+<tr><td>מלאי בדף מוצר</td><td>שניות — בסדר ("נשארו 3")</td><td>cache או replica</td></tr>
+<tr><td>מלאי ברגע ההזמנה</td><td><strong>לא</strong></td><td>primary, בתוך טרנזקציה, UPDATE מותנה</td></tr>
+<tr><td>סטטוס הזמנה אחרי תשלום</td><td>לא — <em>למשתמש הזה</em></td><td>primary לזמן קצר אחרי כתיבה (E14)</td></tr>
+<tr><td>מספר צפיות</td><td>דקות — בסדר, וגם קצת לא מדויק</td><td>מונה ב־Redis, נכתב למסד באצוות</td></tr>
+<tr><td>נקודות לפני מימוש</td><td><strong>לא</strong> — זה כסף</td><td>primary, טרנזקציה</td></tr>
+<tr><td>דוח חודשי</td><td>שעות — בסדר</td><td>replica, או מחסן נתונים</td></tr>
+</table></div>
+<p>הכלל: <strong>החלטות על כסף ומלאי — מהמקור. תצוגה — ממה שמהיר.</strong> בדיוק העיקרון מפרק 26.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"הכול מה־primary, ליתר ביטחון" — עובד עד שה־primary נהיה צוואר הבקבוק. רוב הקריאות לא צריכות להיות מדויקות לשנייה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E11">
+    <h3>P28-E11 · עימוד עם cursor 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Buffer.from(json).toString("base64url")</code>, ובחזרה <code class="mid">Buffer.from(raw, "base64url")</code>. כל השלב בתוך try.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אחרי" במיון יורד: <code>createdAt</code> קטן יותר, או שווה ו־<code>id</code> קטן יותר — בדיוק <code class="mid">(created_at, id) &lt; ($1, $2)</code> ב־SQL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E11
+// cursor "אטום": הלקוח לא יודע (ולא צריך לדעת) מה בפנים. base64url של JSON — ובדיקה כשהוא חוזר
+export interface Cursor {
+  createdAt: string; // ISO
+  id: number;
+}
+
+export function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify([c.createdAt, c.id])).toString("base64url");
+}
+
+export function decodeCursor(raw: string): Cursor {
+  try {
+    const [createdAt, id] = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt)) || !Number.isSafeInteger(id) || id &lt; 1) throw new Error();
+    return { createdAt, id };
+  } catch {
+    throw new Error("cursor לא תקין");
+  }
+}
+
+// keyset: "אחרי השורה הזו" במיון (createdAt DESC, id DESC). בלי OFFSET — מהיר בכל עמוד, ולא מדלג/מכפיל כשנוספות שורות
+export function nextPage&lt;T extends Cursor&gt;(rows: readonly T[], limit: number, after?: string) {
+  const sorted = [...rows].sort((a, b) =&gt; (a.createdAt &lt; b.createdAt ? 1 : a.createdAt &gt; b.createdAt ? -1 : b.id - a.id));
+  const c = after ? decodeCursor(after) : null;
+  const start = c ? sorted.findIndex((r) =&gt; r.createdAt &lt; c.createdAt || (r.createdAt === c.createdAt &amp;&amp; r.id &lt; c.id)) : 0;
+  const page = start === -1 ? [] : sorted.slice(start, start + limit);
+  const last = page[page.length - 1];
+  const hasMore = start !== -1 &amp;&amp; start + limit &lt; sorted.length;
+  return { data: page, nextCursor: hasMore &amp;&amp; last ? encodeCursor(last) : null };
+}</code></pre>
+<p>ב־SQL זה <code class="long">WHERE (created_at, id) &lt; ($1, $2) ORDER BY created_at DESC, id DESC LIMIT 20</code> — ובשיעור 4 מדדנו: 0.06ms בכל עמוד, מול 83ms ל־<code>OFFSET 500000</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>cursor של <code>createdAt</code> לבד — שתי שורות באותה מילישנייה, ואחת מהן נעלמת בין העמודים. תמיד עם id כ"שובר שוויון".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E13">
+    <h3>P28-E13 · consistent hashing 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מערך של <code>{ at, node }</code> ממוין לפי at, וחיפוש בינארי (פרק 27, E10) — lower bound.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אין כזו" = האינדקס יצא <code>length</code> ← עוטפים ל־0.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E13
+// consistent hashing: השרתים והמפתחות על אותו "מעגל" של מספרים; מפתח שייך לשרת הראשון אחריו (עם עטיפה).
+// הוספה/הסרה של שרת מזיזה רק את המפתחות שלידו — כ־1/n, לא כמעט הכול כמו ב־hash % n
+import { createHash } from "node:crypto";
+
+export function hash32(s: string): number {
+  return createHash("md5").update(s).digest().readUInt32BE(0);
+}
+
+export function createRing({ vnodes = 100 }: { vnodes?: number } = {}) {
+  let points: { at: number; node: string }[] = []; // ממוין לפי at
+  const nodes = new Set&lt;string&gt;();
+
+  return {
+    add(node: string) {
+      if (nodes.has(node)) return;
+      nodes.add(node);
+      for (let i = 0; i &lt; vnodes; i++) points.push({ at: hash32(`${node}#${i}`), node });
+      points.sort((a, b) =&gt; a.at - b.at || (a.node &lt; b.node ? -1 : 1));
+    },
+    remove(node: string) {
+      if (!nodes.delete(node)) return;
+      points = points.filter((p) =&gt; p.node !== node);
+    },
+    get(key: string): string | null {
+      if (points.length === 0) return null;
+      const h = hash32(key);
+      // חיפוש בינארי: הנקודה הראשונה שה־at שלה &gt;= h; אין כזו — עוטפים להתחלה
+      let lo = 0;
+      let hi = points.length;
+      while (lo &lt; hi) {
+        const mid = (lo + hi) &gt;&gt;&gt; 1;
+        if (points[mid].at &lt; h) lo = mid + 1;
+        else hi = mid;
+      }
+      return points[lo === points.length ? 0 : lo].node;
+    },
+    nodes: () =&gt; [...nodes],
+  };
+}</code></pre>
+<p>למה virtual nodes? עם נקודה אחת לשרת, ארבע נקודות "אקראיות" על מעגל יוצרות קטעים בגדלים שונים מאוד — שרת אחד מקבל 40% והשני 10%. 100 נקודות לשרת ממצעות את זה. וזה גם מאפשר משקלים: שרת חזק — יותר נקודות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא למיין אחרי <code>add</code> — החיפוש הבינארי "עובד" ומחזיר שרת, רק לא הנכון (E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E16">
+    <h3>P28-E16 · כמה זז כשמוסיפים שרת? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>movedFraction</code>: לולאה, השוואה, חלוקה. ריק ← 0.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי טבעות — אחת עם <code>from</code> שרתים ואחת עם <code>to</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E16
+// כמה מפתחות זזים כשמוסיפים שרת? hash % n מזיז כמעט הכול; consistent hashing — כ־1/n
+import { createHash } from "node:crypto";
+
+export const hash32 = (s: string) =&gt; createHash("md5").update(s).digest().readUInt32BE(0);
+export const moduloShard = (key: string, n: number) =&gt; hash32(key) % n;
+
+export function movedFraction(keys: readonly string[], before: (k: string) =&gt; string | number, after: (k: string) =&gt; string | number): number {
+  if (keys.length === 0) return 0;
+  let moved = 0;
+  for (const k of keys) if (before(k) !== after(k)) moved++;
+  return moved / keys.length;
+}
+
+// makeRing — טבעת consistent hashing (כמו E13): { add(node), get(key) }
+export function compareResharding(
+  keys: readonly string[],
+  from: number,
+  to: number,
+  makeRing: () =&gt; { add(node: string): void; get(key: string): string | null },
+) {
+  const before = makeRing();
+  const after = makeRing();
+  for (let i = 0; i &lt; from; i++) before.add(`db${i}`);
+  for (let i = 0; i &lt; to; i++) after.add(`db${i}`);
+  return {
+    modulo: movedFraction(keys, (k) =&gt; moduloShard(k, from), (k) =&gt; moduloShard(k, to)),
+    ring: movedFraction(keys, (k) =&gt; before.get(k)!, (k) =&gt; after.get(k)!),
+  };
+}</code></pre>
+<p>מה יוצא? על 100,000 מפתחות, מ־4 ל־5 שרתים: modulo — 80.3%, טבעת — 19.2%. מ־10 ל־11: 90.9% מול 7.9%. ב־cache זה ההבדל בין "רוב ה־cache ריק ברגע, והמסד חוטף הכול" לבין "פספוסים ב־8%". ב־sharding של מסד — בין להעביר כמעט את כל הנתונים לבין להעביר עשירית.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נגדל ל־n שרתים מראש ולא נשנה" — הדרך העממית לדחות את הבעיה. עובד, עד שלא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E18">
+    <h3>P28-E18 · batching 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תור של <code>{ key, resolve, reject }</code>, וטיימר אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־flush: "לוקחים" את התור (<code class="mid">const batch = queue; queue = []</code>) לפני הקריאה האסינכרונית — כדי שבקשות חדשות ייכנסו ל־batch הבא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E18
+// batching: הרבה בקשות "תביא את X" באותו רגע ← שאילתה אחת עם כולם (כמו DataLoader מול N+1)
+export function createBatcher&lt;K, V&gt;(
+  loadMany: (keys: K[]) =&gt; Promise&lt;Map&lt;K, V&gt;&gt;,
+  { maxBatch = 100, waitMs = 0 }: { maxBatch?: number; waitMs?: number } = {},
+) {
+  let queue: { key: K; resolve: (v: V | undefined) =&gt; void; reject: (e: unknown) =&gt; void }[] = [];
+  let timer: ReturnType&lt;typeof setTimeout&gt; | null = null;
+
+  const flush = () =&gt; {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const batch = queue;
+    queue = [];
+    const keys = [...new Set(batch.map((b) =&gt; b.key))];
+    loadMany(keys).then(
+      (result) =&gt; batch.forEach((b) =&gt; b.resolve(result.get(b.key))),
+      (err) =&gt; batch.forEach((b) =&gt; b.reject(err)),
+    );
+  };
+
+  return (key: K) =&gt;
+    new Promise&lt;V | undefined&gt;((resolve, reject) =&gt; {
+      queue.push({ key, resolve, reject });
+      if (new Set(queue.map((q) =&gt; q.key)).size &gt;= maxBatch) flush();
+      else if (!timer) timer = setTimeout(flush, waitMs);
+    });
+}</code></pre>
+<p>זה DataLoader (הספרייה של GraphQL) בגרסה קטנה, והתשובה הכללית ל־N+1 (פרק 19): עשרים resolvers שכל אחד מבקש "משתמש X" ← שאילתה אחת <code>WHERE id IN (…)</code>. אותו רעיון בכתיבה: במקום INSERT לכל קליק — אצווה כל שנייה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר תוצאות לפי <em>סדר</em> ולא לפי מפתח — המסד לא מבטיח ש־<code>IN (3, 1, 2)</code> יחזור באותו סדר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E22">
+    <h3>P28-E22 · טבעת עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חיפוש בינארי דורש... ?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לכל שרת יש <code>vnodes</code> נקודות. כמה <code>splice</code> מוחק?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E22
+import { createHash } from "node:crypto";
+
+const hash32 = (s: string) =&gt; createHash("md5").update(s).digest().readUInt32BE(0);
+
+export function createRing({ vnodes = 50 } = {}) {
+  let points: { at: number; node: string }[] = [];
+  return {
+    add(node: string) {
+      for (let i = 0; i &lt; vnodes; i++) points.push({ at: hash32(`${node}#${i}`), node });
+      points.sort((a, b) =&gt; a.at - b.at); // תקלה 1: לא מיינו אחרי הוספה ← החיפוש הבינארי על מערך לא ממוין
+    },
+    remove(node: string) {
+      points = points.filter((p) =&gt; p.node !== node); // תקלה 2: הסירו רק את הנקודה הראשונה של השרת ← "שרת רפאים" ממשיך לקבל מפתחות
+    },
+    get(key: string): string | null {
+      if (points.length === 0) return null;
+      const h = hash32(key);
+      let lo = 0;
+      let hi = points.length;
+      while (lo &lt; hi) {
+        const mid = (lo + hi) &gt;&gt;&gt; 1;
+        if (points[mid].at &lt; h) lo = mid + 1;
+        else hi = mid;
+      }
+      return points[lo % points.length].node; // תקלה 3: היה points[lo] ← מפתח אחרי הנקודה האחרונה מקבל undefined במקום לעטוף להתחלה
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את ה־undefined עם <code>?? points[0].node</code> בלי להבין — עובד במקרה, כי זו בדיוק העטיפה. עדיף לכתוב את הכוונה: <code>lo % length</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E24">
+    <h3>P28-E24 · אתגר: מזהי Snowflake 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">((ms − EPOCH) &lt;&lt; 22n) | (worker &lt;&lt; 12n) | seq</code> — הכול BigInt (<code>BigInt(x)</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פירוק: <code>id &gt;&gt; 22n</code>, <code>(id &gt;&gt; 12n) &amp; 1023n</code>, <code>id &amp; 4095n</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E24
+// מזהה בסגנון Snowflake (טוויטר): 64 ביט = 41 זמן (מילישניות מ־epoch משלנו) | 10 worker | 12 מונה.
+// כל שרת מייצר לבד, בלי לתאם, והמזהים ממוינים בערך לפי זמן. BigInt — כי Number שומר רק 53 ביט
+const EPOCH = 1_767_225_600_000n; // 2026-01-01T00:00:00Z
+
+export function createIdGenerator(workerId: number, { now = () =&gt; Date.now() }: { now?: () =&gt; number } = {}) {
+  if (!Number.isInteger(workerId) || workerId &lt; 0 || workerId &gt; 1023) throw new Error("workerId בין 0 ל־1023");
+  let lastMs = -1;
+  let seq = 0;
+  return {
+    next(): bigint {
+      let ms = now();
+      if (ms &lt; lastMs) throw new Error(`השעון חזר אחורה ב־${lastMs - ms}ms — מסרבים לייצר מזהים כפולים`);
+      if (ms === lastMs) {
+        seq = (seq + 1) &amp; 4095;
+        if (seq === 0) {
+          while (ms &lt;= lastMs) ms = now(); // 4096 מזהים באותה מילישנייה — מחכים לבאה
+        }
+      } else {
+        seq = 0;
+      }
+      lastMs = ms;
+      return ((BigInt(ms) - EPOCH) &lt;&lt; 22n) | (BigInt(workerId) &lt;&lt; 12n) | BigInt(seq);
+    },
+  };
+}
+
+export function parseId(id: bigint) {
+  return {
+    time: new Date(Number((id &gt;&gt; 22n) + EPOCH)).toISOString(),
+    workerId: Number((id &gt;&gt; 12n) &amp; 1023n),
+    seq: Number(id &amp; 4095n),
+  };
+}</code></pre>
+<p>למה לא מספר אוטומטי מהמסד? כי אז כל יצירה צריכה את המסד — ועם כמה מסדים (sharding) כל אחד סופר לבד. למה לא UUID אקראי? 128 ביט, ולא ממוין — אינדקס B-tree שמקבל ערכים אקראיים מתפצל בכל מקום. Snowflake: 64 ביט, ממוין בערך לפי זמן, בלי תיאום. היום יש גם <strong>UUIDv7</strong> — UUID שמתחיל בזמן — שנותן את רוב היתרונות עם תקן מוכר. ובצד הלקוח: מזהה של 64 ביט הוא מעבר ל־<code>Number.MAX_SAFE_INTEGER</code> — ב־JSON שולחים אותו <em>כמחרוזת</em>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number</code> במקום <code>BigInt</code> — מעבר ל־53 ביט מספרים "נעגלים" בשקט, ושני מזהים שונים הופכים לאותו מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28-E25">
+    <h3>P28-E25 · אתגר: Bloom filter 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ביט p: בית <code>p &gt;&gt; 3</code>, ביט <code>p &amp; 7</code> בתוכו. הדלקה: <code>|= 1 &lt;&lt; (p &amp; 7)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>d.readUInt32BE(4) | 1</code> — מה הסימן של התוצאה, כשהביט העליון דלוק?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E25
+// Bloom filter: "בטוח לא קיים" או "אולי קיים" — במעט זיכרון. אין false negatives; false positives בשיעור שבוחרים.
+// m ביטים ו־k פונקציות hash, מחושבים מגודל צפוי n ושיעור טעות p
+import { createHash } from "node:crypto";
+
+export function createBloom(expected: number, falsePositiveRate: number) {
+  const m = Math.ceil((-expected * Math.log(falsePositiveRate)) / Math.LN2 ** 2);
+  const k = Math.max(1, Math.round((m / expected) * Math.LN2));
+  const bits = new Uint8Array(Math.ceil(m / 8));
+
+  // double hashing: שני hashים מ־sha256, ומהם k מיקומים (h1 + i·h2)
+  const positions = (item: string) =&gt; {
+    const d = createHash("sha256").update(item).digest();
+    const h1 = d.readUInt32BE(0);
+    const h2 = (d.readUInt32BE(4) | 1) &gt;&gt;&gt; 0; // "&gt;&gt;&gt; 0": בלי זה, | הופך מספר גדול לשלילי — ומיקום שלילי ב־Uint8Array פשוט לא נכתב
+    return Array.from({ length: k }, (_, i) =&gt; (h1 + i * h2) % m);
+  };
+
+  return {
+    m,
+    k,
+    bytes: bits.length,
+    add(item: string) {
+      for (const p of positions(item)) bits[p &gt;&gt; 3] |= 1 &lt;&lt; (p &amp; 7);
+    },
+    mightContain(item: string): boolean {
+      return positions(item).every((p) =&gt; (bits[p &gt;&gt; 3] &amp; (1 &lt;&lt; (p &amp; 7))) !== 0);
+    },
+  };
+}</code></pre>
+<p>על מיליון שמות עם 1% טעות: 1.2MB ו־7 hashים. מדדתי: 1.002% false positives. Set עם אותם מיליון שמות תפס כ־35MB. "לא קיים" — בטוח, ואפשר לענות מיד; "אולי" — שואלים את המסד. כך עושים Cassandra ו־RocksDB (לדלג על קבצים שבטוח אין בהם את המפתח), וכך דפדפנים בדקו פעם אתרים זדוניים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>זה הבאג שהיה לי בפתרון הראשון: <code>x | 1</code> ב־JavaScript מחזיר מספר <em>עם סימן</em> של 32 ביט. כשהביט העליון דלוק — שלילי, המיקום שלילי, ו־<code>bits[-5] |= …</code> לא זורק — פשוט לא כותב. התוצאה: false negatives, הדבר היחיד שאסור ל־Bloom filter. הבודק תפס את זה; <code>&gt;&gt;&gt; 0</code> מחזיר ל־unsigned.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P28-E26">
+    <h3>P28-E26 · quorum: כמה העתקים צריכים להסכים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>quorumWrite</code>: לולאה, ‏<code>continue</code> על העתק שלא זמין, ומונה <code>acks</code>. ‏<code>quorumRead</code>: ‏<code class="mid">replicas.filter((x) =&gt; x.up).slice(0, r)</code> ← ההעתקים שנקראו. אם יש פחות מ־<code>r</code>, זורקים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החדש ביותר: <code class="long">answered.reduce((best, x) =&gt; (x.version &gt; best.version ? x : best))</code> (פרק 6). אחר כך עוד לולאה על <code>answered</code>: מי שהגרסה שלו נמוכה מקבל את הערך והגרסה של החדש. אלה אובייקטים, ולכן השינוי נשמר במערך המקורי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28-E26 — quorum: כמה העתקים צריכים להסכים
+export type Replica = { up: boolean; version: number; value: string | null };
+
+export function isStrong(n: number, r: number, w: number): boolean {
+  return r + w &gt; n;
+}
+
+export function quorumWrite(replicas: Replica[], w: number, value: string, version: number): boolean {
+  let acks = 0;
+  for (const replica of replicas) {
+    if (!replica.up) continue;
+    replica.version = version;
+    replica.value = value;
+    acks++;
+  }
+  return acks &gt;= w;
+}
+
+export function quorumRead(replicas: Replica[], r: number): { value: string | null; version: number; repaired: number } {
+  const answered = replicas.filter((rep) =&gt; rep.up).slice(0, r);
+  if (answered.length &lt; r) throw new Error(`רק ${answered.length} העתקים זמינים, צריך ${r}`);
+  const newest = answered.reduce((best, rep) =&gt; (rep.version &gt; best.version ? rep : best));
+  let repaired = 0;
+  for (const rep of answered) {
+    if (rep.version &lt; newest.version) {
+      rep.version = newest.version;
+      rep.value = newest.value;
+      repaired++;
+    }
+  }
+  return { value: newest.value, version: newest.version, repaired };
+}
+
+const replicas: Replica[] = [
+  { up: true, version: 0, value: null },
+  { up: true, version: 0, value: null },
+  { up: true, version: 0, value: null },
+];
+console.log("N=3, R=2, W=2 strong?", isStrong(3, 2, 2), "· R=1, W=1?", isStrong(3, 1, 1));
+replicas[2].up = false;
+console.log("write v1:", quorumWrite(replicas, 2, "address: Haifa", 1));
+replicas[2].up = true;
+replicas[0].up = false;
+console.log("read:", quorumRead(replicas, 2));
+console.log(replicas.map((r) =&gt; `${r.version}:${r.value}`));</code></pre>
+<pre class="terminal">N=3, R=2, W=2 strong? true · R=1, W=1? false
+write v1: true
+read: { value: 'address: Haifa', version: 1, repaired: 1 }
+[ '1:address: Haifa', '1:address: Haifa', '1:address: Haifa' ]</pre>
+<p>התרחיש: הכתיבה הגיעה רק להעתקים 0 ו־1, כי 2 היה למטה. אחר כך 2 חזר, ו־0 נפל. הקריאה עם R=2 שאלה את 1 ואת 2. ל־1 יש את הגרסה החדשה, ולכן היא מנצחת. זו החפיפה ש־<code>R + W &gt; N</code> מבטיחה. בדרך, העתק 2 קיבל את הגרסה (<code>repaired: 1</code>), כך שההעתקים מתכנסים בלי תהליך נפרד.</p>
+<p>הבדיקה האחרונה בבודק עוברת על כל הצירופים: כתיבה בלי העתק אחד, וקריאה בלי העתק אחר. הקריאה תמיד מוצאת את <code>v1</code>. עם <code>R = W = 1</code> זה לא נכון: הכתיבה יכולה להגיע רק להעתק 0, והקריאה רק להעתק 1. זה ה־trade-off של שיעור 4. ‏<code>R=1, W=1</code> מהיר וזמין מאוד, אבל eventually consistent.</p>
+<p>מה הסימולציה מפשטת? ‏<code>version</code> כאן הוא מספר שהכותב בוחר. במערכת אמיתית שני כותבים יכולים לבחור אותה גרסה, ואז צריך חותמת זמן עם מזהה צומת, או vector clock. וכתיבה "שנכשלה" (פחות מ־W) שנשארה בחלק מההעתקים יכולה להופיע בקריאה מאוחרת. זו הסיבה ש־Cassandra ממליצה לנסות שוב כתיבה שנכשלה עם אותו ערך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא מכל ההעתקים ולבחור את החדש — "עובד", אבל זה R=N: כל העתק שנופל מפיל את הקריאה.</li><li>לבחור את הערך הנפוץ ביותר במקום את הגרסה הגבוהה — שני העתקים ישנים "מנצחים" העתק אחד חדש.</li><li>read repair גם להעתקים שלא נקראו — הקורא לא יודע מה יש בהם.</li><li><code>quorumWrite</code> שעוצרת אחרי <code>w</code> אישורים — שאר ההעתקים נשארים ישנים, והחפיפה נשענת על מזל.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-design-doc.html"><small>הבא</small>שיעור 5 — פיד, ומסמך תכנון לחנות הקפה</a></div>
+</main>
+</body>
+</html>

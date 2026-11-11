@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E07">
+    <h3>P25.5-E07 · היקר ביותר בכל קטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אין DISTINCT ON. יש window functions.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id)</code> בתת־שאילתה, ו־<code>WHERE rn = 1</code> בחוץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E07
+-- המוצר היקר ביותר בכל קטגוריה (פעיל ובמלאי); בתיקו — ה־id הקטן. window functions קיימות מ־MySQL 8.0
+SELECT category, name, price
+FROM (
+  SELECT category, name, price,
+         ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id) AS rn
+  FROM products
+  WHERE is_active AND stock &gt; 0
+) ranked
+WHERE rn = 1
+ORDER BY category;</code></pre>
+<pre class="terminal">+-------------+----------------------+--------+
+| category    | name                 | price  |
++-------------+----------------------+--------+
+| accessories | Paper Filters (100)  |  24.90 |
+| beans       | Ethiopia Beans 1kg   |  89.90 |
+| brewing     | Gooseneck Kettle     | 229.00 |
+| grinders    | Electric Grinder Pro | 649.00 |
++-------------+----------------------+--------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">SELECT category, name, MAX(price) … GROUP BY category</code> — ב־MySQL ישן זה "עבד" ונתן <code>name</code> אקראי; ב־8 עם ONLY_FULL_GROUP_BY — שגיאה. וטוב שכך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E08">
+    <h3>P25.5-E08 · upsert לעגלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">INSERT … ON DUPLICATE KEY UPDATE</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>VALUES(quantity)</code> בתוך ה־UPDATE מיושן מ־8.0.20 (warning). במקומו: <code class="long">VALUES (1, 3, 2) AS new … quantity = cart_items.quantity + new.quantity</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E08
+-- "הוסף 2 יחידות של מוצר 3 לעגלה של לקוח 1": אם השורה קיימת — מוסיפים לכמות. ב־PostgreSQL: ON CONFLICT … DO UPDATE.
+-- ב־MySQL: ON DUPLICATE KEY UPDATE, עם alias לשורה החדשה (VALUES() בתוך UPDATE מיושן מ־8.0.20 ומחזיר warning)
+INSERT INTO cart_items (customer_id, product_id, quantity)
+VALUES (1, 3, 2) AS new
+ON DUPLICATE KEY UPDATE quantity = cart_items.quantity + new.quantity;</code></pre>
+<p>שימו לב להבדל מ־PostgreSQL: <code class="mid">ON CONFLICT (customer_id, product_id)</code> בוחר מפתח; <code>ON DUPLICATE KEY</code> מופעל על <em>כל</em> מפתח ייחודי בטבלה. בטבלה עם שני מפתחות ייחודיים זה יכול לעדכן שורה שלא התכוונת אליה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>REPLACE INTO</code> — "upsert" שבעצם מוחק ומכניס מחדש: ה־id משתנה, וטריגרים ומפתחות זרים עם ON DELETE מופעלים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E11">
+    <h3>P25.5-E11 · GROUP BY נכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל עמודה ב־SELECT — או ב־GROUP BY, או בתוך פונקציה מצטברת, או <em>תלויה פונקציונלית</em> במה שב־GROUP BY.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>GROUP BY c.id</code> מספיק ל־<code>c.name</code> ו־<code>c.city</code> — כי <code>id</code> הוא המפתח הראשי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E11
+-- לכל לקוח עם הזמנות ששולמו: כמה, כמה כסף, ומתי האחרונה. ONLY_FULL_GROUP_BY מרשה name ו־city
+-- כי הם תלויים פונקציונלית ב־c.id (המפתח הראשי) — לא צריך להוסיף אותם ל־GROUP BY
+SELECT c.name, c.city,
+       COUNT(*) AS paid_orders,
+       SUM(o.total) AS paid_total,
+       MAX(o.created_at) AS last_order
+FROM customers c
+JOIN orders o ON o.customer_id = c.id AND o.status IN ('paid', 'shipped')
+GROUP BY c.id
+ORDER BY paid_total DESC, c.id;</code></pre>
+<pre class="terminal">+-------------+-----------+-------------+------------+-------------------------+
+| name        | city      | paid_orders | paid_total | last_order              |
++-------------+-----------+-------------+------------+-------------------------+
+| Yossi Cohen | Tel Aviv  |           1 |     649.00 | 2026-03-02 11:30:00.000 |
+| Dana Levi   | Haifa     |           1 |     278.90 | 2026-03-01 09:00:00.000 |
+| Noa Mizrahi | Tel Aviv  |           1 |     238.00 | 2026-03-04 16:45:00.000 |
+| Avi Peretz  | Jerusalem |           1 |     119.00 | 2026-03-06 10:10:00.000 |
++-------------+-----------+-------------+------------+-------------------------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכבות את ONLY_FULL_GROUP_BY ב־<code>sql_mode</code> כי "השאילתה הישנה נשברה". השאילתה הישנה החזירה ערכים שרירותיים — עכשיו פשוט יודעים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E12">
+    <h3>P25.5-E12 · עמודת JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>attributes-&gt;&gt;'$.material'</code> — טקסט; <code>-&gt;</code> — JSON (עם מרכאות).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">CAST(attributes-&gt;&gt;'$.cups' AS UNSIGNED)</code>, ו־<code class="mid">ORDER BY cups IS NULL, cups DESC</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E12
+-- עמודת JSON: -&gt;&gt; מחזיר טקסט (בלי מרכאות), -&gt; מחזיר JSON. מספר — CAST, כדי למיין ולהשוות כמספר
+SELECT name,
+       attributes-&gt;&gt;'$.material' AS material,
+       CAST(attributes-&gt;&gt;'$.cups' AS UNSIGNED) AS cups
+FROM products
+WHERE category = 'brewing'
+  AND attributes-&gt;&gt;'$.material' IS NOT NULL
+ORDER BY cups IS NULL, cups DESC, name;</code></pre>
+<pre class="terminal">+------------------+-----------+------+
+| name             | material  | cups |
++------------------+-----------+------+
+| French Press 1L  | glass     |    8 |
+| Moka Pot 6 Cups  | aluminium |    6 |
+| Gooseneck Kettle | steel     | NULL |
+| V60 Ceramic      | ceramic   | NULL |
++------------------+-----------+------+</pre>
+<p>וכשמחפשים לפי שדה ב־JSON הרבה: עמודה מחושבת (<code class="mid">GENERATED ALWAYS AS (attributes-&gt;&gt;'$.material')</code>) עם אינדקס, או functional index. אבל אם שדה מופיע בכל שורה ומחפשים לפיו — הוא כנראה צריך להיות עמודה רגילה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות <code class="mid">attributes-&gt;'$.material' = 'glass'</code> — ה־<code>-&gt;</code> מחזיר JSON (<code>"glass"</code> עם מרכאות), וההשוואה מתנהגת אחרת ממה שנראה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E20">
+    <h3>P25.5-E20 · שאילתה מ־PostgreSQL — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה דברים ש־MySQL לא מכיר, או מכיר אחרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>||</code>, <code>ILIKE</code>, <code>DISTINCT ON</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E20
+-- "השאילתה עבדה ב־PostgreSQL": שלוש בעיות ב־MySQL
+-- תקלה 1: || ב־MySQL הוא OR לוגי (מחזיר 0/1), לא חיבור מחרוזות ← CONCAT
+-- תקלה 2: אין ILIKE ← LIKE, שבקולציה של הטבלה (_ai_ci) כבר לא רגיש לרישיות
+-- תקלה 3: DISTINCT ON לא קיים ← ROW_NUMBER() בתת־שאילתה
+SELECT customer, city, last_total
+FROM (
+  SELECT CONCAT(c.name, ' (', c.email, ')') AS customer,
+         c.city,
+         o.total AS last_total,
+         ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.created_at DESC) AS rn
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id
+  WHERE c.city LIKE '%aviv%'
+) t
+WHERE rn = 1
+ORDER BY customer;</code></pre>
+<pre class="terminal">+---------------------------------+----------+------------+
+| customer                        | city     | last_total |
++---------------------------------+----------+------------+
+| Noa Mizrahi (noa@example.com)   | Tel Aviv |     238.00 |
+| Yossi Cohen (yossi@example.com) | Tel Aviv |      89.90 |
++---------------------------------+----------+------------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל <code>PIPES_AS_CONCAT</code> ב־sql_mode כדי ש־<code>||</code> יעבוד — עכשיו הקוד תלוי בהגדרת שרת, ושרת אחר יחזיר 0.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E26">
+    <h3>P25.5-E26 · דוח לקוחות ב־MySQL — מקובץ ריק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי טבלאות "רבות" לכל לקוח (הזמנות ועגלה). ‏<code>JOIN</code> לשתיהן יחד מכפיל שורות: לדנה יש שני פריטים בעגלה, וההזמנה שלה נספרת פעמיים. לכן מסכמים כל אחת בנפרד ב־CTE (<code class="mid">WITH spent AS (... GROUP BY customer_id), cart AS (...)</code>), ואז <code>LEFT JOIN</code> ללקוחות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>MySQL: ‏<code>IFNULL(s.spent, 0)</code> (או <code>COALESCE</code>), ‏<code class="mid">DATE_FORMAT(s.last_at, '%d/%m/%Y')</code>. ‏<code>DATE_FORMAT</code> של <code>NULL</code> הוא <code>NULL</code>. בחלון: <code class="long">RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC)</code>, ובסוף <code class="mid">ORDER BY c.city, city_rank, c.name</code> (מותר למיין לפי כינוי של עמודה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH spent AS (
+  SELECT customer_id, COUNT(*) AS orders, SUM(total) AS spent, MAX(created_at) AS last_at
+  FROM orders
+  WHERE status IN ('paid', 'shipped')
+  GROUP BY customer_id
+),
+cart AS (
+  SELECT customer_id, SUM(quantity) AS units
+  FROM cart_items
+  GROUP BY customer_id
+)
+SELECT
+  c.name,
+  c.city,
+  IFNULL(s.orders, 0) AS orders,
+  IFNULL(s.spent, 0) AS spent,
+  DATE_FORMAT(s.last_at, '%d/%m/%Y') AS last_order,
+  IFNULL(ct.units, 0) AS cart_units,
+  RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC) AS city_rank
+FROM customers c
+LEFT JOIN spent s ON s.customer_id = c.id
+LEFT JOIN cart ct ON ct.customer_id = c.id
+ORDER BY c.city, city_rank, c.name;</code></pre>
+<pre class="terminal">+-------------+-----------+--------+--------+------------+------------+-----------+
+| name        | city      | orders | spent  | last_order | cart_units | city_rank |
++-------------+-----------+--------+--------+------------+------------+-----------+
+| Dana Levi   | Haifa     |      1 | 278.90 | 01/03/2026 |          3 |         1 |
+| Maya Katz   | Haifa     |      0 |   0.00 | NULL       |          1 |         2 |
+| Avi Peretz  | Jerusalem |      1 | 119.00 | 06/03/2026 |          0 |         1 |
+| Yossi Cohen | Tel Aviv  |      1 | 649.00 | 02/03/2026 |          0 |         1 |
+| Noa Mizrahi | Tel Aviv  |      1 | 238.00 | 04/03/2026 |          0 |         2 |
++-------------+-----------+--------+--------+------------+------------+-----------+</pre>
+<p>דנה: הזמנה אחת ששולמה (278.90). ההזמנה המבוטלת לא נספרת. בעגלה שלה 2 + 1 = 3 יחידות. מי שמצרף את <code>orders</code> ואת <code>cart_items</code> באותו <code>FROM</code> מקבל לה <code>spent</code> של 557.80, כי כל הזמנה מופיעה פעם לכל פריט בעגלה. זה ה־"fan-out" מפרק 17, והוא נראה בדיוק אותו דבר ב־MySQL.</p>
+<p>מה כאן MySQL ומה לא? ‏CTE, ‏<code>LEFT JOIN</code>, ‏<code>RANK</code> ו־<code>GROUP BY</code> זהים ל־PostgreSQL (מגרסה 8). ההבדלים: ‏<code>DATE_FORMAT</code> עם <code>%d/%m/%Y</code> (ב־PostgreSQL: ‏<code>to_char(..., 'DD/MM/YYYY')</code>), ו־<code>IFNULL</code>, שקיים רק ב־MySQL. ‏<code>COALESCE</code> עובד בשניהם, ולכן הוא בחירה טובה כשכותבים SQL שצריך לרוץ בשני המסדים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>JOIN</code> במקום <code>LEFT JOIN</code> — מאיה, שעוד לא הזמינה, נעלמת מהדוח.</li><li><code>WHERE o.status IN (...)</code> אחרי <code>LEFT JOIN</code> ל־<code>orders</code> — הופך אותו ל־<code>JOIN</code> רגיל, ומאיה שוב נעלמת. את הסינון שמים בתוך ה־CTE (או בתנאי ה־<code>ON</code>).</li><li><code>ROW_NUMBER</code> במקום <code>RANK</code> — בתיקו אחד מקבל 1 והשני 2, לפי סדר מקרי.</li><li><code>'%d/%m/%y'</code> — ‏<code>y</code> קטנה היא שנה בשתי ספרות (<code>26</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E27">
+    <h3>P25.5-E27 · INSERT מרובה שורות, עם upsert 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות לא יכולים להיות פרמטרים (<code>?</code> הוא רק לערכים), ולכן בודקים אותם מול רשימה מותרת: פונקציה קטנה <code>ident(name)</code> שזורקת אם ה־regex לא מתאים, ומחזירה את השם עטוף ב־backticks. כל שם עובר דרכה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const columns = Object.keys(rows[0])</code>. השוואת עמודות: <code class="mid">Object.keys(row).sort().join(",")</code> מול אותו דבר בשורה הראשונה. פרמטרים: <code class="mid">rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]))</code>. ‏placeholders: ‏<code class="mid">rows.map(() =&gt; "(?, ?, ?)").join(", ")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E27 — INSERT מרובה שורות, עם upsert
+type Value = string | number | boolean | null;
+
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+
+function ident(name: string): string {
+  if (!IDENT.test(name)) throw new Error(`שם לא חוקי: ${name}`);
+  return `\`${name}\``;
+}
+
+export function buildBulkInsert(
+  table: string,
+  rows: Record&lt;string, Value&gt;[],
+  options: { add?: string[]; set?: string[] } = {},
+): { sql: string; params: Value[] } {
+  if (rows.length === 0) throw new Error("אין שורות");
+  const columns = Object.keys(rows[0]);
+  const key = [...columns].sort().join(",");
+  for (const row of rows) {
+    if (Object.keys(row).sort().join(",") !== key) throw new Error("לכל השורות צריכות להיות אותן עמודות");
+  }
+
+  const placeholders = `(${columns.map(() =&gt; "?").join(", ")})`;
+  let sql = `INSERT INTO ${ident(table)} (${columns.map(ident).join(", ")}) VALUES ${rows.map(() =&gt; placeholders).join(", ")}`;
+  const params = rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]));
+
+  const updates = [
+    ...(options.add ?? []).map((c) =&gt; `${ident(c)} = ${ident(table)}.${ident(c)} + new.${ident(c)}`),
+    ...(options.set ?? []).map((c) =&gt; `${ident(c)} = new.${ident(c)}`),
+  ];
+  if (updates.length &gt; 0) sql += ` AS new ON DUPLICATE KEY UPDATE ${updates.join(", ")}`;
+  return { sql, params };
+}
+
+console.log(buildBulkInsert("cart_items", [
+  { customer_id: 1, product_id: 3, quantity: 2 },
+  { product_id: 4, customer_id: 1, quantity: 1 },
+], { add: ["quantity"] }));
+try {
+  buildBulkInsert("products; DROP TABLE orders", [{ id: 1 }]);
+} catch (err) {
+  console.log((err as Error).message);
+}</code></pre>
+<pre class="terminal">{
+  sql: 'INSERT INTO `cart_items` (`customer_id`, `product_id`, `quantity`) VALUES (?, ?, ?), (?, ?, ?) AS new ON DUPLICATE KEY UPDATE `quantity` = `cart_items`.`quantity` + new.`quantity`',
+  params: [ 1, 3, 2, 1, 4, 1 ]
+}
+שם לא חוקי: products; DROP TABLE orders</pre>
+<p>שני חלקים, ולכל אחד הגנה משלו מ־injection. ערכים עוברים תמיד כ־<code>?</code>, ולכן <code class="mid">"x'); DROP TABLE orders; --"</code> נשמר כשם של לקוח. שמות אי אפשר להעביר כפרמטר, ולכן הם עוברים בדיקה מול regex קשוח. שם כמו <code class="mid">products; DROP TABLE orders</code> לא מגיע ל־SQL בכלל.</p>
+<p><code>flatMap</code> לפי <code>columns</code>, ולא <code>Object.values(row)</code>: בשורה השנייה בדוגמה המפתחות כתובים בסדר אחר. ‏<code>Object.values</code> היה מכניס את מספר המוצר לעמודת הלקוח, בלי שום שגיאה.</p>
+<p>‏MySQL מגביל את מספר ה־placeholders בשאילתה (65,535). לכן בטעינה גדולה מחלקים את השורות לקבוצות של כמה מאות, ומריצים כל קבוצה בנפרד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Object.values(row)</code> — תלוי בסדר שבו המפתחות נכתבו בכל שורה.</li><li>לשרשר ערכים לתוך ה־SQL (<code><code>VALUES ('${name}')</code></code>) — ‏injection, וגם שבירה על כל שם עם גרש (<code>O'Brien</code>).</li><li><code>VALUES(quantity)</code> במקום <code>new.quantity</code> — עובד, אבל deprecated מ־MySQL 8.0.20.</li><li>לבדוק רק שמספר העמודות שווה — ‏<code>{a, b}</code> ו־<code>{a, c}</code> עוברים.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-transactions.html"><small>הבא</small>שיעור 3 — InnoDB: טרנזקציות, נעילות ו־deadlocks</a></div>
+</main>
+</body>
+</html>

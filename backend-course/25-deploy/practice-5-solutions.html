@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — פרק 25</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 25</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25-deploy/solutions/</code>.</p></div>
+
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25-E24">
+    <h3>P25-E24 · אתגר: linter ל־workflows 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־YAML 1.1 (למשל PyYAML) המפתח <code>on</code> נקרא כ־<code>true</code>; ב־js-yaml 5 (YAML 1.2) — כ־<code>"on"</code>. כדי לעבוד עם שניהם: <code>wf.on ?? wf["true"]</code>. ו־<code>on</code> יכול להיות מחרוזת, מערך או אובייקט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"משתמש בסודות": <code class="mid">/secrets\./.test(JSON.stringify(job))</code> — פשוט ומספיק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E24
+import { load as parseYaml } from "js-yaml";
+
+export interface Finding {
+  job: string | null;
+  rule: "yaml" | "permissions" | "timeout" | "unpinned-action" | "npm-install" | "secret-in-run" | "unknown-needs" | "deploy-without-needs" | "pr-secrets";
+}
+
+interface Step { uses?: string; run?: string; env?: Record&lt;string, string&gt; }
+interface Job { needs?: string | string[]; "timeout-minutes"?: number; steps?: Step[]; env?: Record&lt;string, string&gt;; if?: string }
+
+export function lintWorkflow(text: string): Finding[] {
+  let wf: { on?: unknown; permissions?: unknown; jobs?: Record&lt;string, Job&gt;; env?: Record&lt;string, string&gt; } &amp; Record&lt;string, unknown&gt;;
+  try {
+    wf = parseYaml(text) as typeof wf;
+  } catch {
+    return [{ job: null, rule: "yaml" }];
+  }
+  const out: Finding[] = [];
+  const add = (job: string | null, rule: Finding["rule"]) =&gt; out.push({ job, rule });
+  if (wf.permissions === undefined) add(null, "permissions");
+  const on = wf.on ?? wf["true"];
+  const onPr = Array.isArray(on) ? on.includes("pull_request") : typeof on === "object" &amp;&amp; on !== null ? "pull_request" in on : on === "pull_request";
+  const jobs = wf.jobs ?? {};
+  for (const [name, job] of Object.entries(jobs)) {
+    if (job["timeout-minutes"] === undefined) add(name, "timeout");
+    const steps = job.steps ?? [];
+    if (steps.some((s) =&gt; s.uses &amp;&amp; (!s.uses.includes("@") || /@(main|master)$/.test(s.uses)))) add(name, "unpinned-action");
+    if (steps.some((s) =&gt; /\bnpm (install|i)\b/.test(s.run ?? ""))) add(name, "npm-install");
+    // ${{ secrets.X }} בתוך הסקריפט עצמו: הערך נכנס לטקסט של הסקריפט (וגם injection). דרך env — כמשתנה
+    if (steps.some((s) =&gt; /\$\{\{\s*secrets\./.test(s.run ?? ""))) add(name, "secret-in-run");
+    const needs = [job.needs ?? []].flat();
+    if (needs.some((n) =&gt; !(n in jobs))) add(name, "unknown-needs");
+    if (/deploy/i.test(name) &amp;&amp; needs.length === 0) add(name, "deploy-without-needs");
+    // job שרץ גם על pull request ומשתמש בסודות, בלי if שמגביל ל־push
+    const usesSecrets = /secrets\./.test(JSON.stringify(job));
+    if (onPr &amp;&amp; usesSecrets &amp;&amp; !/push|refs\/heads/.test(job.if ?? "")) add(name, "pr-secrets");
+  }
+  return out;
+}</code></pre>
+<p>הכלי האמיתי: <strong>actionlint</strong> — מריצים אותו ב־CI על ה־workflows עצמם. ולמה <code>secret-in-run</code>? <code>${{ }}</code> מוחלף בטקסט <em>לפני</em> שה־shell רץ: הסוד הופך לחלק מהסקריפט (ואם הערך מגיע ממשתמש — script injection). דרך <code>env</code> הוא משתנה רגיל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להיכשל על ה־<code>ci.yml</code> של הפרויקט: למשל, לחשוב ש־<code>needs: [test, docker]</code> הוא מחרוזת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 23</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 23</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>23-docker/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P23-E17">
+    <h3>P23-E17 · compose: app ו־PostgreSQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בתוך compose, כל שירות נגיש לאחרים לפי השם שלו: <code>@db:5432</code>, לא <code>localhost</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">depends_on: db: condition: service_healthy</code> — רק עם healthcheck ב־db.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml">services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: visits
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d visits"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/visits # db = שם השירות, לא localhost
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:</code></pre>
+<p>שלושה דברים שכל compose של "אפליקציה + מסד" צריך: <strong>שם שירות כ־host</strong>, <strong>volume בשם</strong> (שורד <code>down</code>), ו<strong>healthcheck + condition</strong> (בלעדיהם האפליקציה עולה לפני שהמסד מוכן, ונופלת — E21).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>volume בלי שם (<code>- /var/lib/postgresql</code>) — volume אנונימי שקל לאבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P23-E18">
+    <h3>P23-E18 · משתנים ב־compose 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>compose מחליף <code>${VAR}</code> מה־env של ה־Terminal ומקובץ <code>.env</code> שליד ה־compose.yaml.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>${VAR:-ברירת מחדל}</code> ו־<code>${VAR:?הודעת שגיאה}</code> — אותו תחביר כמו ב־bash.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml">services:
+  app:
+    image: node:24-alpine
+    command: ["node", "-e", "console.log(process.env.API_KEY ? 'יש מפתח' : 'אין מפתח')"]
+    environment:
+      API_KEY: ${API_KEY:?חסר API_KEY — הוסף אותו לקובץ .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_NAME: tasks</code></pre>
+<p>בלי <code>:?</code>, משתנה חסר הופך בשקט למחרוזת ריקה — והאפליקציה עולה עם <code>API_KEY=""</code>. עדיף להיכשל בפקודה, עם הודעה, מאשר לגלות אחרי פריסה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב את המפתח עצמו בתוך compose.yaml — והוא ב־Git.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P23-E19">
+    <h3>P23-E19 · פיתוח מול פרודקשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>compose ממזג את <code>compose.override.yaml</code> לתוך <code>compose.yaml</code> כשלא מציינים <code>-f</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>volumes: - ./:/app</code> ו־<code class="mid">command: ["node", "--watch", "server.mjs"]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># נטען אוטומטית עם compose.yaml — רק במחשב שלך (docker compose up)
+# בפרודקשן: docker compose -f compose.yaml up
+services:
+  app:
+    command: ["node", "--watch", "server.mjs"]
+    volumes:
+      - ./:/app
+    environment:
+      LOG_LEVEL: debug</code></pre>
+<p>ככה משנים קוד ורואים את התוצאה מיד, בלי build — אבל הסביבה (Node 24, אלפיין) עדיין של הקונטיינר. ובפרודקשן רץ בדיוק ה־image שנבנה, בלי קוד "חי" מהמחשב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את ה־bind mount ב־compose.yaml הראשי — ואז גם בשרת הקונטיינר מחפש קוד בתיקייה שאולי לא קיימת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P23-E21">
+    <h3>P23-E21 · compose עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>docker compose logs app</code> ו־<code>docker compose logs db</code> — כל אחת מהתקלות כתובה שם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(1) מה זה <code>localhost</code> בתוך קונטיינר? (2) <code>depends_on</code> בלי condition מחכה רק ש<em>הקונטיינר</em> יעלה. (3) שיעור 4.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P23-E21 — מתוקן
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: visits
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d visits"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/visits
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:</code></pre>
+<p>(1) <code>localhost</code> בתוך קונטיינר הוא <strong>הקונטיינר עצמו</strong> — אין שם PostgreSQL. (2) "הקונטיינר עלה" זה לא "המסד מקבל חיבורים" — PostgreSQL צריך כמה שניות. (3) מ־18, הנתונים ב־<code class="mid">/var/lib/postgresql/18/docker</code>, וה־image מסרב לעלות כשיש mount ל־<code>/var/lib/postgresql/data</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (2) עם <code>restart: always</code> — ה־app "מתאושש" אחרי כמה נפילות. עובד, אבל מסתיר את הבעיה ומלכלך את הלוגים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P23-E24">
+    <h3>P23-E24 · אתגר: nginx, app ומסד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־nginx: <code class="mid">location /api/ { proxy_pass http://app:3000/; }</code> — ה־<code>/</code> בסוף ה־proxy_pass הוא מה שמוריד את <code>/api</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני bind mounts ל־web: <code>./web</code> ← <code>/usr/share/nginx/html</code>, ו־<code>./nginx.conf</code> ← <code class="mid">/etc/nginx/conf.d/default.conf</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml">services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: visits
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d visits"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/visits
+    depends_on:
+      db:
+        condition: service_healthy
+    # בלי ports: נגיש רק מתוך הרשת של compose (דרך nginx)
+
+  web:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - app
+
+volumes:
+  db-data:</code></pre>
+<pre><code class="lang-nginx">server {
+  listen 80;
+
+  # הדף
+  location / {
+    root /usr/share/nginx/html;
+    index index.html;
+  }
+
+  # כל מה שמתחיל ב־/api/ ← השירות app (בלי ה־/api)
+  location /api/ {
+    proxy_pass http://app:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}</code></pre>
+<p>זה המבנה של הרבה מערכות אמיתיות: reverse proxy אחד בחזית, וכל השאר ברשת פנימית. יתרונות: הדף וה־API באותו origin (אין CORS בכלל); רק פורט אחד פתוח לעולם; ובפרק 25 — HTTPS במקום אחד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">proxy_pass http://app:3000;</code> בלי <code>/</code> בסוף — nginx מעביר את <code>/api/visits</code> כמו שהוא, וה־app מחזיר 404.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P23-E27">
+    <h3>P23-E27 · קורא קובץ .env 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאת <code class="mid">for (let i = 0; i &lt; lines.length; i++)</code> ולא <code>for...of</code>, כי צריך את מספר השורה להודעה. ‏<code class="mid">const eq = line.indexOf("=")</code>, ואז <code>line.slice(0, eq)</code> ו־<code>line.slice(eq + 1)</code>. ‏<code>split("=")</code> היה חותך את הערך בכל <code>=</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלושה מקרים לערך, לפי הסדר: מתחיל ונגמר ב־<code>"</code> ← <code class="mid">value.slice(1, -1).replaceAll("\\n", "\n")</code>. מתחיל ונגמר ב־<code>'</code> ← <code>slice(1, -1)</code>. אחרת ← חותכים ב־<code>indexOf(" #")</code> אם יש. בדוק <code>value.length &gt;= 2</code>, אחרת הערך <code>"</code> לבדו "מתחיל ונגמר" במירכאות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P23-E27 — קורא קובץ .env
+export function parseEnv(text: string): Record&lt;string, string&gt; {
+  const result: Record&lt;string, string&gt; = {};
+  const lines = text.split("\n");
+  for (let i = 0; i &lt; lines.length; i++) {
+    let line = lines[i].trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (line.startsWith("export ")) line = line.slice("export ".length).trim();
+
+    const eq = line.indexOf("=");
+    if (eq === -1) throw new SyntaxError(`שורה ${i + 1}: חסר =`);
+    const key = line.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new SyntaxError(`שורה ${i + 1}: שם לא חוקי: ${key}`);
+
+    let value = line.slice(eq + 1).trim();
+    if (value.length &gt;= 2 &amp;&amp; value.startsWith('"') &amp;&amp; value.endsWith('"')) {
+      value = value.slice(1, -1).replaceAll("\\n", "\n");
+    } else if (value.length &gt;= 2 &amp;&amp; value.startsWith("'") &amp;&amp; value.endsWith("'")) {
+      value = value.slice(1, -1);
+    } else {
+      const hash = value.indexOf(" #");
+      if (hash !== -1) value = value.slice(0, hash).trim();
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+const env = parseEnv(`
+# מסד הנתונים
+DATABASE_URL=postgres://app:secret@db:5432/app?sslmode=disable
+export PORT = 3000   # הפורט בתוך הקונטיינר
+GREETING="שלום\\nעולם"
+PATTERN='a#b\\n'
+EMPTY=
+PORT=8080
+`);
+console.log(env);
+try {
+  parseEnv("A=1\n2B=oops");
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}</code></pre>
+<pre class="terminal">{
+  DATABASE_URL: 'postgres://app:secret@db:5432/app?sslmode=disable',
+  PORT: '8080',
+  GREETING: 'שלום\nעולם',
+  PATTERN: 'a#b\\n',
+  EMPTY: ''
+}
+SyntaxError שורה 2: שם לא חוקי: 2B</pre>
+<p><code>PORT</code> מופיע פעמיים, וה־<code>8080</code> המאוחר קובע. זו ההתנהגות של רוב הכלים, וכך אפשר לדרוס ערך בסוף הקובץ. בתוך מירכאות בודדות שום דבר לא מתפרש: ‏<code>#</code> נשאר, וגם <code>\n</code> נשאר שני תווים.</p>
+<p>למה <code>SyntaxError</code> עם מספר שורה? קובץ <code>.env</code> שבור הוא תקלה שמגלים בעלייה של הקונטיינר. ההודעה "שורה 2: שם לא חוקי: 2B" מראה מיד איפה הבעיה. ‏<code>undefined</code> שקט היה מתגלה רק כשמשהו בשרת מתנהג מוזר.</p>
+<p>בפרויקט לא כותבים את זה בעצמך: Node 24 קורא <code>.env</code> עם <code>--env-file</code>, ו־compose עם <code>env_file</code>. אבל עכשיו אתה יודע למה <code>PASSWORD=a#b</code> עובד, ו־<code>PASSWORD=a #b</code> מאבד חצי מהסיסמה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>line.split("=")</code> — ‏<code>DATABASE_URL</code> עם <code>?sslmode=disable</code> נחתך באמצע.</li><li>לחתוך הערה בכל <code>#</code> — סיסמה כמו <code>a#b</code> נחתכת ל־<code>a</code>. הערה מתחילה רק ב־<code> #</code>, ורק מחוץ למירכאות.</li><li>להחליף <code>\n</code> גם במירכאות בודדות — שם הערך מילולי.</li><li>לבדוק את השם לפני שמורידים <code>export </code> — ‏<code>export PORT</code> נראה כמו שם עם רווח.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 2, שלב ו׳: הכול בפקודה אחת</a></div>
+</main>
+</body>
+</html>

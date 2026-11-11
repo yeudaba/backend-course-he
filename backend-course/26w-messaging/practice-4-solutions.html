@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — יחידה 26.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.5</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26w-messaging/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.5-E04">
+    <h3>P26.5-E04 · key, partition וסדר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>partition = hash(key) % מספר ה־partitions. סדר מובטח רק <em>בתוך</em> partition.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־group, כל partition שייך ל־consumer אחד בדיוק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Admin, Producer, stringSerializers } from "@platformatic/kafka";
+
+const brokers = [process.env.KAFKA_BROKERS ?? "localhost:9092"];
+const topic = `e04-${Date.now()}`;
+const admin = new Admin({ clientId: "e04", bootstrapBrokers: brokers });
+await admin.createTopics({ topics: [topic], partitions: 3, replicas: 1 });
+
+const producer = new Producer({ clientId: "e04", bootstrapBrokers: brokers, serializers: stringSerializers, idempotent: true });
+const events = [["order-1", "placed"], ["order-2", "placed"], ["order-1", "paid"], ["order-3", "placed"], ["order-2", "paid"], ["order-1", "shipped"]];
+for (const [key, value] of events) {
+  const r = await producer.send({ messages: [{ topic, key, value }] });
+  const { partition, offset } = r.offsets![0];
+  console.log(`${key} ${value.padEnd(8)} → partition ${partition}, offset ${offset}`);
+}
+await producer.close();
+await admin.deleteTopics({ topics: [topic] });
+await admin.close();</code></pre>
+<pre class="terminal">order-1 placed   → partition 1, offset 0
+order-2 placed   → partition 2, offset 0
+order-1 paid     → partition 1, offset 1
+order-3 placed   → partition 2, offset 1
+order-2 paid     → partition 2, offset 2
+order-1 shipped  → partition 1, offset 2</pre>
+<ol><li><strong>כן.</strong> אותו key ← אותו partition, וה־offsets שלו עולים לפי סדר השליחה. consumer קורא partition לפי הסדר.</li><li><strong>לא מובטח.</strong> אם הם ב־partitions שונים — כל partition נקרא בקצב משלו, אולי ע״י consumers שונים. וזה בסדר: אין קשר סיבתי בין הזמנות שונות. אם יש — צריך key משותף.</li><li><strong>3.</strong> כל partition ל־consumer אחד; שניים נשארים בלי עבודה (standby למקרה שאחד נופל). מספר ה־partitions הוא תקרת המקביליות של group — לכן בוחרים אותו מראש עם מרווח.</li></ol>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E12">
+    <h3>P26.5-E12 · producer של Kafka 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">producer.send({ messages: [{ topic, key, value, headers }] })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>key חייב להיות מחרוזת (ה־serializer הוא של מחרוזות).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E12: producer של Kafka — key לכל הזמנה, JSON, ו־headers
+import type { Producer } from "@platformatic/kafka";
+
+export interface OrderEvent {
+  eventId: string;
+  orderId: number;
+  type: string;
+  at: string;
+  data?: unknown;
+}
+
+export async function publishOrderEvents(producer: Producer&lt;string, string, string, string&gt;, topic: string, events: OrderEvent[]) {
+  const res = await producer.send({
+    messages: events.map((e) =&gt; ({
+      topic,
+      key: String(e.orderId), // אותו key ← אותו partition ← סדר נשמר לכל הזמנה
+      value: JSON.stringify(e),
+      headers: { "event-type": e.type, "event-id": e.eventId },
+    })),
+  });
+  return res.offsets ?? [];
+}</code></pre>
+<p>ובקוד קיים תפגוש את <strong>KafkaJS</strong> — הספרייה הנפוצה ביותר ל־Node.js במשך שנים (<code class="mid">producer.send({ topic, messages })</code>, <code class="mid">consumer.run({ eachMessage })</code>), שלא קיבלה עדכון מאז 2023. הרעיונות זהים; ה־API שונה מעט.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E14">
+    <h3>P26.5-E14 · commit אחרי טיפול 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">mode: MessagesStreamModes.COMMITTED</code>, <code class="mid">fallbackMode: MessagesStreamFallbackModes.EARLIEST</code>, <code>autocommit: false</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">for await (const m of stream)</code>, ו־<code>await m.commit()</code>. <code>finally</code> לסגירה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E14: consumer group — commit רק אחרי שהטיפול הצליח
+import { Consumer, MessagesStreamModes, MessagesStreamFallbackModes, stringDeserializers } from "@platformatic/kafka";
+
+export interface ConsumeOptions {
+  brokers: string[];
+  groupId: string;
+  topic: string;
+}
+
+export async function consumeAndCommit(
+  { brokers, groupId, topic }: ConsumeOptions,
+  handler: (event: any) =&gt; Promise&lt;void&gt;,
+  { max }: { max: number },
+): Promise&lt;number&gt; {
+  const consumer = new Consumer({ groupId, clientId: `${groupId}-worker`, bootstrapBrokers: brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({
+    topics: [topic],
+    mode: MessagesStreamModes.COMMITTED, // ממשיכים מאיפה שה־group עצר
+    fallbackMode: MessagesStreamFallbackModes.EARLIEST, // group חדש ← מההתחלה
+    autocommit: false,
+  });
+  let processed = 0;
+  try {
+    for await (const m of stream) {
+      await handler(JSON.parse(m.value)); // נכשל ← יוצאים בלי commit; ההודעה תגיע שוב
+      await m.commit();
+      if (++processed &gt;= max) break;
+    }
+  } finally {
+    await stream.close().catch(() =&gt; {});
+    await consumer.close();
+  }
+  return processed;
+}</code></pre>
+<p>commit אחרי כל הודעה הוא הכי בטוח, ולא הכי מהיר: בנפח גבוה עושים commit כל N הודעות או כל שנייה (autocommit עם מרווח) — ומקבלים שאחרי קריסה כמה הודעות יטופלו שוב. שוב: consumer אידמפוטנטי.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E19">
+    <h3>P26.5-E19 · consumer lag 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Object.entries(end)</code> — המפתחות מחרוזות; <code>Number(p)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>window 3 ← בודקים 4 דגימות אחרונות: a &lt; b &lt; c &lt; d.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E19: consumer lag — כמה ה־consumers מאחור, והאם הפער גדל
+export interface LagReport {
+  perPartition: Record&lt;number, number&gt;;
+  total: number;
+  worstPartition: number | null;
+}
+
+// end: ה־offset הבא שייכתב בכל partition (high watermark); committed: הבא שה־group יקרא (‎-1 = אין commit)
+export function consumerLag(end: Record&lt;number, number&gt;, committed: Record&lt;number, number&gt;, earliest: Record&lt;number, number&gt; = {}): LagReport {
+  const perPartition: Record&lt;number, number&gt; = {};
+  let total = 0;
+  let worstPartition: number | null = null;
+  for (const [p, hw] of Object.entries(end)) {
+    const part = Number(p);
+    const c = committed[part];
+    const from = c === undefined || c &lt; 0 ? (earliest[part] ?? 0) : c; // בלי commit — כל מה שעוד שמור ב־topic
+    const lag = Math.max(0, hw - from);
+    perPartition[part] = lag;
+    total += lag;
+    if (worstPartition === null || lag &gt; perPartition[worstPartition]) worstPartition = part;
+  }
+  return { perPartition, total, worstPartition };
+}
+
+// מתריעים כשה־lag עולה ברציפות — לא על קפיצה אחת
+export function isFallingBehind(samples: number[], { window = 3 } = {}): boolean {
+  if (samples.length &lt; window + 1) return false;
+  const last = samples.slice(-(window + 1));
+  return last.every((v, i) =&gt; i === 0 || v &gt; last[i - 1]);
+}</code></pre>
+<p>lag גבוה אחרי deploy זה טבעי (consumer עלה ומדביק פער). lag ש<em>עולה</em> כל הזמן — הצרכנים איטיים מהקצב: מוסיפים consumers (עד מספר ה־partitions), או מגלים שה־handler איטי (שאילתה בלי אינדקס, קריאת API בכל הודעה).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E22">
+    <h3>P26.5-E22 · סטטוסים ב־Kafka — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי key — לאיזה partition הולכת כל הודעה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>MessagesStreamModes.LATEST</code> ל־group שעוד לא עשה commit.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E22: אחרי התיקון
+import { Consumer, MessagesStreamModes, MessagesStreamFallbackModes, stringDeserializers, type Producer } from "@platformatic/kafka";
+
+export async function publishStatus(producer: Producer&lt;string, string, string, string&gt;, topic: string, orderId: number, status: string) {
+  await producer.send({
+    messages: [{ topic, key: String(orderId), value: JSON.stringify({ orderId, status }) }], // תיקון 1: key — אחרת אין סדר בין עדכונים של אותה הזמנה
+  });
+}
+
+export async function syncStatuses(
+  opts: { brokers: string[]; groupId: string; topic: string },
+  save: (orderId: number, status: string) =&gt; Promise&lt;void&gt;,
+  max: number,
+) {
+  const consumer = new Consumer({ groupId: opts.groupId, clientId: "status-sync", bootstrapBrokers: opts.brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({
+    topics: [opts.topic],
+    mode: MessagesStreamModes.COMMITTED,
+    fallbackMode: MessagesStreamFallbackModes.EARLIEST, // תיקון 3: group חדש מתחיל מההתחלה, לא רק מהודעות חדשות
+    autocommit: false,
+  });
+  let n = 0;
+  try {
+    for await (const m of stream) {
+      const { orderId, status } = JSON.parse(m.value);
+      await save(orderId, status);
+      await m.commit(); // תיקון 2: commit אחרי save, לא לפני
+      if (++n &gt;= max) break;
+    }
+  } finally {
+    await stream.close().catch(() =&gt; {});
+    await consumer.close();
+  }
+  return n;
+}</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P26.5-E26">
+    <h3>P26.5-E26 · להחזיר סדר להודעות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שדות מספיקים: <code>#next</code> (הבא בתור) ו־<code class="mid">#waiting = new Map&lt;number, T&gt;()</code>. ב־<code>push</code>, שלושת המקרים לפי הסדר: <code class="mid">seq &lt; #next || #waiting.has(seq)</code> ← כפילות. <code>seq &gt; #next</code> ← לשמור ב־Map. אחרת ← למסור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שמסרת את <code>seq</code>: ‏<code>this.#next++</code>, ואז <code class="mid">while (this.#waiting.has(this.#next))</code>: מוציאים מה־Map, מוסרים, ומקדמים. ‏<code>gaps</code>: ‏<code class="mid">Math.max(...this.#waiting.keys())</code>, ולולאה מ־<code>#next</code> עד אליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E26 — להחזיר סדר להודעות
+export type PushResult = "delivered" | "buffered" | "duplicate";
+
+export class ReorderBuffer&lt;T&gt; {
+  #next: number;
+  #waiting = new Map&lt;number, T&gt;();
+  #deliver: (seq: number, message: T) =&gt; void;
+
+  constructor(deliver: (seq: number, message: T) =&gt; void, startSeq = 1) {
+    this.#deliver = deliver;
+    this.#next = startSeq;
+  }
+
+  push(seq: number, message: T): PushResult {
+    if (!Number.isInteger(seq)) throw new TypeError(`seq חייב להיות מספר שלם: ${seq}`);
+    if (seq &lt; this.#next || this.#waiting.has(seq)) return "duplicate";
+    if (seq &gt; this.#next) {
+      this.#waiting.set(seq, message);
+      return "buffered";
+    }
+    this.#deliver(seq, message);
+    this.#next++;
+    while (this.#waiting.has(this.#next)) {
+      const waiting = this.#waiting.get(this.#next) as T;
+      this.#waiting.delete(this.#next);
+      this.#deliver(this.#next, waiting);
+      this.#next++;
+    }
+    return "delivered";
+  }
+
+  get nextSeq(): number {
+    return this.#next;
+  }
+
+  get pending(): number {
+    return this.#waiting.size;
+  }
+
+  gaps(): number[] {
+    if (this.#waiting.size === 0) return [];
+    const max = Math.max(...this.#waiting.keys());
+    const missing: number[] = [];
+    for (let seq = this.#next; seq &lt; max; seq++) if (!this.#waiting.has(seq)) missing.push(seq);
+    return missing;
+  }
+}
+
+const buffer = new ReorderBuffer&lt;string&gt;((seq, status) =&gt; console.log(`  ← ${seq}: ${status}`));
+for (const [seq, status] of [[1, "placed"], [3, "shipped"], [5, "refunded"], [3, "shipped"], [2, "paid"], [1, "placed"]] as const) {
+  const result = buffer.push(seq, status);
+  console.log(`push ${seq} → ${result}`, result === "buffered" ? `(חסר: ${buffer.gaps().join(", ")})` : "");
+}
+console.log("next:", buffer.nextSeq, "pending:", buffer.pending);</code></pre>
+<pre class="terminal">  ← 1: placed
+push 1 → delivered 
+push 3 → buffered (חסר: 2)
+push 5 → buffered (חסר: 2, 4)
+push 3 → duplicate 
+  ← 2: paid
+  ← 3: shipped
+push 2 → delivered 
+push 1 → duplicate 
+next: 4 pending: 1</pre>
+<p>כש־2 מגיע, שתי הודעות נמסרות: 2, ומיד אחריה 3 שחיכתה. ‏5 עדיין מחכה ל־4. ‏<code>gaps()</code> הוא מה שמראים בלוג או במדד: "ממתינים ל־4 כבר 30 שניות" הוא סימן שהודעה הלכה לאיבוד, או שנתקעה ב־DLQ.</p>
+<p>מה חסר כאן, ובמערכת אמיתית חייב להיות? <strong>גבול</strong>. אם 4 לא מגיעה לעולם, ה־Map גדל בלי סוף, וההזמנה תקועה. פתרונות: זמן המתנה מקסימלי ואז התראה, או מסירה עם "דילוג" מתועד. ובנוסף, ‏<code>#next</code> חי בזיכרון: אחרי restart הוא חוזר ל־1. לכן שומרים אותו במסד, באותה טרנזקציה של הטיפול (כמו <code>processed_events</code> בשיעור 5), ומעבירים ל־<code>startSeq</code>.</p>
+<p>הרבה פעמים אפשר לחסוך את כל זה: אם כל ההודעות של הזמנה הולכות לאותו partition (‏key = מזהה ההזמנה), ‏Kafka כבר שומר את הסדר. ‏ReorderBuffer נחוץ כשאין לך שליטה על התשתית, או כשההודעות מגיעות מכמה מקורות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למסור רק את <code>seq</code> ולא לבדוק מי מחכה אחריו — 3 נשארת ב־Map לנצח.</li><li>לבדוק כפילות רק מול <code>#next</code> — הודעה שמחכה ומגיעה שוב דורסת את הראשונה.</li><li>לשמור את כל ההודעות במערך ולמיין בכל <code>push</code> — עובד, אבל O(n log n) לכל הודעה, ואין דרך פשוטה לזהות כפילות.</li><li><code>Math.max(...[])</code> כשאין ממתינות — ‏<code>-Infinity</code>. בדוק קודם שה־Map לא ריק.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-reliability.html"><small>הבא</small>שיעור 5 — אמינות: אידמפוטנטיות, outbox ו־retries</a></div>
+</main>
+</body>
+</html>

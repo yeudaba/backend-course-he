@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28w-scale/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28.5-E10">
+    <h3>P28.5-E10 · פירוק NDJSON בזרם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>StringDecoder</code> שומר בתים של תו שלא נגמר עד ה־chunk הבא. <code>chunk.toString()</code> — לא.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>buffer של טקסט: מוסיפים, מפצלים ב־<code>\n</code>, והחלק האחרון חוזר ל־buffer. ב־<code>flush</code> — מה שנשאר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E10: Transform שמפרק NDJSON לאובייקטים — גם כש־chunk נחתך באמצע שורה, ובאמצע תו
+import { Transform, type TransformCallback } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
+
+export function ndjsonParser(): Transform {
+  const decoder = new StringDecoder("utf8"); // מחזיק בתים של תו שנחתך עד שה־chunk הבא משלים אותו
+  let buffer = "";
+  let lineNo = 0;
+  function pushLine(this: Transform, line: string): Error | null {
+    lineNo++;
+    if (line.trim() === "") return null;
+    try {
+      this.push(JSON.parse(line));
+      return null;
+    } catch {
+      return new Error(`שורה ${lineNo}: JSON לא תקין`);
+    }
+  }
+  return new Transform({
+    readableObjectMode: true,
+    transform(chunk: Buffer, _enc, cb: TransformCallback) {
+      buffer += decoder.write(chunk);
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!; // השורה האחרונה אולי עוד לא הסתיימה
+      for (const l of lines) {
+        const err = pushLine.call(this, l.replace(/\r$/, ""));
+        if (err) return cb(err);
+      }
+      cb();
+    },
+    flush(cb: TransformCallback) {
+      buffer += decoder.end();
+      cb(pushLine.call(this, buffer.replace(/\r$/, "")) ?? undefined); // שורה אחרונה בלי \n
+    },
+  });
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">chunk.toString().split("\n")</code> לכל chunk — עובד בבדיקה עם קובץ קטן (chunk אחד), ונשבר בפרודקשן על קובץ של 1GB: שורות חתוכות, ו־<code>�</code> במקום אותיות (E20).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E11">
+    <h3>P28.5-E11 · אגרגציה על קובץ ענק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">for await (const line of createInterface({ input, crlfDelay: Infinity }))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>יום בשעון ישראל: <code class="long">new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" })</code> ← <code>"2026-10-31"</code> (פרק 24).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E11: אגרגציה על קובץ ענק — שורה אחרי שורה, בזיכרון קבוע
+import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
+
+export interface DayTotals {
+  orders: number;
+  revenueCents: number;
+}
+
+const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" });
+export const israelDay = (iso: string) =&gt; dayFmt.format(new Date(iso)); // "2026-10-31"
+
+export async function dailyRevenue(input: Readable): Promise&lt;Record&lt;string, DayTotals&gt;&gt; {
+  const totals: Record&lt;string, DayTotals&gt; = {};
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    const o = JSON.parse(line) as { createdAt: string; quantity: number; priceCents: number; status?: string };
+    if (o.status === "cancelled") continue;
+    const day = israelDay(o.createdAt);
+    const t = (totals[day] ??= { orders: 0, revenueCents: 0 });
+    t.orders++;
+    t.revenueCents += o.quantity * o.priceCents;
+  }
+  return totals;
+}</code></pre>
+<p>הזיכרון כאן קבוע: שורה אחת בכל רגע, ומפה של ~30 ימים. אותו קוד יעבוד על 300 אלף שורות ועל 300 מיליון. ההפך — <code class="mid">(await fs.readFile(f, "utf8")).split("\n")</code> — טוען את כל הקובץ לזיכרון (ומחרוזת ב־V8 מוגבלת בכל מקרה לכחצי מיליארד תווים).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E12">
+    <h3>P28.5-E12 · הכנסה מרוכזת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">INSERT … SELECT * FROM unnest($1::text[], $2::int[], $3::text[], $4::timestamptz[]) ON CONFLICT (id) DO NOTHING</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>rowCount</code> — כמה שורות נכנסו (בלי אלה שדולגו).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E12: הכנסה של הרבה שורות — מעט round trips, עם unnest
+import type { Pool } from "pg";
+
+export interface PageView {
+  id: string;
+  userId: number;
+  path: string;
+  at: string;
+}
+
+export async function bulkInsertViews(pool: Pool, rows: PageView[], { batchSize = 5000 } = {}): Promise&lt;number&gt; {
+  let inserted = 0;
+  for (let i = 0; i &lt; rows.length; i += batchSize) {
+    const b = rows.slice(i, i + batchSize);
+    // ארבעה מערכים — ארבעה פרמטרים, לא 4 × 5000 (ל־PostgreSQL יש תקרה של 65,535 פרמטרים בשאילתה)
+    const res = await pool.query(
+      `INSERT INTO page_views (id, user_id, path, viewed_at)
+       SELECT * FROM unnest($1::text[], $2::int[], $3::text[], $4::timestamptz[])
+       ON CONFLICT (id) DO NOTHING`,
+      [b.map((r) =&gt; r.id), b.map((r) =&gt; r.userId), b.map((r) =&gt; r.path), b.map((r) =&gt; r.at)],
+    );
+    inserted += res.rowCount ?? 0;
+  }
+  return inserted;
+}</code></pre>
+<p>למה לא <code class="mid">VALUES ($1,$2,$3,$4), ($5,…)</code>? אפשר — אבל 5,000 שורות × 4 = 20,000 פרמטרים, ו־PostgreSQL מגביל ל־65,535 בשאילתה. עם unnest — תמיד 4. ולמיליוני שורות: <code>COPY … FROM STDIN</code> (החבילה <code>pg-copy-streams</code>), המהיר מכולם.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E19">
+    <h3>P28.5-E19 · reservoir sampling 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>k הראשונים נכנסים. הפריט ה־n (n &gt; k): מגרילים j בין 0 ל־n−1; אם j &lt; k — מחליף את sample[j].</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">for await (const x of items)</code> עובד גם על iterable רגיל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E19: reservoir sampling — דגימה אחידה מזרם שלא יודעים את אורכו
+export async function reservoirSample&lt;T&gt;(items: Iterable&lt;T&gt; | AsyncIterable&lt;T&gt;, k: number, random: () =&gt; number = Math.random): Promise&lt;T[]&gt; {
+  if (!Number.isInteger(k) || k &lt; 1) throw new Error("k חייב להיות שלם חיובי");
+  const sample: T[] = [];
+  let seen = 0;
+  for await (const item of items) {
+    seen++;
+    if (sample.length &lt; k) sample.push(item);
+    else {
+      const j = Math.floor(random() * seen); // 0..seen-1
+      if (j &lt; k) sample[j] = item; // הסיכוי של הפריט ה־n להיכנס: k/n
+    }
+  }
+  return sample;
+}</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E20">
+    <h3>P28.5-E20 · ייבוא שעובד רק בבדיקות — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קובץ קטן מגיע כ־chunk אחד. קובץ גדול — בחתיכות של 64KB, שלא מתחשבות בשורות או בתווים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>onEvent(…)</code> בלי <code>await</code> — כמה רצים במקביל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E20: ייבוא אירועים מ־NDJSON — אחרי התיקון
+import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
+
+export async function importEvents(input: Readable, onEvent: (e: any) =&gt; Promise&lt;void&gt;): Promise&lt;number&gt; {
+  let count = 0;
+  // תיקון 1+2: readline מחבר שורות שנחתכו בין chunks (וגם תו עברי שנחתך), ומחזיר גם שורה אחרונה בלי \n
+  for await (const line of createInterface({ input, crlfDelay: Infinity })) {
+    if (!line.trim()) continue;
+    await onEvent(JSON.parse(line)); // תיקון 3: מחכים — backpressure, ושגיאה עולה למעלה
+    count++;
+  }
+  return count;
+}</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P28.5-E26">
+    <h3>P28.5-E26 · הנפוצים ביותר בזרם, בזיכרון קבוע 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה <code class="mid">#counters = new Map&lt;T, { count: number; error: number }&gt;()</code>. ב־<code>add</code>, שלושת המקרים לפי הסדר עם <code>return</code> אחרי כל אחד. ‏<code>counter.count++</code> על האובייקט שב־Map מעדכן אותו במקום, בלי <code>set</code> נוסף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מציאת המינימום: לולאת <code class="mid">for (const [key, c] of this.#counters)</code> עם <code>min</code> ו־<code>minItem</code>. זה O(k) לכל החלפה. עם k של עשרות זה זניח, ובגרסאות מהירות מחזיקים את המונים ברשימה ממוינת. אחר כך <code>delete(minItem)</code> ו־<code class="mid">set(item, { count: min + 1, error: min })</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E26 — הנפוצים ביותר בזרם, בזיכרון קבוע (Space-Saving)
+export type Counted&lt;T&gt; = { item: T; count: number; error: number };
+
+export class TopK&lt;T&gt; {
+  #k: number;
+  #counters = new Map&lt;T, { count: number; error: number }&gt;();
+  #seen = 0;
+
+  constructor(k: number) {
+    if (!Number.isInteger(k) || k &lt; 1) throw new RangeError("k חייב להיות מספר שלם חיובי");
+    this.#k = k;
+  }
+
+  add(item: T): void {
+    this.#seen++;
+    const counter = this.#counters.get(item);
+    if (counter) {
+      counter.count++;
+      return;
+    }
+    if (this.#counters.size &lt; this.#k) {
+      this.#counters.set(item, { count: 1, error: 0 });
+      return;
+    }
+    // מחליפים את המונה הקטן ביותר: החדש "יורש" את הספירה שלו (וזו גם הטעות האפשרית)
+    let minItem: T | undefined;
+    let min = Infinity;
+    for (const [key, c] of this.#counters) {
+      if (c.count &lt; min) {
+        min = c.count;
+        minItem = key;
+      }
+    }
+    this.#counters.delete(minItem as T);
+    this.#counters.set(item, { count: min + 1, error: min });
+  }
+
+  get seen(): number {
+    return this.#seen;
+  }
+
+  top(n = this.#k): Counted&lt;T&gt;[] {
+    return [...this.#counters]
+      .map(([item, c]) =&gt; ({ item, count: c.count, error: c.error }))
+      .sort((a, b) =&gt; b.count - a.count || String(a.item).localeCompare(String(b.item)))
+      .slice(0, n);
+  }
+}
+
+// זרם של 100,000 בקשות: 3 נתיבים "חמים" ו־5,000 נתיבים שמופיעים מעט
+let seed = 1;
+const rand = () =&gt; ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+const topk = new TopK&lt;string&gt;(20);
+const truth = new Map&lt;string, number&gt;();
+for (let i = 0; i &lt; 100_000; i++) {
+  const r = rand();
+  const path = r &lt; 0.2 ? "/products" : r &lt; 0.3 ? "/cart" : r &lt; 0.35 ? "/checkout" : `/products/${Math.floor(rand() * 5000)}`;
+  topk.add(path);
+  truth.set(path, (truth.get(path) ?? 0) + 1);
+}
+for (const { item, count, error } of topk.top(4)) {
+  console.log(item.padEnd(16), String(count).padStart(6), `(אמיתי: ${truth.get(item)}, טעות עד ${error})`);
+}
+console.log("seen:", topk.seen, "· מונים בזיכרון: 20 במקום", truth.size);</code></pre>
+<pre class="terminal">/products         20174 (אמיתי: 20174, טעות עד 0)
+/cart             10378 (אמיתי: 10378, טעות עד 0)
+/checkout          5550 (אמיתי: 5550, טעות עד 6)
+/products/1237     3759 (אמיתי: 31, טעות עד 3758)
+seen: 100000 · מונים בזיכרון: 20 במקום 2931</pre>
+<p>שלושת הנתיבים החמים נספרו בדיוק, או כמעט: ב־<code>/checkout</code> הטעות האפשרית היא 6, מתוך 5,550. השורה הרביעית היא השיעור: ‏<code>/products/1237</code> הופיע 31 פעמים, אבל המונה שלו הוא 3,759, כי הוא "ירש" מונה של פריט אחר. ה־<code>error</code> (‏3,758) אומר את זה במפורש: ייתכן שהוא הופיע רק <code>count - error</code> = פעם אחת. לכן מציגים רק פריטים עם <code>count - error</code> גבוה, או לפחות מראים את הטעות.</p>
+<p>למה זה עובד? סכום כל המונים תמיד שווה ל־N (כל <code>add</code> מוסיף 1 בדיוק). לכן המונה הקטן ביותר הוא לכל היותר N/k. פריט שהופיע יותר מ־N/k פעמים לא יכול להימחק לצמיתות: בכל פעם שהוא חוזר, הוא מקבל מונה גדול מהמינימום. זה גם המבנה של "trending" ב־Redis ‏(<code>TOPK</code> ב־RedisBloom) ובמנועי סטרימינג.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>החדש מקבל <code>count: 1</code> במקום <code>min + 1</code> — הוא יימחק מיד בפעם הבאה, ופריט חם שנכנס מאוחר לא "יטפס" לעולם.</li><li>לשכוח את <code>error</code> — אי אפשר להבדיל בין 3,759 אמיתיים ל־3,759 שעברו בירושה.</li><li>לשמור <code>Map</code> של הכול "רק לבדיקה" — זה בדיוק מה שהאלגוריתם חוסך.</li><li><code>top()</code> שממיין את ה־Map עצמו — ‏<code>Map</code> לא ממוין; יוצרים מערך חדש.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-columnar.html"><small>הבא</small>שיעור 4 — עמודות: Parquet, DuckDB ומחסני נתונים</a></div>
+</main>
+</body>
+</html>

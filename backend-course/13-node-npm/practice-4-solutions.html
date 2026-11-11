@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 13</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 13</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>13-node-npm/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P13-E05">
+    <h3>P13-E05 · path <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>..</code> עולה תיקייה. resolve: נתיב מוחלט באמצע "מתחיל מחדש".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>extname — רק החלק אחרי הנקודה האחרונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import path from "node:path";
+console.log(path.join("/srv/app", "uploads", "..", "logs", "a.log"));
+console.log(path.join("uploads", "../../etc/passwd"));
+console.log(path.basename("../../etc/passwd"));
+console.log(path.extname("archive.tar.gz"));
+console.log(path.basename("report.pdf", ".pdf"));
+console.log(path.resolve("/srv", "/tmp", "x"));</code></pre>
+<pre class="terminal">/srv/app/logs/a.log
+../etc/passwd
+passwd
+.gz
+report
+/tmp/x</pre>
+<p>שורה 2 היא path traversal בפעולה: הנתיב יצא מ־uploads. שורה 3 היא ההגנה הבסיסית.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>path.join</code> "מגן" — הוא רק מחבר נכון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E11">
+    <h3>P13-E11 · נתיב בטוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const full = path.resolve(baseDir, userPath);</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדיקה: <code class="mid">full === base || full.startsWith(base + path.sep)</code> (ה־sep חשוב: <code>/data</code> מול <code>/data-secret</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E11
+import path from "node:path";
+
+export function safeJoin(baseDir, userPath) {
+  const base = path.resolve(baseDir);
+  const full = path.resolve(base, userPath);
+  if (full !== base &amp;&amp; !full.startsWith(base + path.sep)) {
+    throw new Error("נתיב לא מורשה");
+  }
+  return full;
+}
+
+console.log(safeJoin("/srv/uploads", "a/b.png"));
+try {
+  safeJoin("/srv/uploads", "../secrets.env");
+} catch (err) {
+  console.log(err.message);
+}</code></pre>
+<pre class="terminal">/srv/uploads/a/b.png
+נתיב לא מורשה</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>full.startsWith(base)</code> בלי <code>path.sep</code> — <code>/srv/uploads-old/x</code> יעבור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E12">
+    <h3>P13-E12 · סטטיסטיקת תיקייה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">fs.readdir(dir, { withFileTypes: true })</code> נותן אובייקטים עם <code>isFile()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>גודל: <code>(await fs.stat(full)).size</code>. במקביל עם Promise.all.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E12
+import fs from "node:fs/promises";
+import path from "node:path";
+
+export async function dirStats(dir) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = entries.filter((e) =&gt; e.isFile()).map((e) =&gt; e.name);
+  const sizes = await Promise.all(files.map(async (name) =&gt; (await fs.stat(path.join(dir, name))).size));
+  const byExtension = {};
+  for (const name of files) {
+    const ext = path.extname(name).slice(1).toLowerCase() || "(none)";
+    byExtension[ext] = (byExtension[ext] ?? 0) + 1;
+  }
+  return { files: files.length, totalBytes: sizes.reduce((s, n) =&gt; s + n, 0), byExtension };
+}
+
+const tmp = await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "stats-"));
+await fs.writeFile(path.join(tmp, "a.TXT"), "12345");
+await fs.writeFile(path.join(tmp, "Makefile"), "x");
+await fs.mkdir(path.join(tmp, "sub"));
+console.log(await dirStats(tmp));</code></pre>
+<pre class="terminal">{ files: 2, totalBytes: 6, byExtension: { '(none)': 1, txt: 1 } }</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לספור גם תיקיות — <code>stat</code> של תיקייה מחזיר גודל, וההכללה שגויה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E17">
+    <h3>P13-E17 · שמירת קובץ שהועלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">path.extname(originalName).toLowerCase()</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">await fs.mkdir(baseDir, { recursive: true })</code> ואז writeFile ל־<code class="mid">path.join(baseDir, storedName)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E17
+import fs from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+
+const ALLOWED = [".png", ".jpg", ".jpeg", ".pdf"];
+
+export async function storeUpload(baseDir, originalName, content) {
+  const ext = path.extname(originalName).toLowerCase();
+  if (!ALLOWED.includes(ext)) {
+    throw new Error("סוג קובץ לא נתמך");
+  }
+  const storedName = `${randomUUID()}${ext}`;
+  await fs.mkdir(baseDir, { recursive: true });
+  await fs.writeFile(path.join(baseDir, storedName), content);
+  return { storedName, originalName: path.basename(originalName), size: Buffer.byteLength(content) };
+}
+
+const dir = path.join((await import("node:os")).tmpdir(), "uploads-demo");
+const r = await storeUpload(dir, "../../evil/Report.PDF", "hello");
+console.log(r.storedName.endsWith(".pdf"), r.originalName, r.size);</code></pre>
+<pre class="terminal">true Report.PDF 5</pre>
+<p>שלושה עקרונות אבטחה: (1) אף פעם לא להשתמש בשם שהמשתמש שלח כנתיב; (2) allowlist של סוגים; (3) שומרים את השם המקורי רק כ"מידע" (במסד) להצגה. (בפועל בודקים גם את התוכן — לא רק את הסיומת — ומגבילים גודל.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">path.join(baseDir, originalName)</code> — path traversal.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E18">
+    <h3>P13-E18 · ספירת סטטוסים מלוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">for await (const line of rl)</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קבוצה: <code><code class="mid">${Math.floor(status / 100)}xx</code></code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E18
+import fs from "node:fs";
+import readline from "node:readline";
+
+export async function countStatuses(file) {
+  const result = { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, invalid: 0, slowest: null };
+  const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
+  for await (const raw of rl) {
+    const line = raw.trim();
+    if (line === "") continue;
+    const parts = line.split(/\s+/);
+    const status = Number(parts[2]);
+    const ms = Number(parts[3]);
+    const group = `${Math.floor(status / 100)}xx`;
+    if (parts.length !== 4 || !Number.isInteger(status) || Number.isNaN(ms) || !(group in result) || group === "invalid") {
+      result.invalid++;
+      continue;
+    }
+    result[group]++;
+    if (result.slowest === null || ms &gt; result.slowest.ms) {
+      result.slowest = { path: parts[1], ms };
+    }
+  }
+  return result;
+}
+
+const os = await import("node:os");
+const path = await import("node:path");
+const file = path.join(os.tmpdir(), "demo-access.log");
+fs.writeFileSync(file, "GET /a 200 12\nGET /b 404 3\n\nPOST /c 500 900\nbroken line\nGET /d 301 5\n");
+console.log(await countStatuses(file));</code></pre>
+<pre class="terminal">{
+  '2xx': 1,
+  '3xx': 1,
+  '4xx': 1,
+  '5xx': 1,
+  invalid: 1,
+  slowest: { path: '/c', ms: 900 }
+}</pre>
+<p>(<code>split(/\s+/)</code> — פיצול לפי "רווח אחד או יותר" — ביטוי רגולרי.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>readFile + split — עובד בבדיקה, נופל על לוג של 4GB בייצור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E19">
+    <h3>P13-E19 · קבצים כפולים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">for await (const chunk of fs.createReadStream(file)) hash.update(chunk);</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Map של hash ← מערך שמות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E19
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { createHash } from "node:crypto";
+
+export async function fileHash(file) {
+  const hash = createHash("sha256");
+  for await (const chunk of fs.createReadStream(file)) {
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
+export async function findDuplicates(dir) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  const names = entries.filter((e) =&gt; e.isFile()).map((e) =&gt; e.name);
+  const hashes = await Promise.all(names.map((n) =&gt; fileHash(path.join(dir, n))));
+  const groups = new Map();
+  names.forEach((name, i) =&gt; {
+    const list = groups.get(hashes[i]) ?? [];
+    list.push(name);
+    groups.set(hashes[i], list);
+  });
+  return [...groups.values()]
+    .filter((g) =&gt; g.length &gt; 1)
+    .map((g) =&gt; g.sort())
+    .sort((a, b) =&gt; a[0].localeCompare(b[0]));
+}
+
+const tmp = await fsp.mkdtemp(path.join((await import("node:os")).tmpdir(), "dups-"));
+for (const [name, text] of [["a.txt", "x"], ["b.txt", "y"], ["c.txt", "x"], ["d.txt", "y"], ["e.txt", "z"]]) {
+  await fsp.writeFile(path.join(tmp, name), text);
+}
+console.log(await findDuplicates(tmp));</code></pre>
+<pre class="terminal">[ [ 'a.txt', 'c.txt' ], [ 'b.txt', 'd.txt' ] ]</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות לפי גודל בלבד — קבצים בגודל זהה עם תוכן שונה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E23">
+    <h3>P13-E23 · ספירת שורות שקורסת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד המקורי משתמש ב־callback בתוך async function ומחזיר לפני שה־callback רץ.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">for await (const line of rl) if (line.toLowerCase().includes(w)) count++;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E23: מתוקן
+import fs from "node:fs";
+import readline from "node:readline";
+
+export async function countMatchingLines(file, word) {
+  const w = word.toLowerCase();
+  const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
+  let count = 0;
+  for await (const line of rl) {
+    if (line.toLowerCase().includes(w)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+const os = await import("node:os");
+const path = await import("node:path");
+const file = path.join(os.tmpdir(), "count-demo.txt");
+fs.writeFileSync(file, "Error A\nok\nERROR b\n");
+console.log(await countMatchingLines(file, "error"));</code></pre>
+<pre class="terminal">2</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף את הקוד הישן ב־<code>await</code> בלי לתקן את ה־callback — עדיין 0.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P13-E26">
+    <h3>P13-E26 · פירוק שורת לוג עם regex 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בונים את ה־regex חלק אחר חלק, משמאל לימין: <code>\S+</code> ("רצף בלי רווחים") ל־ip ולשני המקפים, <code>\[([^\]]+)\]</code> לזמן ("כל מה שאינו <code>]</code>"), ואז <code class="mid">"([A-Z]+) (\S+) HTTP\/[\d.]+"</code>. מסיימים ב־<code>(\d{3}) (\d+|-)</code>. ‏<code>^</code> בהתחלה ו־<code>$</code> בסוף — כדי שכל השורה תתאים, ולא רק חלק ממנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קבוצה בשם: <code>(?&lt;ip&gt;\S+)</code>. אחרי <code class="mid">const m = line.trim().match(LINE)</code> הערכים נמצאים ב־<code>m.groups</code>, ואפשר לפרק אותם: <code class="mid">const { ip, time, ... } = m.groups</code>. אם <code>m</code> הוא <code>null</code> — אין התאמה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E26: פירוק שורת לוג עם regex
+const LINE = /^(?&lt;ip&gt;\S+) \S+ \S+ \[(?&lt;time&gt;[^\]]+)\] "(?&lt;method&gt;[A-Z]+) (?&lt;path&gt;\S+) HTTP\/[\d.]+" (?&lt;status&gt;\d{3}) (?&lt;bytes&gt;\d+|-)$/;
+
+export function parseAccessLine(line) {
+  const m = line.trim().match(LINE);
+  if (!m) {
+    return null;
+  }
+  const { ip, time, method, path, status, bytes } = m.groups;
+  return {
+    ip,
+    time,
+    method,
+    path,
+    status: Number(status),
+    bytes: bytes === "-" ? 0 : Number(bytes),
+  };
+}
+
+console.log(parseAccessLine('203.0.113.7 - - [10/Nov/2026:13:05:01 +0000] "GET /api/users?page=2 HTTP/1.1" 200 512'));
+console.log(parseAccessLine('10.0.0.1 - dana [10/Nov/2026:13:05:02 +0000] "DELETE /api/users/7 HTTP/1.1" 204 -'));
+console.log(parseAccessLine("משהו אחר לגמרי"));</code></pre>
+<pre class="terminal">{
+  ip: '203.0.113.7',
+  time: '10/Nov/2026:13:05:01 +0000',
+  method: 'GET',
+  path: '/api/users?page=2',
+  status: 200,
+  bytes: 512
+}
+{
+  ip: '10.0.0.1',
+  time: '10/Nov/2026:13:05:02 +0000',
+  method: 'DELETE',
+  path: '/api/users/7',
+  status: 204,
+  bytes: 0
+}
+null</pre>
+<p>ה־regex נקרא משמאל לימין, בדיוק כמו השורה: ip, שני שדות שלא מעניינים אותנו (<code>\S+ \S+</code>), זמן בסוגריים, בקשה במירכאות, סטטוס ובתים. ‏<code>[^\]]+</code> פירושו "תו אחד או יותר שאינם <code>]</code>" — כך הזמן נעצר בדיוק בסוגר, גם אם יש בו רווח.</p>
+<p>קבוצות בשם (<code>?&lt;name&gt;</code>) הופכות את התוצאה לאובייקט קריא. בלעדיהן הייתי כותב <code>m[1]</code>, <code>m[5]</code>, ובכל שינוי ב־regex המספרים זזים.</p>
+<p>מה שיוצא מ־regex הוא תמיד מחרוזת. לכן <code>Number(status)</code>, ולכן גם <code>(\d+|-)</code>: הבתים הם מספר <em>או</em> מקף, ובקוד הופכים מקף ל־0.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>^</code> ו־<code>$</code> — שורה עם זבל בסוף עדיין "מתאימה", והבודק מצפה ל־<code>null</code>.</li><li><code>.*</code> במקום <code>[^\]]+</code> — ‏<code>.*</code> "חמדן" ובולע עד ה־<code>]</code> האחרון בשורה.</li><li>לשכוח <code>\</code> לפני <code>[</code>, <code>]</code> או <code>/</code> — בתוך regex אלה תווים מיוחדים.</li><li>להחזיר <code>status: "200"</code> — מחרוזת ולא מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P13-E28">
+    <h3>P13-E28 · מיזוג קובצי הגדרות במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר <code>readJson(file)</code>: ‏<code class="mid">await fs.readFile(file, "utf8")</code>, ואז <code>JSON.parse</code> בתוך <code>try/catch</code> שזורק את השגיאה החדשה. אחר כך: <code class="mid">await Promise.all(files.map(readJson))</code>.</p>
+<p>שים לב ש־<code>try</code> עוטף רק את <code>JSON.parse</code>, ולא את <code>readFile</code>. כך שגיאת "קובץ לא קיים" לא הופכת ל"JSON לא תקין".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיזוג: <code class="long">configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {})</code>. ב־spread, מה שמופיע מאוחר יותר גובר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E28: מיזוג קובצי הגדרות במקביל
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+async function readJson(file) {
+  const text = await fs.readFile(file, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${path.basename(file)}: JSON לא תקין`);
+  }
+}
+
+export async function loadConfigs(files) {
+  const configs = await Promise.all(files.map(readJson));
+  return configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {});
+}
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cfg-"));
+await fs.writeFile(path.join(dir, "default.json"), '{ "port": 3000, "logLevel": "info" }');
+await fs.writeFile(path.join(dir, "local.json"), '{ "logLevel": "debug" }');
+await fs.writeFile(path.join(dir, "broken.json"), "{ port: 1 }");
+
+console.log(await loadConfigs([path.join(dir, "default.json"), path.join(dir, "local.json")]));
+try {
+  await loadConfigs([path.join(dir, "default.json"), path.join(dir, "broken.json")]);
+} catch (err) {
+  console.log(err.message);
+}</code></pre>
+<pre class="terminal">{ port: 3000, logLevel: 'debug' }
+broken.json: JSON לא תקין</pre>
+<p><code>Promise.all</code> שומר על הסדר של המערך, גם אם קובץ אחד נקרא מהר מהאחר. לכן ה־<code>reduce</code> ממזג בדיוק לפי הסדר שביקשו, והקובץ האחרון גובר.</p>
+<p>ה־<code>try</code> הצר הוא העיקר כאן: הוא תופס רק את השגיאה שאנחנו יודעים להסביר (JSON שבור), ומוסיף לה את שם הקובץ. שגיאה אחרת, כמו קובץ חסר, עוברת כמו שהיא. ככה מי שקורא את ההודעה יודע מה באמת קרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>for ... of</code> עם <code>await</code> בתוכו — עובד, אבל קורא קובץ אחרי קובץ. הבודק מחפש <code>Promise.all</code>.</li><li><code>{ ...config, ...merged }</code> — הסדר הפוך, והקובץ הראשון גובר.</li><li><code>try</code> סביב הכול עם <code>catch</code> שזורק "JSON לא תקין" — קובץ חסר מקבל הודעה שקרית.</li><li>להחזיר את <code>err.message</code> המקורי של <code>JSON.parse</code> — הוא לא אומר באיזה קובץ הבעיה.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P13-E24">
+    <h3>P13-E24 · אתגר: פותר תלויות (mini-npm) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תור של <code>[name, range]</code> להוספה. לכל אחד: אם כבר נבחרה גרסה — בדוק שהיא מקיימת את הטווח החדש (אחרת התנגשות). אם לא — בחר max ותוסיף את התלויות שלה לתור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אל תשכח: אותה חבילה יכולה להופיע כמה פעמים בתור — זה תקין.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E24: פותר תלויות שטוח
+const parse = (v) =&gt; v.split(".").map(Number);
+function compare(a, b) {
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i &lt; 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+function satisfies(version, range) {
+  if (!range.startsWith("^")) return compare(version, range) === 0;
+  const min = range.slice(1);
+  return compare(version, min) &gt;= 0 &amp;&amp; parse(version)[0] === parse(min)[0];
+}
+
+export function resolveDeps(rootDeps, registry) {
+  const chosen = {};
+  const queue = Object.entries(rootDeps);
+  while (queue.length &gt; 0) {
+    const [name, range] = queue.shift();
+    if (chosen[name]) {
+      if (!satisfies(chosen[name], range)) {
+        throw new Error(`התנגשות: ${name}`);
+      }
+      continue;
+    }
+    const versions = Object.keys(registry[name] ?? {}).filter((v) =&gt; satisfies(v, range)).sort(compare);
+    const best = versions.at(-1);
+    if (!best) {
+      throw new Error(`אין גרסה של ${name} שמתאימה ל־${range}`);
+    }
+    chosen[name] = best;
+    queue.push(...Object.entries(registry[name][best].deps ?? {}));
+  }
+  return Object.fromEntries(Object.entries(chosen).sort(([a], [b]) =&gt; a.localeCompare(b)));
+}
+
+const registry = {
+  express: { "5.0.0": { deps: { router: "^2.0.0", debug: "^4.0.0" } }, "5.1.0": { deps: { router: "^2.1.0", debug: "^4.3.0" } } },
+  router: { "2.0.0": {}, "2.2.0": { deps: { debug: "^4.0.0" } } },
+  debug: { "4.3.4": {}, "4.4.0": {} },
+};
+console.log(resolveDeps({ express: "^5.0.0" }, registry));</code></pre>
+<pre class="terminal">{ debug: '4.4.0', express: '5.1.0', router: '2.2.0' }</pre>
+<p>npm אמיתי לא "שטוח" לגמרי: כשיש התנגשות, הוא מתקין שתי גרסאות (אחת בתוך <code>node_modules</code> של החבילה שצריכה אותה). זו הסיבה ש־node_modules כל כך גדול. וזו גם הסיבה שה־lockfile קיים — הפתרון הזה מסובך, ושומרים את התוצאה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור גרסה בלי לעבור על התלויות שלה — עץ חסר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P13-E25">
+    <h3>P13-E25 · אתגר: סיבוב קובצי לוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>עבוד <strong>מהסוף להתחלה</strong> — אחרת תדרוס קבצים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>fs.rename(from, to)</code>, <code class="mid">fs.rm(file, { force: true })</code>. בדיקת קיום: <code>fs.access</code> בתוך try, או <code>fs.stat</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P13-E25: log rotation
+import fs from "node:fs/promises";
+import path from "node:path";
+
+async function exists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function rotate(dir, name, maxFiles) {
+  const actions = [];
+  const file = (i) =&gt; path.join(dir, i === 0 ? name : `${name}.${i}`);
+  const label = (i) =&gt; (i === 0 ? name : `${name}.${i}`);
+
+  if (await exists(file(maxFiles))) {
+    await fs.rm(file(maxFiles));
+    actions.push(`delete ${label(maxFiles)}`);
+  }
+  for (let i = maxFiles - 1; i &gt;= 0; i--) {
+    if (await exists(file(i))) {
+      await fs.rename(file(i), file(i + 1));
+      actions.push(`${label(i)} -&gt; ${label(i + 1)}`);
+    }
+  }
+  await fs.writeFile(file(0), "");
+  actions.push(`create ${name}`);
+  return actions;
+}
+
+const tmp = await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "rot-"));
+for (const f of ["app.log", "app.log.1", "app.log.3"]) await fs.writeFile(path.join(tmp, f), f);
+console.log(await rotate(tmp, "app.log", 3));
+console.log((await fs.readdir(tmp)).sort());</code></pre>
+<pre class="terminal">[
+  'delete app.log.3',
+  'app.log.1 -&gt; app.log.2',
+  'app.log -&gt; app.log.1',
+  'create app.log'
+]
+[ 'app.log', 'app.log.1', 'app.log.2' ]</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתחיל מ־app.log ← .1 — דורס את .1 הקיים לפני שהועבר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

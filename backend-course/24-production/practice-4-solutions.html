@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>24-production/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P24-E05">
+    <h3>P24-E05 · שלוש דרכים לספור <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־fixed window, 12:00:50 ו־12:01:05 הן בשתי דקות שונות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־token bucket: כמה אסימונים התמלאו בין 12:00:50 ל־12:01:05?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>כל 20 עוברות</strong> — 10 בדקה של 12:00, ו־10 בדקה של 12:01. 20 בקשות ב־15 שניות, כפול מהמגבלה. זו החולשה של fixed window: פרץ בגבול.</li><li><strong>10 עוברות</strong>, ה־10 הבאות נדחות (ב־12:01:05 יש כבר 10 בחלון). ב־12:01:50 הראשונות יוצאות מהחלון. Retry-After: 45 שניות.</li><li><strong>12 עוברות</strong>: 10 מהדלי המלא, ועד 12:01:05 התמלאו עוד 2 (15 שניות ÷ 6).</li><li>ל־login — <strong>sliding window</strong>: מגבלה קשיחה ופשוטה להסביר ("10 ניסיונות בדקה"), וזה מה שבפרויקט. ל־API עם פרצים — <strong>token bucket</strong>: מאפשר פרץ קצר (טעינת מסך שמביאה 8 דברים), ושומר על ממוצע. (fixed window — כשצריך הכי פשוט וזול, למשל מונה ב־Redis עם תוקף.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהגבלת קצב היא "אבטחה מלאה". היא מאטה ניחוש סיסמאות מ־IP אחד; תוקף עם אלף IPs צריך גם נעילת חשבון (פרק 21, E19) ו־CAPTCHA.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E17">
+    <h3>P24-E17 · Token Bucket 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי טיימרים: שומרים <code>tokens</code> ו־<code>last</code>. בכל <code>take</code>: <code class="mid">tokens = min(capacity, tokens + (now − last) / 1000 × rate)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חסר <code>cost − tokens</code> אסימונים; בקצב <code>rate</code> לשנייה — <code>Math.ceil(missing / rate)</code> שניות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E17
+export interface TakeResult {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+}
+
+// דלי עם capacity אסימונים, שמתמלא בקצב קבוע. כל בקשה לוקחת אסימון.
+// מאפשר "פרץ" של עד capacity בקשות, ובממוצע — refillPerSecond בשנייה
+export class TokenBucket {
+  #capacity: number;
+  #rate: number;
+  #now: () =&gt; number;
+  #tokens: number;
+  #last: number;
+
+  constructor({ capacity, refillPerSecond, now = () =&gt; Date.now() }: { capacity: number; refillPerSecond: number; now?: () =&gt; number }) {
+    if (capacity &lt;= 0 || refillPerSecond &lt;= 0) throw new RangeError("capacity ו־refillPerSecond חייבים להיות חיוביים");
+    this.#capacity = capacity;
+    this.#rate = refillPerSecond;
+    this.#now = now;
+    this.#tokens = capacity; // מתחיל מלא
+    this.#last = now();
+  }
+
+  #refill() {
+    const t = this.#now();
+    // לא שומרים טיימר — מחשבים כמה התמלא מאז הפעם הקודמת
+    this.#tokens = Math.min(this.#capacity, this.#tokens + ((t - this.#last) / 1000) * this.#rate);
+    this.#last = t;
+  }
+
+  take(cost = 1): TakeResult {
+    if (cost &gt; this.#capacity) throw new RangeError("cost גדול מהקיבולת — הבקשה לעולם לא תעבור");
+    this.#refill();
+    if (this.#tokens &gt;= cost) {
+      this.#tokens -= cost;
+      return { allowed: true, remaining: Math.floor(this.#tokens), retryAfterSeconds: 0 };
+    }
+    // לא מורידים כלום כשנדחה — אחרת לקוח שמנסה שוב ושוב לא יעבור לעולם
+    const missing = cost - this.#tokens;
+    return { allowed: false, remaining: Math.floor(this.#tokens), retryAfterSeconds: Math.ceil(missing / this.#rate) };
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>setInterval</code> שממלא את כל הדליים — אלף לקוחות = אלף טיימרים, והכול לא מדויק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E18">
+    <h3>P24-E18 · middleware של הגבלת קצב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Map מלקוח למערך זמנים. בכל בקשה: <code class="mid">filter(t =&gt; t &gt; now − windowMs)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ניקוי: פעם ב־<code>windowMs</code>, עוברים על ה־Map ומוחקים לקוחות שהבקשה האחרונה שלהם יצאה מהחלון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E18
+import type { NextFunction, Request, Response } from "express";
+
+export function rateLimit({ limit, windowMs, now = () =&gt; Date.now(), key = (req) =&gt; req.ip ?? "unknown" }: {
+  limit: number;
+  windowMs: number;
+  now?: () =&gt; number;
+  key?: (req: Request) =&gt; string;
+}) {
+  const hits = new Map&lt;string, number[]&gt;(); // לכל לקוח — הזמנים של הבקשות שעברו, בחלון האחרון
+  let lastSweep = now();
+
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const t = now();
+    // ניקוי מדי פעם: לקוח שהלך — לא נשאר בזיכרון לנצח
+    if (t - lastSweep &gt;= windowMs) {
+      for (const [k, times] of hits) if (times.at(-1)! &lt;= t - windowMs) hits.delete(k);
+      lastSweep = t;
+    }
+    const id = key(req);
+    const recent = (hits.get(id) ?? []).filter((x) =&gt; x &gt; t - windowMs);
+    const resetSeconds = (oldest: number) =&gt; Math.max(1, Math.ceil((oldest + windowMs - t) / 1000));
+    res.setHeader("RateLimit-Limit", String(limit));
+
+    if (recent.length &gt;= limit) {
+      hits.set(id, recent); // הבקשה שנדחתה לא נספרת
+      const retry = resetSeconds(recent[0]);
+      res.setHeader("RateLimit-Remaining", "0");
+      res.setHeader("RateLimit-Reset", String(retry));
+      res.setHeader("Retry-After", String(retry)); // בשניות, לפי התקן — לא מילישניות
+      return res.status(429).json({ error: "יותר מדי בקשות" });
+    }
+    recent.push(t);
+    hits.set(id, recent);
+    res.setHeader("RateLimit-Remaining", String(limit - recent.length));
+    res.setHeader("RateLimit-Reset", String(resetSeconds(recent[0])));
+    next();
+  };
+}</code></pre>
+<p>ה־headers האלה (<code>RateLimit-*</code>) הם טיוטת תקן של IETF; GitHub ו־Cloudflare שולחים גרסאות שלהם (<code>X-RateLimit-*</code>). לקוח טוב קורא אותם ומאט לפני שהוא נחסם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>זה עובד בשרת אחד. עם שלושה שרתים מאחורי load balancer, כל אחד סופר לבד — והמגבלה האמיתית פי 3. לשם צריך מונה משותף (Redis, פרק 26).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E19">
+    <h3>P24-E19 · כיבוי מסודר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>server.close(cb)</code> — מפסיק לקבל, ו־cb נקרא כשכל החיבורים נסגרו. <code class="mid">server.closeIdleConnections()</code>, <code class="mid">server.closeAllConnections()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Promise.race</code> בין "נסגר" ל־timeout. ואל תשכח <code>clearTimeout</code> — אחרת התהליך לא יוצא עד שהטיימר נגמר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E19
+import type { Server } from "node:http";
+
+export function gracefulShutdown(server: Server, { timeoutMs = 10_000, onClose = async () =&gt; {} }: { timeoutMs?: number; onClose?: () =&gt; Promise&lt;void&gt; } = {}) {
+  let running: Promise&lt;{ forced: boolean }&gt; | undefined;
+  let shuttingDown = false;
+
+  async function shutdown() {
+    shuttingDown = true;
+    // 1. לא מקבלים חיבורים חדשים. close() מחכה שכל החיבורים הקיימים ייסגרו
+    const closed = new Promise&lt;void&gt;((resolve) =&gt; server.close(() =&gt; resolve()));
+    // 2. חיבורי keep-alive שלא באמצע בקשה — סוגרים עכשיו (מ־Node 19 close עושה את זה בעצמו; מפורש — ברור יותר)
+    server.closeIdleConnections();
+    // 3. בקשות שבאמצע — מקבלות עד timeoutMs לסיים. אחר כך — בכוח
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise&lt;boolean&gt;((resolve) =&gt; {
+      timer = setTimeout(() =&gt; resolve(true), timeoutMs);
+    });
+    const forced = await Promise.race([closed.then(() =&gt; false), timedOut]);
+    clearTimeout(timer);
+    if (forced) {
+      server.closeAllConnections();
+      await closed;
+    }
+    // 4. רק אחרי שאין בקשות — סוגרים את מה שהן משתמשות בו (מסד, תורים)
+    await onClose();
+    return { forced };
+  }
+
+  return {
+    // אפשר לקרוא כמה פעמים (SIGTERM ואז SIGINT) — מתבצע פעם אחת
+    shutdown: () =&gt; (running ??= shutdown()),
+    isShuttingDown: () =&gt; shuttingDown,
+  };
+}</code></pre>
+<p>ובשרת אמיתי:</p>
+<pre><code class="lang-ts">const { shutdown } = gracefulShutdown(server, { timeoutMs: 10_000, onClose: () =&gt; pool.end() });
+process.on("SIGTERM", async () =&gt; {
+  const { forced } = await shutdown();
+  process.exit(forced ? 1 : 0);
+});</code></pre>
+<p><code>docker stop</code> שולח SIGTERM ומחכה 10 שניות לפני SIGKILL (פרק 23) — לכן ה־timeout שלנו קצר מזה. ב־Nest זה <code>app.enableShutdownHooks()</code>, שכבר בפרויקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>process.exit(0)</code> מיד ב־SIGTERM — כל בקשה שבאמצע נחתכת; לקוח שבאמצע תשלום מקבל שגיאת רשת (ומזל שיש Idempotency-Key).</li><li>לסגור את המסד <em>לפני</em> שהבקשות סיימו — הן נכשלות עם "pool is closed".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E23">
+    <h3>P24-E23 · הגבלת קצב עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מאיפה מגיע <code>X-Forwarded-For</code>? מי קובע מה כתוב בו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מתי <code>recent.push(t)</code> קורה — לפני או אחרי הבדיקה? ובאיזו יחידה <code>Retry-After</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E23
+import type { NextFunction, Request, Response } from "express";
+
+export function rateLimit({ limit, windowMs, now = () =&gt; Date.now() }: { limit: number; windowMs: number; now?: () =&gt; number }) {
+  const hits = new Map&lt;string, number[]&gt;();
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    // תקלה 1: X-Forwarded-For הוא header שהלקוח שולח כרצונו — כל בקשה עם ערך אחר "עוקפת" את המגבלה.
+    // req.ip בלבד; מאחורי proxy מוכר — app.set("trust proxy", 1), ו־Express מחשב את req.ip נכון
+    const client = req.ip ?? "unknown";
+    const t = now();
+    const recent = (hits.get(client) ?? []).filter((x) =&gt; x &gt; t - windowMs);
+    if (recent.length &gt;= limit) {
+      hits.set(client, recent);
+      // תקלה 3: Retry-After הוא בשניות (RFC 9110). 60000 = "חכה 16 שעות"
+      res.setHeader("Retry-After", String(Math.ceil((recent[0] + windowMs - t) / 1000)));
+      return res.status(429).json({ error: "יותר מדי בקשות" });
+    }
+    // תקלה 2: הבקשה נספרה לפני הבדיקה — גם הנדחות. לקוח שממשיך לנסות היה חסום לתמיד
+    recent.push(t);
+    hits.set(client, recent);
+    next();
+  };
+}</code></pre>
+<p>ומתי כן <code>X-Forwarded-For</code>? כשהשרת מאחורי proxy שאתה שולט בו (load balancer בפרק 25). אז <code>app.set("trust proxy", 1)</code> — "סמוך על hop אחד" — ו־Express לוקח מה־header את הכתובת ש<em>ה־proxy</em> הוסיף, לא את מה שהלקוח כתב לפניה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>trust proxy: true</code> (הכול) כשאין proxy — אותה פרצה בדיוק, רק במקום אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E32">
+    <h3>P24-E32 · בדיקות ל־Retry-After 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קבע "עכשיו" קבוע אחד: <code class="mid">const NOW = new Date("2026-10-21T07:27:00Z")</code>. אז דקה אחרי זה, <code class="mid">"Wed, 21 Oct 2026 07:28:00 GMT"</code>, צריך לתת בדיוק <code>60_000</code>. בדיקה שקוראת לפונקציה <em>בלי</em> <code>now</code> תלויה בשעה שבה היא רצה — אל תעשה את זה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לקלט לא תקין: טבלה ולולאה (‏P22-E17), ובהודעה <code>JSON.stringify(bad)</code> כדי לראות מה נכשל. חשוב על מה ש־<code>Number()</code> ו־<code>Date.parse()</code> "מקבלים בטעות": ‏<code>Number("")</code> הוא 0, ו־<code>Date.parse("1.5")</code> הוא תאריך בשנת 2001.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E32 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseRetryAfter } from "./P24-E32.ts";
+
+const NOW = new Date("2026-10-21T07:27:00Z");
+
+test("מספר שניות ← מילישניות", () =&gt; {
+  assert.equal(parseRetryAfter("120", NOW), 120_000);
+  assert.equal(parseRetryAfter("1", NOW), 1000);
+  assert.equal(parseRetryAfter("0", NOW), 0);
+  assert.equal(parseRetryAfter("  30 ", NOW), 30_000);
+});
+
+test("תאריך HTTP ← כמה זמן עד אליו, לפי now", () =&gt; {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:28:00 GMT", NOW), 60_000);
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 08:27:00 GMT", NOW), 3_600_000);
+});
+
+test("תאריך שעבר ← 0", () =&gt; {
+  assert.equal(parseRetryAfter("Wed, 21 Oct 2026 07:00:00 GMT", NOW), 0);
+});
+
+test("אין header, או header לא תקין ← null", () =&gt; {
+  for (const bad of [undefined, "", "   ", "-5", "1.5", "5s", "abc", "2026-10-21", "tomorrow"]) {
+    assert.equal(parseRetryAfter(bad, NOW), null, JSON.stringify(bad));
+  }
+});</code></pre>
+<p>כל בדיקה כאן סוגרת באג אחד או יותר. ‏<code>"0"</code> תופס regex שדורש ספרה ראשונה שאינה 0. ‏<code>"  30 "</code> תופס מימוש בלי <code>trim</code>. התאריך שעבר תופס מימוש בלי <code>Math.max</code>. ו־<code>NOW</code> קבוע תופס מימוש שמתעלם מ־<code>now</code> וקורא ל־<code>Date.now()</code>: אצלו התשובה היא 0, כי 21 באוקטובר כבר עבר.</p>
+<p>הקלטים הכי חשובים הם אלה שנראים "כמעט תקינים": ‏<code>""</code>, ‏<code>"1.5"</code>, ‏<code>"2026-10-21"</code>. מימוש עם <code>Number(v)</code> מחזיר על <code>""</code> אפס, כלומר "נסה מיד". מימוש עם <code>Date.parse</code> בלבד מקבל את <code>"1.5"</code> כתאריך. בשני המקרים לקוח שמכבד את ה־header היה מציף את השרת שביקש ממנו לחכות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את הדוגמה מהמשימה (<code>"120"</code>) — רוב הבאגים כאן הם בקלט הלא תקין ובגבולות.</li><li><code class="mid">assert.ok(parseRetryAfter("abc") == null)</code> — עובר גם על <code>undefined</code>. ‏<code>assert.equal(..., null)</code> מדויק.</li><li>להשוות תאריכים בלי <code>now</code> קבוע — הבדיקה עוברת היום ונכשלת מחר.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 2, שלב ז׳: מוכן לפרודקשן</a></div>
+</main>
+</body>
+</html>

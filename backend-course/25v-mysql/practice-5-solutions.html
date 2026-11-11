@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E16">
+    <h3>P25.5-E16 · חיפוש FULLTEXT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">ALTER TABLE products ADD FULLTEXT INDEX … (name)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">MATCH(name) AGAINST ('+grinder* -electric' IN BOOLEAN MODE)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E16
+-- חיפוש מלא (FULLTEXT) ב־InnoDB: אינדקס על name, ו־MATCH … AGAINST. במצב BOOLEAN: + חובה, - אסור, * prefix
+ALTER TABLE products ADD FULLTEXT INDEX ft_products_name (name);
+SELECT name
+FROM products
+WHERE MATCH(name) AGAINST ('+grinder* -electric' IN BOOLEAN MODE)
+ORDER BY name;</code></pre>
+<p>ומה עם קלט של משתמש? בתווים כמו <code>+ - * " ( )</code> יש משמעות ב־BOOLEAN MODE — מנקים אותם (או משתמשים ב־NATURAL LANGUAGE MODE). ומעל כמה מיליוני מסמכים, או כשצריך דירוג חכם, פונים למנוע חיפוש (Elasticsearch/OpenSearch, Meilisearch).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>LIKE '%grinder%'</code> על טבלה גדולה — סורק הכול; אינדקס רגיל לא עוזר כשהתבנית מתחילה ב־%.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E18">
+    <h3>P25.5-E18 · אינדקס נכון, לפי EXPLAIN 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סדר העמודות באינדקס: קודם מה שמשווים ב־<code>=</code>, אחר כך מה שממיינים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האינדקס הקיים <code>(customer_id, created_at)</code> ממוין נכון — אבל עובר על כל ההזמנות המבוטלות עד שמוצא 10 ששולמו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E18
+-- השאילתה: WHERE customer_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 10.
+-- אינדקס מורכב בסדר: שוויון קודם (customer_id, status), ואז המיון (created_at) — בלי filesort, ובלי לסרוק הזמנות בסטטוס אחר
+CREATE INDEX idx_orders_customer_status_created ON orders (customer_id, status, created_at);</code></pre>
+<p>ב־InnoDB כל אינדקס משני מכיל גם את המפתח הראשי — לכן <code>id</code> כבר "באינדקס". הוסף גם <code>total</code> ← covering index: המסד לא צריך לקרוא את השורה בכלל. ולכן גם: מפתח ראשי קצר וממוין (AUTO_INCREMENT), לא UUID אקראי — הוא מוכפל בכל אינדקס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>אינדקס נפרד לכל עמודה — MySQL ישתמש ברוב המקרים באחד מהם בלבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E19">
+    <h3>P25.5-E19 · migrations עם GET_LOCK 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">SELECT GET_LOCK('schema_migrations', ?) AS ok</code> ← 1 אם קיבלת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הנעילה שייכת ל<em>חיבור</em> — לכן <code>pool.getConnection()</code>, לא <code>pool.query</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E19
+import type { Pool } from "mysql2/promise";
+
+// כלי migrations בקטן. שני דברים שמיוחדים ל־MySQL:
+// (1) DDL עושה COMMIT מרומז — אי אפשר לעטוף CREATE/ALTER בטרנזקציה ולבטל. migration שנכשל באמצע — נשאר באמצע.
+// (2) GET_LOCK: נעילה בשם, לכל השרתים — כך שני שרתים שעולים יחד לא מריצים את אותו migration פעמיים
+export async function migrate(pool: Pool, migrations: readonly { id: string; sql: string }[], { lockTimeoutSeconds = 10 } = {}): Promise&lt;string[]&gt; {
+  const conn = await pool.getConnection();
+  try {
+    const [[lock]] = await conn.query&lt;any[]&gt;("SELECT GET_LOCK('schema_migrations', ?) AS ok", [lockTimeoutSeconds]);
+    if (lock.ok !== 1) throw new Error("לא התקבלה נעילה ל־migrations");
+    try {
+      await conn.query("CREATE TABLE IF NOT EXISTS schema_migrations (id VARCHAR(100) PRIMARY KEY, applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))");
+      const [done] = await conn.query&lt;any[]&gt;("SELECT id FROM schema_migrations");
+      const applied = new Set(done.map((r) =&gt; r.id));
+      const ran: string[] = [];
+      for (const m of [...migrations].sort((a, b) =&gt; (a.id &lt; b.id ? -1 : 1))) {
+        if (applied.has(m.id)) continue;
+        await conn.query(m.sql);
+        await conn.execute("INSERT INTO schema_migrations (id) VALUES (?)", [m.id]);
+        ran.push(m.id);
+      }
+      return ran;
+    } finally {
+      await conn.query("SELECT RELEASE_LOCK('schema_migrations')");
+    }
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>ההבדל הגדול מ־PostgreSQL: שם, <code>CREATE TABLE</code> בתוך טרנזקציה אפשר לבטל. ב־MySQL כל DDL עושה COMMIT מרומז — migration עם שלוש פקודות שנכשל בשלישית משאיר את שתי הראשונות. לכן: migration קטן, פקודה אחת אם אפשר, ו־"expand/contract" (פרק 25).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>GET_LOCK</code> על <code>pool.query</code> — הנעילה נלקחת בחיבור אחד, ה־migrations רצים באחרים, וה־RELEASE משחרר (או לא) בשלישי.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E24">
+    <h3>P25.5-E24 · אתגר: "הזמן" של חנות הקפה ב־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני פתרונות קודמים בפרק הם רוב הדרך: E09 (הזמנה), E17 (idempotency).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי <code>INSERT IGNORE</code> שהחזיר 0 — קרא את השורה עם <code>FOR SHARE</code>: ב־REPEATABLE READ קריאה רגילה יכולה להחזיר את התמונה הישנה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E24
+import type { Pool } from "mysql2/promise";
+
+export class EmptyCart extends Error {}
+export class OutOfStock extends Error {
+  productId: number;
+  constructor(productId: number) {
+    super(`אין מספיק מלאי למוצר ${productId}`);
+    this.productId = productId;
+  }
+}
+
+// "הזמן" של חנות הקפה — ב־MySQL. טרנזקציה אחת: מפתח idempotency, עגלה, נעילת המוצרים (FOR UPDATE, לפי id —
+// סדר קבוע מונע deadlocks), בדיקת מלאי, הזמנה ופריטים עם המחיר של עכשיו, הורדת מלאי, ריקון העגלה
+export async function createOrderFromCart(pool: Pool, customerId: number, idemKey: string): Promise&lt;{ orderId: number; totalCents: number; replayed: boolean }&gt; {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // אותו מפתח בבקשה מקבילה: ה־INSERT מחכה לנעילה על המפתח, וממשיך כשהראשונה מסתיימת
+    const [ins] = await conn.execute&lt;any&gt;("INSERT IGNORE INTO order_requests (idem_key, customer_id) VALUES (?, ?)", [idemKey, customerId]);
+    if (ins.affectedRows === 0) {
+      // FOR SHARE — קריאה "נועלת" רואה את הגרסה המחויבת האחרונה (לא את ה־snapshot של REPEATABLE READ)
+      const [[prev]] = await conn.execute&lt;any[]&gt;("SELECT r.customer_id, r.order_id, o.total FROM order_requests r LEFT JOIN orders o ON o.id = r.order_id WHERE r.idem_key = ? FOR SHARE", [idemKey]);
+      await conn.commit();
+      if (!prev || prev.customer_id !== customerId || prev.order_id === null) throw new Error("Idempotency-Key בשימוש");
+      return { orderId: prev.order_id, totalCents: Math.round(Number(prev.total) * 100), replayed: true };
+    }
+    const [cart] = await conn.execute&lt;any[]&gt;("SELECT product_id, quantity FROM cart_items WHERE customer_id = ? ORDER BY product_id", [customerId]);
+    if (cart.length === 0) throw new EmptyCart("העגלה ריקה");
+    const [products] = await conn.query&lt;any[]&gt;("SELECT id, price, stock FROM products WHERE id IN (?) ORDER BY id FOR UPDATE", [cart.map((c) =&gt; c.product_id)]);
+    const byId = new Map(products.map((p) =&gt; [p.id, p]));
+    let totalCents = 0;
+    for (const c of cart) {
+      const p = byId.get(c.product_id);
+      if (!p || p.stock &lt; c.quantity) throw new OutOfStock(c.product_id);
+      totalCents += Math.round(Number(p.price) * 100) * c.quantity;
+    }
+    const [order] = await conn.execute&lt;any&gt;("INSERT INTO orders (customer_id, status, total) VALUES (?, 'pending_payment', ?)", [customerId, (totalCents / 100).toFixed(2)]);
+    const orderId: number = order.insertId;
+    await conn.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES ?", [cart.map((c) =&gt; [orderId, c.product_id, c.quantity, byId.get(c.product_id).price])]);
+    for (const c of cart) await conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [c.quantity, c.product_id]);
+    await conn.execute("DELETE FROM cart_items WHERE customer_id = ?", [customerId]);
+    await conn.execute("UPDATE order_requests SET order_id = ? WHERE idem_key = ?", [orderId, idemKey]);
+    await conn.commit();
+    return { orderId, totalCents, replayed: false };
+  } catch (err) {
+    await conn.rollback(); // גם שורת ה־idempotency מתבטלת — אפשר לנסות שוב עם אותו מפתח
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור את ה־idempotency בטרנזקציה נפרדת מההזמנה — קריסה ביניהן משאירה מפתח "בטיפול" לנצח, או הזמנה בלי מפתח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E25">
+    <h3>P25.5-E25 · אתגר: העברת נתונים מ־PostgreSQL ל־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־PostgreSQL: <code>balance::text</code> — כך הסכום מגיע כמחרוזת מדויקת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">INSERT … VALUES ? AS new ON DUPLICATE KEY UPDATE …</code> עם מערך של מערכים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E25
+import type pg from "pg";
+import type { Pool } from "mysql2/promise";
+
+// העברת טבלה מ־PostgreSQL ל־MySQL — משימה אמיתית כשמחליפים מסד או מאחדים מערכות.
+// בקבוצות (keyset לפי id, לא OFFSET), עם המרת טיפוסים, ו־idempotent: הרצה שנייה לא מכפילה (ON DUPLICATE KEY UPDATE)
+export async function copyCustomers(source: pg.Client | pg.Pool, target: Pool, { batchSize = 500 } = {}): Promise&lt;{ copied: number; batches: number }&gt; {
+  let lastId = 0;
+  let copied = 0;
+  let batches = 0;
+  for (;;) {
+    const { rows } = await source.query(
+      "SELECT id, name, email, is_vip, balance::text AS balance, created_at FROM customers WHERE id &gt; $1 ORDER BY id LIMIT $2",
+      [lastId, batchSize],
+    );
+    if (rows.length === 0) break;
+    const values = rows.map((r: any) =&gt; [
+      r.id,
+      r.name,
+      r.email,
+      r.is_vip ? 1 : 0, // boolean ← TINYINT(1)
+      r.balance, // numeric כמחרוזת ← DECIMAL — בלי לעבור דרך float
+      // timestamptz ← DATETIME(3) ב־UTC (MySQL DATETIME לא שומר אזור זמן — מחליטים ומתעדים: UTC)
+      (r.created_at as Date).toISOString().slice(0, 23).replace("T", " "),
+    ]);
+    await target.query(
+      "INSERT INTO customers (id, name, email, is_vip, balance, created_at) VALUES ? AS new " +
+        "ON DUPLICATE KEY UPDATE name = new.name, email = new.email, is_vip = new.is_vip, balance = new.balance, created_at = new.created_at",
+      [values],
+    );
+    copied += rows.length;
+    batches++;
+    lastId = rows[rows.length - 1].id;
+  }
+  return { copied, batches };
+}</code></pre>
+<p>במעבר אמיתי: קודם להעתיק (כמו כאן), אחר כך לכתוב לשני המסדים במקביל, להשוות, ורק אז להעביר קריאות — וכל הזמן עם דרך חזרה (expand/contract בגדול).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>created_at.toString()</code> או <code>toLocaleString()</code> ← תאריך באזור הזמן של השרת שמריץ את ההעברה. <code>toISOString()</code> — תמיד UTC.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

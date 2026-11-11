@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — יחידה 26.3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.3</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26c-cloud/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.3-E04">
+    <h3>P26.3-E04 · מה Kubernetes יעשה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>readiness ← "לשלוח אליי תנועה?"; liveness ← "להרוג ולהפעיל מחדש?".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־Deployment כל הזמן משווה בין מה שכתוב (desired) למה שקיים (actual).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־ReplicaSet רואה 2 במקום 3, ויוצר pod חדש תוך שניות. זה הרעיון של <strong>desired state</strong>: לא אומרים "תפעיל", אומרים "צריכים להיות 3".</li><li><strong>שום pod לא מופעל מחדש</strong> (liveness תקין). כולם יוצאים מה־endpoints של ה־Service (readiness נכשל) — הבקשות נכשלות מהר ב־Ingress במקום להיתקע, וכשהמסד חוזר, הם חוזרים לבד. אם liveness היה בודק את המסד — Kubernetes היה מפעיל מחדש את כל ה־pods בלולאה, בלי שזה עוזר בכלום (פרק 25).</li><li>אחרי <code>failureThreshold</code> כישלונות של liveness — הקונטיינר מופעל מחדש (<code>RESTARTS</code> עולה ב־<code>kubectl get pods</code>).</li><li><strong>OOMKilled</strong> — הקונטיינר נהרג ומופעל מחדש. (חריגה מ־limit של CPU לא הורגת — היא מאטה: throttling.)</li><li>ה־pods החדשים ב־<code>CrashLoopBackOff</code>, אף אחד לא Ready — וה־rolling update <strong>נעצר</strong>: הישנים לא מוסרים מעבר ל־<code>maxUnavailable</code>. האתר ממשיך לעבוד על הגרסה הישנה. <code>kubectl rollout undo</code> (או revert ב־Git, עם Argo CD — שיעור 4).</li><li>ה־scheduler יוצר שני pods חדשים על nodes אחרים (אם יש מקום — אחרת הם <code>Pending</code>, E18). ו־PodDisruptionBudget מגן מכיבוי <em>מתוכנן</em> של nodes, לא מתקלה (E11).</li></ol>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.3-E09">
+    <h3>P26.3-E09 · Deployment 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>spec.selector.matchLabels</code> חייב להתאים ל־<code class="mid">spec.template.metadata.labels</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">valueFrom: secretKeyRef: { name, key }</code>. ו־<code>port: http</code> ב־probe — שם הפורט, אז אין מספר כפול לעדכן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E09: ה־Deployment של coffee-api
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+  labels:
+    app: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # המשתמש node מה־Dockerfile
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: coffee-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3</code></pre>
+<p>למה limit רק ל־memory? limit של CPU גורם ל־throttling גם כשה־node פנוי; הרבה צוותים שמים רק request ל־CPU. ל־memory — limit חובה: דליפת זיכרון ב־pod אחד לא תפיל את כל ה־node.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>image: …:latest</code> — אי אפשר לדעת איזו גרסה רצה, ו־"rollback" מחזיר את אותו latest.</li><li>readiness ו־liveness על אותה בדיקה של המסד — ראה E04.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E10">
+    <h3>P26.3-E10 · Service ו־ConfigMap 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>data</code> של ConfigMap — רק מחרוזות. <code>3000</code> בלי מרכאות הוא מספר ב־YAML.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">envFrom: - configMapRef: { name: … }</code> טוען את כל המפתחות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E10: Service ו־ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coffee-config
+data:
+  LOG_LEVEL: info
+  PORT: "3000"
+  CORS_ORIGINS: https://shop.coffee.example
+  TRUST_PROXY: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee-api
+spec:
+  type: ClusterIP
+  selector:
+    app: coffee-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: coffee-config</code></pre>
+<p>ה־Service נותן שם DNS יציב — <code>coffee-api</code> (או המלא, <code class="mid">coffee-api.&lt;namespace&gt;.svc.cluster.local</code>) — ומחלק בקשות בין ה־pods שה־selector שלו תופס <em>ושהם Ready</em>. pods נוצרים ומתים, ה־IP שלהם משתנה; השם נשאר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שינוי ב־ConfigMap לא מגיע ל־pods שכבר רצים (env נקרא בעלייה). צריך rollout — <code>kubectl rollout restart</code>, או ב־Helm: checksum של ה־ConfigMap כ־annotation (שיעור 4).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E11">
+    <h3>P26.3-E11 · autoscaling ו־PDB 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחוז ה־CPU הוא מתוך ה־<em>request</em> — בלי requests ל־CPU ה־HPA לא יודע לחשב (E09).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">behavior.scaleDown.stabilizationWindowSeconds</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E11: HorizontalPodAutoscaler ו־PodDisruptionBudget
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coffee-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coffee-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coffee-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coffee-api</code></pre>
+<p>ה־HPA קורא מדדים מ־metrics-server כל 15 שניות בערך, ומחשב <code>ceil(עותקים × נוכחי / יעד)</code>: 3 עותקים ב־140% ← 6. עלייה מהר, ירידה לאט — כדי לא "לנשום" למעלה ולמטה כל דקה.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.3-E12">
+    <h3>P26.3-E12 · סודות כקבצים: *_FILE 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>readFile</code> מוזרק — בבדיקה הוא אובייקט בזיכרון, באפליקציה <code class="mid">(p) =&gt; fs.readFileSync(p, "utf8")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"בלי ה־newline שבסוף" — רק שורה אחת אחרונה. <code>trim()</code> היה מוחק גם רווח שהוא חלק מהסיסמה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E12: הגדרות מ־env, עם המוסכמה *_FILE לסודות (Kubernetes Secret שמורכב כקובץ)
+export interface AppConfig {
+  databaseUrl: string;
+  jwtSecret: string;
+  redisUrl: string;
+  port: number;
+}
+
+type ReadFile = (path: string) =&gt; string;
+
+const REQUIRED = { databaseUrl: "DATABASE_URL", jwtSecret: "JWT_SECRET", redisUrl: "REDIS_URL" } as const;
+
+export function readSetting(env: Record&lt;string, string | undefined&gt;, name: string, readFile: ReadFile): string | undefined {
+  const direct = env[name];
+  const file = env[`${name}_FILE`];
+  if (direct !== undefined &amp;&amp; file !== undefined) throw new Error(`${name} ו־${name}_FILE מוגדרים שניהם — בחר אחד`);
+  if (file !== undefined) {
+    let text: string;
+    try {
+      text = readFile(file);
+    } catch {
+      throw new Error(`${name}_FILE: אי אפשר לקרוא את ${file}`);
+    }
+    const value = text.replace(/\r?\n$/, "");
+    if (!value) throw new Error(`${name}_FILE: הקובץ ${file} ריק`);
+    return value;
+  }
+  return direct === "" ? undefined : direct;
+}
+
+export function loadConfig(env: Record&lt;string, string | undefined&gt;, readFile: ReadFile): AppConfig {
+  const missing: string[] = [];
+  const out: Record&lt;string, string&gt; = {};
+  for (const [key, name] of Object.entries(REQUIRED)) {
+    const v = readSetting(env, name, readFile);
+    if (v === undefined) missing.push(name);
+    else out[key] = v;
+  }
+  if (missing.length) throw new Error(`חסרות הגדרות: ${missing.join(", ")}`);
+  const port = Number(env.PORT ?? "3000");
+  if (!Number.isInteger(port) || port &lt; 1 || port &gt; 65535) throw new Error(`PORT לא תקין: ${env.PORT}`);
+  return { databaseUrl: out.databaseUrl, jwtSecret: out.jwtSecret, redisUrl: out.redisUrl, port };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>value.trim()</code> — סיסמה שמסתיימת ברווח (נדיר, אבל קורה) נשברת בשקט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E14">
+    <h3>P26.3-E14 · כמויות של Kubernetes 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>"512M"</code> הוא 512,000,000 — כמעט 25MB פחות מ־<code>"512Mi"</code>. טעות נפוצה ב־limits.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>regex אחד: <code class="mid">/^(\d+(?:\.\d+)?)(Ki|Mi|…)?$/</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E14: כמויות של Kubernetes — CPU ו־memory
+const BINARY: Record&lt;string, number&gt; = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40 };
+const DECIMAL: Record&lt;string, number&gt; = { k: 1e3, M: 1e6, G: 1e9, T: 1e12 };
+
+// מחזיר millicores: "250m" ← 250, "1" ← 1000, "0.5" ← 500
+export function parseCpu(q: string | number): number {
+  const s = String(q).trim();
+  const m = /^(\d+(?:\.\d+)?)(m?)$/.exec(s);
+  if (!m) throw new Error(`CPU לא תקין: ${q}`);
+  const n = Number(m[1]);
+  const milli = m[2] ? n : n * 1000;
+  if (!Number.isInteger(milli)) throw new Error(`CPU לא תקין (פחות ממילי־ליבה): ${q}`);
+  return milli;
+}
+
+// מחזיר בתים: "512Mi" ← 536870912, "1G" ← 1e9
+export function parseMemory(q: string | number): number {
+  const s = String(q).trim();
+  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/.exec(s);
+  if (!m) throw new Error(`memory לא תקין: ${q}`);
+  const unit = m[2] ? (BINARY[m[2]] ?? DECIMAL[m[2]]) : 1;
+  return Math.round(Number(m[1]) * unit);
+}
+
+export function formatMemory(bytes: number): string {
+  for (const u of ["Gi", "Mi", "Ki"]) if (bytes &gt;= BINARY[u] &amp;&amp; bytes % BINARY[u] === 0) return `${bytes / BINARY[u]}${u}`;
+  return String(bytes);
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>"250M"</code> כ־CPU — זה לא "250 מילי", זה 250 מיליון ליבות (ו־Kubernetes דוחה). <code>m</code> קטנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E17">
+    <h3>P26.3-E17 · rolling update בצעדים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>4 עותקים, surge 1, unavailable 0: <code>4/0 4/1 3/2 2/3 1/4 0/4</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>להסיר: <code class="mid">min(old, old + new - minAvailable)</code>. להוסיף: <code class="mid">min(replicas - new, maxPods - old - new)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E17: rolling update — כמה pods מותר, ואיך ה־rollout מתקדם
+export type Amount = number | `${number}%`;
+
+function resolve(amount: Amount, replicas: number, round: (n: number) =&gt; number, name: string): number {
+  if (typeof amount === "number") {
+    if (!Number.isInteger(amount) || amount &lt; 0) throw new Error(`${name} לא תקין: ${amount}`);
+    return amount;
+  }
+  const m = /^(\d+)%$/.exec(amount);
+  if (!m) throw new Error(`${name} לא תקין: ${amount}`);
+  return round((replicas * Number(m[1])) / 100);
+}
+
+export function rolloutBounds(replicas: number, maxSurge: Amount, maxUnavailable: Amount) {
+  if (!Number.isInteger(replicas) || replicas &lt; 1) throw new Error("replicas חייב להיות לפחות 1");
+  const surge = resolve(maxSurge, replicas, Math.ceil, "maxSurge"); // Kubernetes: surge מעגל למעלה
+  const unavailable = resolve(maxUnavailable, replicas, Math.floor, "maxUnavailable"); // unavailable — למטה
+  if (surge === 0 &amp;&amp; unavailable === 0) throw new Error("maxSurge ו־maxUnavailable לא יכולים להיות שניהם 0 — ה־rollout לא יתקדם");
+  return { maxPods: replicas + surge, minAvailable: replicas - unavailable };
+}
+
+export interface Snapshot {
+  old: number;
+  new: number;
+}
+
+// מודל פשוט: pods חדשים שנוצרו בצעד מוכנים (ready) בסוף הצעד
+export function simulateRollout(replicas: number, maxSurge: Amount, maxUnavailable: Amount) {
+  const { maxPods, minAvailable } = rolloutBounds(replicas, maxSurge, maxUnavailable);
+  let oldPods = replicas;
+  let newPods = 0;
+  const steps: Snapshot[] = [{ old: oldPods, new: newPods }];
+  while (oldPods &gt; 0 || newPods &lt; replicas) {
+    const remove = Math.max(0, Math.min(oldPods, oldPods + newPods - minAvailable));
+    oldPods -= remove;
+    const add = Math.max(0, Math.min(replicas - newPods, maxPods - oldPods - newPods));
+    newPods += add;
+    if (remove === 0 &amp;&amp; add === 0) throw new Error("ה־rollout תקוע");
+    steps.push({ old: oldPods, new: newPods });
+  }
+  return { maxPods, minAvailable, steps };
+}</code></pre>
+<p>הבחירה בפועל: <code>maxUnavailable: 0</code> + <code>maxSurge: 1</code> — אף פעם לא פחות קיבולת, אבל איטי ודורש מקום ל־pod נוסף. <code>25%/25%</code> (ברירת המחדל של Kubernetes) — מהר יותר. <code>maxSurge: 0</code> — כשאין מקום פנוי ב־cluster.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.3-E18">
+    <h3>P26.3-E18 · scheduler קטן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מפה של משאבים פנויים לכל node, ולהוריד ממנה בכל השמה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגדולים קודם (first-fit decreasing) — אחרת קטנים "מפוררים" את המקום, וה־pod הגדול נשאר Pending גם כשבסך הכול יש מספיק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E18: scheduler קטן — לאיזה node כל pod הולך (לפי requests)
+export interface NodeSpec {
+  name: string;
+  cpu: string;
+  memory: string;
+}
+export interface PodSpec {
+  name: string;
+  cpu: string;
+  memory: string;
+}
+
+// מוכנות (מ־E14)
+export const parseCpu = (q: string) =&gt; (q.endsWith("m") ? Number(q.slice(0, -1)) : Number(q) * 1000);
+const UNITS: Record&lt;string, number&gt; = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, k: 1e3, M: 1e6, G: 1e9 };
+export const parseMemory = (q: string) =&gt; {
+  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|k|M|G)?$/.exec(q)!;
+  return Math.round(Number(m[1]) * (m[2] ? UNITS[m[2]] : 1));
+};
+
+export function schedule(nodes: NodeSpec[], pods: PodSpec[]) {
+  const free = new Map(nodes.map((n) =&gt; [n.name, { cpu: parseCpu(n.cpu), memory: parseMemory(n.memory) }]));
+  const order = pods
+    .map((p) =&gt; ({ name: p.name, cpu: parseCpu(p.cpu), memory: parseMemory(p.memory) }))
+    .sort((a, b) =&gt; b.cpu - a.cpu || b.memory - a.memory || a.name.localeCompare(b.name)); // הגדולים קודם
+  const placements: Record&lt;string, string&gt; = {};
+  const pending: string[] = [];
+  for (const pod of order) {
+    const node = nodes.find((n) =&gt; {
+      const f = free.get(n.name)!;
+      return f.cpu &gt;= pod.cpu &amp;&amp; f.memory &gt;= pod.memory;
+    });
+    if (!node) {
+      pending.push(pod.name);
+      continue;
+    }
+    const f = free.get(node.name)!;
+    f.cpu -= pod.cpu;
+    f.memory -= pod.memory;
+    placements[pod.name] = node.name;
+  }
+  return { placements, pending, free: Object.fromEntries(free) };
+}</code></pre>
+<p>ה־scheduler האמיתי מחליט לפי <strong>requests</strong> — לא לפי השימוש בפועל. pod עם request של 100m שמשתמש ב־2 ליבות "לא תופס מקום" מבחינת ה־scheduler, ומאט את השכנים. לכן requests קרובים למציאות, מתוך המדדים.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.3-E20">
+    <h3>P26.3-E20 · Deployment שלא עולה — ארבע תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הודעת השגיאה של apply: <code class="mid">selector does not match template labels</code>. ומה עוד ה־API server דוחה? limit מול request.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>על איזה פורט האפליקציה מאזינה, ועל איזה ה־readiness בודק?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E20: ה־Deployment אחרי התיקון
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coffee-api # תיקון 1: זהה ל־labels של ה־template
+  template:
+    metadata:
+      labels:
+        app: coffee-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/noa-cohen/coffee-shop:1.4.2 # תיקון 4: גרסה קבועה, לא latest
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http # תיקון 2: הפורט שהאפליקציה מאזינה לו
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              cpu: "1" # תיקון 3: limit לא קטן מה־request
+              memory: 512Mi</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את ה־selector על ידי שינוי ה־labels של ה־template ל־<code>app: coffee</code> — עובד כאן, אבל ה־Service (E10) בוחר <code>app: coffee-api</code>, ואז אין לו endpoints.</li><li>"לתקן" את ה־readiness על ידי מחיקה שלו — ה־pods "Ready" מיד, ומקבלים תנועה לפני שהאפליקציה עלתה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26.3-E26">
+    <h3>P26.3-E26 · label selector של Kubernetes 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שלבים: קודם לפרק את המחרוזת לרשימת דרישות, ואז לבדוק כל אחת. פירוק בפסיקים שלא בתוך סוגריים: <code class="mid">selector.split(/,(?![^()]*\))/)</code>. כלומר "פסיק, שאחריו <em>לא</em> בא <code>)</code> בלי <code>(</code> באמצע". לכל חלק — שלושה regex, לפי הסדר: שוויון (<code class="mid">/^([\w./-]+)\s*(==|=|!=)\s*([\w.-]*)$/</code>), קבוצה (<code>in</code>/<code>notin</code> עם סוגריים), וקיום (<code>/^(!?)\s*([\w./-]+)$/</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור כל דרישה כאובייקט עם <code>op</code> (‏<code>"="</code>, ‏<code>"!="</code>, ‏<code>"in"</code>, ‏<code>"notin"</code>, ‏<code>"exists"</code>, ‏<code>"!exists"</code>), ואז <code>requirements.every(...)</code> עם <code>switch (r.op)</code>. "האם יש label": ‏<code>Object.hasOwn(labels, key)</code>. ‏<code>labels[key] !== undefined</code> נכשל על מפתחות כמו <code>constructor</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E26 — label selector של Kubernetes
+export type Requirement =
+  | { key: string; op: "=" | "!="; value: string }
+  | { key: string; op: "in" | "notin"; values: string[] }
+  | { key: string; op: "exists" | "!exists" };
+
+const EQUALITY = /^([\w./-]+)\s*(==|=|!=)\s*([\w.-]*)$/;
+const SET = /^([\w./-]+)\s+(in|notin)\s*\(([^()]*)\)$/;
+const EXISTS = /^(!?)\s*([\w./-]+)$/;
+const VALUE = /^[\w.-]+$/;
+
+export function parseSelector(selector: string): Requirement[] {
+  if (selector.trim() === "") return [];
+  // פסיק מפריד בין דרישות — אבל לא פסיק בתוך סוגריים
+  return selector.split(/,(?![^()]*\))/).map((raw) =&gt; {
+    const part = raw.trim();
+    let m = part.match(EQUALITY);
+    if (m) return { key: m[1], op: m[2] === "!=" ? "!=" : "=", value: m[3] };
+    m = part.match(SET);
+    if (m) {
+      const values = m[3].split(",").map((v) =&gt; v.trim());
+      if (values.some((v) =&gt; !VALUE.test(v))) throw new SyntaxError(`ערך לא תקין ב־"${part}"`);
+      return { key: m[1], op: m[2] as "in" | "notin", values };
+    }
+    m = part.match(EXISTS);
+    if (m) return { key: m[2], op: m[1] ? "!exists" : "exists" };
+    throw new SyntaxError(`דרישה לא תקינה: "${part}"`);
+  });
+}
+
+export function matches(labels: Record&lt;string, string&gt;, selector: string): boolean {
+  return parseSelector(selector).every((r) =&gt; {
+    const has = Object.hasOwn(labels, r.key);
+    const value = labels[r.key];
+    switch (r.op) {
+      case "=":
+        return has &amp;&amp; value === r.value;
+      case "!=":
+        return !has || value !== r.value;
+      case "in":
+        return has &amp;&amp; r.values.includes(value);
+      case "notin":
+        return !has || !r.values.includes(value);
+      case "exists":
+        return has;
+      case "!exists":
+        return !has;
+    }
+  });
+}
+
+const pods: { name: string; labels: Record&lt;string, string&gt; }[] = [
+  { name: "web-7d9f-a", labels: { app: "web", tier: "frontend", env: "prod" } },
+  { name: "web-7d9f-b", labels: { app: "web", tier: "frontend", env: "staging", canary: "true" } },
+  { name: "api-5c4b-a", labels: { app: "api", tier: "backend", env: "prod" } },
+  { name: "db-0", labels: { app: "postgres", tier: "db" } },
+];
+for (const sel of ["app=web", "env in (prod, staging),!canary", "tier!=db", "env", "tier notin (frontend,db)"]) {
+  console.log(sel.padEnd(32), pods.filter((p) =&gt; matches(p.labels, sel)).map((p) =&gt; p.name).join(" "));
+}
+console.log(JSON.stringify(parseSelector("app=web,env in (prod,staging),!canary")));</code></pre>
+<pre class="terminal">app=web                          web-7d9f-a web-7d9f-b
+env in (prod, staging),!canary   web-7d9f-a api-5c4b-a
+tier!=db                         web-7d9f-a web-7d9f-b api-5c4b-a
+env                              web-7d9f-a web-7d9f-b api-5c4b-a
+tier notin (frontend,db)         api-5c4b-a
+[{"key":"app","op":"=","value":"web"},{"key":"env","op":"in","values":["prod","staging"]},{"key":"canary","op":"!exists"}]</pre>
+<p>שורה 3: ‏<code>tier!=db</code> מחזיר את כל מי שאינו מסד. אם היה Pod בלי <code>tier</code> בכלל, גם הוא היה חוזר. זו הסמנטיקה של Kubernetes, והיא מפתיעה: ‏<code>!=</code> ו־<code>notin</code> אומרים "לא שווה", ולא "קיים ושונה". מי שרוצה "קיים ושונה" כותב <code>tier,tier!=db</code>.</p>
+<p>פירוק לפני הערכה (<code>parseSelector</code> ואז <code>every</code>) הוא אותו מבנה כמו ב־<code>parseAuthorization</code> (‏P21-E27) וב־<code>parseInfo</code> (‏P26-E32): קודם הופכים טקסט למבנה עם טיפוס, ואז הלוגיקה פשוטה. ה־union של <code>Requirement</code> מבטיח שב־<code>case "in"</code> יש <code>values</code>, וב־<code>case "="</code> יש <code>value</code>.</p>
+<p>שגיאה על selector שבור, ולא <code>false</code> שקט, חשובה במיוחד כאן. ‏<code>false</code> אומר "אף Pod לא מתאים", כלומר Service שלא שולח תעבורה לאף אחד, בלי שום הודעה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>selector.split(",")</code> — ‏<code>env in (prod,staging)</code> נחתך לשני חלקים שבורים.</li><li><code>!=</code> שדורש שה־label קיים — Pods בלי ה־label נעלמים מהתוצאה, בניגוד ל־Kubernetes.</li><li>לבדוק קודם את regex הקיום — <code>app</code> ב־<code>app=web</code> לא מתאים לו (יש <code>=</code>), אבל בלי <code>^</code> ו־<code>$</code> הוא היה מתאים לחלק מהמחרוזת.</li><li>להחזיר <code>false</code> על selector לא תקין — טעות הקלדה נראית כמו "אין Pods".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26.3-E28">
+    <h3>P26.3-E28 · סיכום של kubectl get pods 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const cols = header.trim().split(/\s{2,}/)</code>, ואז <code class="long">const [NAME, READY, ...] = ["NAME", "READY", ...].map((c) =&gt; cols.indexOf(c))</code>. בכל שורה: <code class="mid">const [ready, total] = cells[READY].split("/").map(Number)</code>. ‏<code class="mid">parseInt("14 (63s ago)", 10)</code> קורא ספרות עד התו הראשון שאינו ספרה, ומחזיר 14.</p>
+<p>ב־<code>parsePods</code> השתמש ב־<code>map</code> ישירות (בלי לולאה), וסנן קודם שורות ריקות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ספירה: <code class="mid">byStatus[p.status] = (byStatus[p.status] ?? 0) + 1</code>. מיון: <code class="long">sort((a, b) =&gt; b.restarts - a.restarts || a.name.localeCompare(b.name))</code>. כשההפרש הוא 0, ‏<code>||</code> עובר לקריטריון השני.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E28 — סיכום של kubectl get pods
+export type Pod = { name: string; ready: number; total: number; status: string; restarts: number; age: string };
+
+export function parsePods(text: string): Pod[] {
+  const [header, ...rows] = text.trim().split("\n");
+  const cols = header.trim().split(/\s{2,}/);
+  const at = (name: string) =&gt; {
+    const i = cols.indexOf(name);
+    if (i === -1) throw new Error(`חסרה עמודה ${name}`);
+    return i;
+  };
+  const [NAME, READY, STATUS, RESTARTS, AGE] = ["NAME", "READY", "STATUS", "RESTARTS", "AGE"].map(at);
+  return rows
+    .filter((row) =&gt; row.trim() !== "")
+    .map((row) =&gt; {
+      const cells = row.trim().split(/\s{2,}/);
+      const [ready, total] = cells[READY].split("/").map(Number);
+      return {
+        name: cells[NAME],
+        ready,
+        total,
+        status: cells[STATUS],
+        restarts: parseInt(cells[RESTARTS], 10),
+        age: cells[AGE],
+      };
+    });
+}
+
+export function podSummary(pods: Pod[]) {
+  const byStatus: Record&lt;string, number&gt; = {};
+  for (const pod of pods) byStatus[pod.status] = (byStatus[pod.status] ?? 0) + 1;
+  const notReady = pods.filter((p) =&gt; p.ready &lt; p.total &amp;&amp; p.status !== "Completed").map((p) =&gt; p.name);
+  const restarting = pods
+    .filter((p) =&gt; p.restarts &gt;= 3)
+    .sort((a, b) =&gt; b.restarts - a.restarts || a.name.localeCompare(b.name))
+    .map((p) =&gt; `${p.name} (${p.restarts})`);
+  return { byStatus, notReady, restarting };
+}
+
+const output = `NAME                         READY   STATUS             RESTARTS        AGE
+coffee-api-7d9f8b6c4-2xkqp   1/1     Running            0               3d4h
+coffee-api-7d9f8b6c4-9wzlm   1/1     Running            1 (2d ago)      3d4h
+coffee-api-7d9f8b6c4-tq7rn   0/1     CrashLoopBackOff   14 (63s ago)    48m
+worker-6c5d7f9b8-hk2vd       1/2     Running            3 (10m ago)     2h
+postgres-0                   1/1     Running            0               12d
+migrate-q8x2n                0/1     Completed          0               3d4h
+`;
+const pods = parsePods(output);
+console.log(pods[2]);
+console.log(podSummary(pods));</code></pre>
+<pre class="terminal">{
+  name: 'coffee-api-7d9f8b6c4-tq7rn',
+  ready: 0,
+  total: 1,
+  status: 'CrashLoopBackOff',
+  restarts: 14,
+  age: '48m'
+}
+{
+  byStatus: { Running: 4, CrashLoopBackOff: 1, Completed: 1 },
+  notReady: [ 'coffee-api-7d9f8b6c4-tq7rn', 'worker-6c5d7f9b8-hk2vd' ],
+  restarting: [ 'coffee-api-7d9f8b6c4-tq7rn (14)', 'worker-6c5d7f9b8-hk2vd (3)' ]
+}</pre>
+<p>שתי עמודות דורשות טיפול: <code>RESTARTS</code> עם הסוגריים (מ־Kubernetes 1.28 בערך מוצג גם מתי הייתה ההפעלה האחרונה), ו־<code>READY</code> כשבר. ‏<code>parseInt</code> עוצר בתו הראשון שאינו ספרה. ‏<code>Number("14 (63s ago)")</code> היה <code>NaN</code>.</p>
+<p>‏<code>worker</code> הוא המקרה המעניין: הסטטוס <code>Running</code>, אבל 1/2 מוכנים. כלומר אחד משני הקונטיינרים ב־Pod (אולי sidecar) לא עובר readiness probe. מי שמסתכל רק על <code>STATUS</code> לא רואה אותו. בגלל זה <code>notReady</code> מסתכל על <code>READY</code>.</p>
+<p>בסקריפט אמיתי מבקשים מ־kubectl פלט JSON: ‏<code>kubectl get pods -o json</code>, ואז <code class="mid">status.containerStatuses[].restartCount</code>. הפלט המודפס נועד לבני אדם, וכאן הוא תרגיל טוב בטקסט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>split(/\s+/)</code> — ‏<code>14 (63s ago)</code> מתפרק לשלושה תאים, וכל העמודות שאחריו זזות.</li><li><code>Number(cells[RESTARTS])</code> — ‏<code>NaN</code> לכל Pod שהופעל מחדש.</li><li>מספרי עמודות קבועים (<code>cells[3]</code>) — ‏<code>-o wide</code> או גרסה אחרת של kubectl שוברים אותם.</li><li>לספור את <code>Completed</code> כ"לא מוכן" — כל migration שרץ כ־Job מופיע כתקלה.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-helm-gitops.html"><small>הבא</small>שיעור 4 — Helm ו־GitOps עם Argo CD</a></div>
+</main>
+</body>
+</html>

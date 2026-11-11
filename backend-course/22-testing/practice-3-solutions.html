@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 22</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 22</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>22-testing/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P22-E14">
+    <h3>P22-E14 · בדיקות HTTP 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>createApp().listen(0, ...)</code> — 0 = "כל פורט פנוי". <code>server.address().port</code> אחר כך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אפליקציה חדשה לכל בדיקה, ו־<code class="mid">t.after(() =&gt; server.close())</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E14 — הבדיקות
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { createApp } from "./P22-E14.ts";
+
+// שרת אמיתי על פורט פנוי (0), ו־fetch אמיתי. אפליקציה חדשה לכל בדיקה — בלי state משותף
+async function start(t: { after: (fn: () =&gt; void) =&gt; void }) {
+  const server: Server = await new Promise((resolve) =&gt; {
+    const s = createApp().listen(0, () =&gt; resolve(s));
+  });
+  t.after(() =&gt; server.close());
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  return (method: string, path: string, body?: unknown) =&gt;
+    fetch(base + path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+test("POST ← 201 עם Location, ואז GET", async (t) =&gt; {
+  const call = await start(t);
+  const res = await call("POST", "/items", { name: "  Mug  " });
+  assert.equal(res.status, 201);
+  assert.equal(res.headers.get("location"), "/items/1");
+  assert.deepEqual(await res.json(), { id: 1, name: "Mug" });
+  assert.deepEqual(await (await call("GET", "/items/1")).json(), { id: 1, name: "Mug" });
+  assert.deepEqual(await (await call("GET", "/items")).json(), [{ id: 1, name: "Mug" }]);
+});
+
+test("ולידציה ← 400", async (t) =&gt; {
+  const call = await start(t);
+  for (const body of [{ name: "" }, { name: "   " }, { name: "x".repeat(51) }, {}]) {
+    assert.equal((await call("POST", "/items", body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call("POST", "/items", { name: "x".repeat(50) })).status, 201);
+});
+
+test("404 ו־DELETE", async (t) =&gt; {
+  const call = await start(t);
+  assert.equal((await call("GET", "/items/9")).status, 404);
+  await call("POST", "/items", { name: "Mug" });
+  assert.equal((await call("DELETE", "/items/1")).status, 204);
+  assert.equal((await call("GET", "/items/1")).status, 404);
+  assert.equal((await call("DELETE", "/items/1")).status, 404);
+});</code></pre>
+<p>שים לב ל־<code>start(t)</code>: פונקציה אחת שמעלה שרת חדש, רושמת סגירה, ומחזירה <code>call</code> קצר. כל בדיקה מתחילה מאפס — אין "ה־id הבא הוא 4 כי בדיקה אחרת יצרה 3".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שרת אחד לכל הקובץ — נוח, עד שבדיקה אחת משאירה פריטים והשנייה סופרת אותם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E15">
+    <h3>P22-E15 · מסד בדיקות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>before</code> — יוצרים את ה־schema פעם אחת; <code>beforeEach</code> — <code>reset()</code>; <code>after</code> — <code>close()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כדי לבדוק מיון — צור את המוצרים בסדר <em>אחר</em> מהמחיר. ובשביל עמוד 2 — יותר מ־10 מוצרים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E15 — הבדיקות
+import { test, before, after, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { createTestSchema } from "./db-helper.ts";
+import { ProductsRepository } from "./P22-E15.ts";
+
+let db: Awaited&lt;ReturnType&lt;typeof createTestSchema&gt;&gt;;
+let repo: ProductsRepository;
+
+before(async () =&gt; {
+  db = await createTestSchema();
+  repo = new ProductsRepository(db.pool);
+});
+after(() =&gt; db.close());
+beforeEach(() =&gt; db.reset());
+
+test("create מחזיר את המוצר, עם מחיר כמספר", async () =&gt; {
+  assert.deepEqual(await repo.create("Mug", 19.9), { id: 1, name: "Mug", price: 19.9 });
+});
+
+test("חיפוש בלי תלות באותיות", async () =&gt; {
+  await repo.create("Espresso Cup", 25);
+  await repo.create("Milk jug", 60);
+  assert.deepEqual(await repo.search({ q: "CUP" }), [{ id: 1, name: "Espresso Cup", price: 25 }], "גם המחיר — מספר, לא \"25.00\"");
+});
+
+test("טווח מחירים — כולל הגבולות", async () =&gt; {
+  for (const [name, price] of [["a", 10], ["b", 20], ["c", 30]] as const) await repo.create(name, price);
+  assert.deepEqual((await repo.search({ minPrice: 10, maxPrice: 20 })).map((p) =&gt; p.name), ["a", "b"]);
+  assert.deepEqual((await repo.search({ minPrice: 20, maxPrice: 30 })).map((p) =&gt; p.name), ["b", "c"]);
+});
+
+test("מיון לפי מחיר, ועמודים של 10", async () =&gt; {
+  for (let i = 1; i &lt;= 12; i++) await repo.create(`p${i}`, 100 - i); // הזול ביותר נוצר אחרון
+  const first = await repo.search();
+  assert.equal(first.length, 10);
+  assert.equal(first[0].name, "p12");
+  assert.deepEqual((await repo.search({ page: 2 })).map((p) =&gt; p.name), ["p2", "p1"]);
+});</code></pre>
+<p>למה schema זמני ולא המסד הרגיל? (1) הבדיקות לא נוגעות בנתוני הפיתוח שלך; (2) <code>reset()</code> מאפס גם ids, אז אפשר לכתוב <code>id: 1</code>; (3) שתי ריצות במקביל לא מפריעות זו לזו. ו־<code>deepEqual</code> על המוצר השלם תפס מוטנט שבדיקת שמות בלבד לא תופסת: מחיר שחוזר כמחרוזת <code>"25.00"</code> (כך <code>pg</code> מחזיר <code>NUMERIC</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק <code>.length</code> של התוצאות — מיון ועמודים לא נבדקים בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E16">
+    <h3>P22-E16 · builders לנתוני בדיקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const id = overrides.id ?? nextUserId++</code> — ואז <code class="mid">{ ...defaults, ...overrides }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שים לב שאם הועבר id, המונה <strong>לא</strong> מתקדם — <code>??</code> מקצר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E16 — builders: ערכי ברירת מחדל תקינים, ids ייחודיים, ורק מה שחשוב לבדיקה — כותבים במפורש
+export interface User {
+  id: number;
+  email: string;
+  role: "user" | "admin";
+  createdAt: string;
+}
+
+export interface Task {
+  id: number;
+  ownerId: number;
+  title: string;
+  status: "todo" | "in_progress" | "done";
+  priority: "low" | "medium" | "high";
+  dueDate: string | null;
+}
+
+let nextUserId = 1;
+let nextTaskId = 1;
+
+export function aUser(overrides: Partial&lt;User&gt; = {}): User {
+  const id = overrides.id ?? nextUserId++;
+  return { id, email: `user${id}@example.com`, role: "user", createdAt: "2026-11-01T00:00:00.000Z", ...overrides };
+}
+
+export function aTask(overrides: Partial&lt;Task&gt; = {}): Task {
+  const id = overrides.id ?? nextTaskId++;
+  return { id, ownerId: 1, title: `משימה ${id}`, status: "todo", priority: "medium", dueDate: null, ...overrides };
+}
+
+export function resetBuilders(): void {
+  nextUserId = 1;
+  nextTaskId = 1;
+}</code></pre>
+<p>למה builders? בדיקה שצריכה "משימה של admin שהסתיימה" כותבת <code class="mid">aTask({ ownerId: admin.id, status: "done" })</code> — רק מה שחשוב <em>לה</em>. כשמוסיפים שדה חובה למשימה, משנים מקום אחד ולא מאה בדיקות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מונה שלא מתאפס בין בדיקות — ids תלויים בסדר הריצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E18">
+    <h3>P22-E18 · e2e: כניסה ובעלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>helper אחד: <code>start(t)</code> שמחזיר <code class="mid">call(method, path, { body, token })</code>, <code>login(email, password)</code> ושעון שאפשר לקדם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בעלות: דנה יוצרת, יוסי מנסה לראות ולמחוק — ואז בודקים שאצל דנה זה עדיין שם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E18 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { createApp } from "./P22-E18.ts";
+
+async function start(t: { after: (fn: () =&gt; void) =&gt; void }) {
+  const clock = { now: new Date("2026-11-04T10:00:00Z") };
+  const server: Server = await new Promise((resolve) =&gt; {
+    const s = createApp({ now: () =&gt; clock.now }).listen(0, () =&gt; resolve(s));
+  });
+  t.after(() =&gt; server.close());
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  const call = async (method: string, path: string, { body, token }: { body?: unknown; token?: string } = {}) =&gt; {
+    const res = await fetch(base + path, {
+      method,
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, body: res.status === 204 ? null : await res.json() };
+  };
+  const login = async (email: string, password: string) =&gt; (await call("POST", "/login", { body: { email, password } })).body.token as string;
+  return { call, login, clock };
+}
+
+test("כניסה", async (t) =&gt; {
+  const { call } = await start(t);
+  assert.equal((await call("POST", "/login", { body: { email: "dana@example.com", password: "wrong" } })).status, 401);
+  const ok = await call("POST", "/login", { body: { email: "dana@example.com", password: "dana-password-1" } });
+  assert.equal(ok.status, 200);
+  assert.equal(typeof ok.body.token, "string");
+});
+
+test("בלי טוקן ← 401", async (t) =&gt; {
+  const { call } = await start(t);
+  assert.equal((await call("GET", "/notes")).status, 401);
+  assert.equal((await call("GET", "/notes", { token: "made-up" })).status, 401);
+});
+
+test("כל אחד רואה ומוחק רק את שלו", async (t) =&gt; {
+  const { call, login } = await start(t);
+  const dana = await login("dana@example.com", "dana-password-1");
+  const yossi = await login("yossi@example.com", "yossi-password-1");
+  await call("POST", "/notes", { token: dana, body: { text: "של דנה" } });
+  await call("POST", "/notes", { token: yossi, body: { text: "של יוסי" } });
+  assert.deepEqual((await call("GET", "/notes", { token: yossi })).body, [{ id: 2, text: "של יוסי" }]);
+  assert.equal((await call("DELETE", "/notes/1", { token: yossi })).status, 404);
+  assert.deepEqual((await call("GET", "/notes", { token: dana })).body, [{ id: 1, text: "של דנה" }]);
+  assert.equal((await call("DELETE", "/notes/1", { token: dana })).status, 204);
+});
+
+test("ה־session פג אחרי 15 דקות", async (t) =&gt; {
+  const { call, login, clock } = await start(t);
+  const dana = await login("dana@example.com", "dana-password-1");
+  clock.now = new Date("2026-11-04T10:14:59Z");
+  assert.equal((await call("GET", "/notes", { token: dana })).status, 200);
+  clock.now = new Date("2026-11-04T10:15:00Z");
+  assert.equal((await call("GET", "/notes", { token: dana })).status, 401);
+});</code></pre>
+<p>שים לב לבדיקה "כל אחד רואה ומוחק רק את שלו": היא לא מסתפקת ב־404 של יוסי, אלא בודקת אחר כך שהפתק של דנה <strong>עדיין קיים</strong>. בלי השורה הזו, קוד שמוחק ואז מחזיר 404 היה עובר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק "בלי טוקן ← 401" — ולא טוקן מזויף, ולא טוקן שפג.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-jest.html"><small>הבא</small>שיעור 4 — Jest, Nest, כיסוי ו־mutation testing</a></div>
+</main>
+</body>
+</html>

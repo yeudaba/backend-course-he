@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — פרק 12</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 12</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>12-design/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P12-E03">
+    <h3>P12-E03 · מי תופס? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>NotFoundError היא גם AppError.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדיקה כללית לפני ספציפית "בולעת" אותן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>400, 400, 500, 500. כל שגיאה שיורשת מ־AppError נתפסת בבדיקה הראשונה, וה־404/422 לא מגיעים לעולם. התיקון: מהספציפי לכללי — <code>NotFoundError</code>, <code>ValidationError</code>, ורק אז <code>AppError</code>. (וזריקה של מחרוזת — <code>throw "string error"</code> — הגיעה ל־500: לכן תמיד זורקים <code>Error</code>.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>instanceof</code> בודק "בדיוק המחלקה הזו" — הוא בודק גם מחלקות אב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E09">
+    <h3>P12-E09 · היררכיית שגיאות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">this.name = new.target.name;</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־toHttp: field רק ל־ValidationError — <code class="long">...(err instanceof ValidationError ? { field: err.field } : {})</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E09
+export class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(entity: string, id: string | number) {
+    super(`${entity} ${id} לא נמצא`, 404, "NOT_FOUND");
+  }
+}
+
+export class ValidationError extends AppError {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message, 400, "VALIDATION");
+    this.field = field;
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(message, 409, "CONFLICT");
+  }
+}
+
+export function toHttp(err: unknown): { status: number; body: { code: string; message: string; field?: string } } {
+  if (err instanceof AppError) {
+    return {
+      status: err.status,
+      body: { code: err.code, message: err.message, ...(err instanceof ValidationError ? { field: err.field } : {}) },
+    };
+  }
+  return { status: 500, body: { code: "INTERNAL", message: "שגיאה פנימית" } };
+}
+
+console.log(toHttp(new ValidationError("email", "לא תקין")), new NotFoundError("משתמש", 3).name);</code></pre>
+<pre class="terminal">{
+  status: 400,
+  body: { code: 'VALIDATION', message: 'לא תקין', field: 'email' }
+} NotFoundError</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>super(message)</code> — TypeScript יזרוק שגיאה, ובלעדיו אין message.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E10">
+    <h3>P12-E10 · חוזה Logger 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>PrefixLogger הוא הרכבה: "יש לו" Logger.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>processOrders מקבל <code>Logger</code> — לא MemoryLogger. כך עובד עם כל מימוש.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E10
+export interface Logger {
+  info(msg: string): void;
+  error(msg: string): void;
+}
+
+export class MemoryLogger implements Logger {
+  #lines: string[] = [];
+  info(msg: string): void {
+    this.#lines.push(`INFO: ${msg}`);
+  }
+  error(msg: string): void {
+    this.#lines.push(`ERROR: ${msg}`);
+  }
+  get lines(): string[] {
+    return [...this.#lines];
+  }
+}
+
+export class PrefixLogger implements Logger {
+  #inner: Logger;
+  #prefix: string;
+  constructor(inner: Logger, prefix: string) {
+    this.#inner = inner;
+    this.#prefix = prefix;
+  }
+  info(msg: string): void {
+    this.#inner.info(`${this.#prefix} ${msg}`);
+  }
+  error(msg: string): void {
+    this.#inner.error(`${this.#prefix} ${msg}`);
+  }
+}
+
+export function processOrders(ids: number[], logger: Logger): number {
+  let ok = 0;
+  for (const id of ids) {
+    if (id &gt; 0) {
+      logger.info(`order ${id} ok`);
+      ok++;
+    } else {
+      logger.error(`order ${id} invalid`);
+    }
+  }
+  return ok;
+}
+
+const mem = new MemoryLogger();
+console.log(processOrders([1, -2], new PrefixLogger(mem, "[orders]")), mem.lines);</code></pre>
+<pre class="terminal">1 [ 'INFO: [orders] order 1 ok', 'ERROR: [orders] order -2 invalid' ]</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">PrefixLogger extends MemoryLogger</code> — ירושה במקום הרכבה; אז הוא עובד רק עם MemoryLogger.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E14">
+    <h3>P12-E14 · הגבלת קצב עם שעון מוזרק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Map של key ← מערך זמנים. בכל קריאה — מסננים זמנים ישנים מ־<code>now() - windowMs</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור את <code>now</code> בשדה פרטי וקרא לו <code>this.#now()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E14
+export class RateLimiter {
+  #limit: number;
+  #windowMs: number;
+  #now: () =&gt; number;
+  #hits = new Map&lt;string, number[]&gt;();
+
+  constructor({ limit, windowMs, now = Date.now }: { limit: number; windowMs: number; now?: () =&gt; number }) {
+    this.#limit = limit;
+    this.#windowMs = windowMs;
+    this.#now = now;
+  }
+
+  #recent(key: string): number[] {
+    const cutoff = this.#now() - this.#windowMs;
+    const recent = (this.#hits.get(key) ?? []).filter((t) =&gt; t &gt; cutoff);
+    this.#hits.set(key, recent);
+    return recent;
+  }
+
+  allow(key: string): boolean {
+    const recent = this.#recent(key);
+    if (recent.length &gt;= this.#limit) {
+      return false;
+    }
+    recent.push(this.#now());
+    return true;
+  }
+
+  remaining(key: string): number {
+    return Math.max(0, this.#limit - this.#recent(key).length);
+  }
+}
+
+let t = 0;
+const rl = new RateLimiter({ limit: 2, windowMs: 1000, now: () =&gt; t });
+console.log(rl.allow("ip1"), rl.allow("ip1"), rl.allow("ip1"));
+t = 1001;
+console.log(rl.allow("ip1"), rl.remaining("ip1"));</code></pre>
+<pre class="terminal">true true false
+true 1</pre>
+<p>"שעון מוזרק" הוא אחד הטריקים החשובים בכתיבת קוד בדיק: כל קוד שתלוי בזמן — מקבל את הזמן מבחוץ. נשתמש בזה שוב בפרקים 22 ו־24.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code>Date.now()</code> ישירות — הבדיקה תצטרך לחכות שנייה אמיתית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E21">
+    <h3>P12-E21 · שגיאות שלא מזוהות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>name לא מוגדר; status מוגדר במקום הלא נכון; סדר ה־instanceof.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדוק כל מחלקה: האם <code>super</code> מקבל את ההודעה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E21: מתוקן
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+  }
+}
+
+export class NotFoundError extends HttpError {
+  constructor(message: string) {
+    super(message, 404);
+  }
+}
+
+export class ForbiddenError extends HttpError {
+  constructor(message = "אין הרשאה") {
+    super(message, 403);
+  }
+}
+
+export function respond(err: unknown): string {
+  if (err instanceof NotFoundError) return `404 ${err.message}`;
+  if (err instanceof ForbiddenError) return `403 ${err.message}`;
+  if (err instanceof HttpError) return `${err.status} ${err.message}`;
+  return "500 שגיאה פנימית";
+}
+
+console.log(respond(new ForbiddenError()), new NotFoundError("x").name);</code></pre>
+<pre class="terminal">403 אין הרשאה NotFoundError</pre>
+<p>הבאגים: (1) <code>super()</code> בלי ההודעה — message ריק; (2) אין <code>this.name</code>, ולכן כל השגיאות נקראות "Error" ביומן; (3) בדיקת <code>HttpError</code> לפני הספציפיות. (נסה: בלי התיקון, ForbiddenError הייתה מחזירה "403 " עם הודעה ריקה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן רק את הסדר — ההודעות עדיין ריקות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E26">
+    <h3>P12-E26 · מחסן כמחלקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה פרטי אחד: <code class="mid">#items = new Map&lt;string, number&gt;();</code>. מתודה פרטית לבדיקת כמות (<code>#checkQty(qty)</code>) חוסכת לכתוב את אותה בדיקה פעמיים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>remove</code>: קודם כל הבדיקות (כמות, ואז <code>have &lt; qty</code>), ורק אחר כך שינוי. אם <code>have - qty === 0</code> — <code>this.#items.delete(sku)</code>. ‏<code>totalItems</code>: ‏<code class="mid">[...this.#items.values()].reduce(...)</code>. ‏<code>skus</code>: ‏<code class="mid">[...this.#items.keys()].sort()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E26: מחסן כמחלקה
+export class Inventory {
+  #items = new Map&lt;string, number&gt;();
+
+  #checkQty(qty: number): void {
+    if (!Number.isInteger(qty) || qty &lt;= 0) {
+      throw new RangeError("כמות חייבת להיות מספר שלם חיובי");
+    }
+  }
+
+  add(sku: string, qty: number): void {
+    this.#checkQty(qty);
+    this.#items.set(sku, this.count(sku) + qty);
+  }
+
+  remove(sku: string, qty: number): void {
+    this.#checkQty(qty);
+    const have = this.count(sku);
+    if (have &lt; qty) {
+      throw new Error(`אין מספיק ${sku}: יש ${have}, ביקשו ${qty}`);
+    }
+    if (have === qty) {
+      this.#items.delete(sku);
+    } else {
+      this.#items.set(sku, have - qty);
+    }
+  }
+
+  count(sku: string): number {
+    return this.#items.get(sku) ?? 0;
+  }
+
+  totalItems(): number {
+    return [...this.#items.values()].reduce((sum, n) =&gt; sum + n, 0);
+  }
+
+  skus(): string[] {
+    return [...this.#items.keys()].sort();
+  }
+}
+
+const inv = new Inventory();
+inv.add("pen", 5);
+inv.add("cup", 2);
+inv.remove("cup", 2);
+try {
+  inv.remove("pen", 9);
+} catch (err) {
+  console.log((err as Error).message);
+}
+console.log(inv.count("pen"), inv.totalItems(), inv.skus());</code></pre>
+<pre class="terminal">אין מספיק pen: יש 5, ביקשו 9
+5 5 [ 'pen' ]</pre>
+<p>השווה ל־P07-E27: שם המשתנה <code>items</code> היה "פרטי" כי הוא חי בתוך הפונקציה. כאן הוא פרטי בזכות <code>#</code>. בשני המקרים מבחוץ אפשר רק לקרוא למתודות. ההבדל העיקרי הוא בנוחות: במחלקה יש <code>instanceof</code>, ‏getters, ירושה, ומקום טבעי למתודות פרטיות כמו <code>#checkQty</code>.</p>
+<p>הסדר ב־<code>remove</code> הוא העיקרון של שיעור 1: <strong>קודם בודקים, אחר כך משנים</strong>. כך שגיאה אף פעם לא משאירה את האובייקט "באמצע". ואם תשתמש ב־<code>count</code> בתוך <code>add</code> ו־<code>remove</code>, ה־<code>?? 0</code> נכתב פעם אחת בלבד.</p>
+<p><code>(err as Error)</code>: ב־TypeScript, מה שנתפס ב־<code>catch</code> הוא מטיפוס <code>unknown</code> (פרק 11, שיעור 4). כאן אנחנו יודעים מה נזרק. בקוד שמקבל שגיאות מבחוץ, עדיף <code>err instanceof Error</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשנות את הכמות ורק אחר כך לבדוק — אחרי שגיאה המלאי כבר שלילי.</li><li>להשאיר פריטים עם 0 ב־Map — ‏<code>skus()</code> מחזירה פריטים שאזלו.</li><li><code>items = new Map()</code> בלי <code>#</code> — הבודק מגלה ש־<code>Object.keys(inv)</code> לא ריק, כלומר אפשר לגשת לנתונים מבחוץ.</li><li><code>sort()</code> ישירות על <code>this.#items.keys()</code> — ל־iterator אין <code>sort</code>. קודם <code>[...]</code>.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-repository-service.html"><small>הבא</small>שיעור 3 — interface, repository, service והזרקת תלויות</a></div>
+</main>
+</body>
+</html>

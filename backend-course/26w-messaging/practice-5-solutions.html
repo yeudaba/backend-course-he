@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — יחידה 26.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.5</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26w-messaging/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.5-E08">
+    <h3>P26.5-E08 · מעטפת לאירועים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם המעטפת (<code>data: z.unknown()</code>), ואז סכמה לפי <code>version</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>z.iso.datetime()</code> ל־occurredAt, <code>z.email()</code> לכתובת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E08: מעטפת לאירועים — id, סוג, גרסה, זמן — ואימות בצד שמקבל
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+
+export interface EventEnvelope&lt;T = unknown&gt; {
+  id: string;
+  type: string;
+  version: number;
+  occurredAt: string;
+  source: string;
+  data: T;
+}
+
+export function makeEvent&lt;T&gt;(type: string, version: number, data: T, { id = randomUUID(), now = new Date(), source = "coffee-api" } = {}): EventEnvelope&lt;T&gt; {
+  return { id, type, version, occurredAt: now.toISOString(), source, data };
+}
+
+const envelope = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  version: z.number().int().positive(),
+  occurredAt: z.iso.datetime(),
+  source: z.string().min(1),
+  data: z.unknown(),
+});
+
+const placedV1 = z.object({ orderId: z.number().int().positive(), email: z.email(), totalCents: z.number().int().positive() });
+const placedV2 = z.object({
+  orderId: z.number().int().positive(),
+  email: z.email(),
+  total: z.object({ amountCents: z.number().int().positive(), currency: z.string().length(3) }),
+});
+export type OrderPlaced = z.infer&lt;typeof placedV2&gt;;
+
+// מקבל כל גרסה שאנחנו מכירים, ומחזיר תמיד את הצורה העדכנית (v2)
+export function parseOrderPlaced(raw: string): EventEnvelope&lt;OrderPlaced&gt; {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("לא JSON");
+  }
+  const env = envelope.parse(json);
+  if (env.type !== "order.placed") throw new Error(`סוג לא צפוי: ${env.type}`);
+  if (env.version === 1) {
+    const d = placedV1.parse(env.data);
+    return { ...env, version: 2, data: { orderId: d.orderId, email: d.email, total: { amountCents: d.totalCents, currency: "ILS" } } };
+  }
+  if (env.version === 2) return { ...env, data: placedV2.parse(env.data) };
+  throw new Error(`גרסה לא מוכרת: ${env.version}`);
+}</code></pre>
+<p>למה שתי גרסאות? כי אי אפשר לעדכן את כל ה־producers וה־consumers באותה שנייה. הכלל: <strong>consumer מתעדכן קודם</strong> (מקבל גם v1 וגם v2), ורק אחר כך ה־producer מתחיל לשלוח v2. ובחברות עם הרבה צוותים — Schema Registry שאוכף את זה.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E13">
+    <h3>P26.5-E13 · projection מזרם לא מסודר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ההשוואה היא ל־<code>seq</code> השמור — לא לסדר ההגעה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>status = הסוג בלי <code>order.</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E13: projection — מצב ההזמנות מתוך זרם אירועים (עם כפילויות ואי־סדר)
+export interface OrderEvent {
+  orderId: number;
+  seq: number; // מספר רץ לכל הזמנה: 1, 2, 3…
+  type: "order.placed" | "order.paid" | "order.shipped" | "order.cancelled";
+}
+
+export interface OrderView {
+  status: "placed" | "paid" | "shipped" | "cancelled";
+  seq: number;
+}
+
+const STATUS = { "order.placed": "placed", "order.paid": "paid", "order.shipped": "shipped", "order.cancelled": "cancelled" } as const;
+
+export function applyEvent(state: Map&lt;number, OrderView&gt;, e: OrderEvent): boolean {
+  const cur = state.get(e.orderId);
+  if (cur &amp;&amp; e.seq &lt;= cur.seq) return false; // כפילות, או אירוע ישן שהגיע מאוחר
+  if (cur?.status === "cancelled") return false; // סופי
+  state.set(e.orderId, { status: STATUS[e.type], seq: e.seq });
+  return true;
+}
+
+export function project(events: OrderEvent[]) {
+  const state = new Map&lt;number, OrderView&gt;();
+  let applied = 0;
+  for (const e of events) if (applyEvent(state, e)) applied++;
+  return { state, applied, ignored: events.length - applied };
+}</code></pre>
+<p>ה־<code>seq</code> מגיע מה־producer — מהמסד שלו (מספר גרסה בשורת ההזמנה, שעולה בכל עדכון). בלעדיו, consumer לא יכול לדעת ש־"paid" שהגיע עכשיו ישן מ־"shipped" שכבר ראה.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E15">
+    <h3>P26.5-E15 · consumer אידמפוטנטי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">INSERT … ON CONFLICT DO NOTHING</code>, ו־<code>rowCount</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני consumers עם אותו eventId במקביל: ה־INSERT של השני <em>מחכה</em> לטרנזקציה של הראשון, ואז רואה שהשורה קיימת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E15: consumer אידמפוטנטי — "טופל" נרשם באותה טרנזקציה עם הפעולה
+import type { Pool } from "pg";
+
+export interface PaymentEvent {
+  eventId: string;
+  orderId: number;
+  amountCents: number;
+}
+
+export async function handlePaymentEvent(pool: Pool, e: PaymentEvent): Promise&lt;"processed" | "duplicate"&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const mark = await client.query(
+      "INSERT INTO processed_events (consumer, event_id) VALUES ('payments', $1) ON CONFLICT DO NOTHING",
+      [e.eventId],
+    );
+    if (mark.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return "duplicate"; // כבר טופל (או מטופל ממש עכשיו בטרנזקציה אחרת — ה־INSERT חיכה לה)
+    }
+    await client.query("INSERT INTO payments (order_id, amount_cents, event_id) VALUES ($1, $2, $3)", [e.orderId, e.amountCents, e.eventId]);
+    const upd = await client.query("UPDATE orders SET status = 'paid' WHERE id = $1", [e.orderId]);
+    if (upd.rowCount !== 1) throw new Error(`הזמנה ${e.orderId} לא קיימת`);
+    await client.query("COMMIT");
+    return "processed";
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err; // נכשל ← גם הסימון בוטל, ואפשר לנסות שוב
+  } finally {
+    client.release();
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"קודם בודקים <code class="mid">SELECT … WHERE event_id = ?</code>, ואם אין — מטפלים" — שני consumers בודקים יחד, שניהם לא מוצאים, שניהם מחייבים. הסימון חייב להיות הפעולה הנועלת עצמה.</li><li>לסמן ב־Redis ולשמור במסד — שתי מערכות, אין טרנזקציה משותפת. קריסה ביניהן ← או כפול או חסר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E16">
+    <h3>P26.5-E16 · retry עם backoff ו־jitter 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>attempt 1 ← תקרה 500; 2 ← 1000; 3 ← 2000…</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"full jitter" — לא <code>תקרה ± קצת</code>, אלא כל הטווח מ־0.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E16: מתי לנסות שוב, ומתי לוותר — exponential backoff עם jitter
+export type RetryDecision = { action: "retry"; delayMs: number } | { action: "dead-letter"; reason: string };
+
+export interface RetryOptions {
+  baseMs?: number;
+  maxMs?: number;
+  maxAttempts?: number;
+  random?: () =&gt; number;
+}
+
+export function isPermanent(err: any): boolean {
+  if (err?.permanent === true) return true;
+  const s = err?.status;
+  return typeof s === "number" &amp;&amp; s &gt;= 400 &amp;&amp; s &lt; 500 &amp;&amp; s !== 408 &amp;&amp; s !== 429; // 4xx — לא ישתנה בניסיון חוזר
+}
+
+// attempt = כמה ניסיונות כבר נכשלו (1 אחרי הכישלון הראשון)
+export function nextRetry(attempt: number, err: unknown, { baseMs = 500, maxMs = 30_000, maxAttempts = 5, random = Math.random }: RetryOptions = {}): RetryDecision {
+  if (isPermanent(err)) return { action: "dead-letter", reason: "permanent" };
+  if (attempt &gt;= maxAttempts) return { action: "dead-letter", reason: "max-attempts" };
+  const cap = Math.min(maxMs, baseMs * 2 ** (attempt - 1));
+  let delayMs = Math.floor(random() * cap); // "full jitter": אקראי בין 0 לתקרה — כדי שאלף consumers לא יחזרו באותה שנייה
+  const retryAfter = (err as any)?.retryAfterMs;
+  if (typeof retryAfter === "number" &amp;&amp; retryAfter &gt; delayMs) delayMs = Math.min(retryAfter, maxMs);
+  return { action: "retry", delayMs };
+}</code></pre>
+<p>למה jitter? שירות התשלומים נפל לדקה, ואלף consumers נכשלו יחד. בלי jitter — כולם חוזרים יחד אחרי 500ms, ושוב אחרי 1000ms: גלים שמפילים את השירות בדיוק כשהוא מנסה לקום ("thundering herd"). עם jitter — הניסיונות מתפזרים.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E17">
+    <h3>P26.5-E17 · transactional outbox 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">SELECT … WHERE published_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך טרנזקציה: הנעילה מחזיקה עד ה־COMMIT.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E17: transactional outbox — ההזמנה והאירוע נשמרים יחד; relay שולח אחר כך
+import type { Pool } from "pg";
+
+export interface OutboxRow {
+  id: number;
+  topic: string;
+  key: string;
+  payload: any;
+}
+
+export async function placeOrder(pool: Pool, order: { email: string; totalCents: number }): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO orders (email, total_cents) VALUES ($1, $2) RETURNING id", [order.email, order.totalCents]);
+    const id = rows[0].id as number;
+    await client.query("INSERT INTO outbox (topic, key, payload) VALUES ('orders', $1, $2)", [
+      String(id),
+      { type: "order.placed", orderId: id, email: order.email, totalCents: order.totalCents },
+    ]);
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function relayOutbox(pool: Pool, publish: (row: OutboxRow) =&gt; Promise&lt;void&gt;, { batch = 100 } = {}): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  const sent: number[] = [];
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      "SELECT id, topic, key, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED",
+      [batch],
+    );
+    let failure: unknown = null;
+    for (const r of rows) {
+      try {
+        await publish({ id: Number(r.id), topic: r.topic, key: r.key, payload: r.payload });
+        sent.push(Number(r.id));
+      } catch (err) {
+        failure = err; // עוצרים: לשמור על הסדר. מה שנשלח — מסמנים
+        break;
+      }
+    }
+    if (sent.length) await client.query("UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[])", [sent]);
+    await client.query("COMMIT");
+    if (failure) throw failure;
+    return sent.length;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>outbox נותן at-least-once: אם ה־relay שלח ונפל לפני ה־COMMIT — השורה תישלח שוב. לכן ה־consumer אידמפוטנטי (E15) — שני הדפוסים באים יחד. ובקנה מידה גדול, במקום relay שסורק — CDC (Debezium) שקורא את ה־WAL של PostgreSQL ושולח ל־Kafka.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E23">
+    <h3>P26.5-E23 · outbox — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>pool.query</code> בתוך טרנזקציה של <code>client</code> — על איזה חיבור הוא רץ?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה רואה relay שני, בזמן שהראשון עוד שולח?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E23: outbox — אחרי התיקון
+import type { Pool } from "pg";
+
+export async function placeOrder(pool: Pool, order: { email: string; totalCents: number }): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO orders (email, total_cents) VALUES ($1, $2) RETURNING id", [order.email, order.totalCents]);
+    // תיקון 1: client, לא pool — אותה טרנזקציה. pool.query רץ על חיבור אחר, ונשמר גם כשההזמנה נכשלת
+    await client.query("INSERT INTO outbox (topic, key, payload) VALUES ('orders', $1, $2)", [
+      String(rows[0].id),
+      { type: "order.placed", orderId: rows[0].id, totalCents: order.totalCents },
+    ]);
+    await client.query("COMMIT");
+    return rows[0].id;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function relayOutbox(pool: Pool, publish: (row: any) =&gt; Promise&lt;void&gt;): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      // תיקון 3: FOR UPDATE SKIP LOCKED — שני relays במקביל לא לוקחים את אותן שורות
+      "SELECT id, topic, key, payload FROM outbox WHERE published_at IS NULL ORDER BY id LIMIT 50 FOR UPDATE SKIP LOCKED",
+    );
+    for (const r of rows) {
+      await publish(r);
+      // תיקון 2: מסמנים אחרי ש־publish הצליח, לא לפני
+      await client.query("UPDATE outbox SET published_at = now() WHERE id = $1", [r.id]);
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>בתיקון הזה, publish שנכשל באמצע מבטל (ROLLBACK) גם את הסימון של מה שכבר נשלח באותה ריצה — אז אלה יישלחו שוב. זה at-least-once, ובסדר — ה־consumers אידמפוטנטיים. E17 מראה גרסה שמסמנת את מה שהצליח.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E24">
+    <h3>P26.5-E24 · אתגר: צינור ההזמנות ב־RabbitMQ 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">conn.createConfirmChannel()</code> (הבודק יוצר אותו), ואז <code>ch.waitForConfirms()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>המפתח ב־store הוא <code>consumer + eventId</code> — מייל ומלאי מטפלים באותו אירוע, כל אחד בנפרד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E24: צינור ההזמנות של חנות הקפה ב־RabbitMQ
+import type { Channel, ConfirmChannel } from "amqplib";
+
+export interface PipelineNames {
+  exchange: string;
+  emailQueue: string;
+  inventoryQueue: string;
+  deadLetterExchange: string;
+  deadLetterQueue: string;
+}
+
+export interface OrderPlaced {
+  eventId: string;
+  orderId: number;
+  email: string;
+  items: { productId: number; quantity: number }[];
+}
+
+export async function setupOrderPipeline(ch: Channel, n: PipelineNames): Promise&lt;void&gt; {
+  await ch.assertExchange(n.exchange, "topic", { durable: true });
+  await ch.assertExchange(n.deadLetterExchange, "fanout", { durable: true });
+  await ch.assertQueue(n.deadLetterQueue, { durable: true });
+  await ch.bindQueue(n.deadLetterQueue, n.deadLetterExchange, "");
+  for (const q of [n.emailQueue, n.inventoryQueue]) {
+    await ch.assertQueue(q, { durable: true, deadLetterExchange: n.deadLetterExchange });
+    await ch.bindQueue(q, n.exchange, "order.placed");
+  }
+}
+
+// publisher confirms: מחכים שה־broker אישר שקיבל (ושמר) — רק אז "נשלח"
+export async function publishOrderPlaced(ch: ConfirmChannel, exchange: string, e: OrderPlaced): Promise&lt;void&gt; {
+  ch.publish(exchange, "order.placed", Buffer.from(JSON.stringify(e)), {
+    persistent: true,
+    contentType: "application/json",
+    messageId: e.eventId,
+  });
+  await ch.waitForConfirms();
+}
+
+export interface ProcessedStore {
+  // true אם זו הפעם הראשונה (ונרשם), false אם כבר טופל
+  markIfNew(consumer: string, eventId: string): Promise&lt;boolean&gt;;
+  unmark(consumer: string, eventId: string): Promise&lt;void&gt;;
+}
+
+export function memoryStore(): ProcessedStore {
+  const seen = new Set&lt;string&gt;();
+  return {
+    async markIfNew(c, id) {
+      const k = `${c}:${id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    },
+    async unmark(c, id) {
+      seen.delete(`${c}:${id}`);
+    },
+  };
+}
+
+function isOrderPlaced(x: any): x is OrderPlaced {
+  return (
+    x &amp;&amp; typeof x.eventId === "string" &amp;&amp; Number.isInteger(x.orderId) &amp;&amp; typeof x.email === "string" &amp;&amp;
+    Array.isArray(x.items) &amp;&amp; x.items.every((i: any) =&gt; Number.isInteger(i.productId) &amp;&amp; Number.isInteger(i.quantity) &amp;&amp; i.quantity &gt; 0)
+  );
+}
+
+// consumer אידמפוטנטי: אותו eventId פעמיים ← פעולה אחת. הודעה פגומה ← dead letter מיד
+export async function startConsumer(
+  ch: Channel,
+  queue: string,
+  name: string,
+  store: ProcessedStore,
+  handle: (e: OrderPlaced) =&gt; Promise&lt;void&gt;,
+): Promise&lt;string&gt; {
+  await ch.prefetch(10);
+  const { consumerTag } = await ch.consume(queue, async (msg) =&gt; {
+    if (!msg) return;
+    let e: unknown;
+    try {
+      e = JSON.parse(msg.content.toString());
+    } catch {
+      return ch.nack(msg, false, false);
+    }
+    if (!isOrderPlaced(e)) return ch.nack(msg, false, false);
+    if (!(await store.markIfNew(name, e.eventId))) return ch.ack(msg); // כפילות — כבר טופל
+    try {
+      await handle(e);
+      ch.ack(msg);
+    } catch {
+      await store.unmark(name, e.eventId); // לא הצליח — שיוכל לנסות שוב
+      ch.nack(msg, false, false);
+    }
+  });
+  return consumerTag;
+}</code></pre>
+<p>בלי confirms, <code>publish</code> חוזר כשההודעה נכנסה ל־buffer של הספרייה — לא כשהגיעה ל־broker. נפילה של הרשת באותו רגע ← ההזמנה נשמרה, האירוע לא. עם confirms — יודעים, ואפשר לנסות שוב (או: outbox, E17).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.5-E25">
+    <h3>P26.5-E25 · אתגר: אנליטיקה מ־Kafka, בדיוק פעם אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה partitions יש? <code class="mid">new Admin(…).metadata({ topics: [topic] })</code> ← <code class="mid">topics.get(topic).partitionsCount</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורה לכל אירוע: <code class="long">INSERT … ON CONFLICT (minute) DO UPDATE SET orders = orders + 1 …</code>, ו־upsert של <code>next_offset = offset + 1</code> — בין BEGIN ל־COMMIT אחד. ה־offset הוא <code>bigint</code>: <code>m.offset + 1n</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E25: אנליטיקה מ־Kafka ל־PostgreSQL — ה־offset נשמר באותה טרנזקציה עם התוצאה
+import { Admin, Consumer, MessagesStreamModes, stringDeserializers } from "@platformatic/kafka";
+import type { Pool } from "pg";
+import { randomUUID } from "node:crypto";
+
+export interface AggregatorOptions {
+  brokers: string[];
+  topic: string;
+  pool: Pool;
+  max: number;
+}
+
+async function partitionsOf(brokers: string[], topic: string): Promise&lt;number[]&gt; {
+  const admin = new Admin({ clientId: "revenue-meta", bootstrapBrokers: brokers });
+  try {
+    const md = await admin.metadata({ topics: [topic] });
+    return Array.from({ length: md.topics.get(topic)!.partitionsCount }, (_, i) =&gt; i);
+  } finally {
+    await admin.close();
+  }
+}
+
+export async function runRevenueAggregator({ brokers, topic, pool, max }: AggregatorOptions): Promise&lt;number&gt; {
+  const { rows } = await pool.query("SELECT partition, next_offset FROM consumer_offsets WHERE topic = $1", [topic]);
+  const stored = new Map(rows.map((r: any) =&gt; [Number(r.partition), BigInt(r.next_offset)]));
+  const offsets = (await partitionsOf(brokers, topic)).map((partition) =&gt; ({ topic, partition, offset: stored.get(partition) ?? 0n }));
+
+  // group חד־פעמי לכל ריצה: ה־offsets של Kafka לא נקראים ולא נכתבים — האמת במסד
+  const consumer = new Consumer({ groupId: `revenue-${topic}-${randomUUID()}`, clientId: "revenue", bootstrapBrokers: brokers, deserializers: stringDeserializers });
+  const stream = await consumer.consume({ topics: [topic], mode: MessagesStreamModes.MANUAL, offsets, autocommit: false });
+  let n = 0;
+  try {
+    for await (const m of stream) {
+      const e = JSON.parse(m.value) as { orderId: number; totalCents: number; at: string };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO revenue_by_minute (minute, orders, revenue_cents) VALUES (date_trunc('minute', $1::timestamptz), 1, $2)
+           ON CONFLICT (minute) DO UPDATE SET orders = revenue_by_minute.orders + 1, revenue_cents = revenue_by_minute.revenue_cents + EXCLUDED.revenue_cents`,
+          [e.at, e.totalCents],
+        );
+        await client.query(
+          `INSERT INTO consumer_offsets (topic, partition, next_offset) VALUES ($1, $2, $3)
+           ON CONFLICT (topic, partition) DO UPDATE SET next_offset = EXCLUDED.next_offset`,
+          [topic, m.partition, String(m.offset + 1n)],
+        );
+        await client.query("COMMIT"); // התוצאה וה־offset — יחד, או אף אחד
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() =&gt; {});
+        throw err;
+      } finally {
+        client.release();
+      }
+      if (++n &gt;= max) break;
+    }
+  } finally {
+    await stream.close().catch(() =&gt; {});
+    await consumer.close();
+  }
+  return n;
+}</code></pre>
+<p>זה הדפוס שמאחורי "exactly-once" אמיתי מול מסד: התוצאה וה"איפה עצרתי" נכתבים אטומית, אז אין מצב ביניים. הבודק מפיל את התהליך בשני מקומות שונים — ומימוש עם שתי טרנזקציות (קודם התוצאה, אחר כך ה־offset) נכשל באחד מהם: אירוע נספר פעמיים.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P26.5-E27">
+    <h3>P26.5-E27 · בדיקות ל־decide: לנסות שוב או dead letter? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש השהיות ראשונות מראות את הנוסחה (וגם שהחזקה מתחילה מ־0). לתקרה צריך שני צדדים: ניסיון שבו הנוסחה עוד מתחת ל־60,000 (6 ← 32,000), וניסיון שבו היא כבר מעל (7 ← 64,000, ולכן 60,000).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לגבול של <code>maxAttempts</code>: ‏<code>decide(4, 5)</code> ← retry, ‏<code>decide(5, 5)</code> ← dead-letter. ל־<code>reason</code>: בדוק ש<em>מכיל</em> את הודעת השגיאה (<code>includes</code>), ולא שהוא שווה למחרוזת מדויקת. ‏TypeScript ידרוש לבדוק קודם ש־<code>action === "dead-letter"</code> לפני שניגשים ל־<code>reason</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { decide } from "./P26.5-E27.ts";
+
+const temporary = { retryable: true, message: "connection reset" };
+const permanent = { retryable: false, message: "product 99 not found" };
+
+test("השהיה שמכפילה את עצמה: 1000, 2000, 4000", () =&gt; {
+  assert.deepEqual(decide(1, 10, temporary), { action: "retry", delayMs: 1000 });
+  assert.deepEqual(decide(2, 10, temporary), { action: "retry", delayMs: 2000 });
+  assert.deepEqual(decide(3, 10, temporary), { action: "retry", delayMs: 4000 });
+});
+
+test("תקרה של 60 שניות", () =&gt; {
+  assert.deepEqual(decide(6, 20, temporary), { action: "retry", delayMs: 32_000 });
+  assert.deepEqual(decide(7, 20, temporary), { action: "retry", delayMs: 60_000 });
+  assert.deepEqual(decide(19, 20, temporary), { action: "retry", delayMs: 60_000 });
+});
+
+test("maxAttempts: הניסיון האחרון ← dead-letter, זה שלפניו ← retry", () =&gt; {
+  assert.equal(decide(4, 5, temporary).action, "retry");
+  const last = decide(5, 5, temporary);
+  assert.equal(last.action, "dead-letter");
+  assert.ok(last.action === "dead-letter" &amp;&amp; last.reason.includes("connection reset"), "ה־reason כולל את הודעת השגיאה");
+  assert.equal(decide(1, 1, temporary).action, "dead-letter", "maxAttempts של 1 — בלי ניסיון חוזר");
+});
+
+test("שגיאה קבועה ← dead-letter מיד", () =&gt; {
+  const d = decide(1, 5, permanent);
+  assert.equal(d.action, "dead-letter");
+  assert.ok(d.action === "dead-letter" &amp;&amp; d.reason.includes("product 99 not found"));
+});
+
+test("attempt לא תקין ← RangeError", () =&gt; {
+  for (const bad of [0, -1, 1.5, NaN]) assert.throws(() =&gt; decide(bad, 5, temporary), RangeError, String(bad));
+});</code></pre>
+<p>שלושה דברים כאן שקל לפספס. <strong>הגבול של maxAttempts</strong>: מימוש עם <code>&gt;</code> במקום <code>&gt;=</code> נותן ניסיון נוסף, ורק <code>decide(5, 5)</code> תופס אותו. <strong>התקרה משני הצדדים</strong>: בדיקה רק על 19 לא מבדילה בין תקרה של 30 שניות ל־60 בניסיון הנכון, ובדיקה רק על 6 לא תופסת מימוש בלי תקרה. <strong>ה־reason</strong>: מי שמסתכל על ה־DLQ בשלוש בלילה צריך לראות <em>למה</em> ההודעה שם.</p>
+<p><code>includes</code> ולא <code>equal</code> על ה־<code>reason</code>: הניסוח המדויק הוא פרט מימוש. מה שחשוב הוא שהמידע שם. בדיקה שמשווה מחרוזת שלמה נשברת בכל שינוי ניסוח, ומלמדת את הצוות להתעלם מבדיקות אדומות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את 1, 2, 3 — שלושה מוטנטים (בלי תקרה, תקרה של 30 שניות, ו־<code>&gt;</code>) עוברים.</li><li><code class="mid">assert.equal(d.reason, "נכשל 5 פעמים: connection reset")</code> — עובד על הקוד הזה, אבל קושר את הבדיקה לניסוח.</li><li>לבדוק <code>RangeError</code> רק על 0 — שבר (<code>1.5</code>) עובר במימוש שבודק רק <code>attempt &lt; 1</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26.5-E28">
+    <h3>P26.5-E28 · האירוע הבא לכל מפתח ב־outbox 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־CTE: כל השורות שלא פורסמו, ועליהן שני חלונות על אותה חלוקה: <code class="long">ROW_NUMBER() OVER (PARTITION BY topic, key ORDER BY id) AS rn</code> ו־<code class="mid">COUNT(*) OVER (PARTITION BY topic, key) AS pending</code>. בשאילתה החיצונית: <code>WHERE rn = 1</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אי אפשר לכתוב <code>WHERE rn = 1</code> באותה שאילתה שבה מחשבים את <code>rn</code>: ‏<code>WHERE</code> רץ לפני החלונות. לכן ה־CTE. ‏<code>WHERE published_at IS NULL</code> שייך ל־CTE, כדי שהחלונות יספרו רק ממתינים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH pending AS (
+  SELECT
+    id, topic, key, event_type,
+    ROW_NUMBER() OVER (PARTITION BY topic, key ORDER BY id) AS rn,
+    COUNT(*) OVER (PARTITION BY topic, key) AS pending
+  FROM outbox
+  WHERE published_at IS NULL
+)
+SELECT topic, key, id AS next_id, event_type, pending
+FROM pending
+WHERE rn = 1
+ORDER BY next_id;</code></pre>
+<pre class="terminal">  topic   |   key   | next_id |   event_type    | pending
+----------+---------+---------+-----------------+---------
+ orders   | order-2 |       4 | OrderPaid       |       2
+ payments | pay-9   |       5 | PaymentCaptured |       2
+ orders   | order-1 |       6 | OrderShipped    |       2
+ orders   | order-3 |       8 | OrderPlaced     |       1
+ audit    | order-1 |      11 | OrderViewed     |       1
+(5 rows)</pre>
+<p><code>order-1</code> ב־<code>orders</code>: אירועים 1 ו־3 כבר פורסמו, ולכן הבא בתור הוא 6, ואחריו עוד אחד (10). ב־<code>audit</code> יש גם <code>order-1</code>, אבל זה רצף אחר, עם סדר משלו. ‏<code>PARTITION BY key</code> לבד היה מערבב ביניהם: ‏<code>pending</code> של 3, ו־<code>OrderViewed</code> היה נעלם.</p>
+<p>למה לא <code>GROUP BY topic, key</code> עם <code>MIN(id)</code>? ‏<code>MIN(id)</code> נותן את <code>next_id</code>, אבל לא את <code>event_type</code> שלו. בשביל זה צריך <code>JOIN</code> חזרה לטבלה. ‏<code>ROW_NUMBER</code> נותן את כל השורה הראשונה בכל קבוצה בשלב אחד. זה הדפוס של "top-N לכל קבוצה" מ־P18-E28.</p>
+<p>ב־relay אמיתי השאילתה נגמרת ב־<code>FOR UPDATE SKIP LOCKED</code> (שיעור 5), כדי ששני relays לא יפרסמו את אותו אירוע. אבל עם פונקציות חלון אי אפשר לנעול. לכן בפועל נועלים קודם את השורות (<code class="mid">SELECT ... FOR UPDATE SKIP LOCKED</code>), ובוחרים מהן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסנן <code>published_at IS NULL</code> בשאילתה החיצונית, אחרי החלון — ‏<code>rn = 1</code> הוא האירוע הראשון שאי פעם נכתב, והוא כבר פורסם.</li><li><code>PARTITION BY key</code> בלי <code>topic</code> — רצפים של topics שונים מתערבבים.</li><li><code>ORDER BY created_at</code> בחלון — שני אירועים באותה מילישנייה מקבלים סדר מקרי. ‏<code>id</code> (‏bigserial) מגדיר סדר כתיבה חד־משמעי.</li></ul>
+
+
+</div></details>
+  </div>
+
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

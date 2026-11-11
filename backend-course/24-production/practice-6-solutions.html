@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 6 — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ פתרונות שיעור 6</div>
+  <h1>🔒 פתרונות — תרגול שיעור 6</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>24-production/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P24-E26">
+    <h3>P24-E26 · איזה מדד, ואילו labels? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>counter — רק עולה (סופרים אירועים). gauge — עולה ויורד (מצב עכשיו). histogram — התפלגות של ערכים (זמנים, גדלים).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כל צירוף שונה של ערכי labels הוא סדרה נפרדת בזיכרון של Prometheus. כמה משתמשים יש לך?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol>
+<li><strong>counter</strong> <code class="mid">orders_created_total{payment_method}</code>. "בדקה האחרונה" — לא שומרים בקוד; Prometheus מחשב: <code class="mid">increase(orders_created_total[1m])</code>. ל־<code>payment_method</code> יש 3–4 ערכים — בסדר.</li>
+<li><strong>histogram</strong> <code class="mid">http_request_duration_seconds{method,route}</code>, ומחשבים ב־Prometheus: <code class="mid">histogram_quantile(0.95, …)</code>. ממוצע לא עונה על השאלה (סעיף 3 בשיעור).</li>
+<li><strong>gauge</strong> <code>queue_waiting_jobs{queue}</code> — ערך שעולה ויורד. מודדים אותו בזמן ה־scrape (שואלים את BullMQ כמה מחכות), לא מעדכנים בכל עבודה.</li>
+<li><strong>המלכודת.</strong> <code>userId</code> כ־label = סדרה לכל משתמש: מאה אלף משתמשים × routes × statuses = מיליוני סדרות, ו־Prometheus נופל (high cardinality). "כמה כל משתמש שלח" — שאלה ללוגים או למסד, לא למדדים. ל־labels — רק ערכים מקבוצה קטנה וסגורה.</li>
+<li>שני counters שכבר יש: <code>http_requests_total</code> עם <code>status</code>. היחס: <code class="mid">rate(...{status=~"5.."}[5m]) / rate(...[5m])</code>. לא סופרים אחוזים בקוד.</li>
+</ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>gauge לספירת בקשות ("מספר הבקשות עד עכשיו") — אחרי restart הוא מתאפס, ו־Prometheus לא יודע שזה איפוס. counter יודע: <code>rate</code> מזהה ירידה כאיפוס.</li><li>route עם המזהה (<code>/tasks/42</code>) — אותה מלכודת כמו userId, רק מוסתרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E27">
+    <h3>P24-E27 · registry של מדדים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל מדד — Map ממפתח (<code>JSON.stringify</code> של מערך הערכים, לפי סדר <code>labelNames</code>) לנתונים: ב־counter מספר, ב־histogram מערך ספירות לדליים + sum + count. Map שומר את סדר ההכנסה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>metrics()</code> עוברת על רשימת המדדים ומבקשת מכל אחד <code>render()</code> — פונקציה שה־counter/histogram רשמו כשנוצרו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E27
+// רישום מדדים קטן בפורמט הטקסט של Prometheus: counter ו־histogram, עם labels
+type Labels = Record&lt;string, string&gt;;
+
+const escapeValue = (v: string) =&gt; v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+const formatLabels = (names: string[], values: string[], extra = "") =&gt; {
+  const parts = names.map((n, i) =&gt; `${n}="${escapeValue(values[i])}"`);
+  if (extra) parts.push(extra);
+  return parts.length ? `{${parts.join(",")}}` : "";
+};
+
+function labelValues(names: string[], labels: Labels): string[] {
+  const keys = Object.keys(labels);
+  for (const k of keys) if (!names.includes(k)) throw new Error(`label לא מוכר: ${k}`);
+  // כל label חובה — אחרת אותו מדד יופיע פעם עם label ופעם בלי, ואי אפשר לסכם
+  return names.map((n) =&gt; {
+    if (labels[n] === undefined) throw new Error(`חסר label: ${n}`);
+    return String(labels[n]);
+  });
+}
+
+export function createRegistry() {
+  const metrics: { render: () =&gt; string }[] = [];
+  const names = new Set&lt;string&gt;();
+  const register = (name: string) =&gt; {
+    if (names.has(name)) throw new Error(`מדד בשם ${name} כבר רשום`);
+    names.add(name);
+  };
+
+  function counter({ name, help, labelNames = [] }: { name: string; help: string; labelNames?: string[] }) {
+    register(name);
+    const series = new Map&lt;string, { values: string[]; value: number }&gt;(); // מפתח: הערכים של ה־labels
+    metrics.push({
+      render: () =&gt;
+        [`# HELP ${name} ${help}`, `# TYPE ${name} counter`, ...[...series.values()].map((s) =&gt; `${name}${formatLabels(labelNames, s.values)} ${s.value}`)].join("\n"),
+    });
+    return {
+      inc(labels: Labels = {}, by = 1) {
+        if (by &lt; 0) throw new RangeError("counter רק עולה");
+        const values = labelValues(labelNames, labels);
+        const key = JSON.stringify(values);
+        const s = series.get(key) ?? { values, value: 0 };
+        s.value += by;
+        series.set(key, s);
+      },
+    };
+  }
+
+  function histogram({ name, help, labelNames = [], buckets }: { name: string; help: string; labelNames?: string[]; buckets: number[] }) {
+    register(name);
+    const sorted = [...buckets].sort((a, b) =&gt; a - b);
+    const series = new Map&lt;string, { values: string[]; counts: number[]; sum: number; count: number }&gt;();
+    metrics.push({
+      render: () =&gt; {
+        const lines = [`# HELP ${name} ${help}`, `# TYPE ${name} histogram`];
+        for (const s of series.values()) {
+          // הדליים מצטברים: le="0.1" סופר את כל מה שקטן או שווה ל־0.1 — כולל מה שב־le="0.05"
+          sorted.forEach((le, i) =&gt; lines.push(`${name}_bucket${formatLabels(labelNames, s.values, `le="${le}"`)} ${s.counts[i]}`));
+          lines.push(`${name}_bucket${formatLabels(labelNames, s.values, 'le="+Inf"')} ${s.count}`);
+          lines.push(`${name}_sum${formatLabels(labelNames, s.values)} ${s.sum}`);
+          lines.push(`${name}_count${formatLabels(labelNames, s.values)} ${s.count}`);
+        }
+        return lines.join("\n");
+      },
+    });
+    return {
+      observe(labels: Labels, value: number) {
+        const values = labelValues(labelNames, labels);
+        const key = JSON.stringify(values);
+        const s = series.get(key) ?? { values, counts: sorted.map(() =&gt; 0), sum: 0, count: 0 };
+        sorted.forEach((le, i) =&gt; { if (value &lt;= le) s.counts[i]++; });
+        s.sum += value;
+        s.count++;
+        series.set(key, s);
+      },
+    };
+  }
+
+  return { counter, histogram, metrics: () =&gt; metrics.map((m) =&gt; m.render()).join("\n") + "\n" };
+}</code></pre>
+<p>בעבודה: <code>prom-client</code> עושה את זה, ועוד — gauge, summary, מדדי ברירת מחדל של Node (זיכרון, event loop lag, GC) בשורה אחת: <code>collectDefaultMetrics()</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>דליים לא מצטברים (כל ערך רק בדלי הראשון שמתאים) — <code>histogram_quantile</code> של Prometheus יחשב אחוזונים שגויים, בלי שום שגיאה.</li><li>לשכוח את <code>le="+Inf"</code> — בלעדיו Prometheus לא יודע כמה ערכים היו מעל הדלי האחרון.</li><li>ערכי labels בלי escaping — route עם <code>"</code> שובר את כל ה־scrape, לא רק שורה אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E28">
+    <h3>P24-E28 · middleware של מדדים ו־GET /metrics 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>res.on("finish", …)</code> כמו בשורת הלוג של E09. ב־finish, <code>req.route</code> הוא ה־route שטיפל (אם היה), ו־<code>req.baseUrl</code> — ה־prefix של ה־router.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">res.type("text/plain; version=0.0.4; charset=utf-8").send(registry.metrics())</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E28
+// middleware שמודד כל בקשה (RED: כמה, כמה נכשלו, כמה זמן) ו־handler ל־GET /metrics.
+// מקבל registry מבחוץ (כמו E27, או prom-client) — כך אפשר להחליף אותו ולבדוק
+import type { NextFunction, Request, Response } from "express";
+
+type Labels = Record&lt;string, string&gt;;
+export interface Registry {
+  counter(opts: { name: string; help: string; labelNames: string[] }): { inc(labels: Labels, by?: number): void };
+  histogram(opts: { name: string; help: string; labelNames: string[]; buckets: number[] }): { observe(labels: Labels, value: number): void };
+  metrics(): string;
+}
+
+export const BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];
+
+export function httpMetrics(registry: Registry, { now = () =&gt; performance.now() }: { now?: () =&gt; number } = {}) {
+  const requests = registry.counter({ name: "http_requests_total", help: "HTTP requests", labelNames: ["method", "route", "status"] });
+  const duration = registry.histogram({ name: "http_request_duration_seconds", help: "HTTP request duration in seconds", labelNames: ["method", "route"], buckets: BUCKETS });
+
+  const middleware = (req: Request, res: Response, next: NextFunction) =&gt; {
+    if (req.path === "/metrics") return next(); // Prometheus קורא כל 15 שניות — לא רוצים שזה ימלא את הגרפים
+    const start = now();
+    // מודדים בסוף — רק אז ידועים ה־status והזמן
+    res.on("finish", () =&gt; {
+      // התבנית של ה־route, לא הכתובת: /tasks/:id ולא /tasks/42 — אחרת סדרה חדשה לכל מזהה
+      // router על "/tasks" עם route "/" ← "/tasks" (בלי / בסוף). בלי route בכלל (404) ← "unmatched"
+      const route = req.route ? (req.baseUrl &amp;&amp; req.route.path === "/" ? req.baseUrl : req.baseUrl + req.route.path) : "unmatched";
+      const method = req.method;
+      requests.inc({ method, route, status: String(res.statusCode) });
+      duration.observe({ method, route }, (now() - start) / 1000); // Prometheus: תמיד שניות
+    });
+    next();
+  };
+
+  const handler = (req: Request, res: Response) =&gt; {
+    res.type("text/plain; version=0.0.4; charset=utf-8").send(registry.metrics());
+  };
+
+  return { middleware, handler };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>req.originalUrl</code> או <code>req.path</code> כ־route — כל מזהה וכל query הם סדרה חדשה. אחרי שבוע: מיליון סדרות.</li><li>למדוד לפני <code>next()</code> — ה־status עוד 200 תמיד, והמשך כמעט 0.</li><li>מילישניות במקום שניות — הגרפים עובדים, אבל כל dashboard ו־alert מוכן (שמניח שניות) יהיה מוטה פי 1000.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E29">
+    <h3>P24-E29 · traceparent: להמשיך trace ולהעביר אותו הלאה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">/^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/</code>. ו־"מחוץ לבקשה / בתוך בקשה" — <code>AsyncLocalStorage</code>, בדיוק כמו ה־requestId בשיעור 1.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־middleware: <code class="mid">als.run({ traceId, spanId }, next)</code>. כל מה שה־handler עושה אחרי זה (גם אחרי await) רואה את ה־store.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E29
+// tracing מינימלי לפי W3C Trace Context: traceparent נכנס ← span לבקשה ← traceparent יוצא
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
+
+export interface Span {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  status: number;
+  durationMs: number;
+}
+
+const TRACEPARENT = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/;
+
+export function parseTraceparent(header: string | undefined) {
+  const m = header ? TRACEPARENT.exec(header.trim()) : null;
+  if (!m) return null;
+  const [, traceId, parentId, flags] = m;
+  // מזהה של אפסים בלבד — לא תקין לפי התקן
+  if (/^0+$/.test(traceId) || /^0+$/.test(parentId)) return null;
+  return { traceId, parentId, sampled: (parseInt(flags, 16) &amp; 1) === 1 };
+}
+
+const als = new AsyncLocalStorage&lt;{ traceId: string; spanId: string }&gt;();
+
+// headers לבקשה יוצאת: השירות הבא יראה את ה־span שלנו כ"הורה"
+export function outgoingHeaders(): Record&lt;string, string&gt; {
+  const ctx = als.getStore();
+  return ctx ? { traceparent: `00-${ctx.traceId}-${ctx.spanId}-01` } : {};
+}
+
+export function tracing({
+  onSpan,
+  now = () =&gt; performance.now(),
+  randomHex = (bytes: number) =&gt; randomBytes(bytes).toString("hex"),
+}: {
+  onSpan: (span: Span) =&gt; void;
+  now?: () =&gt; number;
+  randomHex?: (bytes: number) =&gt; string;
+}) {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const parent = parseTraceparent(req.get("traceparent"));
+    const traceId = parent?.traceId ?? randomHex(16); // אין הורה תקין ← אנחנו תחילת ה־trace
+    const spanId = randomHex(8);
+    const start = now();
+    res.set("X-Trace-Id", traceId);
+    res.on("finish", () =&gt; {
+      const route = req.route ? req.baseUrl + req.route.path : "unmatched";
+      onSpan({ traceId, spanId, parentSpanId: parent?.parentId ?? null, name: `${req.method} ${route}`, status: res.statusCode, durationMs: now() - start });
+    });
+    als.run({ traceId, spanId }, next);
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח הלאה את ה־<code>parentId</code> שהגיע במקום ה־<code>spanId</code> שלנו — ב־Jaeger השירות הבא יופיע כ"אח" שלנו ולא כ"ילד", והעץ שקר.</li><li>trace חדש לכל בקשה גם כשהגיע traceparent — כל שירות מקבל trace משלו, ואי אפשר לראות בקשה אחת מקצה לקצה.</li><li>משתנה גלובלי במקום AsyncLocalStorage — בשתי בקשות במקביל, הבקשה היוצאת של אחת נושאת את ה־trace של השנייה (הבדיקה האחרונה).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E30">
+    <h3>P24-E30 · ה־exporter משקר: שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חשב ביד: ערכים <code>[0.05, 0.5, 0.7]</code> ודליים <code>[0.1, 1]</code>. כמה ערכים "קטנים או שווים ל־1"? ומה הקובץ מחזיר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי התקלות האחרות: מה קורה כשב־label יש <code>"</code>? ואיזה דלי חובה בכל histogram?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E30
+// הופך histogram לשורות בפורמט של Prometheus
+export function renderHistogram({ name, labels, buckets, values }: { name: string; labels: Record&lt;string, string&gt;; buckets: number[]; values: number[] }): string[] {
+  const esc = (v: string) =&gt; v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+  const base = Object.entries(labels).map(([k, v]) =&gt; `${k}="${esc(v)}"`); // תקלה 2: ערך עם " שבר את השורה
+  const fmt = (extra?: string) =&gt; `{${[...base, ...(extra ? [extra] : [])].join(",")}}`;
+  const sorted = [...buckets].sort((a, b) =&gt; a - b);
+  const lines = sorted.map((le) =&gt; `${name}_bucket${fmt(`le="${le}"`)} ${values.filter((v) =&gt; v &lt;= le).length}`); // תקלה 1: מצטבר — כל מה שקטן או שווה
+  lines.push(`${name}_bucket${fmt('le="+Inf"')} ${values.length}`); // תקלה 3: +Inf חובה, ושווה ל־count
+  const sum = values.reduce((a, b) =&gt; a + b, 0);
+  lines.push(`${name}_sum${fmt()} ${sum}`, `${name}_count${fmt()} ${values.length}`);
+  return lines;
+}</code></pre>
+<ol><li><strong>דליים לא מצטברים</strong> — כל ערך נספר רק בדלי הראשון שמתאים. <code>histogram_quantile</code> מניח מצטבר, ולכן מחשב אחוזונים שגויים — בלי שום שגיאה.</li><li><strong>אין escaping</strong> — <code>route="a"b"</code> הוא שורה לא חוקית, ו־Prometheus דוחה את כל ה־scrape (כל המדדים, לא רק זה).</li><li><strong>חסר <code>le="+Inf"</code></strong> — בלעדיו אין דלי ש"תופס הכול", וערכים מעל הדלי האחרון נעלמים מהחישוב.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את המצטבר רק ל־<code>+Inf</code> — כל הדליים צריכים להיות מצטברים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E31">
+    <h3>P24-E31 · דוח latency מלוגים של JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id")</code>. ‏<code>(?=\/|$)</code> אומר "ואחרי הספרות בא <code>/</code> או סוף" — בלי זה, <code>/v2beta</code> או <code>/123abc</code> היו נפגעים. ב־<code>routeReport</code>: ‏<code class="long">try { entry = JSON.parse(line) } catch { skipped++; continue; }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Map&lt;string, { ms: number[]; errors: number }&gt;</code>, ואחר כך <code class="mid">[...map].map(([route, s]) =&gt; ...)</code>. לאחוזון: <code class="long">const sorted = [...s.ms].sort((a, b) =&gt; a - b); sorted[Math.ceil(sorted.length * 0.95) - 1]</code>. ‏<code>sort()</code> בלי פונקציה ממיין מספרים כטקסט (‏<code>100</code> לפני <code>9</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E31 — דוח latency מלוגים של JSON
+export type RouteStats = { route: string; count: number; errorPct: number; p95: number };
+
+export function routeOf(method: string, path: string): string {
+  const clean = path.split("?")[0].replace(/\/\d+(?=\/|$)/g, "/:id");
+  return `${method.toUpperCase()} ${clean}`;
+}
+
+function p95(sorted: number[]): number {
+  return sorted[Math.ceil(sorted.length * 0.95) - 1];
+}
+
+export function routeReport(lines: string[]): { routes: RouteStats[]; skipped: number } {
+  const byRoute = new Map&lt;string, { ms: number[]; errors: number }&gt;();
+  let skipped = 0;
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (entry?.msg !== "request" || typeof entry.ms !== "number") {
+      skipped++;
+      continue;
+    }
+    const route = routeOf(entry.method, entry.path);
+    const stats = byRoute.get(route) ?? { ms: [], errors: 0 };
+    stats.ms.push(entry.ms);
+    if (entry.status &gt;= 500) stats.errors++;
+    byRoute.set(route, stats);
+  }
+
+  const routes = [...byRoute].map(([route, { ms, errors }]) =&gt; ({
+    route,
+    count: ms.length,
+    errorPct: Math.round((errors / ms.length) * 1000) / 10,
+    p95: p95([...ms].sort((a, b) =&gt; a - b)),
+  }));
+  routes.sort((a, b) =&gt; b.p95 - a.p95 || a.route.localeCompare(b.route));
+  return { routes, skipped };
+}
+
+const lines = [
+  '{"level":"info","msg":"server started","port":3000}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks","status":200,"ms":12}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17","status":200,"ms":8}',
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/4?fields=title","status":404,"ms":5}',
+  '{"level":"error","msg":"request","method":"POST","path":"/tasks","status":500,"ms":340}',
+  '{"level":"info","msg":"request","method":"post","path":"/tasks","status":201,"ms":45}',
+  "Error: connect ECONNREFUSED 127.0.0.1:5432",
+  '{"level":"info","msg":"request","method":"GET","path":"/tasks/17/comments","status":200,"ms":30}',
+];
+const { routes, skipped } = routeReport(lines);
+console.table(routes);
+console.log("skipped:", skipped);</code></pre>
+<pre class="terminal">┌─────────┬───────────────────────────┬───────┬──────────┬─────┐
+│ (index) │ route                     │ count │ errorPct │ p95 │
+├─────────┼───────────────────────────┼───────┼──────────┼─────┤
+│ 0       │ 'POST /tasks'             │ 2     │ 50       │ 340 │
+│ 1       │ 'GET /tasks/:id/comments' │ 1     │ 0        │ 30  │
+│ 2       │ 'GET /tasks'              │ 1     │ 0        │ 12  │
+│ 3       │ 'GET /tasks/:id'          │ 2     │ 0        │ 8   │
+└─────────┴───────────────────────────┴───────┴──────────┴─────┘
+skipped: 2</pre>
+<p><code>POST /tasks</code> בראש הדוח, עם 50% שגיאות ו־p95 של 340ms. זו בדיוק השאלה הראשונה בתקלה: "איזה route, ומאז מתי". ‏<code>post</code> באותיות קטנות נספר יחד עם <code>POST</code>, ו־<code>/tasks/4?fields=title</code> יחד עם <code>/tasks/17</code>.</p>
+<p>למה לנרמל את הנתיב? בלי זה, כל משימה היא "route" משלה: אלף שורות בדוח, ובכל אחת בקשה אחת. זו אותה בעיה כמו label עם cardinality גבוה ב־Prometheus (שיעור 6). לכן ב־Express משתמשים ב־<code>req.route.path</code>, ולא ב־<code>req.path</code>.</p>
+<p>שורות שלא הצלחנו לקרוא לא נעלמות בשקט: ‏<code>skipped</code> מדווח עליהן. אם הוא פתאום קופץ, משהו כותב ללוג בפורמט אחר. במקרה הזה זו שגיאה מ־<code>console.error</code> שעקפה את ה־logger.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ממוצע במקום אחוזון — בקשה אחת של 340ms "נבלעת" בממוצע, ובדיוק היא זו שהמשתמש מרגיש.</li><li><code>.sort()</code> בלי פונקציית השוואה — <code>[100, 9, 12]</code> נשאר בסדר הזה.</li><li><code>Math.round(0.95 * n)</code> במקום <code>Math.ceil(...) - 1</code> — עם 2 ערכים זה האינדקס 2, שלא קיים, וה־p95 יוצא <code>undefined</code>.</li><li><code>/\d+/g</code> בלי עוגנים — <code>/v2/users</code> הופך ל־<code>/v:id/users</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E33">
+    <h3>P24-E33 · התראה על שיעור שגיאות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה <code class="mid">#events: { at: number; error: boolean }[]</code>. הבקשות נכנסות לפי סדר הזמן, ולכן הישנות תמיד בהתחלה: <code class="long">while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קרא ל־<code>#prune()</code> בתחילת שני ה־getters. ‏<code>shouldAlert</code> משתמש בהם: <code class="mid">this.count &gt;= ... &amp;&amp; this.errorRate &gt;= ...</code>. לבדיקת <code>threshold</code>: ‏<code>!(t &gt; 0 &amp;&amp; t &lt;= 1)</code> תופס גם <code>NaN</code>, ו־<code>t &lt;= 0 || t &gt; 1</code> לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E33 — התראה על שיעור שגיאות בחלון זמן
+type Options = { windowMs: number; threshold: number; minRequests: number };
+
+export class ErrorRateAlarm {
+  #events: { at: number; error: boolean }[] = [];
+  #options: Options;
+  #now: () =&gt; number;
+
+  constructor(options: Options, now: () =&gt; number = () =&gt; Date.now()) {
+    if (!(options.threshold &gt; 0 &amp;&amp; options.threshold &lt;= 1)) throw new RangeError("threshold חייב להיות בין 0 ל־1");
+    this.#options = options;
+    this.#now = now;
+  }
+
+  #prune(): void {
+    const from = this.#now() - this.#options.windowMs;
+    while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();
+  }
+
+  record(status: number): void {
+    this.#events.push({ at: this.#now(), error: status &gt;= 500 });
+  }
+
+  get count(): number {
+    this.#prune();
+    return this.#events.length;
+  }
+
+  get errorRate(): number {
+    this.#prune();
+    if (this.#events.length === 0) return 0;
+    const errors = this.#events.filter((e) =&gt; e.error).length;
+    return errors / this.#events.length;
+  }
+
+  shouldAlert(): boolean {
+    return this.count &gt;= this.#options.minRequests &amp;&amp; this.errorRate &gt;= this.#options.threshold;
+  }
+}
+
+let now = 0;
+const alarm = new ErrorRateAlarm({ windowMs: 60_000, threshold: 0.1, minRequests: 20 }, () =&gt; now);
+for (let i = 0; i &lt; 18; i++) alarm.record(200);
+alarm.record(500);
+alarm.record(503);
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
+now = 30_000;
+alarm.record(200);
+console.log(alarm.count, alarm.errorRate.toFixed(3), alarm.shouldAlert());
+now = 60_000;
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());</code></pre>
+<pre class="terminal">20 0.1 true
+21 0.095 false
+1 0 false</pre>
+<p>שורה 1: עשרים בקשות, שתיים מהן שגיאות. 10% בדיוק, ויש התראה. שורה 2: בקשה תקינה נוספת מורידה את השיעור ל־9.5%. שורה 3: אחרי דקה כל עשרים הבקשות הראשונות יוצאות מהחלון, ונשארה רק אחת. ‏<code>minRequests</code> מונע התראה על בקשה אחת.</p>
+<p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code class="mid">rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P24-E24">
+    <h3>P24-E24 · אתגר: API של הזמנות, מוכן לפרודקשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סדר ה־middleware: request id ולוג ← <code>express.json()</code> ← routes (עם auth ← limit ← handler) ← 404 ← error handler. ה־middleware הראשון חייב להיות לפני <code>express.json()</code> — אחרת JSON שבור לא יקבל requestId.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פונקציה אחת <code class="mid">fail(res, status, code, message)</code> שכל השגיאות עוברות דרכה — ככה ה־requestId לא נשכח באף אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E24
+import { createHash, randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
+import express, { type NextFunction, type Request, type Response } from "express";
+
+interface Options {
+  clock?: () =&gt; Date;
+  logSink?: (line: string) =&gt; void;
+  rateLimitPerMinute?: number;
+}
+interface Order {
+  id: number;
+  userId: string;
+  item: string;
+  quantity: number;
+  createdAt: string;
+}
+
+export function createApp({ clock = () =&gt; new Date(), logSink = (l) =&gt; process.stdout.write(l + "\n"), rateLimitPerMinute = 5 }: Options = {}) {
+  const app = express();
+  app.locals.draining = false;
+  const orders: Order[] = [];
+  const keys = new Map&lt;string, { fingerprint: string; status: number; body: unknown } | null&gt;();
+  const hits = new Map&lt;string, number[]&gt;();
+
+  const log = (level: string, msg: string, fields: Record&lt;string, unknown&gt;) =&gt;
+    logSink(JSON.stringify({ time: clock().toISOString(), level, msg, ...fields }));
+  const fail = (res: Response, status: number, code: string, message: string) =&gt;
+    res.status(status).json({ error: { code, message, requestId: res.locals.requestId } });
+
+  // 1. request id + שורת לוג בסוף כל בקשה
+  app.use((req, res, next) =&gt; {
+    const incoming = req.get("x-request-id");
+    res.locals.requestId = incoming &amp;&amp; /^[A-Za-z0-9._-]{1,64}$/.test(incoming) ? incoming : randomUUID();
+    res.setHeader("X-Request-Id", res.locals.requestId);
+    const started = performance.now();
+    res.on("finish", () =&gt; {
+      const path = req.originalUrl.split("?")[0];
+      const status = res.statusCode;
+      log(status &gt;= 500 ? "error" : status &gt;= 400 ? "warn" : "info", "request", {
+        requestId: res.locals.requestId,
+        ...(res.locals.userId ? { userId: res.locals.userId } : {}),
+        method: req.method,
+        path,
+        status,
+        durationMs: Math.round(performance.now() - started),
+      });
+    });
+    next();
+  });
+
+  app.use(express.json());
+
+  app.get("/health", (req, res) =&gt; res.json({ status: "ok" }));
+  app.get("/ready", (req, res) =&gt; (app.locals.draining ? fail(res, 503, "DRAINING", "השרת בכיבוי") : res.json({ status: "ready" })));
+
+  // 2. "אימות" פשוט לתרגיל: x-user-id
+  const auth = (req: Request, res: Response, next: NextFunction) =&gt; {
+    const userId = req.get("x-user-id");
+    if (!userId) return fail(res, 401, "UNAUTHORIZED", "חסר x-user-id");
+    res.locals.userId = userId;
+    next();
+  };
+
+  // 3. הגבלת קצב לכל משתמש
+  const limit = (req: Request, res: Response, next: NextFunction) =&gt; {
+    const t = clock().getTime();
+    const recent = (hits.get(res.locals.userId) ?? []).filter((x) =&gt; x &gt; t - 60_000);
+    if (recent.length &gt;= rateLimitPerMinute) {
+      hits.set(res.locals.userId, recent);
+      res.setHeader("Retry-After", String(Math.ceil((recent[0] + 60_000 - t) / 1000)));
+      return fail(res, 429, "TOO_MANY_REQUESTS", "יותר מדי הזמנות בדקה");
+    }
+    recent.push(t);
+    hits.set(res.locals.userId, recent);
+    next();
+  };
+
+  app.get("/orders", auth, (req, res) =&gt; res.json(orders.filter((o) =&gt; o.userId === res.locals.userId)));
+
+  app.post("/orders", auth, limit, (req, res) =&gt; {
+    const key = req.get("idempotency-key");
+    if (!key || !/^[A-Za-z0-9_-]{8,100}$/.test(key)) return fail(res, 400, "IDEMPOTENCY_KEY_REQUIRED", "POST /orders דורש Idempotency-Key תקין");
+    const id = JSON.stringify([res.locals.userId, key]);
+    const fingerprint = createHash("sha256").update(JSON.stringify(req.body ?? null)).digest("hex");
+    const prev = keys.get(id);
+    if (prev === null) return fail(res, 409, "IDEMPOTENCY_IN_PROGRESS", "בקשה עם המפתח הזה בטיפול");
+    if (prev &amp;&amp; prev.fingerprint !== fingerprint) return fail(res, 422, "IDEMPOTENCY_KEY_REUSED", "המפתח שימש לבקשה אחרת");
+    if (prev) return res.status(prev.status).set("Idempotent-Replayed", "true").json(prev.body);
+
+    const { item, quantity } = req.body ?? {};
+    if (typeof item !== "string" || item.trim() === "" || !Number.isInteger(quantity) || quantity &lt; 1 || quantity &gt; 100) {
+      return fail(res, 400, "VALIDATION_ERROR", "item: מחרוזת לא ריקה; quantity: מספר שלם 1–100"); // לא נשמר — אפשר לתקן ולשלוח שוב
+    }
+    const order: Order = { id: orders.length + 1, userId: res.locals.userId, item: item.trim(), quantity, createdAt: clock().toISOString() };
+    orders.push(order);
+    keys.set(id, { fingerprint, status: 201, body: order });
+    res.status(201).location(`/orders/${order.id}`).json(order);
+  });
+
+  app.use((req, res) =&gt; fail(res, 404, "NOT_FOUND", "אין נתיב כזה"));
+  app.use((err: Error &amp; { type?: string }, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err.type === "entity.parse.failed") return fail(res, 400, "INVALID_JSON", "JSON לא תקין");
+    log("error", err.message, { requestId: res.locals.requestId, stack: err.stack });
+    fail(res, 500, "INTERNAL", "שגיאה פנימית");
+  });
+  return app;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שגיאה אחת שנכתבת ביד (<code class="mid">res.status(400).json({ error: "..." })</code>) בלי requestId — ודווקא היא זו שהלקוח יתקשר לתמיכה בגללה.</li><li>הגבלת קצב לפני או אחרי idempotency? כאן לפני — כל POST נספר, גם replay. ההפך (replay לא נספר) ידידותי יותר ללקוח ששולח שוב אחרי timeout. שתיהן לגיטימיות; העיקר לבחור במודע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-6.html"><small>חזרה</small>תרגול שיעור 6</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

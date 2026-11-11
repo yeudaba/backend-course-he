@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — פרק 22</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 22</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>22-testing/solutions/</code>.</p></div>
+
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P22-E24">
+    <h3>P22-E24 · אתגר: מלאי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>setup אחד: שעון שאפשר לקדם בדקות, notifier עם <code>mock.fn</code>, ו־inventory חדש לכל בדיקה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עבור על כל משפט במפרט ושאל: "איזה באג היה עובר אם לא הייתה בדיקה למשפט הזה?" — במיוחד "עד", "15 דקות", "באמת".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E24 — הבדיקות
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { InventoryService, OutOfStockError, type Notifier } from "./P22-E24.ts";
+
+function setup(threshold = 3) {
+  let now = new Date("2026-11-04T10:00:00Z");
+  const clock = { now: () =&gt; now, advance: (minutes: number) =&gt; (now = new Date(now.getTime() + minutes * 60_000)) };
+  const notifier = { lowStock: mock.fn&lt;Notifier["lowStock"]&gt;() };
+  const inventory = new InventoryService(clock, notifier, threshold);
+  return { inventory, clock, notifier };
+}
+
+test("restock מוסיף", () =&gt; {
+  const { inventory } = setup();
+  inventory.restock("mug", 5);
+  inventory.restock("mug", 3);
+  assert.equal(inventory.available("mug"), 8);
+  assert.equal(inventory.available("unknown"), 0);
+});
+
+test("כמויות לא תקינות", () =&gt; {
+  const { inventory } = setup();
+  inventory.restock("mug", 5);
+  for (const qty of [0, -1, 1.5]) {
+    assert.throws(() =&gt; inventory.restock("mug", qty), RangeError);
+    assert.throws(() =&gt; inventory.reserve("mug", qty), RangeError);
+  }
+});
+
+test("שמירה מורידה מהפנוי; release מחזיר", () =&gt; {
+  const { inventory } = setup();
+  inventory.restock("mug", 10);
+  const id = inventory.reserve("mug", 4);
+  assert.equal(inventory.available("mug"), 6);
+  inventory.release(id);
+  assert.equal(inventory.available("mug"), 10);
+});
+
+test("אי אפשר לשמור יותר מהפנוי — אבל בדיוק הפנוי כן", () =&gt; {
+  const { inventory } = setup();
+  inventory.restock("mug", 5);
+  inventory.reserve("mug", 3);
+  assert.throws(() =&gt; inventory.reserve("mug", 3), OutOfStockError);
+  inventory.reserve("mug", 2);
+  assert.equal(inventory.available("mug"), 0);
+});
+
+test("שמירה פגה אחרי 15 דקות", () =&gt; {
+  const { inventory, clock } = setup();
+  inventory.restock("mug", 5);
+  const id = inventory.reserve("mug", 5);
+  clock.advance(14);
+  assert.equal(inventory.available("mug"), 0);
+  clock.advance(1);
+  assert.equal(inventory.available("mug"), 5);
+  assert.throws(() =&gt; inventory.commit(id), /פג תוקפה/);
+});
+
+test("commit מוריד מהמלאי באמת", () =&gt; {
+  const { inventory, clock } = setup();
+  inventory.restock("mug", 5);
+  const id = inventory.reserve("mug", 2);
+  inventory.commit(id);
+  clock.advance(60);
+  assert.equal(inventory.available("mug"), 3, "גם אחרי שהשמירה הייתה פגה");
+  assert.throws(() =&gt; inventory.commit(id), "commit פעמיים");
+});
+
+test("התראת מלאי נמוך — כשנשאר בדיוק הסף, עם מה שנשאר", () =&gt; {
+  const { inventory, notifier } = setup(3);
+  inventory.restock("mug", 10);
+  inventory.reserve("mug", 6); // נשארו 4
+  assert.equal(notifier.lowStock.mock.callCount(), 0);
+  inventory.reserve("mug", 1); // נשארו 3
+  assert.deepEqual(notifier.lowStock.mock.calls.map((c) =&gt; c.arguments), [["mug", 3]]);
+});</code></pre>
+<p>שים לב לבדיקת <code>commit</code>: היא מקדמת את השעון <em>אחרי</em> ה־commit ובודקת שהמלאי עדיין ירד — אחרת "commit שלא מוריד מהמלאי" נראה זהה ל"שמירה פעילה" בדיוק ברגע הבדיקה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את ה"מסלול השמח" (restock ← reserve ← commit) — חצי מהבאגים בגבולות ובזמן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
+</main>
+</body>
+</html>

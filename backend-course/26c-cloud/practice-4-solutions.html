@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 4 — יחידה 26.3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.3</a> ‹ פתרונות שיעור 4</div>
+  <h1>🔒 פתרונות — תרגול שיעור 4</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26c-cloud/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.3-E05">
+    <h3>P26.3-E05 · Helm ו־GitOps: מה יוצא, ומי עושה מה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>default</code> מחזיר את ברירת המחדל כשהערך ריק. ו־values-prod <em>ממזג</em> לתוך values.yaml — לא מחליף אותו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־GitOps, Jenkins לא מדבר עם ה־cluster בכלל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p><strong>א.</strong></p>
+<pre><code class="lang-yaml">replicas: 3
+image: "ghcr.io/noa-cohen/coffee-shop:1.5.0"</code></pre>
+<p><code>replicas</code> ו־<code>image.tag</code> מ־values-prod; <code>image.repository</code> נשאר מ־values.yaml (מיזוג עמוק). <code>resources</code> הוא <code>{}</code> — ריק נחשב false ב־<code>if</code>, אז השורה לא מופיעה בכלל. בלי values-prod: <code>tag</code> ריק ← <code>default</code> ← <code>1.4.2</code> מה־Chart.</p>
+<p><strong>ב.</strong> 7 ← 2 (מפתח) · 4 ← 3 ← 5 (Jenkins) · 1 ← 6 (Argo CD). Jenkins (CI) בונה ובודק, ומסתיים ב־commit ל־repo התצורה (E25). Argo CD (CD) <strong>מושך</strong> מ־Git ומסנכרן — ל־Jenkins אין credentials ל־cluster בכלל, ו־Git הוא התיעוד של מה רץ ומתי. rollback = revert של ה־commit.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Jenkins מריץ <code>kubectl apply</code> בסוף" — זה push-based deploy. עובד, אבל ה־CI מחזיק מפתח ל־production, ושינוי ידני ב־cluster נשאר שם בלי שאף אחד יודע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E15">
+    <h3>P26.3-E15 · Application של Argo CD 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"ה־cluster שבו Argo CD רץ" — <code class="mid">https://kubernetes.default.svc</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">syncPolicy.automated: { prune, selfHeal }</code>, ו־<code>syncOptions</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E15: Argo CD Application — Argo CD מושך את ה־chart מ־repo התצורה ושומר את ה־cluster מסונכרן
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coffee-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/noa-cohen/coffee-deploy.git
+    targetRevision: main
+    path: charts/coffee-api
+    helm:
+      valueFiles:
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: coffee
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true</code></pre>
+<p><strong>selfHeal</strong>: מישהו הריץ <code>kubectl scale --replicas=1</code> בלילה — Argo CD מחזיר ל־3 תוך דקות. מה שב־Git הוא האמת. ושינוי אמיתי? pull request ל־repo התצורה.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P26.3-E25">
+    <h3>P26.3-E25 · אתגר: עדכון tag ב־repo התצורה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>JSON.parse</code>/<code>stringify</code> או <code>js-yaml</code> מאבדים את ההערות. החבילה <code>yaml</code>: <code>parseAllDocuments</code> ← עץ (Document), <code>doc.get</code>/<code>getIn</code>/<code>set</code>, ו־<code>doc.toString()</code> שומר על הכול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>repository של image: הכול עד ה־<code>:</code> האחרון — אבל רק אם הוא <em>אחרי</em> ה־<code>/</code> האחרון (<code>localhost:5000/app</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E25: GitOps — לעדכן את ה־tag של image ב־repo התצורה, בלי להרוס את הקובץ
+import { parseAllDocuments, isMap, isSeq, YAMLMap } from "yaml";
+
+const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+
+// "ghcr.io/x/app:1.2" ← "ghcr.io/x/app"; גם @sha256:…; ולא מתבלבל עם port של registry (localhost:5000/app)
+export function repositoryOf(image: string): string {
+  const at = image.indexOf("@");
+  const noDigest = at &gt;= 0 ? image.slice(0, at) : image;
+  const slash = noDigest.lastIndexOf("/");
+  const colon = noDigest.lastIndexOf(":");
+  return colon &gt; slash ? noDigest.slice(0, colon) : noDigest;
+}
+
+function podSpecs(doc: any): YAMLMap[] {
+  const out: YAMLMap[] = [];
+  const kind = doc.get("kind");
+  const spec = doc.get("spec");
+  if (!isMap(spec)) return out;
+  const tpl = kind === "CronJob" ? (spec.getIn(["jobTemplate", "spec", "template", "spec"]) as unknown) : spec.getIn(["template", "spec"]);
+  if (isMap(tpl)) out.push(tpl);
+  return out;
+}
+
+export function bumpImageTag(text: string, repository: string, tag: string): { text: string; changed: number } {
+  if (!TAG_RE.test(tag)) throw new Error(`tag לא תקין: ${tag}`);
+  const docs = parseAllDocuments(text);
+  let changed = 0;
+  for (const doc of docs) {
+    if ("errors" in doc &amp;&amp; doc.errors.length) throw new Error(`YAML לא תקין: ${doc.errors[0].message}`);
+    for (const pod of podSpecs(doc)) {
+      for (const field of ["initContainers", "containers"]) {
+        const list = pod.get(field);
+        if (!isSeq(list)) continue;
+        for (const c of list.items) {
+          if (!isMap(c)) continue;
+          const image = c.get("image");
+          if (typeof image !== "string" || repositoryOf(image) !== repository) continue;
+          const next = `${repository}:${tag}`;
+          if (image !== next) {
+            c.set("image", next);
+            changed++;
+          }
+        }
+      }
+    }
+  }
+  if (changed === 0 &amp;&amp; !text.includes(`${repository}:${tag}`)) throw new Error(`לא נמצא image של ${repository}`);
+  return { text: docs.map((d) =&gt; d.toString()).join(""), changed };
+}</code></pre>
+<p>בפועל יש לזה כלים מוכנים — <code>kustomize edit set image</code>, <code>yq</code>, או Argo CD Image Updater — אבל כולם עושים בדיוק את זה. וה־commit עצמו (ב־Jenkins): <code class="mid">git commit -am "coffee-api 1.5.0" &amp;&amp; git push</code> ל־repo התצורה, עם token שיש לו הרשאה רק ל־repo הזה.</p>
+
+
+</div></details>
+    
+  </div>
+
+<div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-jenkins.html"><small>הבא</small>שיעור 5 — Jenkins, והדרך המלאה מ־commit ל־cluster</a></div>
+</main>
+</body>
+</html>
