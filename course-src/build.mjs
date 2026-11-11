@@ -176,7 +176,7 @@ function checkRun(run, expected, ctx) {
 // קוד בינוני (mid) — בשורה משלו רק במסך צר (טלפון), כדי שלא יברח מהמסך.
 const LONG_INLINE = 60;
 const MID_INLINE = 26;
-const unesc = (t) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+const unesc = (t) => t.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 function markLongCode(html) {
   return html.replace(/<code>([^<]*)<\/code>/g, (all, t) => {
     const n = unesc(t).length;
