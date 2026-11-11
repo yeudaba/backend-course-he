@@ -1,0 +1,5 @@
+-- P17-E77: המקום של כל מוצר בקטגוריה
+-- מוצרים פעילים: category, product, price, price_rank (1 = היקר; מחיר זהה ← אותו מקום)
+-- מיון: category, price_rank, product
+--
+-- בדיקה:  npm run check P17-E77

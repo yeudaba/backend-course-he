@@ -1,0 +1,7 @@
+-- P17-E39: פניות שירות — SET NULL ו־CASCADE
+-- 1. support_tickets: id, customer_id (לא חובה; לקוח נמחק ← NULL), subject (חובה), opened_at (timestamptz, ברירת מחדל now())
+-- 2. ticket_messages: id, ticket_id (חובה; פנייה נמחקת ← ההודעות נמחקות), body (חובה), sent_at (כמו opened_at)
+-- 3. הנתונים — בדף התרגול
+-- 4. SELECT id, customer_id, subject של הפניות, לפי id
+--
+-- בדיקה:  npm run check P17-E39

@@ -51,6 +51,228 @@ SELECT name FROM categories WHERE id NOT IN (SELECT category_id FROM products);<
 
 </div></details>
   </div>
+<div class="ex" id="P17-E68">
+    <h3>P17-E68 · תת־שאילתה שמחזירה יותר משורה אחת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תת־שאילתה בתור <strong>ערך</strong> חייבת להחזיר שורה אחת ועמודה אחת. כמה מוצרים יש בקטגוריה 1?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"יקר מכולם" = יקר מהיקר שבהם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT name, price FROM products
+WHERE price &gt; (SELECT price FROM products WHERE category_id = 1);</code></pre>
+<pre class="terminal">ERROR:  more than one row returned by a subquery used as an expression</pre>
+<pre><code class="lang-sql">SELECT name, price FROM products
+WHERE price &gt; (SELECT MAX(price) FROM products WHERE category_id = 1)
+ORDER BY price;</code></pre>
+<pre class="terminal">         name         | price
+----------------------+--------
+ V60 Ceramic          |  99.00
+ French Press 1L      | 119.00
+ Digital Scale        | 129.00
+ Moka Pot 6 Cups      | 149.00
+ Hand Grinder         | 189.00
+ Gooseneck Kettle     | 229.00
+ Electric Grinder Pro | 649.00
+(7 rows)</pre>
+<p>המסד לא יודע לאיזה מהמחירים השווית — אז הוא נכשל, ובצדק. צבירה (<code>MAX</code>) הופכת את הרשימה לערך אחד. שים לב: השגיאה מופיעה רק כשהתת־שאילתה <strong>באמת</strong> מחזירה כמה שורות — עם קטגוריה של מוצר אחד השאילתה הייתה "עובדת", עד שמישהו מוסיף מוצר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>LIMIT 1</code> לתת־שאילתה — השגיאה נעלמת, והתוצאה תלויה באיזו שורה במקרה חזרה ראשונה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E69">
+    <h3>P17-E69 · ‏ROW_NUMBER מול RANK בתיקו <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>ROW_NUMBER</code> — תמיד 1, 2, 3... גם בשוויון (השם הוא שובר השוויון). ‏<code>RANK</code> — שוויון ← אותו מקום.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שלושה במקום 2 — מה המקום הבא ב־RANK? (כמו בתחרות.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH counts AS (
+  SELECT c.full_name, COUNT(o.id) AS orders
+  FROM customers c
+  LEFT JOIN orders o ON o.customer_id = c.id AND o.status &lt;&gt; 'cancelled'
+  GROUP BY c.id
+)
+SELECT full_name, orders,
+       ROW_NUMBER() OVER (ORDER BY orders DESC, full_name) AS rn,
+       RANK()       OVER (ORDER BY orders DESC) AS rnk
+FROM counts
+ORDER BY rn;</code></pre>
+<pre class="terminal">  full_name   | orders | rn | rnk
+--------------+--------+----+-----
+ Dana Levi    |      3 |  1 |   1
+ Michal Biton |      2 |  2 |   2
+ Ron Avraham  |      2 |  3 |   2
+ Yossi Cohen  |      2 |  4 |   2
+ Noa Mizrahi  |      1 |  5 |   5
+ Shira David  |      1 |  6 |   5
+ Avi Peretz   |      0 |  7 |   7
+ Omer Shalom  |      0 |  8 |   7
+(8 rows)</pre>
+<p><code>RANK</code> מדלג: אחרי שלושה לקוחות במקום 2 — המקום הבא הוא 5 (ואחרי שניים במקום 5 — 7). מתי איזה? "תן לי בדיוק N מכל קבוצה" ← <code>ROW_NUMBER</code> (עם שובר שוויון קבוע). "כל מי שבמקום הראשון, גם אם הם שניים" ← <code>RANK</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ROW_NUMBER</code> בלי שובר שוויון ב־ORDER BY — בתיקו, מי מקבל 1 תלוי במקרה, ויכול להשתנות בין הרצות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E70">
+    <h3>P17-E70 · ‏EXISTS מול JOIN — כמה פעמים כל לקוח? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>JOIN מחזיר שורה לכל <strong>פריט</strong> מתאים. לדנה יש פולים בשתי הזמנות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>EXISTS שואל "יש או אין" — כל לקוח נבדק פעם אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT c.full_name
+FROM customers c
+JOIN orders o       ON o.customer_id = c.id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p     ON p.id = oi.product_id
+WHERE p.category_id = 1
+ORDER BY c.full_name;
+
+SELECT c.full_name
+FROM customers c
+WHERE EXISTS (
+  SELECT 1 FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  JOIN products p     ON p.id = oi.product_id
+  WHERE o.customer_id = c.id AND p.category_id = 1
+)
+ORDER BY c.full_name;</code></pre>
+<pre class="terminal">  full_name
+--------------
+ Dana Levi
+ Dana Levi
+ Michal Biton
+ Ron Avraham
+ Ron Avraham
+ Shira David
+ Yossi Cohen
+ Yossi Cohen
+(8 rows)
+
+  full_name
+--------------
+ Dana Levi
+ Michal Biton
+ Ron Avraham
+ Shira David
+ Yossi Cohen
+(5 rows)</pre>
+<p>ה־JOIN חוזר על לקוחות — שורה לכל פריט פולים שקנו. ‏<code>SELECT DISTINCT</code> היה "מתקן", אבל EXISTS אומר את הכוונה: "לקוחות שיש להם...". וזה עוד יתרון: אם תרצה להציג גם את העיר או האימייל — הם לא יוכפלו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>DISTINCT</code> כרפלקס בכל פעם שיש כפילויות — לפעמים זה מסתיר JOIN שגוי, שמכפיל גם סכומים (P17-E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E71">
+    <h3>P17-E71 · ‏OVER — עם PARTITION, עם ORDER BY, ובלי כלום <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>OVER ()</code> — חלון אחד: כל השורות. ‏<code>PARTITION BY</code> — חלון לכל קבוצה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>ORDER BY</code> בתוך OVER הופך את הסכום ל"מצטבר עד השורה הזו".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH t AS (
+  SELECT o.id, c.full_name, o.created_at, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o
+  JOIN customers c    ON c.id = o.customer_id
+  JOIN order_items oi ON oi.order_id = o.id
+  WHERE c.id IN (1, 2)
+  GROUP BY o.id, c.full_name
+)
+SELECT full_name, id, total,
+       SUM(total) OVER () AS all_total,
+       SUM(total) OVER (PARTITION BY full_name) AS customer_total,
+       SUM(total) OVER (PARTITION BY full_name ORDER BY created_at) AS running
+FROM t
+ORDER BY full_name, created_at;</code></pre>
+<pre class="terminal">  full_name  | id | total  | all_total | customer_total | running
+-------------+----+--------+-----------+----------------+---------
+ Dana Levi   |  1 | 194.70 |    998.80 |         550.30 |  194.70
+ Dana Levi   |  3 | 197.00 |    998.80 |         550.30 |  391.70
+ Dana Levi   |  8 | 158.60 |    998.80 |         550.30 |  550.30
+ Yossi Cohen |  2 | 278.70 |    998.80 |         448.50 |  278.70
+ Yossi Cohen |  6 | 169.80 |    998.80 |         448.50 |  448.50
+(5 rows)</pre>
+<p><code>all_total</code> זהה בכל השורות (סכום כל ההזמנות של שניהם). ‏<code>customer_total</code> זהה בתוך כל לקוח. ‏<code>running</code> גדל בתוך כל לקוח ומתאפס בלקוח הבא. כל השורות נשארות — זה ההבדל מ־GROUP BY. וכך מחשבים בקלות "אחוז מסך הלקוח": <code class="mid">total / SUM(total) OVER (PARTITION BY full_name)</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>OVER (PARTITION BY ...)</code> בלי ORDER BY נותן סכום מצטבר — הוא נותן את הסכום של כל הקבוצה, בכל שורה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E72">
+    <h3>P17-E72 · ‏WITH או תת־שאילתה ב־FROM? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלב 1: סכום לכל הזמנה. שלב 2: צבירה על הסכומים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תת־שאילתה ב־FROM חייבת כינוי (<code>AS order_totals</code>), ואפשר להשתמש בה רק במקום שבו נכתבה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT ROUND(AVG(total), 2) AS avg_order, MAX(total) AS max_order
+FROM (
+  SELECT o.id, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status &lt;&gt; 'cancelled'
+  GROUP BY o.id
+) AS order_totals;
+
+WITH order_totals AS (
+  SELECT o.id, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status &lt;&gt; 'cancelled'
+  GROUP BY o.id
+)
+SELECT ROUND(AVG(total), 2) AS avg_order, MAX(total) AS max_order
+FROM order_totals;</code></pre>
+<pre class="terminal"> avg_order | max_order
+-----------+-----------
+    233.98 |    305.00
+(1 row)
+
+ avg_order | max_order
+-----------+-----------
+    233.98 |    305.00
+(1 row)</pre>
+<p>שלבים: (1) לכל הזמנה שלא בוטלה — סכום הפריטים שלה; (2) על 11 הסכומים — ממוצע ומקסימום. זה גם הפתרון ל"ממוצע הזמנה" מ־P17-E61. ‏WITH קורא מלמעלה למטה, בסדר החישוב; ואם צריך את אותו שלב פעמיים — עם WITH כותבים אותו פעם אחת ומשתמשים בשם בכל מקום; עם תת־שאילתה צריך להעתיק אותה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את הכינוי של תת־שאילתה ב־FROM — ב־PostgreSQL 16 ומעלה זה מותר, אבל בגרסאות קודמות ובמסדים אחרים — שגיאה. כינוי תמיד.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P17-E15">
     <h3>P17-E15 · יקר מהממוצע בקטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -172,59 +394,296 @@ ORDER BY category, "rank";</code></pre>
 
 </div></details>
   </div>
-<div class="ex typed" id="P17-E27">
-    <h3>P17-E27 · ההזמנה הכמה של הלקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+<div class="ex typed" id="P17-E73">
+    <h3>P17-E73 · ההזמנה האחרונה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>שני שלבים. קודם סכום לכל הזמנה: <code class="long">WITH order_totals AS (SELECT o.id, o.customer_id, o.created_at, SUM(...) AS total FROM orders o JOIN order_items oi ... WHERE ... GROUP BY o.id)</code>. אחר כך <code>JOIN</code> ל־<code>customers</code>, והחלונות על התוצאה.</p>
+<p>הפנימית: <code class="mid">SELECT MAX(created_at) FROM orders</code>.</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>שני החלונות מתחלקים לפי לקוח וממוינים לפי זמן: <code class="mid">ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY t.created_at)</code> ו־<code class="mid">SUM(t.total) OVER (PARTITION BY c.id ORDER BY t.created_at)</code>. ‏<code>SUM</code> עם <code>ORDER BY</code> בחלון הוא סכום מצטבר, כמו בשיעור 4.</p>
+<p><code>WHERE created_at = (...)</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT id, customer_id, status
+FROM orders
+WHERE created_at = (SELECT MAX(created_at) FROM orders)
+ORDER BY id;</code></pre>
+<pre class="terminal"> id | customer_id | status
+----+-------------+---------
+ 12 |           6 | pending
+(1 row)</pre>
+<p>ההבדל מ־<code class="mid">ORDER BY created_at DESC LIMIT 1</code>: אם שתי הזמנות נוצרו באותו רגע, התת־שאילתה מחזירה את שתיהן, ו־LIMIT 1 — אחת, באקראי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">WHERE created_at = MAX(created_at)</code> — צבירה ב־WHERE לא מותרת; לכן תת־שאילתה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E74">
+    <h3>P17-E74 · קטגוריות בלי מוצר פעיל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל קטגוריה: "האם קיים מוצר פעיל שמצביע עליה?"</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.category_id = cat.id AND p.is_active)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT cat.name AS category
+FROM categories cat
+WHERE NOT EXISTS (
+  SELECT 1 FROM products p
+  WHERE p.category_id = cat.id AND p.is_active
+)
+ORDER BY cat.name;</code></pre>
+<pre class="terminal">  category
+------------
+ gift cards
+(1 row)</pre>
+<p>היום רק <code>gift cards</code>. אבל אם שתי המטחנות יורדו מהמדף — גם <code>grinders</code> תופיע, למרות שיש בה מוצרים. "בלי מוצר פעיל" ≠ "בלי מוצרים".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">NOT IN (SELECT category_id FROM products WHERE is_active)</code> — עובד כאן (‏category_id הוא NOT NULL), אבל זה ההרגל המסוכן מ־P17-E05.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P17-E75">
+    <h3>P17-E75 · מחכים למשלוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התת־שאילתה מחזירה רשימה של <code>customer_id</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">WHERE id IN (SELECT customer_id FROM orders WHERE status = 'pending')</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT full_name, email
+FROM customers
+WHERE id IN (SELECT customer_id FROM orders WHERE status = 'pending')
+ORDER BY full_name;</code></pre>
+<pre class="terminal">  full_name   |       email
+--------------+--------------------
+ Michal Biton | michal@example.com
+ Ron Avraham  | ron@example.com
+(2 rows)</pre>
+<p>‏IN (לא NOT IN) בטוח גם עם NULL ברשימה. וכמו EXISTS — לקוח עם שתי הזמנות ממתינות מופיע פעם אחת (P17-E70).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>JOIN עם orders — לקוח עם שתי הזמנות ממתינות יופיע פעמיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E76">
+    <h3>P17-E76 · ממוצע הזמנה לפי עיר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלב 1 (ה־CTE): סכום לכל הזמנה, עם <code>customer_id</code>. שלב 2: JOIN ללקוחות, וקיבוץ לפי עיר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">GROUP BY COALESCE(c.city, 'unknown')</code> — או <code>GROUP BY 1</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
 <pre><code class="lang-sql">WITH order_totals AS (
-  SELECT o.id, o.customer_id, o.created_at, SUM(oi.quantity * oi.unit_price) AS total
+  SELECT o.id, o.customer_id, SUM(oi.quantity * oi.unit_price) AS total
   FROM orders o
   JOIN order_items oi ON oi.order_id = o.id
   WHERE o.status &lt;&gt; 'cancelled'
   GROUP BY o.id
 )
-SELECT
-  c.full_name,
-  t.id AS order_id,
-  ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY t.created_at) AS order_no,
-  t.total,
-  SUM(t.total) OVER (PARTITION BY c.id ORDER BY t.created_at) AS running_total
+SELECT COALESCE(c.city, 'unknown') AS city, COUNT(*) AS orders, ROUND(AVG(t.total), 2) AS avg_order
 FROM order_totals t
 JOIN customers c ON c.id = t.customer_id
-ORDER BY c.full_name, order_no;</code></pre>
-<pre class="terminal">  full_name   | order_id | order_no | total  | running_total
---------------+----------+----------+--------+---------------
- Dana Levi    |        1 |        1 | 194.70 |        194.70
- Dana Levi    |        3 |        2 | 197.00 |        391.70
- Dana Levi    |        8 |        3 | 158.60 |        550.30
- Michal Biton |        5 |        1 | 288.70 |        288.70
- Michal Biton |       11 |        2 | 305.00 |        593.70
- Noa Mizrahi  |       10 |        1 | 189.00 |        189.00
- Ron Avraham  |        7 |        1 | 288.80 |        288.80
- Ron Avraham  |       12 |        2 | 269.70 |        558.50
- Shira David  |        9 |        1 | 233.80 |        233.80
- Yossi Cohen  |        2 |        1 | 278.70 |        278.70
- Yossi Cohen  |        6 |        2 | 169.80 |        448.50
-(11 rows)</pre>
-<p>למה ה־CTE? כי <code>SUM</code> רגיל (של <code>GROUP BY</code>) ו־<code>SUM ... OVER</code> עובדים ברמות שונות. הראשון מכווץ את הפריטים להזמנה אחת, והשני רץ על ההזמנות בלי לכווץ אותן. כשמפרידים לשני שלבים, כל שלב פשוט. אפשר גם בלי CTE (<code>SUM(SUM(...)) OVER</code>, כמו בשיעור 4), אבל זה קשה יותר לקריאה.</p>
-<p><code>PARTITION BY c.id</code> מתחיל את הספירה ואת הסכום מחדש לכל לקוח. בלעדיו <code>order_no</code> היה רץ מ־1 עד 11 על כל ההזמנות.</p>
-<p>ההבדל בין <code>GROUP BY</code> לחלון: ‏<code>GROUP BY</code> מחזיר שורה אחת לקבוצה. חלון משאיר את כל השורות, ומוסיף לכל אחת מידע על "השכנות" שלה.</p>
+GROUP BY 1
+ORDER BY avg_order DESC, city;</code></pre>
+<pre class="terminal">    city    | orders | avg_order
+------------+--------+-----------
+ Beer Sheva |      2 |    279.25
+ Tel Aviv   |      5 |    228.80
+ Haifa      |      3 |    227.43
+ Jerusalem  |      1 |    189.00
+(4 rows)</pre>
+<p>בלי השלב הראשון, <code>AVG</code> היה רץ על שורות פריט ולא על הזמנות (P17-E61). ה־CTE נותן לשלב הזה שם — ואת הממוצע מחשבים על "הזמנה = שורה".</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>PARTITION BY c.full_name</code> — שני לקוחות עם אותו שם יתערבבו. מחלקים לפי מפתח.</li><li>לשכוח <code class="mid">WHERE o.status &lt;&gt; 'cancelled'</code> בתוך ה־CTE — הזמנות מבוטלות נספרות.</li><li><code class="mid">SUM(t.total) OVER (PARTITION BY c.id)</code> בלי <code>ORDER BY</code> — כל השורות של הלקוח מקבלות את הסכום הכולל, ולא סכום מצטבר.</li></ul>
+<ul><li><code>COUNT(*)</code> בשאילתה בלי CTE (אחרי JOIN לפריטים) — סופר פריטים במקום הזמנות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E77">
+    <h3>P17-E77 · המקום של כל מוצר בקטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"כמו בתחרות" = <code>RANK()</code> (P17-E69).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">RANK() OVER (PARTITION BY cat.name ORDER BY p.price DESC) AS price_rank</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT cat.name AS category, p.name AS product, p.price,
+       RANK() OVER (PARTITION BY cat.name ORDER BY p.price DESC) AS price_rank
+FROM products p
+JOIN categories cat ON cat.id = p.category_id
+WHERE p.is_active
+ORDER BY category, price_rank, product;</code></pre>
+<pre class="terminal">  category   |       product        | price  | price_rank
+-------------+----------------------+--------+------------
+ accessories | Ceramic Mug          |  39.00 |          1
+ accessories | Paper Filters (100)  |  24.90 |          2
+ beans       | Ethiopia Beans 1kg   |  89.90 |          1
+ beans       | Colombia Beans 1kg   |  84.90 |          2
+ beans       | Brazil Beans 250g    |  29.90 |          3
+ brewing     | Gooseneck Kettle     | 229.00 |          1
+ brewing     | Moka Pot 6 Cups      | 149.00 |          2
+ brewing     | French Press 1L      | 119.00 |          3
+ brewing     | V60 Ceramic          |  99.00 |          4
+ grinders    | Electric Grinder Pro | 649.00 |          1
+ grinders    | Hand Grinder         | 189.00 |          2
+(11 rows)</pre>
+<p>אין כאן GROUP BY — כל מוצר נשאר שורה, והחלון רק מוסיף לו מידע על הקבוצה שלו. ‏WHERE רץ לפני החלון: מוצר לא פעיל לא "תופס" מקום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ROW_NUMBER</code> — בשני מוצרים באותו מחיר, אחד יקבל 1 והשני 2, באקראי.</li><li><code>PARTITION BY</code> חסר — דירוג אחד לכל החנות.</li></ul>
 
 
 </div></details>
   </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P17-E78">
+    <h3>P17-E78 · ‏WITH ושמות של שלבים ב־JavaScript <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>orderTotals</code> = ה־CTE. מה ה־<code>filter</code> הראשון בו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Noa: ההזמנה המבוטלת לא נספרת — נשארת לה הזמנה אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const orders = [{ id: 1, customer: "Dana", status: "shipped" }, { id: 2, customer: "Yossi", status: "shipped" },
+  { id: 3, customer: "Dana", status: "paid" }, { id: 4, customer: "Noa", status: "cancelled" }, { id: 5, customer: "Noa", status: "paid" }];
+const items = [{ order: 1, total: 194.7 }, { order: 2, total: 278.7 }, { order: 3, total: 197 }, { order: 4, total: 649 }, { order: 5, total: 189 }];
+
+const orderTotals = orders
+  .filter((o) =&gt; o.status !== "cancelled")
+  .map((o) =&gt; ({ customer: o.customer, total: items.filter((i) =&gt; i.order === o.id).reduce((s, i) =&gt; s + i.total, 0) }));
+
+const byCustomer = new Map();
+for (const t of orderTotals) {
+  const g = byCustomer.get(t.customer) ?? { customer: t.customer, orders: 0, sum: 0 };
+  g.orders += 1;
+  g.sum += t.total;
+  byCustomer.set(t.customer, g);
+}
+const result = [...byCustomer.values()]
+  .map((g) =&gt; ({ customer: g.customer, orders: g.orders, avg: Math.round((g.sum / g.orders) * 100) / 100 }))
+  .sort((a, b) =&gt; b.avg - a.avg)
+  .slice(0, 2);
+console.log(result);</code></pre>
+<pre class="terminal">[
+  { customer: 'Yossi', orders: 1, avg: 278.7 },
+  { customer: 'Dana', orders: 2, avg: 195.85 }
+]</pre>
+<ul><li><code>const orderTotals = ...</code> ← <code>WITH order_totals AS (...)</code>: ‏<code>filter</code> = ‏<code class="mid">WHERE status &lt;&gt; 'cancelled'</code>, וה־<code>items.filter(...).reduce</code> = ‏JOIN לפריטים + <code>SUM</code> + <code>GROUP BY o.id</code>.</li><li>ה־<code>Map</code> והלולאה ← <code>GROUP BY</code> לקוח עם <code>COUNT(*)</code> ו־<code>SUM</code>; ה־<code>map</code> שאחריו ← <code>ROUND(AVG(...), 2)</code>.</li><li><code>sort</code> ← <code>ORDER BY avg_order DESC</code>; ‏<code>slice(0, 2)</code> ← <code>LIMIT 2</code>.</li></ul>
+<p>אותו רעיון: לתת שם לכל שלב. ההבדל: ב־JS כל הנתונים עברו מהמסד לשרת; ב־SQL רק שתי השורות של התוצאה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסנן את המבוטלות <strong>אחרי</strong> הקיבוץ — ממוצע של Noa יכלול את ה־649.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E79">
+    <h3>P17-E79 · ‏NOT IN עם NULL — וב־JavaScript? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־JS, <code>null === null</code> הוא <code>true</code>. ב־SQL, <code>NULL = NULL</code> הוא...?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>x NOT IN (a, b)</code> הוא <code>x &lt;&gt; a AND x &lt;&gt; b</code>. מה התוצאה של <code>AND</code> עם NULL?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const cities = ["Tel Aviv", "Haifa", "Jerusalem", null, "Beer Sheva"];
+const excluded = ["Haifa", null];
+console.log(cities.filter((c) =&gt; !excluded.includes(c)));
+console.log(null === null, "Haifa" !== null);</code></pre>
+<pre class="terminal">[ 'Tel Aviv', 'Jerusalem', 'Beer Sheva' ]
+true true</pre>
+<pre><code class="lang-sql">SELECT DISTINCT city FROM customers WHERE city NOT IN ('Haifa', NULL);
+SELECT NULL = NULL AS eq, 'Haifa' &lt;&gt; NULL AS neq;</code></pre>
+<pre class="terminal"> city
+------
+(0 rows)
+
+ eq | neq
+----+-----
+    |
+(1 row)</pre>
+<p>ב־JS יש שני ערכים: true ו־false, ו־<code>null</code> שווה לעצמו. ב־SQL יש שלושה: true, ‏false ו־<strong>unknown</strong> (מוצג ריק). ‏<code>'Tel Aviv' &lt;&gt; NULL</code> הוא unknown, ו־<code>true AND unknown</code> הוא unknown — ו־WHERE משאיר רק true. לכן אף שורה. כשמעבירים לוגיקה מ־JS ל־SQL (או להפך) — NULL הוא המקום הראשון לבדוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח ש־<code>NOT IN</code> מתנהג כמו <code>!includes</code> — הוא כך רק כשאין NULL ברשימה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E80">
+    <h3>P17-E80 · "שני המובילים בכל קטגוריה" מ־Node — בלולאה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאילתה אחת לרשימה, ועוד אחת לכל קטגוריה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY price DESC, name)</code></pre>
+<p>ב־CTE, ואז <code>WHERE rn &lt;= 2</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>1 + 5 = 6. ‏1 + 500 = 501 — כל אחת נסיעה הלוך־חזור למסד.</li><li>שאילתה אחת:</li></ol>
+<pre><code class="lang-sql">WITH ranked AS (
+  SELECT cat.name AS category, p.name, p.price,
+         ROW_NUMBER() OVER (PARTITION BY cat.id ORDER BY p.price DESC, p.name) AS rn
+  FROM products p
+  JOIN categories cat ON cat.id = p.category_id
+  WHERE p.is_active
+)
+SELECT category, name, price FROM ranked WHERE rn &lt;= 2 ORDER BY category, rn;</code></pre>
+<pre class="terminal">  category   |         name         | price
+-------------+----------------------+--------
+ accessories | Ceramic Mug          |  39.00
+ accessories | Paper Filters (100)  |  24.90
+ beans       | Ethiopia Beans 1kg   |  89.90
+ beans       | Colombia Beans 1kg   |  84.90
+ brewing     | Gooseneck Kettle     | 229.00
+ brewing     | Moka Pot 6 Cups      | 149.00
+ grinders    | Electric Grinder Pro | 649.00
+ grinders    | Hand Grinder         | 189.00
+(8 rows)</pre>
+<ol start="3"><li>בלולאה, gift cards מופיעה עם <code>top: []</code>. בשאילתה — היא לא מופיעה בכלל (אין לה שורות). אם צריך אותה — מתחילים מ־<code>categories</code> עם LEFT JOIN, או מוסיפים בקוד.</li><li>לא. ‏<code>Promise.all</code> שולח את כל ה־500 במקביל — זה יותר מהיר בזמן, אבל אותו מספר שאילתות, ועומס של 500 בקשות בבת אחת על המסד (ו־pool של 10 חיבורים יגרום להן לחכות בתור). הפתרון הוא פחות שאילתות, לא שאילתות מהירות יותר.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה רק 5 קטגוריות" — הקוד הזה ייכתב שוב לכל לקוח ("ההזמנות האחרונות של כל לקוח") — ושם יש 50,000.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P17-E24">
     <h3>P17-E24 · אתגר: פרופיל לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -304,6 +763,58 @@ ORDER BY orders_together DESC, product_a, product_b;</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code class="mid">a.product_id &lt;&gt; b.product_id</code> — כל זוג נספר פעמיים, בשני הכיוונים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P17-E27">
+    <h3>P17-E27 · ההזמנה הכמה של הלקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שלבים. קודם סכום לכל הזמנה: <code class="long">WITH order_totals AS (SELECT o.id, o.customer_id, o.created_at, SUM(...) AS total FROM orders o JOIN order_items oi ... WHERE ... GROUP BY o.id)</code>. אחר כך <code>JOIN</code> ל־<code>customers</code>, והחלונות על התוצאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני החלונות מתחלקים לפי לקוח וממוינים לפי זמן: <code class="mid">ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY t.created_at)</code> ו־<code class="mid">SUM(t.total) OVER (PARTITION BY c.id ORDER BY t.created_at)</code>. ‏<code>SUM</code> עם <code>ORDER BY</code> בחלון הוא סכום מצטבר, כמו בשיעור 4.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH order_totals AS (
+  SELECT o.id, o.customer_id, o.created_at, SUM(oi.quantity * oi.unit_price) AS total
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status &lt;&gt; 'cancelled'
+  GROUP BY o.id
+)
+SELECT
+  c.full_name,
+  t.id AS order_id,
+  ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY t.created_at) AS order_no,
+  t.total,
+  SUM(t.total) OVER (PARTITION BY c.id ORDER BY t.created_at) AS running_total
+FROM order_totals t
+JOIN customers c ON c.id = t.customer_id
+ORDER BY c.full_name, order_no;</code></pre>
+<pre class="terminal">  full_name   | order_id | order_no | total  | running_total
+--------------+----------+----------+--------+---------------
+ Dana Levi    |        1 |        1 | 194.70 |        194.70
+ Dana Levi    |        3 |        2 | 197.00 |        391.70
+ Dana Levi    |        8 |        3 | 158.60 |        550.30
+ Michal Biton |        5 |        1 | 288.70 |        288.70
+ Michal Biton |       11 |        2 | 305.00 |        593.70
+ Noa Mizrahi  |       10 |        1 | 189.00 |        189.00
+ Ron Avraham  |        7 |        1 | 288.80 |        288.80
+ Ron Avraham  |       12 |        2 | 269.70 |        558.50
+ Shira David  |        9 |        1 | 233.80 |        233.80
+ Yossi Cohen  |        2 |        1 | 278.70 |        278.70
+ Yossi Cohen  |        6 |        2 | 169.80 |        448.50
+(11 rows)</pre>
+<p>למה ה־CTE? כי <code>SUM</code> רגיל (של <code>GROUP BY</code>) ו־<code>SUM ... OVER</code> עובדים ברמות שונות. הראשון מכווץ את הפריטים להזמנה אחת, והשני רץ על ההזמנות בלי לכווץ אותן. כשמפרידים לשני שלבים, כל שלב פשוט. אפשר גם בלי CTE (<code>SUM(SUM(...)) OVER</code>, כמו בשיעור 4), אבל זה קשה יותר לקריאה.</p>
+<p><code>PARTITION BY c.id</code> מתחיל את הספירה ואת הסכום מחדש לכל לקוח. בלעדיו <code>order_no</code> היה רץ מ־1 עד 11 על כל ההזמנות.</p>
+<p>ההבדל בין <code>GROUP BY</code> לחלון: ‏<code>GROUP BY</code> מחזיר שורה אחת לקבוצה. חלון משאיר את כל השורות, ומוסיף לכל אחת מידע על "השכנות" שלה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>PARTITION BY c.full_name</code> — שני לקוחות עם אותו שם יתערבבו. מחלקים לפי מפתח.</li><li>לשכוח <code class="mid">WHERE o.status &lt;&gt; 'cancelled'</code> בתוך ה־CTE — הזמנות מבוטלות נספרות.</li><li><code class="mid">SUM(t.total) OVER (PARTITION BY c.id)</code> בלי <code>ORDER BY</code> — כל השורות של הלקוח מקבלות את הסכום הכולל, ולא סכום מצטבר.</li></ul>
 
 
 </div></details>

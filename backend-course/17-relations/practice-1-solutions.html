@@ -35,6 +35,153 @@
 
 </div></details>
   </div>
+<div class="ex" id="P17-E29">
+    <h3>P17-E29 · איפה שמים את ה־foreign key? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־FK תמיד בצד ה"רבים": שואלים "למי יש <strong>אחד</strong>?" — שם שמים עמודה שמצביעה עליו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם לשני הצדדים יש "הרבה" — אף אחת מהטבלאות לא יכולה להחזיק עמודה אחת. צריך טבלה שלישית. ובסעיף 5: FK יכול להצביע על <strong>אותה</strong> טבלה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אחד־לרבים. <code>comments.post_id</code> ← <code>posts.id</code>.</li><li>רבים־לרבים. טבלת קישור <code class="mid">enrollments(student_id, course_id)</code>, מפתח ראשי של הזוג (סטודנט לא נרשם פעמיים לאותו קורס). אפשר להוסיף לה עמודות של הקשר עצמו — <code>enrolled_on</code>, <code>grade</code> — כמו <code>quantity</code> ב־<code>order_items</code>.</li><li>אחד־לאחד. <code>privacy_settings.user_id</code> ← <code>users.id</code> עם <code>UNIQUE</code> (או שה־<code>user_id</code> הוא גם המפתח הראשי). ולרוב — פשוט עוד עמודות ב־<code>users</code>.</li><li>אחד־לרבים. <code>products.supplier_id</code> ← <code>suppliers.id</code> (הצד של ה"רבים" הוא המוצרים).</li><li>אחד־לרבים בתוך אותה טבלה: <code>employees.manager_id</code> ← <code>employees.id</code>, ו־NULL למנכ״ל (אין לו מנהל).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>comment_ids</code> (רשימה) בטבלת הפוסטים — עמודה מחזיקה ערך אחד; רשימה היא שורות בטבלה אחרת.</li><li>טבלת קישור בלי מפתח ראשי על הזוג — אותו סטודנט נרשם פעמיים לאותו קורס, וכל ספירה יוצאת כפולה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E30">
+    <h3>P17-E30 · מה יעבור ומה ייחסם? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>FK נבדק לשני הכיוונים: כשכותבים "ילד" (חייב להצביע על הורה קיים), וכשמוחקים "הורה" (אסור שיישארו ילדים שמצביעים עליו — אלא אם הוגדר CASCADE או SET NULL).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>גם <code>UPDATE</code> של עמודת FK הוא "כתיבה של ילד".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (1, 99, 1, 10);
+UPDATE orders SET customer_id = 50 WHERE id = 1;
+DELETE FROM products WHERE id = 11;
+DELETE FROM products WHERE id = 1;
+DELETE FROM categories WHERE name = 'gift cards';</code></pre>
+<pre class="terminal">ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(99) is not present in table "products".
+ERROR:  insert or update on table "orders" violates foreign key constraint "orders_customer_id_fkey"
+DETAIL:  Key (customer_id)=(50) is not present in table "customers".
+DELETE 1
+ERROR:  update or delete on table "products" violates foreign key constraint "order_items_product_id_fkey" on table "order_items"
+DETAIL:  Key (id)=(1) is still referenced from table "order_items".
+DELETE 1</pre>
+<p>1 ו־2 נחסמים בכתיבה של "ילד" שמצביע על הורה שלא קיים (מוצר 99, לקוח 50). 3 עובר — אף פריט לא מצביע על מוצר 11. 4 נחסם — מוצר 1 נמצא בארבע הזמנות, ו־<code>order_items.product_id</code> הוגדר בלי <code>ON DELETE</code> (ברירת המחדל: לחסום). 5 עובר — אין מוצר שמצביע על gift cards.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שה־FK בודק רק <code>INSERT</code>. הוא בודק כל שינוי שעלול ליצור "יתום": ‏INSERT ו־UPDATE בצד הילד, DELETE ו־UPDATE של המפתח בצד ההורה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E31">
+    <h3>P17-E31 · CASCADE, ‏SET NULL או לחסום? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל: "האם לילד יש משמעות בלי ההורה?" אם לא — CASCADE. אם הקשר לא חובה — SET NULL. אם הילד הוא מידע שאסור לאבד — לחסום.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>SET NULL אפשרי רק כשעמודת ה־FK יכולה להיות NULL (בלי <code>NOT NULL</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>CASCADE</strong> — פריט בעגלה בלי העגלה הוא חסר משמעות.</li><li><strong>לחסום</strong> — חשבונית היא מסמך חשבונאי; מחיקת לקוח לא אמורה למחוק אותה (ובדרך כלל גם לא מוחקים לקוח כזה — מסמנים אותו כלא פעיל).</li><li><strong>SET NULL</strong> — העובד עזב, המשימה נשארת ומחכה להקצאה מחדש. העמודה בלי <code>NOT NULL</code>.</li><li><strong>לחסום</strong> — מחיקת מוצר הייתה מוחקת שורות מהזמנות ישנות ומשנה הכנסות עבר. מוצר שירד מהמדף מסמנים <code>is_active = false</code>.</li><li><strong>CASCADE</strong> — טוקן לאיפוס סיסמה של משתמש שנמחק לא שווה כלום (ואפילו מסוכן להשאיר אותו).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>CASCADE "ליתר ביטחון" בכל מקום — מחיקה אחת של לקוח מוחקת הזמנות, פריטים ותשלומים, בלי שגיאה ובלי דרך חזרה.</li><li>SET NULL על עמודה שהוגדרה <code>NOT NULL</code> — המחיקה תיכשל בשגיאת NOT NULL.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E32">
+    <h3>P17-E32 · מה הבעיה בטבלה שטוחה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה פעמים כתובה העיר של דנה בטבלה? וכמה מהן עודכנו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאלה נוספת: איך מוסיפים קטגוריה חדשה שעוד אין בה מוצרים, בטבלה הזו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE orders_flat (
+  order_id        integer,
+  customer_email  text,
+  customer_city   text,
+  product         text,
+  category        text,
+  quantity        integer
+);
+INSERT INTO orders_flat VALUES
+  (1, 'dana@example.com', 'Tel Aviv', 'Ethiopia Beans 1kg', 'beans', 2),
+  (1, 'dana@example.com', 'Tel Aviv', 'Paper Filters (100)', 'accessories', 1),
+  (3, 'dana@example.com', 'Tel Aviv', 'French Press 1L', 'brewing', 1);
+
+UPDATE orders_flat SET customer_city = 'Haifa' WHERE order_id = 3;
+
+SELECT DISTINCT customer_email, customer_city FROM orders_flat ORDER BY customer_city;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 3
+UPDATE 1
+  customer_email  | customer_city
+------------------+---------------
+ dana@example.com | Haifa
+ dana@example.com | Tel Aviv
+(2 rows)</pre>
+<p>לדנה יש עכשיו <strong>שתי</strong> ערים — ואין דרך לדעת מי נכונה. העובדה "דנה גרה ב..." נשמרה שלוש פעמים, ועודכנה רק באחת. בנוסף: אי אפשר לשמור לקוח בלי הזמנה, או קטגוריה בלי מוצר (אין שורה לשים אותם בה), ומחיקת ההזמנה האחרונה של לקוח מוחקת גם את הלקוח. בחמש הטבלאות של הפרק העיר כתובה פעם אחת, ב־<code>customers</code>, וכל הזמנה רק מצביעה עליה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code class="mid">UPDATE ... WHERE customer_email = ...</code> — עובד היום, אבל כל קוד שיעדכן שורה אחת ישבור שוב. המבנה צריך למנוע את זה, לא המשמעת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E33">
+    <h3>P17-E33 · אותו מוצר פעמיים באותה הזמנה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה המפתח הראשי של <code>order_items</code>? (<code>store.sql</code>, או הטבלה בשיעור.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מפתח ראשי של זוג אומר: לכל זוג (הזמנה, מוצר) — שורה אחת לכל היותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (1, 1, 1, 84.90);
+UPDATE order_items SET quantity = quantity + 1 WHERE order_id = 1 AND product_id = 1 RETURNING *;</code></pre>
+<pre class="terminal">ERROR:  duplicate key value violates unique constraint "order_items_pkey"
+DETAIL:  Key (order_id, product_id)=(1, 1) already exists.
+ order_id | product_id | quantity | unit_price
+----------+------------+----------+------------
+        1 |          1 |        3 |      84.90
+(1 row)
+
+UPDATE 1</pre>
+<p>ה־INSERT נכשל: המפתח הראשי <code>(order_id, product_id)</code> לא מרשה שתי שורות לאותו מוצר באותה הזמנה. וזה טוב — אחרת "2 יחידות" היו שתי שורות של 1, וכל דוח של "כמה שורות בהזמנה" היה משקר. הדרך הנכונה היא לעדכן את הכמות של השורה הקיימת. ‏<code>RETURNING *</code> (פרק 16) מראה שהכמות עלתה ל־3.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד את המפתח הראשי "כדי שה־INSERT יעבור" — זה מעביר את הבעיה לכל השאילתות שיבואו אחר כך.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P17-E16">
     <h3>P17-E16 · תגיות למוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -155,7 +302,479 @@ INSERT 0 3
 
 </div></details>
   </div>
+<div class="ex typed" id="P17-E34">
+    <h3>P17-E34 · כתובות ללקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">customer_id integer NOT NULL REFERENCES customers (id) ON DELETE CASCADE</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־INSERT בלי <code>is_default</code>: כתוב רק את העמודות שאתה נותן — <code class="mid">INSERT INTO addresses (customer_id, city, street) VALUES ...</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE addresses (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  customer_id  integer NOT NULL REFERENCES customers (id) ON DELETE CASCADE,
+  city         text NOT NULL,
+  street       text NOT NULL,
+  is_default   boolean NOT NULL DEFAULT false
+);
+
+INSERT INTO addresses (customer_id, city, street, is_default) VALUES (1, 'Tel Aviv', 'Dizengoff 10', true);
+INSERT INTO addresses (customer_id, city, street) VALUES (1, 'Haifa', 'Herzl 5'), (8, 'Eilat', 'Palm 3');
+
+SELECT customer_id, city, street, is_default FROM addresses ORDER BY id;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 1
+INSERT 0 2
+ customer_id |   city   |    street    | is_default
+-------------+----------+--------------+------------
+           1 | Tel Aviv | Dizengoff 10 | t
+           1 | Haifa    | Herzl 5      | f
+           8 | Eilat    | Palm 3       | f
+(3 rows)</pre>
+<p>ה־FK יושב בצד ה"רבים" — בכתובת. ‏CASCADE מתאים: כתובת בלי לקוח לא שווה כלום. (ושים לב: את דנה עדיין אי אפשר למחוק — ההזמנות שלה חוסמות.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>address_id</code> בטבלת הלקוחות — אז לכל לקוח כתובת אחת בלבד.</li><li>לשכוח <code>NOT NULL</code> ב־<code>customer_id</code> — FK מרשה NULL, ואז יש כתובות "של אף אחד".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E35">
+    <h3>P17-E35 · רשימת משאלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>זה רבים־לרבים — טבלת קישור כמו <code>order_items</code>. המפתח הראשי הוא הזוג.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"נחסמת" = בלי <code>ON DELETE</code> (ברירת המחדל). היום: <code>DEFAULT CURRENT_DATE</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE wishlist_items (
+  customer_id  integer NOT NULL REFERENCES customers (id) ON DELETE CASCADE,
+  product_id   integer NOT NULL REFERENCES products (id),
+  added_on     date NOT NULL DEFAULT CURRENT_DATE,
+  PRIMARY KEY (customer_id, product_id)
+);
+
+INSERT INTO wishlist_items (customer_id, product_id) VALUES (4, 5), (4, 12), (8, 5);
+
+SELECT customer_id, product_id FROM wishlist_items ORDER BY customer_id, product_id;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 3
+ customer_id | product_id
+-------------+------------
+           4 |          5
+           4 |         12
+           8 |          5
+(3 rows)</pre>
+<p>אין <code>id</code> נפרד — הזוג הוא המזהה. אם בעתיד תרצה לשמור גם "כמה פעמים נשמר" או הערה — אלה עמודות נוספות באותה טבלה, כמו <code>quantity</code> ב־<code>order_items</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>id</code> ממוספר בלי <code class="mid">PRIMARY KEY (customer_id, product_id)</code> (או <code>UNIQUE</code> על הזוג) — אותו מוצר נשמר פעמיים.</li><li><code>ON DELETE CASCADE</code> גם על המוצר — המשימה ביקשה לחסום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E36">
+    <h3>P17-E36 · לקוחה חדשה והזמנה ראשונה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לקוחה ← הזמנה ← פריטים. אם תכניס פריט לפני ההזמנה — ה־FK יחסום.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>את המחירים קח מ־<code class="mid">SELECT id, price FROM products WHERE id IN (3, 10)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO customers (full_name, email, city, joined_on) VALUES ('Tal Gil', 'tal@example.com', 'Eilat', '2026-05-10') RETURNING id;
+INSERT INTO orders (customer_id, status, created_at) VALUES (9, 'pending', '2026-05-10 10:00:00+03') RETURNING id;
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (13, 3, 2, 29.90), (13, 10, 1, 39.00);
+
+SELECT order_id, product_id, quantity, unit_price FROM order_items WHERE order_id = 13 ORDER BY product_id;</code></pre>
+<pre class="terminal"> id
+----
+  9
+(1 row)
+
+INSERT 0 1
+ id
+----
+ 13
+(1 row)
+
+INSERT 0 1
+INSERT 0 2
+ order_id | product_id | quantity | unit_price
+----------+------------+----------+------------
+       13 |          3 |        2 |      29.90
+       13 |         10 |        1 |      39.00
+(2 rows)</pre>
+<p>הסדר נקבע לפי החצים בתרשים: מי שמצביעים עליו — קודם. ‏<code>unit_price</code> הוא העתק של המחיר <strong>עכשיו</strong>; אם מחר המחיר ישתנה, ההזמנה הזו לא תזוז. (בקוד אמיתי לא כותבים 9 ו־13 ביד — לוקחים אותם מ־<code>RETURNING id</code>. נעשה את זה מ־Node ב־P17-E44.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להכניס את ההזמנה לפני הלקוחה — ‏<code class="mid">Key (customer_id)=(9) is not present in table "customers"</code>.</li><li>מחיר "עגול" שהמצאת — ה־CHECK לא יעצור אותך, אבל הקבלה תהיה שגויה. המחיר מגיע מהמסד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P17-E37">
+    <h3>P17-E37 · ההזמנות של לקוחה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־FK הוא עמודה רגילה: אפשר לסנן לפיה ב־<code>WHERE</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">WHERE customer_id = 1 ORDER BY created_at</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT id, status, created_at FROM orders WHERE customer_id = 1 ORDER BY created_at;</code></pre>
+<pre class="terminal"> id | status  |       created_at
+----+---------+------------------------
+  1 | shipped | 2026-01-05 09:12:00+02
+  3 | shipped | 2026-02-03 12:00:00+02
+  8 | paid    | 2026-03-28 21:10:00+03
+(3 rows)</pre>
+<p>"ההזמנות של לקוח X" — השאילתה הכי נפוצה ביחס של אחד־לרבים, וזה כל מה שהיא צריכה. (את שם הלקוח ליד כל הזמנה נביא ב־JOIN, בשיעור הבא.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למיין לפי <code>id</code> — היום זה יוצא אותו סדר, אבל "מהישנה לחדשה" זה <code>created_at</code>. מספר מזהה לא מבטיח סדר זמנים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E38">
+    <h3>P17-E38 · שינוי שם לקטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השם כתוב רק במקום אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">UPDATE categories SET name = ... WHERE name = 'beans';</code> ואחריו <code class="mid">INSERT INTO categories (name) VALUES ...</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- ב־products לא מעדכנים כלום: הם מצביעים על id 1, והשם נמצא רק ב־categories
+UPDATE categories SET name = 'coffee beans' WHERE name = 'beans';
+INSERT INTO categories (name) VALUES ('tea');
+
+SELECT id, name FROM categories ORDER BY id;</code></pre>
+<pre class="terminal">UPDATE 1
+INSERT 0 1
+ id |     name
+----+--------------
+  1 | coffee beans
+  2 | grinders
+  3 | brewing
+  4 | accessories
+  5 | gift cards
+  6 | tea
+(6 rows)</pre>
+<p>זה היתרון של נרמול: שינוי של עובדה אחת — שורה אחת. ובפרק 16, עם <code>category = 'beans'</code> בכל מוצר, זה היה UPDATE על כל המוצרים (ואם שכחת אחד — שתי קטגוריות).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">UPDATE categories SET name = 'coffee beans'</code> בלי WHERE — כל הקטגוריות מקבלות את אותו שם, ואילוץ ה־UNIQUE עוצר את זה (למזלך).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E39">
+    <h3>P17-E39 · פניות שירות: SET NULL ו־CASCADE 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">customer_id integer REFERENCES customers (id) ON DELETE SET NULL</code></pre>
+<p>— בלי <code>NOT NULL</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ההודעות מצביעות על פניות שעדיין לא נוצרו? סדר: פניות ← הודעות. מספרי הפניות על טבלה ריקה: 1 ו־2.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE support_tickets (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  customer_id  integer REFERENCES customers (id) ON DELETE SET NULL,
+  subject      text NOT NULL,
+  opened_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE ticket_messages (
+  id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ticket_id  integer NOT NULL REFERENCES support_tickets (id) ON DELETE CASCADE,
+  body       text NOT NULL,
+  sent_at    timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO support_tickets (customer_id, subject) VALUES (8, 'Where is my discount?'), (4, 'Wrong email');
+INSERT INTO ticket_messages (ticket_id, body) VALUES
+  (1, 'Hi, I was promised 10%'),
+  (1, 'Any news?'),
+  (2, 'Please fix my email');
+
+SELECT id, customer_id, subject FROM support_tickets ORDER BY id;</code></pre>
+<pre class="terminal">CREATE TABLE
+CREATE TABLE
+INSERT 0 2
+INSERT 0 3
+ id | customer_id |        subject
+----+-------------+-----------------------
+  1 |           8 | Where is my discount?
+  2 |           4 | Wrong email
+(2 rows)</pre>
+<p>שתי ההגדרות בפרק אחד: פנייה היא מידע שרוצים לשמור גם אחרי שהלקוח עזב (SET NULL), והודעה בלי הפנייה שלה היא חסרת משמעות (CASCADE).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">customer_id integer NOT NULL ... ON DELETE SET NULL</code> — מחיקת הלקוח נכשלת: המסד לא יכול לשים NULL בעמודה שאוסרת אותו.</li><li>CASCADE גם על הלקוח — מחיקת לקוח מוחקת את ההיסטוריה של השירות שקיבל.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P17-E40">
+    <h3>P17-E40 · ‏Zod אמר "תקין", המסד אמר "לא" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Zod רואה רק את גוף הבקשה. הוא לא יודע מה יש במסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שגיאה שלא נתפסה ב־Express 5 מגיעה ל־error middleware — וברירת המחדל שלו היא 500.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא. <code>99</code> הוא מספר שלם חיובי — הצורה תקינה. Zod בודק <strong>צורה</strong>; קיום של לקוח הוא עובדה במסד.</li><li>ה־FK חוסם: <code class="mid">violates foreign key constraint "orders_customer_id_fkey"</code>, וההזמנה לא נשמרת.</li><li>הבקשה תקינה מבחינת צורה, אבל מצביעה על משאב שלא קיים — מקובל 404 (‏"לקוח 99 לא נמצא") או 422. לא 500: זו לא תקלה בשרת. בלי טיפול — 500, וגרוע מזה: אם ה־error handler מחזיר את <code>err.message</code>, הלקוח רואה את שמות הטבלאות והאילוצים שלך.</li><li>בדיקה בקוד היא שיפור להודעת השגיאה, לא תחליף: בין ה־SELECT ל־INSERT בקשה אחרת יכולה למחוק את הלקוח (פרק 18), וכל קוד אחר — סקריפט, migration, endpoint שנכתב בעוד שנה — יכול לכתוב בלי לבדוק. ה־FK תופס את כולם.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 500 על כל שגיאה מהמסד. ‏500 אומר "השרת שבור" — וגורם ללקוחות לנסות שוב, ולמערכות ניטור להתריע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E41">
+    <h3>P17-E41 · קוד השגיאה של המסד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חמשת הקודים שכדאי להכיר: <code>23503</code> (FK), ‏<code>23505</code> (UNIQUE / מפתח ראשי), ‏<code>23514</code> (CHECK), ‏<code>23502</code> (NOT NULL).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפי <strong>קוד</strong>, לא לפי טקסט ההודעה: הטקסט משתנה בין גרסאות ושפות, הקוד — לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">\set VERBOSITY sqlstate
+INSERT INTO orders (customer_id, status, created_at) VALUES (99, 'paid', now());
+INSERT INTO customers (full_name, email, joined_on) VALUES ('Dana Again', 'dana@example.com', '2026-05-01');
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (1, 2, 0, 84.90);
+INSERT INTO categories (name) VALUES (NULL);
+DELETE FROM customers WHERE id = 1;</code></pre>
+<pre class="terminal">ERROR:  23503
+ERROR:  23505
+ERROR:  23514
+ERROR:  23502
+ERROR:  23503</pre>
+<pre><code class="lang-ts">function toHttpStatus(err: { code?: string }): number {
+  switch (err.code) {
+    case "23505": return 409; // כבר קיים (אימייל תפוס)
+    case "23503": return 409; // מצביע על משהו שלא קיים / יש מי שמצביע עליו — ראה למטה
+    case "23514":
+    case "23502": return 400; // ערך לא תקין — היה צריך להיעצר ב־Zod
+    default: return 500;
+  }
+}</code></pre>
+<p><code>23503</code> מגיע בשני מצבים שונים: INSERT של ילד בלי הורה (בדרך כלל 404/422 — "לקוח 99 לא קיים"), ו־DELETE של הורה עם ילדים (409 — "יש ללקוח הזמנות"). כדי להבדיל — <code>err.constraint</code> (שם האילוץ) או ההקשר בקוד שקרא למסד. ו־<code>23514</code>/<code>23502</code> שמגיעים ללקוח אומרים שהוולידציה בקוד חסרה משהו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">if (err.message.includes("foreign key"))</code> — שובר כשהמסד מוגדר לשפה אחרת או כשההודעה משתנה בגרסה הבאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E42">
+    <h3>P17-E42 · מסמך מקונן מול טבלאות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>במסמך, כל דבר "שייך" למישהו. מה קורה כששואלים מהכיוון ההפוך?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה תשמור מוצר שאין לו הזמנה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>קל במסמך</strong> — <code>customers.find(...).orders</code>. בטבלאות: <code>WHERE customer_id = 1</code> — קל באותה מידה.</li><li><strong>קשה במסמך</strong> — לולאה על כל הלקוחות, כל ההזמנות, כל הפריטים (וקריאת כל הקובץ). בטבלאות: JOIN (שיעור 2) או EXISTS (שיעור 4), עם index — מהיר גם במיליון הזמנות.</li><li><strong>קשה ומסוכן במסמך</strong> — השם כתוב בכל פריט שנמכר אי פעם; צריך לעבור על הכול, ומספיק לפספס אחד. בטבלאות: שורה אחת (P17-E38).</li><li><strong>בלתי אפשרי במסמך הזה</strong> — אין מקום למוצר מחוץ להזמנה. בטבלאות: שורה ב־<code>products</code>.</li></ol>
+<p>מסמכים מקוננים לא "רעים" — מסדי מסמכים (MongoDB, יחידה 25w) בנויים עליהם. הם מצוינים כשתמיד קוראים "את כל הדבר הזה ביחד". חנות, עם שאלות מכל הכיוונים, מתאימה לטבלאות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק את ה־JSON כמו שהוא לעמודה אחת במסד — זה עדיין מסמך, רק בתוך טבלה. כל הבעיות נשארות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E43">
+    <h3>P17-E43 · בודק FK בזיכרון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const customerIds = new Set(data.customers.map((c) =&gt; c.id));</code></pre>
+<p>ואז <code class="mid">customerIds.has(o.customer_id)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פונקציה קטנה לנוסח:</p>
+<pre><code class="lang-ts">const missing = (col: string, value: number, table: string) =&gt; `Key (${col})=(${value}) is not present in table "${table}".`</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P17-E43: בודק FK בזיכרון
+export type Data = {
+  customers: { id: number }[];
+  products: { id: number }[];
+  orders: { id: number; customer_id: number }[];
+  order_items: { order_id: number; product_id: number }[];
+};
+
+const missing = (col: string, value: number, table: string) =&gt; `Key (${col})=(${value}) is not present in table "${table}".`;
+
+export function checkForeignKeys(data: Data): string[] {
+  const customerIds = new Set(data.customers.map((c) =&gt; c.id));
+  const productIds = new Set(data.products.map((p) =&gt; p.id));
+  const orderIds = new Set(data.orders.map((o) =&gt; o.id));
+  const problems: string[] = [];
+  for (const o of data.orders) {
+    if (!customerIds.has(o.customer_id)) problems.push(missing("customer_id", o.customer_id, "customers"));
+  }
+  for (const i of data.order_items) {
+    if (!orderIds.has(i.order_id)) problems.push(missing("order_id", i.order_id, "orders"));
+    if (!productIds.has(i.product_id)) problems.push(missing("product_id", i.product_id, "products"));
+  }
+  return problems;
+}</code></pre>
+<p>שלושה <code>Set</code>ים — ואז כל בדיקה היא <code>has</code> אחד. זה בדיוק מה שהמסד עושה בכל INSERT (עם index על המפתח הראשי במקום Set). שים לב: פריט שמצביע על הזמנה <strong>יתומה</strong> (שההזמנה שלה מצביעה על לקוח חסר) עדיין עובר — הוא מצביע על הזמנה שקיימת במערך. גם המסד בודק רק קשר אחד בכל פעם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">data.customers.some((c) =&gt; c.id === o.customer_id)</code> בתוך הלולאה — נכון, אבל לכל הזמנה עובר על כל הלקוחות. בייצוא של 100,000 הזמנות — מיליארדי השוואות.</li><li>לשכוח את הנקודה בסוף ההודעה, או מירכאות רגילות במקום כפולות — הנוסח צריך להיות זהה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E44">
+    <h3>P17-E44 · הוספת פריט מ־Node, עם קודי השגיאה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">const { rows } = await client.query("SELECT price FROM products WHERE id = $1 AND is_active", [productId]);</code></pre>
+<p>אם <code>rows.length === 0</code> — לא נמצא.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>catch (err: any)</code>:</p>
+<pre><code class="lang-ts">if (err.code === "23503") return { ok: false, error: "not_found" };</code></pre>
+<p>וכן הלאה, ובסוף <code>throw err;</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P17-E44: הוספת פריט מ־Node, עם קודי השגיאה
+export type Db = { query(text: string, values?: unknown[]): Promise&lt;{ rows: any[] }&gt; };
+export type AddResult = { ok: true; unitPrice: number } | { ok: false; error: "not_found" | "duplicate" | "invalid" };
+
+const ERRORS: Record&lt;string, "not_found" | "duplicate" | "invalid"&gt; = {
+  "23503": "not_found", // foreign key: אין הזמנה כזו
+  "23505": "duplicate", // המפתח הראשי (order_id, product_id)
+  "23514": "invalid", // CHECK (quantity &gt; 0)
+};
+
+export async function addOrderItem(client: Db, orderId: number, productId: number, quantity: number): Promise&lt;AddResult&gt; {
+  const { rows } = await client.query("SELECT price FROM products WHERE id = $1 AND is_active", [productId]);
+  if (rows.length === 0) return { ok: false, error: "not_found" };
+  const unitPrice = Number(rows[0].price);
+  try {
+    await client.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4)", [orderId, productId, quantity, unitPrice]);
+  } catch (err: any) {
+    const error = ERRORS[err.code];
+    if (error) return { ok: false, error };
+    throw err;
+  }
+  return { ok: true, unitPrice };
+}</code></pre>
+<p>שלוש בדיקות שלא כתבת בקוד: "ההזמנה קיימת" (FK), "המוצר לא כבר בהזמנה" (מפתח ראשי), "הכמות חיובית" (CHECK). המסד עושה אותן בכל מקרה — הקוד רק מתרגם את התשובה לשפה של האפליקציה. ו־<code>throw err</code> בסוף חשוב: שגיאה שלא הבנת (המסד נפל, טיפוס לא נכון) לא הופכת בשקט ל"לא נמצא".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">catch { return { ok: false, error: "not_found" } }</code> לכל שגיאה — תקלת רשת נראית ללקוח כמו "ההזמנה לא קיימת".</li><li>מחיר מהלקוח (מגוף הבקשה) במקום מהמסד — כל אחד יכול לקנות ב־1 ש״ח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E45">
+    <h3>P17-E45 · מ־JSON מקונן לטבלאות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי מפות: <code>Map&lt;string, number&gt;</code> של אימייל ← id ושל שם מוצר ← id. אם אין — <code>map.size + 1</code>, ומוסיפים שורה לטבלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפריטים של הזמנה: <code>Map&lt;number, row&gt;</code> של product_id ← השורה, כדי לחבר כמות כשהמוצר חוזר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P17-E45: מ־JSON מקונן לטבלאות
+export type FlatOrder = { orderId: number; email: string; fullName: string; items: { product: string; price: number; qty: number }[] };
+export type Tables = {
+  customers: { id: number; email: string; full_name: string }[];
+  products: { id: number; name: string }[];
+  orders: { id: number; customer_id: number }[];
+  order_items: { order_id: number; product_id: number; quantity: number; unit_price: number }[];
+};
+
+export function normalize(input: FlatOrder[]): Tables {
+  const t: Tables = { customers: [], products: [], orders: [], order_items: [] };
+  const customerIds = new Map&lt;string, number&gt;();
+  const productIds = new Map&lt;string, number&gt;();
+
+  for (const o of input) {
+    const email = o.email.toLowerCase();
+    let customerId = customerIds.get(email);
+    if (customerId === undefined) {
+      customerId = customerIds.size + 1;
+      customerIds.set(email, customerId);
+      t.customers.push({ id: customerId, email, full_name: o.fullName });
+    }
+    t.orders.push({ id: o.orderId, customer_id: customerId });
+
+    const lines = new Map&lt;number, Tables["order_items"][number]&gt;();
+    for (const item of o.items) {
+      let productId = productIds.get(item.product);
+      if (productId === undefined) {
+        productId = productIds.size + 1;
+        productIds.set(item.product, productId);
+        t.products.push({ id: productId, name: item.product });
+      }
+      const line = lines.get(productId);
+      if (line) line.quantity += item.qty;
+      else {
+        const row = { order_id: o.orderId, product_id: productId, quantity: item.qty, unit_price: item.price };
+        lines.set(productId, row);
+        t.order_items.push(row);
+      }
+    }
+  }
+  return t;
+}</code></pre>
+<p>ה־<code>Map</code>ים הם ה"UNIQUE" שלך: לפני שמוסיפים שורה — בודקים אם כבר יש כזו. ‏<code>lines</code> מתאפס לכל הזמנה, כי המפתח הראשי הוא הזוג (הזמנה, מוצר) — אותו מוצר בהזמנה אחרת הוא שורה חדשה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מפתח לפי האימייל כמו שהוא — <code>Dana@Example.com</code> ו־<code>dana@example.com</code> הופכים לשני לקוחות.</li><li><code>lines</code> אחד לכל הקלט (במקום לכל הזמנה) — כמויות מהזמנות שונות מתחברות.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-joins.html"><small>הבא</small>שיעור 2 — JOIN: לשלב טבלאות</a></div>
 </main>
 </body>

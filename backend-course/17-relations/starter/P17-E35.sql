@@ -1,0 +1,7 @@
+-- P17-E35: רשימת משאלות
+-- 1. CREATE TABLE wishlist_items: customer_id, product_id (חובה, FK), added_on (date, ברירת מחדל: היום)
+--    בלי אותו זוג פעמיים; מחיקת לקוח ← מוחקת את הרשימה; מחיקת מוצר שברשימה ← נחסמת
+-- 2. אבי (4): מוצרים 5 ו־12. עומר (8): מוצר 5
+-- 3. SELECT customer_id, product_id — לפי שניהם
+--
+-- בדיקה:  npm run check P17-E35

@@ -34,6 +34,199 @@
 
 </div></details>
   </div>
+<div class="ex" id="P17-E58">
+    <h3>P17-E58 · שלושה סוגי COUNT <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>COUNT(*)</code> סופר שורות. ‏<code>COUNT(עמודה)</code> סופר ערכים שאינם NULL (כמו במלכודת מהשיעור).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>DISTINCT</code> בתוך COUNT — סופר כל ערך שונה פעם אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT COUNT(*) AS all_rows, COUNT(city) AS with_city, COUNT(DISTINCT city) AS cities
+FROM customers;</code></pre>
+<pre class="terminal"> all_rows | with_city | cities
+----------+-----------+--------
+        8 |         6 |      4
+(1 row)</pre>
+<p>8 שורות; 6 עם עיר; 4 ערים שונות (Tel Aviv, ‏Haifa, ‏Jerusalem, ‏Beer Sheva — ו־NULL לא נספר כ"עיר"). ‏<code>COUNT(DISTINCT o.id)</code> הוא גם התיקון הקלאסי כש־JOIN מכפיל שורות (P17-E22).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>COUNT(city)</code> סופר "כמה ערים יש" — הוא סופר שורות עם עיר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E59">
+    <h3>P17-E59 · כינוי ב־WHERE, ב־HAVING וב־ORDER BY <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>FROM</code> ← <code>WHERE</code> ← <code>GROUP BY</code> ← <code>HAVING</code> ← <code>SELECT</code> ← <code>ORDER BY</code>. הכינוי נולד ב־SELECT.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי רץ <strong>אחרי</strong> ה־SELECT?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT o.id, SUM(oi.quantity * oi.unit_price) AS revenue
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+WHERE revenue &gt; 300
+GROUP BY o.id;
+
+SELECT o.id, SUM(oi.quantity * oi.unit_price) AS revenue
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+GROUP BY o.id
+HAVING revenue &gt; 300;
+
+SELECT o.id, SUM(oi.quantity * oi.unit_price) AS revenue
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+GROUP BY o.id
+HAVING SUM(oi.quantity * oi.unit_price) &gt; 300
+ORDER BY revenue DESC;</code></pre>
+<pre class="terminal">ERROR:  column "revenue" does not exist
+LINE 3: WHERE revenue &gt; 300
+              ^
+ERROR:  column "revenue" does not exist
+LINE 4: HAVING revenue &gt; 300;
+               ^
+ id | revenue
+----+---------
+  4 |  649.00
+ 11 |  305.00
+(2 rows)</pre>
+<p>רק השלישית. ‏WHERE ו־HAVING רצים לפני ה־SELECT — הכינוי עוד לא קיים, ולכן ב־HAVING חוזרים על הביטוי. ‏ORDER BY רץ אחרי — שם הכינוי מותר. (וגם ב־WHERE, צבירה לא מותרת בכלל — זה תפקיד ה־HAVING.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את התנאי ל־WHERE עם הביטוי המלא (<code>WHERE SUM(...) &gt; 300</code>) — שגיאה אחרת: צבירה ב־WHERE.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E60">
+    <h3>P17-E60 · שתי דנה לוי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>GROUP BY יוצר קבוצה לכל <strong>ערך שונה</strong>. כמה ערכים שונים של <code>full_name</code> יש לשתי הלקוחות?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ולמה מותר <code>HAVING c.full_name = ...</code> בשאילתה השנייה? (החריג מהשיעור.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO customers (full_name, email, city, joined_on) VALUES ('Dana Levi', 'dana.l@example.com', 'Eilat', '2026-05-01');
+INSERT INTO orders (customer_id, status, created_at) VALUES (9, 'paid', '2026-05-02 10:00:00+03');
+
+SELECT c.full_name, COUNT(*) AS orders
+FROM customers c JOIN orders o ON o.customer_id = c.id
+GROUP BY c.full_name
+HAVING c.full_name = 'Dana Levi';
+
+SELECT c.id, c.full_name, COUNT(*) AS orders
+FROM customers c JOIN orders o ON o.customer_id = c.id
+GROUP BY c.id
+HAVING c.full_name = 'Dana Levi'
+ORDER BY c.id;</code></pre>
+<pre class="terminal">INSERT 0 1
+INSERT 0 1
+ full_name | orders
+-----------+--------
+ Dana Levi |      4
+(1 row)
+
+ id | full_name | orders
+----+-----------+--------
+  1 | Dana Levi |      3
+  9 | Dana Levi |      1
+(2 rows)</pre>
+<p>הראשון "מאחד" שתי לקוחות שונות לשורה אחת עם 4 הזמנות — דוח שגוי שנראה סביר. השני מקבץ לפי המזהה: שתי שורות, 3 ו־1. לכן בשיעור כתוב <code>GROUP BY c.id, c.full_name</code>: מקבצים לפי מה שמזהה, ומציגים מה שקריא.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אצלנו אין שמות כפולים" — עד הלקוח ה־200. גם מוצרים, ערים וקטגוריות — לקבץ לפי id כשיש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E61">
+    <h3>P17-E61 · ממוצע הזמנה — או ממוצע שורה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>על מה רץ <code>AVG</code>? מה שורה אחת אחרי ה־JOIN?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ממוצע הזמנה = סך ההכנסה ÷ מספר ההזמנות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT ROUND(AVG(oi.quantity * oi.unit_price), 2) AS avg_order
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status &lt;&gt; 'cancelled';
+
+SELECT ROUND(SUM(oi.quantity * oi.unit_price) / COUNT(DISTINCT o.id), 2) AS avg_order
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+WHERE o.status &lt;&gt; 'cancelled';</code></pre>
+<pre class="terminal"> avg_order
+-----------
+    122.56
+(1 row)
+
+ avg_order
+-----------
+    233.98
+(1 row)</pre>
+<p>הראשונה היא ממוצע של <strong>שורת פריט</strong> — לא של הזמנה. השנייה נכונה. דרך שלישית, קריאה יותר: קודם סכום לכל הזמנה (GROUP BY o.id), ואז AVG על התוצאה — עם <code>WITH</code> (שיעור 4; הדוגמה עם <code>order_totals</code> שם).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "נראה סביר" — 122.56 או 233.98, שניהם נראים כמו סכומי הזמנה. השאלה תמיד: על מה רצה הצבירה?</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E62">
+    <h3>P17-E62 · סכום של כלום אחרי LEFT JOIN <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לאבי יש קבוצה של שורה אחת, וכל העמודות של <code>oi</code> בה הן NULL.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>COUNT</code> של NULLים = 0. ‏<code>SUM</code> של NULLים = ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT c.full_name,
+       COUNT(oi.order_id) AS items,
+       SUM(oi.quantity * oi.unit_price) AS spent,
+       COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS spent_or_zero
+FROM customers c
+LEFT JOIN orders o       ON o.customer_id = c.id
+LEFT JOIN order_items oi ON oi.order_id = o.id
+GROUP BY c.id
+ORDER BY c.id;</code></pre>
+<pre class="terminal">  full_name   | items | spent  | spent_or_zero
+--------------+-------+--------+---------------
+ Dana Levi    |     6 | 550.30 |        550.30
+ Yossi Cohen  |     3 | 448.50 |        448.50
+ Noa Mizrahi  |     2 | 838.00 |        838.00
+ Avi Peretz   |     0 |        |             0
+ Michal Biton |     5 | 593.70 |        593.70
+ Ron Avraham  |     3 | 558.50 |        558.50
+ Shira David  |     3 | 233.80 |        233.80
+ Omer Shalom  |     0 |        |             0
+(8 rows)</pre>
+<p><code>COUNT</code> נותן 0, ו־<code>SUM</code> נותן NULL (פרק 16: צבירה על "כלום"). ב־Node זה <code>null</code> — ו־<code>spent.toFixed(2)</code> קורס. לכן <code>COALESCE(SUM(...), 0)</code>. (ושים לב: נואה הוציאה גם את ההזמנה המבוטלת — כאן לא סיננו סטטוס.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסנן מבוטלות עם <code class="mid">WHERE o.status &lt;&gt; 'cancelled'</code> — זה זורק גם את אבי ועומר (P17-E46). התנאי צריך להיות ב־ON.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P17-E10">
     <h3>P17-E10 · מוצרים בכל קטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -312,6 +505,99 @@ ORDER BY revenue DESC;</code></pre>
 
 </div></details>
   </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P17-E63">
+    <h3>P17-E63 · באיזה חודש נכנסת ההזמנה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>00:30+02</code> ב־1 בפברואר — איזו שעה ותאריך זה ב־UTC?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>timestamptz</code> שומר רגע בזמן. "באיזה חודש" — תלוי איפה בעולם שואלים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SET timezone = 'Asia/Jerusalem';
+SELECT date_trunc('month', timestamptz '2026-02-01 00:30:00+02')::date AS month;
+SET timezone = 'UTC';
+SELECT date_trunc('month', timestamptz '2026-02-01 00:30:00+02')::date AS month;</code></pre>
+<pre class="terminal">SET
+   month
+------------
+ 2026-02-01
+(1 row)
+
+SET
+   month
+------------
+ 2026-01-01
+(1 row)</pre>
+<p>אותו רגע: 31 בינואר 22:30 ב־UTC. בדוח ב־UTC ההזמנה נספרת בינואר, ובדוח בשעון ישראל — בפברואר. הסכום החודשי "זז" לפי השרת שמריץ. התיקון: לקבוע במפורש את אזור הזמן של הדוח —</p>
+<pre><code class="lang-sql">date_trunc('month', o.created_at AT TIME ZONE 'Asia/Jerusalem')</code></pre>
+<p>או <code>SET timezone</code> בחיבור של האפליקציה. (בפרק 19 תראה ש־Prisma מכריח להחליט על זה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את הדוח רק במחשב שלך (בשעון ישראל), ולגלות את ההפרש רק בשרת — בדוח של סוף החודש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E64">
+    <h3>P17-E64 · ‏?min=300 — מה יכול להשתבש? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>req.query.min</code> הוא תמיד מחרוזת (או undefined). מה נהיה הטקסט של השאילתה בכל מקרה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פרמטר אפשר לשים בכל מקום שבו יש <strong>ערך</strong> — גם ב־HAVING. לא במקום שם עמודה או מילת SQL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>300</code> — עובד. ‏<code>abc</code> — השאילתה היא <code>&gt;= abc</code>: שגיאת SQL ("column abc does not exist") ← 500. בלי min — <code>&gt;= undefined</code>: אותו דבר.</li><li><code>0 OR true</code> — HAVING תמיד מתקיים: כל הלקוחות. ‏<code>0; DROP TABLE orders</code> — שתי פקודות; ‏<code>pool.query</code> בלי פרמטרים מוכן להריץ כמה פקודות בטקסט אחד. SQL injection.</li><li>כן — פרמטר מותר בכל מקום של ערך:</li></ol>
+<pre><code class="lang-ts">const Query = z.object({ min: z.coerce.number().min(0).default(0) });
+const { min } = Query.parse(req.query); // ‏abc ← ZodError ← 400 ב־error middleware
+const { rows } = await pool.query(`... GROUP BY c.id HAVING SUM(oi.quantity * oi.unit_price) &gt;= $1 ORDER BY spent DESC`, [min]);</code></pre>
+<p>שתי שכבות, לשני דברים שונים: Zod דואג ש־<code>min</code> הוא מספר הגיוני (400 במקום 500), והפרמטר דואג שגם אם משהו יעבור — הוא ערך ולא קוד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה רק מספר, לא צריך פרמטר" — המספר הגיע מה־URL, כלומר מכל אחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E65">
+    <h3>P17-E65 · ממוצע עם 16 ספרות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>AVG</code> של <code>numeric</code> מחזיר <code>numeric</code> בדיוק גבוה — הרבה ספרות אחרי הנקודה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למחרוזת אין <code>toFixed</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT cat.name AS category, AVG(p.price) AS avg_price, ROUND(AVG(p.price), 2) AS avg_rounded
+FROM products p JOIN categories cat ON cat.id = p.category_id
+GROUP BY cat.name
+ORDER BY cat.name;</code></pre>
+<pre class="terminal">  category   |      avg_price       | avg_rounded
+-------------+----------------------+-------------
+ accessories |  64.3000000000000000 |       64.30
+ beans       |  68.2333333333333333 |       68.23
+ brewing     | 149.0000000000000000 |      149.00
+ grinders    | 419.0000000000000000 |      419.00
+(4 rows)</pre>
+<p><code>pg</code> יחזיר <code>"68.2333333333333333"</code> — מחרוזת, ו־<code>"...".toFixed(2)</code> זורק <code class="mid">TypeError: row.avg_price.toFixed is not a function</code>. עדיף לעגל ב־SQL (<code>ROUND(..., 2)</code>) — אז מה שעובר ברשת הוא כבר הערך להצגה, וכל צרכן של השאילתה רואה אותו ערך. ‏<code>Number(...)</code> בקוד — כשצריך מספר לחישוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Number(row.avg_price).toFixed(2)</code> בכל מקום שמציג — עובד, אבל העיגול מתפזר בקוד, ומסך אחד שוכח.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P17-E28">
     <h3>P17-E28 · JOIN ו־GROUP BY בקוד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -378,7 +664,91 @@ console.log(revenueByCity(customers, orders, items));</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P17-E66">
+    <h3>P17-E66 · הכנסה לפי קטגוריה בטווח תאריכים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השוואת מחרוזות <code class="mid">"2026-03-01" &gt;= "2026-04-01"</code> עובדת כמו השוואת תאריכים — בפורמט הזה.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">HAVING SUM(oi.quantity * oi.unit_price) &gt;= $3</code>. ‏<code>SUM</code> של integer מחזיר <code>bigint</code> — שגם הוא מגיע כמחרוזת; ‏<code>Number(...)</code> לשניהם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P17-E66: הכנסה לפי קטגוריה בטווח תאריכים
+export type Db = { query(text: string, values?: unknown[]): Promise&lt;{ rows: any[] }&gt; };
+export type CategoryRevenue = { category: string; units: number; revenue: number };
+
+export async function categoryRevenue(client: Db, { from, to, minRevenue = 0 }: { from: string; to: string; minRevenue?: number }): Promise&lt;CategoryRevenue[]&gt; {
+  if (from &gt;= to) throw new Error("טווח תאריכים לא תקין");
+  const { rows } = await client.query(
+    `SELECT cat.name AS category, SUM(oi.quantity) AS units, SUM(oi.quantity * oi.unit_price) AS revenue
+     FROM order_items oi
+     JOIN orders o       ON o.id = oi.order_id
+     JOIN products p     ON p.id = oi.product_id
+     JOIN categories cat ON cat.id = p.category_id
+     WHERE o.status &lt;&gt; 'cancelled' AND o.created_at &gt;= $1 AND o.created_at &lt; $2
+     GROUP BY cat.name
+     HAVING SUM(oi.quantity * oi.unit_price) &gt;= $3
+     ORDER BY revenue DESC, category`,
+    [from, to, minRevenue],
+  );
+  return rows.map((r) =&gt; ({ category: r.category, units: Number(r.units), revenue: Number(r.revenue) }));
+}</code></pre>
+<p><code>&gt;= from</code> ו־<code>&lt; to</code> (ולא BETWEEN) — טווח "חצי פתוח": כל מרץ הוא <code class="mid">from: "2026-03-01", to: "2026-04-01"</code>, בלי לחשוב כמה ימים בחודש ובלי לפספס את 23:59:59.5.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>created_at &lt;= to</code> — הזמנה ב־1 באפריל בחצות נספרת גם במרץ וגם באפריל.</li><li>לסנן את <code>minRevenue</code> ב־JS אחרי השאילתה — עובד, אבל מעביר ברשת את כל הקבוצות. זה התפקיד של HAVING.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P17-E67">
+    <h3>P17-E67 · דוח עם קיבוץ לבחירה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const KEYS = { city: "COALESCE(c.city, 'unknown')", status: "o.status", month: "date_trunc('month', o.created_at)::date::text" };</code></pre>
+<p>— ואז <code>KEYS[by]</code>. ‏<code>by</code> כבר עבר Zod, אז הוא בטוח אחד מהשלושה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>GROUP BY 1</code> — "לפי העמודה הראשונה ב־SELECT" — חוסך לכתוב את הביטוי פעמיים. ‏<code>HAVING COUNT(*) &gt;= $1</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P17-E67: דוח עם קיבוץ לבחירה
+import { z } from "zod";
+
+export const ReportQuery = z.object({
+  by: z.enum(["city", "status", "month"]),
+  minOrders: z.coerce.number().int().min(1).default(1),
+});
+
+const KEYS: Record&lt;z.infer&lt;typeof ReportQuery&gt;["by"], string&gt; = {
+  city: "COALESCE(c.city, 'unknown')",
+  status: "o.status",
+  month: "date_trunc('month', o.created_at)::date::text",
+};
+
+export function buildReport(query: unknown): { text: string; values: unknown[] } {
+  const { by, minOrders } = ReportQuery.parse(query);
+  const text = `SELECT ${KEYS[by]} AS key, COUNT(*) AS orders
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+GROUP BY 1
+HAVING COUNT(*) &gt;= $1
+ORDER BY orders DESC, key`;
+  return { text, values: [minOrders] };
+}</code></pre>
+<p>שני סוגים של קלט, שני כלים: <code>by</code> בוחר <strong>קוד</strong> — אז הוא חייב להגיע מרשימה סגורה שכתבת (Zod מבטיח שהוא אחד מהשלושה, והטקסט מגיע מ־<code>KEYS</code>, לא מהמשתמש). ‏<code>minOrders</code> הוא <strong>ערך</strong> — אז הוא פרמטר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code><code>GROUP BY ${query.by}</code></code> — גם עם "בדיקה" שהערך לא ריק: <code>?by=1; DROP TABLE orders</code>.</li><li><code>z.number()</code> בלי <code>coerce</code> — מה־URL מגיע <code>"2"</code> (מחרוזת), ו־Zod דוחה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-subqueries.html"><small>הבא</small>שיעור 4 — תת־שאילתות, WITH ופונקציות חלון</a></div>
 </main>
 </body>
