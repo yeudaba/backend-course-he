@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "4 מפגשים (במסלול המהיר: 2)",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, והבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
 ${copyStep("07-objects")}
