@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "3 מפגשים (במסלול המהיר: 1–2)",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, Error Lens.</p>
 <p><strong>מה מתקינים עכשיו:</strong> תוסף <strong>Prettier</strong> — מסדר את הקוד אוטומטית (רווחים, הזחות, מירכאות) בכל שמירה.</p>
 <ol class="steps">

@@ -1,0 +1,12 @@
+const price1 = "49.90";
+const price2 = "15";
+const quantity2 = "3";
+const item1 = Number(price1);
+const line2 = Number(price2) * Number(quantity2);
+let total = 0;
+total += item1;
+total += line2;
+console.log(`פריט 1: ${item1.toFixed(2)}`);
+console.log(`פריט 2: ${quantity2} x ${price2} = ${line2.toFixed(2)}`);
+console.log(`סה״כ: ${total.toFixed(2)}`);
+console.log(`באגורות: ${Math.round(total * 100)}`);

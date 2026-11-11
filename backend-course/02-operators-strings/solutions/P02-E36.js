@@ -1,0 +1,10 @@
+const passengers = 130;
+const busSize = 50;
+const busesNeeded = Math.ceil(passengers / busSize);
+const fullBuses = Math.floor(passengers / busSize);
+const leftOver = passengers % busSize;
+const freeSeats = busesNeeded * busSize - passengers;
+console.log("אוטובוסים צריך:", busesNeeded);
+console.log("אוטובוסים מלאים:", fullBuses);
+console.log("נשארו אחרי המלאים:", leftOver);
+console.log("מקומות פנויים:", freeSeats);

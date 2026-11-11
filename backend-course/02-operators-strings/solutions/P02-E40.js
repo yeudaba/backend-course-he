@@ -1,0 +1,11 @@
+const grade1 = 78;
+const grade2 = 85;
+const grade3 = 90;
+const average = (grade1 + grade2 + grade3) / 3;
+const highest = Math.max(grade1, grade2, grade3);
+const lowest = Math.min(grade1, grade2, grade3);
+console.log("ממוצע:", average);
+console.log("מעוגל:", Math.round(average));
+console.log("הגבוה:", highest);
+console.log("הנמוך:", lowest);
+console.log("טווח:", highest - lowest);

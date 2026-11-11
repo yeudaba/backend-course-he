@@ -1,0 +1,10 @@
+const stockInput = "  40 ";
+const orderedInput = "55";
+const stock = Number(stockInput);
+const ordered = Number(orderedInput);
+const remaining = Math.max(0, stock - ordered);
+const missing = Math.max(0, ordered - stock);
+console.log(`במלאי: ${stock}`);
+console.log(`הוזמנו: ${ordered}`);
+console.log(`יישאר במלאי: ${remaining}`);
+console.log(`חסרים: ${missing}`);
