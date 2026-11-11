@@ -13,8 +13,668 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>15w-web-bridge/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P15.5-E62">
+    <h3>P15.5-E62 · למה cors() ראשון? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>preflight הוא בקשת <code>OPTIONS</code> שהדפדפן שולח <strong>בלי</strong> ה־headers שלך — גם בלי <code>x-api-key</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>middleware שעונה (401) עוצר את השרשרת — מה שאחריו לא רץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">import express from "express";
+import cors from "cors";
+
+const requireKey = (req, res, next) =&gt; (req.get("x-api-key") === "secret" ? next() : res.status(401).json({ error: "חסר מפתח" }));
+
+function build(corsFirst) {
+  const app = express();
+  if (corsFirst) app.use(cors({ origin: ["http://localhost:5500"] }));
+  app.use(requireKey);
+  if (!corsFirst) app.use(cors({ origin: ["http://localhost:5500"] }));
+  app.post("/tasks", (req, res) =&gt; res.status(201).json({ id: 1 }));
+  return app;
+}
+
+for (const corsFirst of [false, true]) {
+  const server = build(corsFirst).listen(0);
+  await new Promise((r) =&gt; server.once("listening", r));
+  const res = await fetch(`http://localhost:${server.address().port}/tasks`, {
+    method: "OPTIONS",
+    headers: { Origin: "http://localhost:5500", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-api-key" },
+  });
+  console.log(corsFirst ? "cors ראשון:" : "cors אחרי המפתח:", res.status, res.headers.get("access-control-allow-origin"));
+  server.close();
+}</code></pre>
+<pre class="terminal">cors אחרי המפתח: 401 null
+cors ראשון: 204 http://localhost:5500</pre>
+<p>כש־cors אחרי בדיקת המפתח, ה־preflight נעצר ב־401 בלי header — והדפדפן מדווח "CORS error", למרות שהבעיה היא <strong>סדר</strong>. כש־cors ראשון, הוא עונה ל־<code>OPTIONS</code> בעצמו (204) ולא ממשיך הלאה; הבקשה האמיתית תגיע אחר כך — עם המפתח — ותעבור את <code>requireKey</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" את שגיאת ה־CORS עם <code>origin: "*"</code> — הבעיה נשארת (401), ועכשיו גם כל אתר יכול לקרוא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E63">
+    <h3>P15.5-E63 · CORS_ORIGINS עם רווח <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הדפדפן שולח <code class="mid">Origin: https://admin.example.com</code> — בלי רווח ובלי <code>/</code> בסוף. ההשוואה היא כמחרוזות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>new URL(s).origin</code> מנרמל: מוריד path ו־<code>/</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const value = "https://app.example.com, https://admin.example.com/";
+const naive = value.split(",");
+console.log(naive);
+console.log(naive.includes("https://admin.example.com"));
+
+const clean = value.split(",").map((s) =&gt; s.trim()).filter(Boolean).map((s) =&gt; new URL(s).origin);
+console.log(clean);
+console.log(clean.includes("https://admin.example.com"));
+console.log(undefined?.split(","));</code></pre>
+<pre class="terminal">[ 'https://app.example.com', ' https://admin.example.com/' ]
+false
+[ 'https://app.example.com', 'https://admin.example.com' ]
+true
+undefined</pre>
+<p>שתי טעויות קטנות בקובץ ההגדרות — רווח אחרי הפסיק ו־<code>/</code> בסוף — והאתר של המנהלים "לא עובד" בייצור, עם שגיאת CORS, בזמן שאצלך הכול תקין. ושורה אחרונה: כשהמשתנה לא מוגדר, <code>?.</code> מחזיר <code>undefined</code> — ו־<code>createApp</code> נופל לברירת המחדל שלו. ב־P15.5-E72 תכתוב את הפירוק הזהיר כפונקציה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק עם origin אחד ב־<code>.env</code> — הבאג מופיע רק כשיש שניים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E64">
+    <h3>P15.5-E64 · serve-web ו־../ <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הסדר בקוד: <code>decodeURIComponent</code> ← <code>path.join(root, ...)</code> (שמנרמל <code>..</code>) ← בדיקת <code>startsWith</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">path.join("/a/web", "../.env")</code> ← <code>/a/.env</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>.../web/index.html</code> ← 200 (<code>text/html</code>).</li><li><code>.../web/style.css</code> ← 200 (<code>text/css</code>).</li><li><code>new URL</code> כבר מנרמל את <code>/../.env</code> ל־<code>/.env</code> ← <code>.../web/.env</code> ← 404 (אין קובץ כזה בתיקייה). ה־<code>..</code> לא יוצא החוצה.</li><li>כאן ה־<code>/</code> עצמו מקודד (<code>%2F</code>), ולכן בעיני <code>new URL</code> זה חלק אחד בשם מוזר — הוא לא מנרמל אותו. אחרי <code>decodeURIComponent</code>: <code>/../.env</code>; ‏<code>path.join</code> ← <code class="mid">/Users/dana/dev/tasks-api/.env</code> — מחוץ לתיקייה ← <strong>403</strong>. בלי הבדיקה, הסודות של השרת היו נשלחים. (נבדק: <code>new URL</code> כן מנרמל <code>/%2e%2e/</code> כשה־<code>/</code> לא מקודד.)</li><li><code>/web-backup/index.html</code> מתחבר ל־<code class="mid">.../web/web-backup/index.html</code> ← 404. ה־<code>+ path.sep</code> חשוב למקרה אחר: נתיב כמו <code>.../web-backup</code> <em>מתחיל</em> במחרוזת <code>.../web</code>! בדיקה רק עם <code>root</code> הייתה מתירה קבצים מתיקייה שכנה ששמה מתחיל באותן אותיות.</li><li><code>.../web/nope.js</code> ← 404 "לא נמצא".</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>urlPath.includes("..")</code> לפני הפענוח — <code>%2e%2e</code> עובר את הבדיקה ומפוענח אחריה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E65">
+    <h3>P15.5-E65 · FormData ושדות ריקים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה ריק — מחרוזת ריקה. שדה שלא קיים — <code>null</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>||</code> מחליף <code>""</code>; ‏<code>??</code> לא (P14-E39).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const fields = new FormData();
+fields.append("title", "  לקנות חלב ");
+fields.append("priority", "high");
+fields.append("dueDate", "");
+// "urgent" הוא checkbox שלא סומן — הדפדפן לא מוסיף אותו בכלל
+
+console.log(JSON.stringify(fields.get("dueDate")), JSON.stringify(fields.get("urgent")));
+console.log(fields.get("dueDate") || null, fields.get("dueDate") ?? null);
+console.log(fields.get("urgent") === "on", fields.has("urgent"));
+console.log(JSON.stringify(Object.fromEntries(fields)));</code></pre>
+<pre class="terminal">"" null
+null
+false false
+{"title":"  לקנות חלב ","priority":"high","dueDate":""}</pre>
+<p>שלושה מצבים, שלוש התנהגויות: תאריך ריק הוא <code>""</code> (וה־API מצפה ל־<code>null</code> — לכן <code>|| null</code>, כמו ברמז בשיעור); צ'קבוקס לא מסומן הוא <code>null</code> — "לא קיים"; וכל הערכים מחרוזות. ‏<code>Object.fromEntries(fields)</code> שולח את הכול כמו שהוא — כולל הרווחים ו־<code>""</code> — ולכן בונים את הגוף במפורש (P15.5-E07).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">JSON.stringify(Object.fromEntries(new FormData(form)))</code> ישר ל־API — ה־Zod בשרת ידחה את <code>dueDate: ""</code> (לא תאריך) ויחזיר 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E66">
+    <h3>P15.5-E66 · תשובה ישנה שדורסת חדשה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התשובות לא בהכרח חוזרות בסדר שבו נשלחו הבקשות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"התעלם מתשובה שאינה של הבקשה האחרונה": מונה בקשות, ובודקים אותו כשהתשובה מגיעה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const server = { open: [["חלב", 300]], done: [["לחם", 50]] };
+let shown = null;
+
+async function loadTasks(status) {
+  const [[title, ms]] = server[status];
+  await sleep(ms);
+  shown = `${status}: ${title}`;
+  console.log("הוצג:", shown);
+}
+
+loadTasks("open");
+await sleep(10);
+loadTasks("done");
+await sleep(400);
+console.log("הסינון שנבחר: done · מה שעל המסך:", shown);</code></pre>
+<pre class="terminal">הוצג: done: לחם
+הוצג: open: חלב
+הסינון שנבחר: done · מה שעל המסך: open: חלב</pre>
+<p>ה־select אומר "בוצעו", והרשימה מראה משימות פתוחות — כי התשובה הישנה הגיעה <strong>אחרונה</strong> ודרסה. באג שקשה מאוד לשחזר (תלוי במהירות הרשת). תיקון: לכל בקשה מספר (<code>const my = ++latest;</code>), ואחרי ה־<code>await</code> — <code>if (my !== latest) return;</code>. או לבטל את הבקשה הקודמת עם <code>AbortController</code>. ב־P15.5-E74 תכתוב את זה כ־wrapper.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח שבקשה שנשלחה קודם חוזרת קודם — לא ברשת אמיתית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E67">
+    <h3>P15.5-E67 · איך הדף מתעדכן אחרי פעולה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חשוב על: מספר בקשות, מה קורה עם סינון/מיון/pagination, ומה המשתמש מרגיש ברשת איטית.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם השרת משנה משהו בעצמו (id, ‏<code>createdAt</code>, trim לכותרת) — מי יודע את הערך הנכון?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>טעינה מחדש</strong> — הכי פשוט ותמיד נכון (מה שבשרת = מה שעל המסך, כולל סינון ומיון). חיסרון: עוד בקשה, והרשימה "מהבהבת".</li><li><strong>עדכון מקומי</strong> — מהיר, בקשה אחת. חיסרון: צריך לחקות בדף את חוקי השרת — איפה המשימה נכנסת לפי המיון? האם היא בכלל עומדת בסינון?</li><li><strong>אופטימי</strong> — מרגיש מיידי. חיסרון: קוד חזרה לאחור, ורגע שבו המסך "משקר".</li></ol>
+<p>(א) אופטימי — פעולה קטנה, כמעט תמיד מצליחה. (ב) טעינה מחדש — הסינון והמיון בשרת. (ג) עדכון מקומי (מוחקים את ה־<code>li</code> אחרי 204), או טעינה מחדש אם יש pagination (עמוד "מתמלא" מהעמוד הבא). בפרויקט: מתחילים עם טעינה מחדש, ומשפרים רק איפה שמרגישים איטיות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף לרשימה את מה שהמשתמש הקליד (ולא את מה שהשרת החזיר) — אין לו id, והכותרת לא עברה trim.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15.5-E68">
+    <h3>P15.5-E68 · כתובת לרשימה המסוננת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const params = new URLSearchParams();</code> ו־<code>params.set(...)</code> רק בתנאי. בסוף: <code>params.size</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code><code class="mid">/tasks${params.size ? "?" + params : ""}</code></code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E68: כתובת לרשימה המסוננת
+export function tasksPath({ status, q, page } = {}) {
+  const params = new URLSearchParams();
+  if (status &amp;&amp; status !== "all") params.set("status", status);
+  if (q &amp;&amp; q.trim()) params.set("q", q.trim());
+  if (page &gt; 1) params.set("page", String(page));
+  return `/tasks${params.size ? "?" + params : ""}`;
+}
+
+console.log(tasksPath({ status: "open", q: " חלב ", page: 1 }));
+console.log(tasksPath({ status: "all", q: "   " }));
+console.log(tasksPath({ q: "red shoes", page: 3 }));
+console.log(tasksPath());</code></pre>
+<pre class="terminal">/tasks?status=open&amp;q=%D7%97%D7%9C%D7%91
+/tasks
+/tasks?q=red+shoes&amp;page=3
+/tasks</pre>
+<p>ה־select של הסינון מחזיר <code>"all"</code> ל"הכול", ושדה החיפוש מחזיר <code>""</code> כשהוא ריק. בלי הסינון כאן, ה־API היה מקבל <code>?status=all&amp;q=</code> — ו־Zod היה דוחה (<code>all</code> לא בסטטוסים).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות במחרוזת: <code><code class="mid">/tasks?status=${status}&amp;amp;q=${q}</code></code> — <code>q</code> לא מקודד, וערכים ריקים נשלחים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E69">
+    <h3>P15.5-E69 · שורת משימה עם אירועים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר: <code class="long">const el = (tag, cls, text) =&gt; { const e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תאריך: <code>const [y, m, d] = task.dueDate.split("-"); <code>${d}.${m}.${y}</code></code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E69: שורת משימה עם אירועים
+export function renderTask(doc, task, { onToggle, onDelete }) {
+  const el = (tag, cls, text) =&gt; {
+    const e = doc.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const done = task.status === "done";
+  const li = el("li", done ? "row done" : "row");
+  li.dataset.id = task.id;
+
+  const box = el("input");
+  box.type = "checkbox";
+  box.checked = done;
+  box.addEventListener("change", () =&gt; onToggle(task.id, box.checked));
+
+  let due = "בלי תאריך";
+  if (task.dueDate) {
+    const [y, m, d] = task.dueDate.split("-");
+    due = `${d}.${m}.${y}`;
+  }
+
+  const del = el("button", "danger", "מחיקה");
+  del.addEventListener("click", () =&gt; onDelete(task.id));
+
+  li.append(box, el("span", "title", task.title), el("span", "meta", `${task.priority} · ${due}`), del);
+  return li;
+}</code></pre>
+<p>ה־handlers מגיעים מבחוץ — ה־<code>li</code> לא יודע מה זה fetch. כך <code>renderTask</code> קל לבדיקה, וה־<code>app.js</code> מחליט מה "מחיקה" עושה (DELETE ואז <code>loadTasks</code>). ה־id נלכד ב־closure — בלי בעיית ה־<code>var</code> של P15.5-E58.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>li.innerHTML = <code class="long">&amp;lt;input type="checkbox"&amp;gt;&amp;lt;span&amp;gt;${task.title}&amp;lt;/span&amp;gt;...</code></code> — XSS (P15.5-E52), וגם צריך אחר כך לחפש את האלמנטים כדי לחבר אירועים.</li><li>לקרוא <code>onToggle(task.id, !done)</code> — אם המשתמש לחץ פעמיים, הערך השני שגוי. קוראים את <code>box.checked</code> ברגע האירוע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E70">
+    <h3>P15.5-E70 · "היום", "מחר", "באיחור" 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const day = (s) =&gt; Date.parse(s + "T00:00:00Z") / 86_400_000;</code> — מספר הימים מאז 1970, ב־UTC.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const n = day(dueDate) - day(today);</code> ואז <code>switch</code>/<code>if</code> לפי <code>n</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E70: "היום", "מחר", "באיחור"
+const day = (s) =&gt; Date.parse(s + "T00:00:00Z") / 86_400_000;
+
+export function formatDue(dueDate, today) {
+  if (dueDate === null || dueDate === undefined) return "בלי תאריך";
+  const n = day(dueDate) - day(today);
+  if (n === 0) return "היום";
+  if (n === 1) return "מחר";
+  if (n === -1) return "אתמול";
+  return n &gt; 0 ? `בעוד ${n} ימים` : `באיחור של ${-n} ימים`;
+}
+
+const today = "2026-10-24";
+for (const d of ["2026-10-24", "2026-10-25", "2026-10-23", "2026-11-03", "2026-10-01", null]) console.log(d, "←", formatDue(d, today));</code></pre>
+<pre class="terminal">2026-10-24 ← היום
+2026-10-25 ← מחר
+2026-10-23 ← אתמול
+2026-11-03 ← בעוד 10 ימים
+2026-10-01 ← באיחור של 23 ימים
+null ← בלי תאריך</pre>
+<p>ב־UTC כל יום הוא בדיוק 86,400,000 מילישניות, ולכן החילוק נותן מספר שלם. בזמן מקומי, ב־25.10.2026 (מעבר לשעון חורף בישראל) יש יום של 25 שעות — והחשבון היה יוצא 1.04 ימים. ‏<code>today</code> מגיע כפרמטר (ולא <code>new Date()</code> בפנים) — כך אפשר לבדוק, ואותו רעיון כמו "שעון מוזרק" בפרקים קודמים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>new Date("2026-10-25")</code> מול <code>new Date()</code> — הראשון חצות UTC, השני "עכשיו" מקומי; "היום" יוצא "אתמול" בחלק מהשעות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E71">
+    <h3>P15.5-E71 · תיבת שגיאה עם details 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>box.replaceChildren(p)</code> או <code>box.replaceChildren(p, ul)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>error.details?.length</code> — ‏<code>undefined</code> וגם <code>0</code> הם falsy.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E71: תיבת שגיאה עם details
+export function showError(doc, box, error) {
+  const p = doc.createElement("p");
+  p.textContent = error.message;
+  const parts = [p];
+  if (error.details?.length) {
+    const ul = doc.createElement("ul");
+    for (const d of error.details) {
+      const li = doc.createElement("li");
+      li.textContent = `${d.path}: ${d.message}`;
+      ul.append(li);
+    }
+    parts.push(ul);
+  }
+  box.replaceChildren(...parts);
+  box.hidden = false;
+}
+
+export function clearError(box) {
+  box.replaceChildren();
+  box.hidden = true;
+}</code></pre>
+<p>זה הרגע שבו מבנה השגיאה האחיד מפרק 15 "משתלם": הדף יודע תמיד איפה ההודעה (<code>error.message</code>) ואיפה הפירוט (<code>details</code>). ה־<code>path</code> (<code>"body.title"</code>) מספיק כדי שמפתח יבין; בדף אמיתי היו ממפים אותו לשם השדה בעברית.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להציג <code>err.message</code> של ה־<code>fetch</code> עצמו ("Failed to fetch") כשהשרת דווקא החזיר הודעה מפורטת.</li><li>לשכוח לנקות בהצלחה — השגיאה הישנה נשארת מתחת לטופס שכבר עבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E72">
+    <h3>P15.5-E72 · לפרק CORS_ORIGINS 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקה לפריט: <code class="long">try { const u = new URL(x); return /^https?:$/.test(u.protocol) &amp;&amp; (u.pathname === "/") &amp;&amp; !u.search &amp;&amp; !u.hash; } catch { return false; }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>[...new Set(list)]</code> — בלי כפילויות, שומר על הסדר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E72: לפרק CORS_ORIGINS
+function isOrigin(x) {
+  try {
+    const u = new URL(x);
+    return /^https?:$/.test(u.protocol) &amp;&amp; u.pathname === "/" &amp;&amp; !u.search &amp;&amp; !u.hash &amp;&amp; !x.endsWith("?") &amp;&amp; !x.endsWith("#");
+  } catch {
+    return false;
+  }
+}
+
+export function parseCorsOrigins(value, fallback = ["http://localhost:5500"]) {
+  if (value === undefined || value.trim() === "") return [...fallback];
+  if (value.trim() === "*") throw new Error("CORS_ORIGINS=* אסור — כתוב רשימה מפורשת");
+  const items = value.split(",").map((s) =&gt; s.trim()).filter(Boolean);
+  const bad = items.filter((x) =&gt; !isOrigin(x));
+  if (bad.length) throw new Error(`CORS_ORIGINS לא תקין: ${bad.join(", ")}`);
+  return [...new Set(items.map((x) =&gt; new URL(x).origin))];
+}
+
+console.log(parseCorsOrigins(undefined));
+console.log(parseCorsOrigins("https://app.example.com, https://admin.example.com/,,https://APP.example.com"));
+for (const v of ["*", "app.example.com, https://ok.test, https://x.test/admin"]) {
+  try {
+    parseCorsOrigins(v);
+  } catch (err) {
+    console.log(err.message);
+  }
+}</code></pre>
+<pre class="terminal">[ 'http://localhost:5500' ]
+[ 'https://app.example.com', 'https://admin.example.com' ]
+CORS_ORIGINS=* אסור — כתוב רשימה מפורשת
+CORS_ORIGINS לא תקין: app.example.com, https://x.test/admin</pre>
+<p>שרת שעולה עם הגדרה שגויה צריך <strong>ליפול מיד</strong>, עם הודעה שאומרת מה לא תקין — ולא לעלות "בשקט" ולחסום משתמשים בייצור (פרק 13, שיעור 3). ‏<code>new URL(x).origin</code> מנרמל גם אותיות גדולות ו־<code>/</code> בסוף, ולכן <code>https://APP.example.com</code> נחשב כפילות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתעלם בשקט מפריט לא תקין (<code>filter(isOrigin)</code>) — מישהו טעה בהקלדה, והאתר שלו "לא עובד" בלי שום רמז.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E73">
+    <h3>P15.5-E73 · API עם CORS — ראשון ונכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>import cors from "cors";</code> — החבילה מותקנת בתיקיית הקורס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הסדר ב־<code>createApp</code>: <code>cors</code> ← <code>express.json</code> ← בדיקת מפתח ← routes.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E73: API עם CORS — ראשון ונכון
+import express from "express";
+import cors from "cors";
+
+export function createApp({ corsOrigins = ["http://localhost:5500"] } = {}) {
+  const app = express();
+  app.use(cors({ origin: corsOrigins }));
+  app.use(express.json());
+  app.use((req, res, next) =&gt; {
+    if (req.get("x-api-key") !== "demo-key") {
+      res.status(401).json({ error: { code: "UNAUTHORIZED", message: "חסר מפתח" } });
+      return;
+    }
+    next();
+  });
+
+  const tasks = [];
+  app.get("/tasks", (req, res) =&gt; {
+    res.json(tasks);
+  });
+  app.post("/tasks", (req, res) =&gt; {
+    const title = req.body?.title;
+    if (typeof title !== "string" || !title.trim()) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "title חובה" } });
+      return;
+    }
+    const task = { id: tasks.length + 1, title: title.trim() };
+    tasks.push(task);
+    res.status(201).json(task);
+  });
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const url = `http://localhost:${server.address().port}/tasks`;
+  const pre = await fetch(url, {
+    method: "OPTIONS",
+    headers: { Origin: "http://localhost:5500", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-api-key" },
+  });
+  console.log("preflight:", pre.status, pre.headers.get("access-control-allow-origin"), pre.headers.get("access-control-allow-headers"));
+  const post = await fetch(url, { method: "POST", headers: { Origin: "http://localhost:5500", "Content-Type": "application/json", "x-api-key": "demo-key" }, body: '{"title":"חלב"}' });
+  console.log("POST:", post.status, post.headers.get("access-control-allow-origin"), await post.text());
+  const evil = await fetch(url, { headers: { Origin: "https://evil.example", "x-api-key": "demo-key" } });
+  console.log("זר:", evil.status, evil.headers.get("access-control-allow-origin"));
+  server.close();
+});</code></pre>
+<pre class="terminal">preflight: 204 http://localhost:5500 content-type,x-api-key
+POST: 201 http://localhost:5500 {"id":1,"title":"חלב"}
+זר: 200 null</pre>
+<p>שלוש השורות הן כל הסיפור: ה־preflight קיבל 204 עם ההיתר (בלי מפתח — ובצדק), הבקשה האמיתית עברה עם המפתח וקיבלה header, והמקור הזר קיבל תשובה <strong>בלי</strong> header — דפדפן יחסום אותה (P15.5-E60).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>app.use(cors())</code> בלי <code>origin</code> — זה <code>*</code>: כל אתר מתקבל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E74">
+    <h3>P15.5-E74 · רק התשובה האחרונה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>let latest = 0;</code> בתוך <code>latestOnly</code>; בכל קריאה <code>const my = ++latest;</code>, ואחרי ה־<code>await</code> — <code>my === latest</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">try { const value = await fn(...args); ... } catch (err) { if (my !== latest) return { stale: true }; throw err; }</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E74: רק התשובה האחרונה
+export function latestOnly(fn) {
+  let latest = 0;
+  return async (...args) =&gt; {
+    const my = ++latest;
+    try {
+      const value = await fn(...args);
+      return my === latest ? { stale: false, value } : { stale: true };
+    } catch (err) {
+      if (my !== latest) return { stale: true };
+      throw err;
+    }
+  };
+}
+
+const sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const load = latestOnly(async (status, ms) =&gt; {
+  await sleep(ms);
+  return `${status}: ${status === "open" ? "חלב" : "לחם"}`;
+});
+const a = load("open", 100);
+const b = load("done", 20);
+console.log(await b);
+console.log(await a);</code></pre>
+<pre class="terminal">{ stale: false, value: 'done: לחם' }
+{ stale: true }</pre>
+<p>ב־<code>loadTasks</code>: <code class="long">const r = await load(status); if (r.stale) return; renderTasks(...r.value)</code>. הבקשה הישנה עדיין רצה עד הסוף (ובשרת היא בוצעה) — רק שהתוצאה שלה לא מוצגת. חיסכון אמיתי בבקשות דורש <code>AbortController</code> (פרק 14); זה הצעד הבא, לא תחליף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>my === latest</code> <strong>לפני</strong> ה־<code>await</code> — תמיד נכון שם. הבדיקה חייבת להיות אחרי שהתוצאה חזרה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E75">
+    <h3>P15.5-E75 · מכתובת לקובץ — בבטחה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">path.extname(file).toLowerCase()</code> ומפה של סוגים, עם <code>??</code> לברירת מחדל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">try { pathname = decodeURIComponent(...) } catch { return null; }</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E75: מכתובת לקובץ — בבטחה
+import path from "node:path";
+
+const TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+};
+
+export function resolveStatic(root, urlPath) {
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(urlPath, "http://x").pathname);
+  } catch {
+    return null;
+  }
+  if (pathname.endsWith("/")) pathname += "index.html";
+  const file = path.join(root, pathname);
+  if (!file.startsWith(root + path.sep)) return null;
+  return { file, type: TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream" };
+}
+
+const root = "/srv/web";
+for (const u of ["/", "/app.JS?v=3", "/docs/", "/%2E%2E%2F.env", "/../web-backup/x.html", "/%E0%A4%A", "/logo.webp"]) {
+  console.log(u.padEnd(22), resolveStatic(root, u));
+}</code></pre>
+<pre class="terminal">/                      { file: '/srv/web/index.html', type: 'text/html; charset=utf-8' }
+/app.JS?v=3            { file: '/srv/web/app.JS', type: 'text/javascript; charset=utf-8' }
+/docs/                 { file: '/srv/web/docs/index.html', type: 'text/html; charset=utf-8' }
+/%2E%2E%2F.env         null
+/../web-backup/x.html  {
+  file: '/srv/web/web-backup/x.html',
+  type: 'text/html; charset=utf-8'
+}
+/%E0%A4%A              null
+/logo.webp             { file: '/srv/web/logo.webp', type: 'application/octet-stream' }</pre>
+<p>שלוש שכבות הגנה: URL מנרמל <code>..</code> רגיל; הבדיקה עם <code>root + path.sep</code> תופסת את מה שעבר בקידוד (<code>%2F</code>); ו־<code>try/catch</code> סביב <code>decodeURIComponent</code> מונע קריסה מבקשה זדונית — שרת שקורס מבקשה אחת הוא בעיה בפני עצמה (P14-E22).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>startsWith(root)</code> בלי <code>path.sep</code> — <code>/srv/web-backup/...</code> עובר (P15.5-E64).</li><li>לא לתפוס את השגיאה של <code>decodeURIComponent</code> — <code>URIError</code> מפיל את השרת.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P15.5-E76">
+    <h3>P15.5-E76 · Vary: Origin <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־<code class="mid">Access-Control-Allow-Origin</code> מכיל origin <strong>אחד</strong> — של מי ששאל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Vary</code> = "התשובה הזו תלויה גם ב־header הזה של הבקשה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>את התשובה השמורה — עם <code class="mid">Access-Control-Allow-Origin: https://app.example.com</code>. הדפדפן ב־admin רואה origin אחר ← חוסם. "CORS error" לסירוגין, לפי מי ביקש ראשון.</li><li>"שמור עותק נפרד לכל ערך של <code>Origin</code>" — או לפחות: אל תגיש תשובה ששמרת ל־Origin אחר.</li><li>כי התשובה זהה לכולם (<code>*</code>). זה אחד הדברים שהופכים <code>*</code> לפשוט — ולמה ספריית <code>cors</code> מוסיפה <code>Vary</code> לבד כשיש רשימה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיר את <code>Vary</code> "כי הוא מקטין את יעילות ה־cache" — ואז CORS נשבר אקראית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E77">
+    <h3>P15.5-E77 · התאריך זז ביום <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>new Date("2026-11-20")</code> (תאריך בלי שעה) — חצות <strong>UTC</strong>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חצות UTC הוא 19:00 של <strong>היום הקודם</strong> בניו יורק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const due = "2026-11-20";
+const d = new Date(due);
+console.log(d.toISOString());
+for (const timeZone of ["Asia/Jerusalem", "America/New_York"]) {
+  console.log(timeZone, d.toLocaleDateString("he-IL", { timeZone }));
+}
+const [y, m, day] = due.split("-");
+console.log("בלי Date:", `${day}.${m}.${y}`);</code></pre>
+<pre class="terminal">2026-11-20T00:00:00.000Z
+Asia/Jerusalem 20.11.2026
+America/New_York 19.11.2026
+בלי Date: 20.11.2026</pre>
+<p>בניו יורק המשימה "זזה" ליום הקודם. תאריך בלי שעה (יום יעד, יום הולדת) הוא לא "רגע בזמן" — ולכן לא מעבירים אותו דרך <code>Date</code> כדי להציג; מפרקים את המחרוזת (כמו ב־P15.5-E69), או מעבירים <code>timeZone: "UTC"</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק במחשב בישראל — UTC+2, הבאג לא מופיע (חצות UTC הוא 02:00 באותו יום).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E78">
+    <h3>P15.5-E78 · מה נכנס ל־commit? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הכלל מ־P13-E30: מה שנוצר מקבצים אחרים — לא נכנס; מה שאי אפשר ליצור מחדש — נכנס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סודות וערכים של מכונה מסוימת — לא ב־Git. רשימה של <em>אילו</em> משתנים צריך — כן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>כן</strong> — קוד המקור של הדף.</li><li><strong>כן</strong>.</li><li><strong>כן</strong>.</li><li><strong>כן</strong> — הגרסאות המדויקות של <code>cors</code> ותלויותיו.</li><li><strong>לא</strong> — נוצר מה־lockfile.</li><li><strong>לא</strong> — הגדרות של מכונה (ובשרת אמיתי — גם סודות).</li><li><strong>כן</strong> — מתעד אילו משתנים יש.</li><li><strong>כן</strong>.</li></ol>
+<p>אחרי pull: <code>npm ci</code> (או <code>npm install</code>), להעתיק <code>.env.example</code> ל־<code>.env</code> אם נוסף משתנה, ואז <code>npm run dev</code> ו־<code>npm run web</code> בשני חלונות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>package-lock.json</code> — אצל החבר יותקן <code>cors</code> בגרסה אחרת (בטווח של <code>^</code>).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15.5-E12">
     <h3>P15.5-E12 · אתגר: CORS לייצור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -75,6 +735,109 @@ export function createCors({ allow, credentials = false, maxAge = 600 }: { allow
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code class="mid">origin.endsWith(".preview.example.com")</code> — מתיר גם <code>http://</code> וגם תת־דומיינים מקוננים. ו־<code>includes</code> גרוע עוד יותר: <code class="mid">https://preview.example.com.evil.io</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E79">
+    <h3>P15.5-E79 · שורת סיכום לרשימה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מחרוזות <code>YYYY-MM-DD</code> מושוות נכון עם <code>&lt;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>const parts = [first]; if (s.done) parts.push(<code>${s.done} בוצעו</code>); ... return parts.join(" · ");</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E79: שורת סיכום לרשימה
+export function summarizeTasks(tasks, today) {
+  const open = tasks.filter((t) =&gt; t.status !== "done");
+  return {
+    total: tasks.length,
+    done: tasks.length - open.length,
+    overdue: open.filter((t) =&gt; t.dueDate &amp;&amp; t.dueDate &lt; today).length,
+    dueToday: open.filter((t) =&gt; t.dueDate === today).length,
+  };
+}
+
+export function summaryText({ total, done, overdue, dueToday }) {
+  if (total === 0) return "אין משימות";
+  const parts = [total === 1 ? "משימה אחת" : `${total} משימות`];
+  if (done) parts.push(`${done} בוצעו`);
+  if (overdue) parts.push(`${overdue} באיחור`);
+  if (dueToday) parts.push(`${dueToday} להיום`);
+  return parts.join(" · ");
+}
+
+const today = "2026-11-11";
+const tasks = [
+  { id: 1, status: "done", dueDate: "2026-11-01" },
+  { id: 2, status: "todo", dueDate: "2026-11-01" },
+  { id: 3, status: "todo", dueDate: "2026-11-11" },
+  { id: 4, status: "todo", dueDate: null },
+  { id: 5, status: "done", dueDate: null },
+];
+const s = summarizeTasks(tasks, today);
+console.log(s, summaryText(s));
+console.log(summaryText(summarizeTasks([], today)), "|", summaryText(summarizeTasks([tasks[3]], today)));</code></pre>
+<pre class="terminal">{ total: 5, done: 2, overdue: 1, dueToday: 1 } 5 משימות · 2 בוצעו · 1 באיחור · 1 להיום
+אין משימות | משימה אחת</pre>
+<p>משימה 1 עברה את התאריך — אבל בוצעה, ולכן היא לא "באיחור". ‏<code>t.dueDate &amp;&amp; ...</code> מגן מ־<code>null &lt; "2026-..."</code> (שב־JavaScript דווקא <code>true</code>!).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לספור באיחור בלי לבדוק <code>status</code> — כל משימה ישנה שבוצעה "צועקת" באדום.</li><li><code>t.dueDate &lt; today</code> בלי בדיקת null — <code>null</code> הופך ל־0 בהשוואה, ומשימות בלי תאריך נספרות באיחור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15.5-E80">
+    <h3>P15.5-E80 · קבוצות לפי עדיפות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בונים <code>Map</code> עם המפתחות לפי הסדר הרצוי, ממלאים, ובסוף מוחקים מפתחות ריקים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>השוואת תאריך: <code class="mid">const d = (t) =&gt; t.dueDate ?? "9999-12-31";</code> ואז <code>d(a).localeCompare(d(b))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E80: קבוצות לפי עדיפות
+const ORDER = ["high", "medium", "low", "other"];
+const due = (t) =&gt; t.dueDate ?? "9999-12-31";
+
+function compare(a, b) {
+  return (a.status === "done") - (b.status === "done") || due(a).localeCompare(due(b)) || a.id - b.id;
+}
+
+export function groupByPriority(tasks) {
+  const groups = new Map(ORDER.map((p) =&gt; [p, []]));
+  for (const t of tasks) groups.get(ORDER.includes(t.priority) &amp;&amp; t.priority !== "other" ? t.priority : "other").push(t);
+  for (const [key, list] of groups) {
+    if (list.length === 0) groups.delete(key);
+    else list.sort(compare);
+  }
+  return groups;
+}
+
+const tasks = [
+  { id: 1, priority: "low", status: "todo", dueDate: null },
+  { id: 2, priority: "high", status: "done", dueDate: "2026-11-01" },
+  { id: 3, priority: "high", status: "todo", dueDate: "2026-11-20" },
+  { id: 4, priority: "high", status: "todo", dueDate: "2026-11-05" },
+  { id: 5, priority: "urgent", status: "todo", dueDate: null },
+  { id: 6, priority: "high", status: "todo", dueDate: null },
+];
+for (const [priority, list] of groupByPriority(tasks)) console.log(priority, list.map((t) =&gt; t.id));</code></pre>
+<pre class="terminal">high [ 4, 3, 6, 2 ]
+low [ 1 ]
+other [ 5 ]</pre>
+<p><code>Map</code> שנבנתה עם המפתחות בסדר הנכון — ואז "ממלאים" — שומרת את הסדר גם כשהמשימה הראשונה במערך היא <code>low</code>. ‏<code>true - false</code> הוא 1: כך "בוצעה" עוברת לסוף בשורה אחת. ו־<code>"9999-12-31"</code> במקום <code>null</code> הופך "בלי תאריך" ל"הכי מאוחר" — בלי <code>if</code>־ים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>tasks.sort(...)</code> — משנה את המערך שהדף מחזיק (ואת הסדר ברשימה הרגילה).</li><li>להוסיף מפתחות ל־Map לפי סדר ההופעה במשימות — הסדר של הקבוצות "קופץ" בכל טעינה.</li></ul>
 
 
 </div></details>

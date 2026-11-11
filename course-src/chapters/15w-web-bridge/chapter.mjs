@@ -8,7 +8,7 @@ export default {
   part: "חטיבה ג׳ — שרת, מסד נתונים ו־HTML בסיסי",
   checker: true,
   time: "2–3 מפגשים",
-  expectedExercises: 15,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code עם התוסף <strong>Live Preview</strong> (פרק 0), Google Chrome, ופרויקט 2 בשלב א׳.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום לשיעורים 1–2. בשיעור 4 — חבילת <code>cors</code> בפרויקט 2 (שם יש הוראות).</p>
 ${copyStep("15w-web-bridge")}
