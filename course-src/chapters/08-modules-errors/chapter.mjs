@@ -7,7 +7,7 @@ export default {
   part: "חטיבה א׳ — יסודות JavaScript",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, הבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו: ESLint</strong> — כלי שקורא את הקוד ומסמן טעויות נפוצות (כמו <code>==</code> או משתנה שלא בשימוש) עוד לפני שמריצים.</p>
 <ol class="steps">
