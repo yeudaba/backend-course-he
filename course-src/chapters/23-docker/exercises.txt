@@ -713,3 +713,239 @@ exit 1
 <p>שים לב ל־<code>--max-time</code>: בלעדיו, שרת שמקבל חיבור ולא עונה תוקע את הסקריפט לנצח, והזמן שקבעת לא שווה כלום. ו־<code>-f</code>: בלעדיו curl מחשיב 503 כהצלחה (הוא קיבל תשובה, הרי).</p>
 @mistakes
 <ul><li><code>sleep 30</code> "וזה בטח יספיק" — איטי כשהשרת מהיר, ונכשל כשהוא איטי.</li></ul>
+
+@@ P23-E26 | 2 | סבב גיבויים: לשמור רק את האחרונים 🤖 | 20 | שיעור 1
+@type scratch
+@task
+<p>בשרת קטן מגבים את PostgreSQL פעם ביום: ‏<code>docker exec db pg_dump ... | gzip &gt; backups/db-2026-11-05.sql.gz</code>. בלי ניקוי, הדיסק מתמלא אחרי כמה חודשים. כתוב מקובץ ריק את <code>rotate-backups.sh &lt;dir&gt; &lt;keep&gt;</code>:</p>
+<ul><li>גיבוי הוא קובץ בתיקייה עצמה (לא בתתי־תיקיות) בשם <code>db-YYYY-MM-DD.sql.gz</code>. כל קובץ אחר (‏<code>notes.txt</code>, ‏<code>db-latest.sql.gz</code>) לא נוגעים בו.</li><li>משאירים את <code>keep</code> הגיבויים החדשים ביותר (לפי התאריך שבשם), ומוחקים את השאר. על כל קובץ שנמחק מדפיסים את השם שלו (בלי התיקייה), מהישן לחדש.</li><li>אם יש <code>keep</code> גיבויים או פחות — לא מוחקים ולא מדפיסים כלום, ויוצאים עם 0.</li><li>לא בדיוק שני ארגומנטים, או <code>keep</code> שאינו שלם חיובי ← הודעה ל־stderr ו־<code>exit 2</code>. התיקייה לא קיימת ← <code>exit 1</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>23-docker/starter/P23-E26.sh</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% bash 23-docker/starter/P23-E26.sh backups 3
+% npm run check P23-E26
+```
+@hint1
+<p>התאריך בפורמט <code>YYYY-MM-DD</code> ממוין נכון גם כטקסט, ולכן <code>sort</code> רגיל מסדר מהישן לחדש. את הקבצים מוצאים עם <code>find "$dir" -maxdepth 1 -type f -name 'db-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].sql.gz'</code>. ‏<code>[0-9]</code> ב־glob הוא ספרה אחת.</p>
+<p>לבדיקת <code>keep</code>: ‏<code>[[ $keep =~ ^[1-9][0-9]*$ ]]</code>.</p>
+@hint2
+<p>אם יש <code>count</code> גיבויים, מוחקים את <code>count - keep</code> הראשונים ברשימה הממוינת: <code>head -n $((count - keep))</code>, ואחריו <code>while read -r name; do rm -- "$dir/$name"; echo "$name"; done</code>. שים מירכאות סביב כל משתנה שהוא נתיב.</p>
+@solution
+```bash save=solutions/P23-E26.sh
+#!/usr/bin/env bash
+# P23-E26 — rotate-backups.sh <dir> <keep>
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  echo "שימוש: rotate-backups.sh <dir> <keep>" >&2
+  exit 2
+fi
+dir=$1
+keep=$2
+
+if ! [[ $keep =~ ^[1-9][0-9]*$ ]]; then
+  echo "keep חייב להיות מספר שלם חיובי: $keep" >&2
+  exit 2
+fi
+if [ ! -d "$dir" ]; then
+  echo "התיקייה לא קיימת: $dir" >&2
+  exit 1
+fi
+
+# רק גיבויים בשם הנכון; התאריך בפורמט YYYY-MM-DD ממוין נכון גם כטקסט
+backups=$(find "$dir" -maxdepth 1 -type f -name 'db-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].sql.gz' -exec basename {} \; | sort)
+count=$(printf '%s\n' "$backups" | grep -c . || true)
+
+if [ "$count" -le "$keep" ]; then
+  exit 0
+fi
+
+printf '%s\n' "$backups" | head -n $((count - keep)) | while read -r name; do
+  rm -- "$dir/$name"
+  echo "$name"
+done
+```
+<p>הרצה על תיקייה עם חמישה גיבויים ועוד שני קבצים:</p>
+```term
+% ls backups
+db-2026-11-01.sql.gz
+db-2026-11-02.sql.gz
+db-2026-11-03.sql.gz
+db-2026-11-04.sql.gz
+db-2026-11-05.sql.gz
+db-latest.sql.gz
+notes.txt
+% bash 23-docker/starter/P23-E26.sh backups 3
+db-2026-11-01.sql.gz
+db-2026-11-02.sql.gz
+% ls backups
+db-2026-11-03.sql.gz
+db-2026-11-04.sql.gz
+db-2026-11-05.sql.gz
+db-latest.sql.gz
+notes.txt
+% bash 23-docker/starter/P23-E26.sh backups 0
+keep חייב להיות מספר שלם חיובי: 0
+```
+<p>סקריפט שמוחק קבצים צריך להיות זהיר יותר מכל סקריפט אחר. לכן התבנית בשם מדויקת: ‏<code>db-*.gz</code> היה מוחק גם את <code>db-latest.sql.gz</code>. בגלל אותה זהירות <code>keep</code> חייב להיות לפחות 1: עם 0 הסקריפט היה מוחק את כל הגיבויים.</p>
+<p><code>grep -c . || true</code>: כשאין אף גיבוי, ‏<code>grep -c</code> מדפיס 0 ויוצא עם 1. בלי <code>|| true</code>, ‏<code>set -e</code> היה עוצר את הסקריפט. ו־<code>rm --</code> מבטיח ששם קובץ שמתחיל במקף לא ייקרא כאפשרות.</p>
+<p>בשרת אמיתי מריצים את זה מ־<code>cron</code> מיד אחרי הגיבוי. גיבוי שלא בודקים אם אפשר לשחזר ממנו הוא לא גיבוי — מדי פעם מריצים <code>gunzip -c ... | psql</code> על מסד ריק.</p>
+@mistakes
+<ul><li><code>ls -t</code> (לפי זמן שינוי) במקום מיון לפי השם — אחרי העתקה או שחזור כל הקבצים מקבלים אותו זמן, והסקריפט מוחק את הגיבויים הלא נכונים.</li><li><code>rm $dir/$name</code> בלי מירכאות — תיקייה עם רווח בשם נשברת לשני נתיבים.</li><li>לשכוח <code>-maxdepth 1</code> — גיבויים בתתי־תיקיות (‏<code>backups/archive/</code>) נמחקים גם הם.</li><li><code>head -n -3</code> ("הכול חוץ משלושה האחרונים") — עובד ב־Linux, אבל לא ב־<code>head</code> של macOS.</li></ul>
+
+@@ P23-E27 | 2 | קורא קובץ .env 🤖 | 20 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>indexOf</code>/<code>slice</code> (‏P14-E26), ביטויים רגולריים (‏P13-E26) ולולאת <code>for</code> עם אינדקס (פרק 4)</strong>. ‏<code>env_file</code> ב־compose ו־<code>node --env-file</code> קוראים קובץ <code>.env</code>. כתוב וייצא <code>parseEnv(text: string): Record&lt;string, string&gt;</code>:</p>
+<ul><li>שורה ריקה, או שורה שמתחילה ב־<code>#</code> (אחרי <code>trim</code>) — מדלגים.</li><li>אפשר <code>export </code> בתחילת השורה, ואז מתעלמים ממנו.</li><li>השם הוא מה שלפני ה־<code>=</code> <em>הראשון</em> (אחרי <code>trim</code>), והוא חייב להתאים ל־<code>[A-Za-z_][A-Za-z0-9_]*</code>. אין <code>=</code>, או שם לא חוקי ← <code>SyntaxError</code> עם מספר השורה (מ־1): ‏<code>"שורה 2: ..."</code>.</li><li>הערך הוא מה שאחרי ה־<code>=</code> הראשון, אחרי <code>trim</code>. ב־<code>=</code> נוספים בתוך הערך לא נוגעים (‏<code>postgres://...?sslmode=disable</code>).</li><li>ערך במירכאות כפולות: מורידים אותן, ו־<code>\n</code> (שני תווים) הופך לשורה חדשה. במירכאות בודדות: מורידים אותן ותו לא. בלי מירכאות: <code> #</code> (רווח ואחריו סולמית) מתחיל הערה עד סוף השורה.</li><li>שם שמופיע פעמיים — הערך האחרון קובע.</li></ul>
+<p>📄 כותבים בקובץ <code>23-docker/starter/P23-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 23-docker/starter/P23-E27.ts
+% npm run check P23-E27
+```
+@hint1
+<p>לולאת <code>for (let i = 0; i &lt; lines.length; i++)</code> ולא <code>for...of</code>, כי צריך את מספר השורה להודעה. ‏<code>const eq = line.indexOf("=")</code>, ואז <code>line.slice(0, eq)</code> ו־<code>line.slice(eq + 1)</code>. ‏<code>split("=")</code> היה חותך את הערך בכל <code>=</code>.</p>
+@hint2
+<p>שלושה מקרים לערך, לפי הסדר: מתחיל ונגמר ב־<code>"</code> ← <code>value.slice(1, -1).replaceAll("\\n", "\n")</code>. מתחיל ונגמר ב־<code>'</code> ← <code>slice(1, -1)</code>. אחרת ← חותכים ב־<code>indexOf(" #")</code> אם יש. בדוק <code>value.length &gt;= 2</code>, אחרת הערך <code>"</code> לבדו "מתחיל ונגמר" במירכאות.</p>
+@solution
+```ts run save=solutions/P23-E27.ts
+// P23-E27 — קורא קובץ .env
+export function parseEnv(text: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (line.startsWith("export ")) line = line.slice("export ".length).trim();
+
+    const eq = line.indexOf("=");
+    if (eq === -1) throw new SyntaxError(`שורה ${i + 1}: חסר =`);
+    const key = line.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new SyntaxError(`שורה ${i + 1}: שם לא חוקי: ${key}`);
+
+    let value = line.slice(eq + 1).trim();
+    if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1).replaceAll("\\n", "\n");
+    } else if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+      value = value.slice(1, -1);
+    } else {
+      const hash = value.indexOf(" #");
+      if (hash !== -1) value = value.slice(0, hash).trim();
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+const env = parseEnv(`
+# מסד הנתונים
+DATABASE_URL=postgres://app:secret@db:5432/app?sslmode=disable
+export PORT = 3000   # הפורט בתוך הקונטיינר
+GREETING="שלום\\nעולם"
+PATTERN='a#b\\n'
+EMPTY=
+PORT=8080
+`);
+console.log(env);
+try {
+  parseEnv("A=1\n2B=oops");
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}
+```
+```out
+{
+  DATABASE_URL: 'postgres://app:secret@db:5432/app?sslmode=disable',
+  PORT: '8080',
+  GREETING: 'שלום\nעולם',
+  PATTERN: 'a#b\\n',
+  EMPTY: ''
+}
+SyntaxError שורה 2: שם לא חוקי: 2B
+```
+<p><code>PORT</code> מופיע פעמיים, וה־<code>8080</code> המאוחר קובע. זו ההתנהגות של רוב הכלים, וכך אפשר לדרוס ערך בסוף הקובץ. בתוך מירכאות בודדות שום דבר לא מתפרש: ‏<code>#</code> נשאר, וגם <code>\n</code> נשאר שני תווים.</p>
+<p>למה <code>SyntaxError</code> עם מספר שורה? קובץ <code>.env</code> שבור הוא תקלה שמגלים בעלייה של הקונטיינר. ההודעה "שורה 2: שם לא חוקי: 2B" מראה מיד איפה הבעיה. ‏<code>undefined</code> שקט היה מתגלה רק כשמשהו בשרת מתנהג מוזר.</p>
+<p>בפרויקט לא כותבים את זה בעצמך: Node 24 קורא <code>.env</code> עם <code>--env-file</code>, ו־compose עם <code>env_file</code>. אבל עכשיו אתה יודע למה <code>PASSWORD=a#b</code> עובד, ו־<code>PASSWORD=a #b</code> מאבד חצי מהסיסמה.</p>
+@mistakes
+<ul><li><code>line.split("=")</code> — ‏<code>DATABASE_URL</code> עם <code>?sslmode=disable</code> נחתך באמצע.</li><li>לחתוך הערה בכל <code>#</code> — סיסמה כמו <code>a#b</code> נחתכת ל־<code>a</code>. הערה מתחילה רק ב־<code> #</code>, ורק מחוץ למירכאות.</li><li>להחליף <code>\n</code> גם במירכאות בודדות — שם הערך מילולי.</li><li>לבדוק את השם לפני שמורידים <code>export </code> — ‏<code>export PORT</code> נראה כמו שם עם רווח.</li></ul>
+
+@@ P23-E28 | 2 | כמה מקום תופסים ה־images? 🤖 | 20 | שיעור 2
+@type review
+@task
+<p><strong>🔁 חזרה על <code>switch</code> (פרק 4), ‏<code>reduce</code> (פרק 6), ‏<code>toFixed</code> (פרק 2) ו־<code>while</code> (פרק 4)</strong>. ‏<code>docker images</code> מדפיס טבלה, והגדלים בה הם טקסט: <code>245MB</code>, ‏<code>1.21GB</code>. Docker משתמש ביחידות עשרוניות: <code>kB</code> = 1,000 בתים, ‏<code>MB</code> = 1,000,000. כתוב וייצא:</p>
+<ul><li><code>parseSize(text): number</code> — בתים. מספר (אפשר עם נקודה), ואחריו יחידה: <code>B</code>, ‏<code>kB</code> (גם <code>KB</code>), ‏<code>MB</code>, ‏<code>GB</code>, ‏<code>TB</code>. את היחידה בוחרים עם <code>switch</code>. כל דבר אחר ← <code>Error</code>.</li><li><code>formatSize(bytes): string</code> — היחידה הגדולה ביותר שבה הערך הוא לפחות 1. בבתים — מספר שלם (<code>999B</code>). ביחידות אחרות — ספרה אחת אחרי הנקודה, בלי <code>.0</code>: ‏<code>12.3kB</code>, ‏<code>245MB</code>, ‏<code>1.5GB</code>.</li><li><code>totalSize(dockerImages): string</code> — מקבלת את כל הפלט של <code>docker images</code> (שורת כותרת ושורות), ומחזירה את סכום עמודת <code>SIZE</code>, מעוצב. העמודות מופרדות בשני רווחים או יותר (בתוך <code>CREATED</code> יש רווח בודד). מצא את העמודה לפי הכותרת, לא לפי מספר קבוע.</li></ul>
+<p>📄 כותבים בקובץ <code>23-docker/starter/P23-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 23-docker/starter/P23-E28.ts
+% npm run check P23-E28
+```
+@hint1
+<p><code>text.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/)</code> נותן את המספר ואת היחידה. ב־<code>switch</code>, ‏<code>case "kB": case "KB":</code> — שני <code>case</code> ברצף חולקים קוד. ב־<code>formatSize</code>: ‏<code>while (value &gt;= 1000)</code> מחלקים ב־1000 ומקדמים אינדקס במערך היחידות.</p>
+<p>נשאר לך <code>.0</code> בסוף? ‏<code>value.toFixed(1).replace(/\.0$/, "")</code>.</p>
+@hint2
+<p><code>const [header, ...rows] = text.trim().split("\n")</code>. ‏<code>header.split(/\s{2,}/).indexOf("SIZE")</code> נותן את מספר העמודה. אחר כך <code>rows.reduce((sum, row) =&gt; sum + parseSize(row.trim().split(/\s{2,}/)[col]), 0)</code>.</p>
+@solution
+```ts run save=solutions/P23-E28.ts
+// P23-E28 — גדלים של images
+const UNITS = ["B", "kB", "MB", "GB", "TB"];
+
+export function parseSize(text: string): number {
+  const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
+  if (!match) throw new Error(`גודל לא תקין: ${text}`);
+  const value = Number(match[1]);
+  switch (match[2]) {
+    case "B":
+      return value;
+    case "kB":
+    case "KB":
+      return value * 1000;
+    case "MB":
+      return value * 1000 ** 2;
+    case "GB":
+      return value * 1000 ** 3;
+    case "TB":
+      return value * 1000 ** 4;
+    default:
+      throw new Error(`יחידה לא מוכרת: ${match[2]}`);
+  }
+}
+
+export function formatSize(bytes: number): string {
+  let unit = 0;
+  let value = bytes;
+  while (value >= 1000 && unit < UNITS.length - 1) {
+    value /= 1000;
+    unit++;
+  }
+  const text = unit === 0 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
+  return text + UNITS[unit];
+}
+
+export function totalSize(dockerImages: string): string {
+  const [header, ...rows] = dockerImages.trim().split("\n");
+  const sizeColumn = header.split(/\s{2,}/).indexOf("SIZE");
+  if (sizeColumn === -1) throw new Error("אין עמודה SIZE");
+  const bytes = rows
+    .filter((row) => row.trim() !== "")
+    .reduce((sum, row) => sum + parseSize(row.trim().split(/\s{2,}/)[sizeColumn]), 0);
+  return formatSize(bytes);
+}
+
+console.log(parseSize("245MB"), parseSize("1.5GB"), parseSize("12.3kB"));
+console.log(formatSize(245_000_000), formatSize(1_500_000_000), formatSize(999), formatSize(12_340));
+console.log(
+  totalSize(`REPOSITORY   TAG         IMAGE ID       CREATED        SIZE
+tasks-api    latest      3f1c2a9b8e7d   2 hours ago    245MB
+postgres     17-alpine   9a8b7c6d5e4f   3 weeks ago    278MB
+node         24-slim     1a2b3c4d5e6f   4 weeks ago    1.21GB`),
+);
+```
+```out
+245000000 1500000000 12300
+245MB 1.5GB 999B 12.3kB
+1.7GB
+```
+<p>245MB + 278MB + 1,210MB = 1,733MB, כלומר <code>1.7GB</code>. ‏<code>split(/\s{2,}/)</code> הוא הטריק בטבלאות של כלי שורת פקודה: "2 hours ago" נשאר תא אחד, כי יש בו רק רווחים בודדים.</p>
+<p>למה לחפש את <code>SIZE</code> בכותרת? ‏<code>docker images --format</code>, וגרסאות חדשות של Docker, משנים את סדר העמודות. קוד שמניח "העמודה החמישית" נשבר בשקט ומחזיר מספר לא נכון. קוד שמחפש בכותרת נכשל עם הודעה ברורה.</p>
+<p>בפועל, כשסקריפט צריך לקרוא פלט של Docker, מבקשים JSON: ‏<code>docker images --format json</code>. פירוק טבלה הוא תרגיל טוב בטקסט, אבל JSON יציב יותר.</p>
+@mistakes
+<ul><li>להכפיל ב־1024 — ‏Docker מציג <code>MB</code> עשרוני. מי שמחשב ב־1024 מקבל סכום שלא תואם לשום דבר שהוא רואה במסך.</li><li><code>split(" ")</code> — ‏"2 hours ago" מתפרק לשלושה תאים, והעמודות זזות.</li><li>לשכוח <code>break</code> או <code>return</code> ב־<code>switch</code> — <code>MB</code> "נופל" ל־<code>GB</code> ומוכפל פי 1,000.</li><li><code>toFixed(1)</code> בלי להוריד <code>.0</code> — ‏<code>245.0MB</code>.</li></ul>

@@ -1370,3 +1370,257 @@ true true
 <p>(<code>finally</code> — כדי שה־stack יתנקה גם כשנזרקת שגיאה.) כשתראה בפרק 20 שגיאה של Nest כמו "Nest can't resolve dependencies of OrderService" — תדע בדיוק מה קורה מאחורי הקלעים.</p>
 @mistakes
 <ul><li>בלי זיהוי מעגל — <code>resolve("A")</code> נכנס לרקורסיה אינסופית: <code>RangeError: Maximum call stack size exceeded</code>.</li></ul>
+
+@@ P12-E26 | 3 | מחסן כמחלקה 🤖 | 20 | שיעור 2
+@type scratch
+@task
+<p>ב־P07-E27 כתבת מלאי עם closure. עכשיו תכתוב אותו כמחלקה, עם שדה פרטי ועם שגיאות ברורות. הקובץ ריק, ואת הכול כותבים מאפס.</p>
+<p>כתוב וייצא <code>class Inventory</code>:</p>
+<ul><li><code>add(sku: string, qty: number): void</code> — מוסיפה.</li><li><code>remove(sku: string, qty: number): void</code> — מורידה. אם אין מספיק: זורקת <code>Error</code> עם ההודעה <code>`אין מספיק ${sku}: יש ${have}, ביקשו ${qty}`</code>, והמלאי <strong>לא משתנה</strong>. פריט שהגיע ל־0 נעלם מהרשימה.</li><li><code>count(sku: string): number</code> — כמה יש (0 לפריט שלא קיים).</li><li><code>totalItems(): number</code> — סך כל היחידות בכל הפריטים.</li><li><code>skus(): string[]</code> — הפריטים שיש מהם לפחות יחידה, ממוינים לפי א״ב.</li><li>ב־<code>add</code> וב־<code>remove</code>: כמות שאינה מספר שלם חיובי — <code>RangeError("כמות חייבת להיות מספר שלם חיובי")</code>.</li></ul>
+<p>אי אפשר לשנות את המלאי מבחוץ, אלא רק דרך המתודות. הבודק בודק התנהגות בלבד, ולא איך שמרת את הנתונים בפנים.</p>
+<p>📄 כותבים בקובץ <code>12-design/starter/P12-E26.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 12-design/starter/P12-E26.ts
+% npm run check P12-E26
+```
+@hint1
+<p>שדה פרטי אחד: <code>#items = new Map&lt;string, number&gt;();</code>. מתודה פרטית לבדיקת כמות (<code>#checkQty(qty)</code>) חוסכת לכתוב את אותה בדיקה פעמיים.</p>
+@hint2
+<p>ב־<code>remove</code>: קודם כל הבדיקות (כמות, ואז <code>have &lt; qty</code>), ורק אחר כך שינוי. אם <code>have - qty === 0</code> — <code>this.#items.delete(sku)</code>. ‏<code>totalItems</code>: ‏<code>[...this.#items.values()].reduce(...)</code>. ‏<code>skus</code>: ‏<code>[...this.#items.keys()].sort()</code>.</p>
+@solution
+```ts run save=solutions/P12-E26.ts
+// P12-E26: מחסן כמחלקה
+export class Inventory {
+  #items = new Map<string, number>();
+
+  #checkQty(qty: number): void {
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new RangeError("כמות חייבת להיות מספר שלם חיובי");
+    }
+  }
+
+  add(sku: string, qty: number): void {
+    this.#checkQty(qty);
+    this.#items.set(sku, this.count(sku) + qty);
+  }
+
+  remove(sku: string, qty: number): void {
+    this.#checkQty(qty);
+    const have = this.count(sku);
+    if (have < qty) {
+      throw new Error(`אין מספיק ${sku}: יש ${have}, ביקשו ${qty}`);
+    }
+    if (have === qty) {
+      this.#items.delete(sku);
+    } else {
+      this.#items.set(sku, have - qty);
+    }
+  }
+
+  count(sku: string): number {
+    return this.#items.get(sku) ?? 0;
+  }
+
+  totalItems(): number {
+    return [...this.#items.values()].reduce((sum, n) => sum + n, 0);
+  }
+
+  skus(): string[] {
+    return [...this.#items.keys()].sort();
+  }
+}
+
+const inv = new Inventory();
+inv.add("pen", 5);
+inv.add("cup", 2);
+inv.remove("cup", 2);
+try {
+  inv.remove("pen", 9);
+} catch (err) {
+  console.log((err as Error).message);
+}
+console.log(inv.count("pen"), inv.totalItems(), inv.skus());
+```
+```out
+אין מספיק pen: יש 5, ביקשו 9
+5 5 [ 'pen' ]
+```
+<p>השווה ל־P07-E27: שם המשתנה <code>items</code> היה "פרטי" כי הוא חי בתוך הפונקציה. כאן הוא פרטי בזכות <code>#</code>. בשני המקרים מבחוץ אפשר רק לקרוא למתודות. ההבדל העיקרי הוא בנוחות: במחלקה יש <code>instanceof</code>, ‏getters, ירושה, ומקום טבעי למתודות פרטיות כמו <code>#checkQty</code>.</p>
+<p>הסדר ב־<code>remove</code> הוא העיקרון של שיעור 1: <strong>קודם בודקים, אחר כך משנים</strong>. כך שגיאה אף פעם לא משאירה את האובייקט "באמצע". ואם תשתמש ב־<code>count</code> בתוך <code>add</code> ו־<code>remove</code>, ה־<code>?? 0</code> נכתב פעם אחת בלבד.</p>
+<p><code>(err as Error)</code>: ב־TypeScript, מה שנתפס ב־<code>catch</code> הוא מטיפוס <code>unknown</code> (פרק 11, שיעור 4). כאן אנחנו יודעים מה נזרק. בקוד שמקבל שגיאות מבחוץ, עדיף <code>err instanceof Error</code>.</p>
+@mistakes
+<ul><li>לשנות את הכמות ורק אחר כך לבדוק — אחרי שגיאה המלאי כבר שלילי.</li><li>להשאיר פריטים עם 0 ב־Map — ‏<code>skus()</code> מחזירה פריטים שאזלו.</li><li><code>items = new Map()</code> בלי <code>#</code> — הבודק מגלה ש־<code>Object.keys(inv)</code> לא ריק, כלומר אפשר לגשת לנתונים מבחוץ.</li><li><code>sort()</code> ישירות על <code>this.#items.keys()</code> — ל־iterator אין <code>sort</code>. קודם <code>[...]</code>.</li></ul>
+
+@@ P12-E27 | 3 | Money: אובייקט ערך 🤖 | 20 | שיעור 1
+@type review
+@task
+<p><strong>🔁 חזרה על אגורות (פרק 2, ‏P08-E26) ועל פסיקים במספרים (P05-E25)</strong>, הפעם כמחלקה. בשיעור 1 ראית <code>Money</code> קטנה. כתוב גרסה מלאה, ששומרת <strong>אגורות שלמות</strong> ואי אפשר לשנות אותה (immutable):</p>
+<ul><li><code>private constructor(agorot: number)</code> — פרטי: יוצרים מופע רק דרך שני ה"מפעלים":</li><li><code>static fromAgorot(agorot: number): Money</code> — אם <code>agorot</code> אינו מספר שלם, זורקת <code>RangeError("סכום באגורות חייב להיות מספר שלם")</code>.</li><li><code>static fromShekels(shekels: number): Money</code> — מעגלת לאגורה הקרובה (<code>19.9</code> ← 1990). ‏<code>NaN</code> או <code>Infinity</code> — אותה <code>RangeError</code>.</li><li>getter <code>agorot</code> (קריאה בלבד).</li><li><code>plus(other: Money): Money</code> ו־<code>times(factor: number): Money</code> — מחזירות מופע <strong>חדש</strong>. ‏<code>times</code> מעגלת לאגורה.</li><li><code>equals(other: Money): boolean</code>.</li><li><code>toString()</code> — <code>"₪1,234.50"</code>: פסיק כל שלוש ספרות, 2 ספרות אחרי הנקודה. סכום שלילי: <code>"-₪5.00"</code>.</li></ul>
+```ts
+const price = Money.fromShekels(1234.5);
+String(price);                         // "₪1,234.50"
+String(price.times(3));                // "₪3,703.50"
+Money.fromShekels(0.1).plus(Money.fromShekels(0.2)).equals(Money.fromAgorot(30)); // true
+```
+<p>📄 כותבים בקובץ <code>12-design/starter/P12-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 12-design/starter/P12-E27.ts
+% npm run check P12-E27
+```
+@hint1
+<p>שדה אחד: <code>readonly #agorot: number;</code>. ‏<code>fromShekels</code> מחשבת <code>Math.round(shekels * 100)</code> וקוראת ל־<code>fromAgorot</code>, כך שהבדיקה כתובה פעם אחת. (<code>Number.isInteger(NaN)</code> הוא <code>false</code>, ולכן גם NaN נתפס שם.)</p>
+@hint2
+<p><code>toString</code>: מפרקים את הערך המוחלט לשקלים (<code>Math.floor(abs / 100)</code>) ולאגורות (<code>abs % 100</code>). את הפסיקים מוסיפים לשקלים כמו ב־P05-E25 — לולאה מהסוף, שלוש ספרות בכל פעם. האגורות: <code>String(cents).padStart(2, "0")</code>.</p>
+@solution
+```ts run save=solutions/P12-E27.ts
+// P12-E27: Money — אובייקט ערך
+function withCommas(n: number): string {
+  const digits = String(n);
+  let out = "";
+  for (let i = digits.length; i > 0; i -= 3) {
+    const part = digits.slice(Math.max(0, i - 3), i);
+    out = out === "" ? part : `${part},${out}`;
+  }
+  return out;
+}
+
+export class Money {
+  readonly #agorot: number;
+
+  private constructor(agorot: number) {
+    this.#agorot = agorot;
+  }
+
+  static fromAgorot(agorot: number): Money {
+    if (!Number.isInteger(agorot)) {
+      throw new RangeError("סכום באגורות חייב להיות מספר שלם");
+    }
+    return new Money(agorot);
+  }
+
+  static fromShekels(shekels: number): Money {
+    return Money.fromAgorot(Math.round(shekels * 100));
+  }
+
+  get agorot(): number {
+    return this.#agorot;
+  }
+
+  plus(other: Money): Money {
+    return new Money(this.#agorot + other.#agorot);
+  }
+
+  times(factor: number): Money {
+    return Money.fromAgorot(Math.round(this.#agorot * factor));
+  }
+
+  equals(other: Money): boolean {
+    return this.#agorot === other.#agorot;
+  }
+
+  toString(): string {
+    const abs = Math.abs(this.#agorot);
+    const shekels = withCommas(Math.floor(abs / 100));
+    const cents = String(abs % 100).padStart(2, "0");
+    return `${this.#agorot < 0 ? "-" : ""}₪${shekels}.${cents}`;
+  }
+}
+
+const price = Money.fromShekels(1234.5);
+console.log(String(price), String(price.times(3)), String(Money.fromAgorot(-500)));
+console.log(Money.fromShekels(0.1).plus(Money.fromShekels(0.2)).equals(Money.fromAgorot(30)));
+```
+```out
+₪1,234.50 ₪3,703.50 -₪5.00
+true
+```
+<p><strong>אובייקט ערך</strong> (value object) הוא אובייקט שמוגדר רק על ידי הערך שלו, כמו מספר. לכן הוא immutable: <code>plus</code> לא משנה את <code>price</code>, אלא מחזירה <code>Money</code> חדש. אם שני חלקים בקוד מחזיקים את אותו מופע, אף אחד מהם לא יכול "להזיז" לשני את הסכום (פרק 7, הפניות).</p>
+<p>ה־constructor הפרטי מבטיח שכל מופע עבר דרך <code>fromAgorot</code>, כלומר דרך הבדיקה. שים לב ש־<code>other.#agorot</code> מותר: שדה פרטי נגיש לכל קוד <strong>בתוך המחלקה</strong>, גם במופע אחר שלה.</p>
+<p>ב־<code>toString</code> עובדים עם הערך המוחלט ומוסיפים את המינוס בסוף. אחרת, עם ‎-550 אגורות, ‏<code>Math.floor(-5.5)</code> הוא ‎-6 (ולא ‎-5), ו־<code>-550 % 100</code> הוא ‎-50.</p>
+@mistakes
+<ul><li>לשמור שקלים (<code>this.amount = 19.9</code>) — <code>0.1 + 0.2</code> חוזר, ו־<code>equals</code> נכשל.</li><li><code>times</code> בלי <code>Math.round</code> — <code>fromAgorot</code> זורקת על <code>1990 * 1.17</code>.</li><li>להוסיף פסיקים למחרוזת שכבר יש בה מינוס — <code>"-123456"</code> הופך ל־<code>"-,123,456"</code>, בדיוק הטעות מ־P05-E25.</li></ul>
+
+@@ P12-E28 | 3 | דוח הלקוחות הגדולים 🤖 | 20 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על קיבוץ עם <code>Map</code> (פרק 7), על <code>sort</code> ו־<code>slice</code> (פרק 6) ועל <code>async/await</code> (פרק 10)</strong>, בתוך service עם repositories מוזרקים (שיעור 3). כתוב וייצא:</p>
+```ts
+export type Order = { id: number; userId: number; total: number; status: "paid" | "cancelled" };
+export type User = { id: number; name: string };
+export interface OrderRepository { findAll(): Promise<Order[]> }
+export interface UserRepository { findByIds(ids: number[]): Promise<User[]> }
+```
+<p>ומחלקה <code>ReportService</code>, שה־constructor שלה מקבל <code>(orders: OrderRepository, users: UserRepository)</code>, עם מתודה אחת:</p>
+<p><code>async topCustomers(n: number): Promise&lt;{ name: string; total: number }[]&gt;</code></p>
+<ul><li>רק הזמנות <code>paid</code>. סוכמים לפי <code>userId</code>.</li><li>ממיינים מהסכום הגבוה לנמוך. בסכום שווה — לפי <code>userId</code> מהקטן לגדול. לוקחים את ה־<code>n</code> הראשונים.</li><li>את השמות מביאים ב<strong>קריאה אחת</strong> ל־<code>findByIds</code>, רק עם ה־ids של ה־<code>n</code> שנבחרו. משתמש שלא נמצא — השם <code>"לא ידוע"</code>.</li></ul>
+<p>הבודק מזריק repositories מזויפים, וסופר כמה פעמים קראת להם.</p>
+<p>📄 כותבים בקובץ <code>12-design/starter/P12-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 12-design/starter/P12-E28.ts
+% npm run check P12-E28
+```
+@hint1
+<p>שלושה שלבים בתוך <code>topCustomers</code>: (1) <code>await this.#orders.findAll()</code> ← <code>filter</code> ← קיבוץ ל־<code>Map&lt;number, number&gt;</code> של userId ← סכום. (2) <code>[...totals]</code> (מערך של זוגות) ← <code>sort</code> ← <code>slice(0, n)</code>. (3) <code>findByIds</code> על ה־ids שנבחרו, ו־<code>Map</code> מ־id לשם.</p>
+<p>(כמו שראית בשיעור 1: את השדות כותבים במפורש — <code>#orders: OrderRepository;</code> ובתוך ה־constructor ‏<code>this.#orders = orders;</code>.)</p>
+@hint2
+<p>מיון זוגות: <code>.sort(([idA, a], [idB, b]) =&gt; b - a || idA - idB)</code> — אם ההפרש 0, ה־<code>||</code> עובר להשוואה השנייה. בסוף: <code>top.map(([id, total]) =&gt; ({ name: names.get(id) ?? "לא ידוע", total }))</code>.</p>
+@solution
+```ts run save=solutions/P12-E28.ts
+// P12-E28: דוח הלקוחות הגדולים
+export type Order = { id: number; userId: number; total: number; status: "paid" | "cancelled" };
+export type User = { id: number; name: string };
+
+export interface OrderRepository {
+  findAll(): Promise<Order[]>;
+}
+export interface UserRepository {
+  findByIds(ids: number[]): Promise<User[]>;
+}
+
+export class ReportService {
+  #orders: OrderRepository;
+  #users: UserRepository;
+
+  constructor(orders: OrderRepository, users: UserRepository) {
+    this.#orders = orders;
+    this.#users = users;
+  }
+
+  async topCustomers(n: number): Promise<{ name: string; total: number }[]> {
+    const orders = await this.#orders.findAll();
+
+    const totals = new Map<number, number>();
+    for (const o of orders.filter((o) => o.status === "paid")) {
+      totals.set(o.userId, (totals.get(o.userId) ?? 0) + o.total);
+    }
+
+    const top = [...totals].sort(([idA, a], [idB, b]) => b - a || idA - idB).slice(0, n);
+
+    const users = await this.#users.findByIds(top.map(([id]) => id));
+    const names = new Map(users.map((u) => [u.id, u.name]));
+
+    return top.map(([id, total]) => ({ name: names.get(id) ?? "לא ידוע", total }));
+  }
+}
+
+const orders: OrderRepository = {
+  findAll: async () => [
+    { id: 1, userId: 7, total: 100, status: "paid" },
+    { id: 2, userId: 8, total: 300, status: "paid" },
+    { id: 3, userId: 7, total: 250, status: "paid" },
+    { id: 4, userId: 9, total: 999, status: "cancelled" },
+  ],
+};
+const users: UserRepository = {
+  findByIds: async (ids) => [{ id: 7, name: "דנה" }, { id: 8, name: "עומר" }].filter((u) => ids.includes(u.id)),
+};
+
+console.log(await new ReportService(orders, users).topCustomers(5));
+```
+```out
+[ { name: 'דנה', total: 350 }, { name: 'עומר', total: 300 } ]
+```
+<p>ה־service לא יודע מאיפה מגיעים הנתונים: ממסד, מקובץ או מאובייקט מזויף בבדיקה. הוא יודע רק את ה־interface. בזכות זה הבודק יכול להזריק repository שסופר קריאות, ולוודא שלא נוצרה בעיית <strong>N+1</strong>: קריאה למסד לכל לקוח בנפרד, במקום קריאה אחת לכולם (תפגוש אותה שוב בפרקים 17 ו־19).</p>
+<p><code>[...totals]</code> הופך <code>Map</code> למערך של זוגות <code>[userId, total]</code>, ומשם זה מיון רגיל (פרק 6). ‏<code>new Map(users.map(...))</code> הוא הדרך הקצרה לבנות מילון מ־id לשם, כדי שהחיפוש בסוף לא יסרוק את המערך כל פעם מחדש.</p>
+@mistakes
+<ul><li><code>for (const [id] of top) { await this.#users.findByIds([id]); }</code> — ‏N קריאות במקום אחת. הבודק סופר.</li><li>לשלוף שמות לכל הלקוחות לפני ה־<code>slice</code> — עובד, אבל מבקש מהמסד אלפי שמות כדי להציג חמישה.</li><li><code>.sort((a, b) =&gt; b[1] - a[1])</code> בלי שובר שוויון — הסדר בין לקוחות עם אותו סכום תלוי בסדר ההזמנות.</li><li><code>constructor(private orders: OrderRepository)</code> — Node לא מריץ את הכתיב המקוצר הזה ישירות מקובץ <code>.ts</code> (שיעור 1).</li></ul>

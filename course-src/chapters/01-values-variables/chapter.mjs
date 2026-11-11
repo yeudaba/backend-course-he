@@ -6,10 +6,27 @@ export default {
   title: "ערכים ומשתנים",
   part: "חטיבה א׳ — יסודות JavaScript",
   fast: true,
+  checker: true,
   time: "2–3 מפגשים (במסלול המהיר: מפגש אחד)",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+ ותוסף Error Lens (פרק 0).</p>
-<p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
+<p><strong>מה מתקינים עכשיו:</strong> כלום. <strong>מה חדש: הבודק האוטומטי.</strong> רוב תרגילי הכתיבה באים עם קובץ מוכן ב־<code>starter/</code> (שיש בו רק הערה עם המשימה) ועם בדיקה. אתה כותב את הקוד בקובץ, ופקודה אחת אומרת לך אם הפלט נכון.</p>
+<ol class="steps">
+<li><strong>פעם אחת בלבד:</strong> ב־Finder, העתק מ־<code>~/Desktop/Backend/backend-course</code> אל <code>~/dev/backend-course</code> את הקובץ <code>package.json</code> ואת התיקייה <code>tools</code>.</li>
+<li>העתק גם את תיקיית הפרק <code>01-values-variables</code> (ראה למטה).</li>
+<li>בדיקה — ב־Terminal של VS Code, מתוך <code>~/dev/backend-course</code>:</li>
+</ol>
+
+\`\`\`term
+% npm run check P01-E06
+.. > backend-course@ check
+.. > node tools/check.mjs P01-E06
+בודק 1 קובצי בדיקה עבור P01-E06...
+✖ ...
+✘ יש בדיקות שנכשלו. קרא את ההודעה מעל: מה ציפינו ומה קיבלנו.
+\`\`\`
+
+<p>זה <strong>תקין</strong> — עוד לא פתרת את התרגיל, ולכן הבדיקות נכשלות. אם קיבלת <code>Missing script: "check"</code> — <code>package.json</code> לא הועתק, או שאתה לא בתיקייה הנכונה (<code>pwd</code>).</p>
 ${copyStep("01-values-variables")}
 ${verifyNode}`,
   entryTest: `<p>זוכר את המושגים מהתואר? ענה על 10 השאלות <strong>בלי להריץ</strong> (~15 דקות), ואז פתח את התשובות.</p>

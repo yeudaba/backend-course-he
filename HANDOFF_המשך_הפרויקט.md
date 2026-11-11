@@ -96,6 +96,7 @@ SELECT ...
 ```
 - **שורת הכותרת:** `מזהה | רמה | כותרת | דקות | שיעור`. הסימן 🤖 בכותרת מסמן שיש לתרגיל בודק אוטומטי.
 - **רמות התרגילים:** E01–05 רמה 1 (הבנה, בלי בודק); E06–12 רמה 2; E13–19 רמה 3; E20–23 רמה 4 (תיקון באג — קובץ ההתחלה מכיל את הבאגים); E24–25 רמה 5 (אתגר).
+- **שורת `@type` (אופציונלית, מיד אחרי הכותרת):** `@type warmup` / `scratch` / `review`. התרגיל מקבל תגית (🔥 חימום / ✍️ מאפס / 🔁 חזרה) ומוצג בבלוק "✍️ תרגול כתיבה" בראש דף התרגילים (ובאותו סדר בדף הפתרונות). תרגיל בלי `@type` נבנה בדיוק כמו קודם. ערך לא מוכר — שגיאת בנייה. ראה 7.5.
 - כל שיעור מסתיים בקופסת "✍️ עכשיו בדף התרגילים" עם קישורים לתרגילים (`exercises.html#P16-E06`). בסוף הפרק: קופסת 💼 "בעולם העבודה".
 
 ### גדרות קוד (fences) — התכונות שהבנייה מבינה
@@ -421,6 +422,71 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 - **פרק 24 שיעור 6** (observability, E26–E30), **פרק 26 שיעור 6** (SSE/WebSocket/fan-out, E26–E30, תלות חדשה `ws`), **פרק 30 שיעור 5** (עוזר קוד AI, E26–E30; חיפוש עבודה עבר לשיעור 6). בפרקים האלה `expectedExercises: 30`.
 - **יחידה 25.7 MongoDB** — `25w-mongodb`, מזהים `P25.7-E06`. קונטיינר `course-mongo` (mongo:8, replica set `rs0`) על **27018**; `build.mjs` מעביר `MONGO_URL` לבלוקי run ו־`COURSE_MONGO_URL` לבדיקות. `root/tools/mongo.mjs`: `mongoSandbox(t, url, { seed })` ← database זמני עם `files/seed.mjs`. תלות `mongodb` 7.8.0.
 - **גילויים:** (35) Docker Hub החזיר 429 על mongo:8 — `cloud-setup.sh` מושך מ־`mirror.gcr.io/library/mongo:8` כגיבוי. (36) Mongo standalone בלי replica set: טרנזקציה נכשלת עם "This MongoDB deployment does not support retryable writes". (37) `insertOne` מוסיף `_id` לאובייקט שקיבל — בדוגמה שמדפיסה את האובייקט צריך עותק. (38) `$pull`/`$push` על `db.collection()` בלי טיפוס — שגיאת TypeScript ב־strict; משתמשים ב־`db.collection<T>()`. (39) OpenTelemetry sdk-node 0.301: `NodeSDK` בלבד (אין `tracing` namespace); ConsoleSpanExporter ב־`@opentelemetry/sdk-trace`.
+
+### 7.5 עדכון 10.11.2026 — תרגול כתיבה (סוכן `exercise-coach`)
+- **החלטות של יהודה:** 3 תרגילים חדשים לכל יחידה ממוספרת (2 🔁 חזרה + 1 חדש; בפרקים 1–2 כולם חימום/מאפס), קובץ התחלה מדורג (פרקים 1–8: החדש הראשון עם חתימה; מפרק 9: ריק עם הערה), בודק פלט לפרקים 1–4, שורת `@type`, ועבודה לפי הסדר 1 ← 30. פרטים: אפיון 6.1 ("חריג מתוכנן 2") ו־6.4.
+- **בוצע — פרקים 1–4:**
+  - `build.mjs`: `@type` (ראה סעיף 3). `reporter.mjs`: מציג את ההודעה שכתבנו ב־assert (ok/fail/match) במקום "קיבלנו false".
+  - `checker: true` בפרקים 1–4. קופסת 🧰 של פרק 1 מסבירה את העתקת `package.json` ו־`tools` (כמו שהייתה בפרק 5); פרק 5 מפנה לפרק 1.
+  - **בודק פלט** ל־60 תרגילי כתיבה קיימים: פרק 1 — 13 (E06–E09, E11–E16, E18, E24–E25), פרק 2 — 15 (E06–E18, E24–E25), פרקים 3–4 — 16 כל אחד (E06–E19, E24–E25). לא נבדקים: תרגילי הסבר/ניבוי (P01-E10, E17, E19; P02-E19) ותרגילי התיקון E20–E23 (עדיין בלי בודק).
+  - **`tests/_out.mjs`** (עותק זהה בכל אחד מפרקים 1–4, כדי שלא יהיה צורך להעתיק `tools` מחדש): `run(url, file, {changes})` מריץ את הקובץ, או עותק שלו שבו ערך הוחלף. ההחלפה לא נוגעת בהערות שבראש הקובץ. בנוסף: `sameOutput`, `printed`, `ranOk` (לולאה אינסופית ← הודעה אחרי 10 שניות), `source`, `code` (בלי הערות), `strings`.
+  - התרגילים עברו מ־`playground/` לקובץ ב־`starter/` שיש בו רק הערה. ב־E07 (פרקים 1–2), P03-E11 ובחלק מהאתגרים הקובץ כולל את הקוד או את הנתונים שהמשימה נותנת. לכל משימה נוספה שורת "📄 כותבים בקובץ ... · `npm run check`". הניסוח הושלם בשמות המשתנים ובפורמט הפלט שהבודק דורש.
+  - **חדשים (`expectedExercises: 28`):**
+    - פרק 1: E26 🔥 תעודת זהות של ערך, E27 🔥 חיישן טמפרטורה, E28 ✍️ משחק: חיים ונקודות.
+    - פרק 2: E26 🔥 אגורות לשקלים, E27 🔥 פירוק אימייל, E28 ✍️ חשבון חשמל.
+    - פרק 3: E26 🔥 שעות פתיחה, E27 🔁 טלפון לתצוגה, E28 🔁 חניון.
+    - פרק 4: E26 🔥 סכום עד יעד, E27 🔁 ספירת סטטוסים (switch), E28 🔁 טבלת טמפרטורות.
+- **בוצע — פרקים 5–12 (בלי 08p), סבב 2:** בכל פרק E26–E28 ו־`expectedExercises: 28`, קישורים מקופסת התרגול של השיעור המתאים. בפרקים 5–8 התרגיל החדש עם חתימה (ב־8: מודול הכסף), מפרק 9 קובצי התחלה ריקים.
+  - **עוזרי בדיקות לכל פרק** (בתוך `tests/` של הפרק, כדי שלא יהיה צורך להעתיק `tools` מחדש): `_src.mjs` בפרקים 5–8 ו־10 (`exportsOf` — הודעה ברורה כשחסר ייצוא; `code` — הקוד בלי הערות), `_git.mjs` בפרק 9, `_ts.mjs` בפרקים 11–12 (`typecheck`, `exportsOf`, `code`, ו־`typeProbe`).
+  - **`typeProbe`**: קובץ `.ts` זמני שמייבא מהקובץ של הלומד (המחרוזת `FILE` מוחלפת בנתיב). שורות רגילות חייבות לעבור, ושורות אחרי `// @ts-expect-error — הסבר` חייבות להיכשל. ההודעה היא שורה אחת (ה־reporter מציג רק את השורה הראשונה): הבעיה הראשונה, ההסבר, ו"(ועוד N)".
+  - **פרק 9:** לראשונה יש בודק (בלי `checker: true` — רוב הפרק עדיין ב־Terminal; נוספה פסקה בקופסת 🧰). `runGitScript` מריץ את `starter/P09-E26.sh` ב־`bash` בתיקייה זמנית, עם `GIT_CONFIG_GLOBAL` זמני (שם, אימייל, `main`, בלי עורך), ובודק log, ‏`ls-files`, ‏`git show` ו־status.
+  - **חדשים:**
+    - פרק 5: E26 🔥 מונה עם זיכרון (closure), E27 🔁 טקסט לקוד סטטוס (switch), E28 🔁 מספר ראשוני (לולאה + guard).
+    - פרק 6: E26 🔥 range, E27 🔁 סדרת קולץ (while), E28 🔁 מחירון עם נקודות (padEnd/padStart/slice/toFixed).
+    - פרק 7: E26 🔥 mapValues עם Object.fromEntries, E27 🔁 מלאי פרטי (closure + Map), E28 🔁 יתרה מאירועים (switch בתוך reduce).
+    - פרק 8: E26 ✍️ מודול כסף ב־ES Modules (שני קבצים), E27 🔁 כפילויות ברשימת הרשמה (Set + TypeError), E28 🔁 מפרש פקודות ל־CLI (switch + split + throw).
+    - פרק 9: E26 ✍️ מאגר ראשון — כסקריפט (.sh), E27 🔁 ניתוח של git log (indexOf/slice/split + ספירה), E28 🔁 ‎.gitignore קטן משלך (startsWith/endsWith + some).
+    - פרק 10: E26 🔥 חיבור אסינכרוני עם callback (error-first, תמיד אסינכרוני), E27 🔁 סכום הזמנה במקביל (map/reduce + Promise.all, נמדד זמן), E28 🔁 כל העמודים (while + await, pagination).
+    - פרק 11: E26 ✍️ Omit/Pick/Partial/Record (utility types), E27 🔁 משך זמן מטקסט ובחזרה (number | null), E28 🔁 שליפת משתמשים: נמצאו וחסרים (Promise.all + Set).
+    - פרק 12: E26 ✍️ מחסן כמחלקה (המשך של P07-E27), E27 🔁 Money — אובייקט ערך (private constructor, פסיקים כמו P05-E25), E28 🔁 דוח הלקוחות הגדולים (service + repositories מזויפים, תופס N+1).
+- **בוצע — פרקים 13–22 (בלי 15p), סבב 3:** בכל פרק E26–E28 ו־`expectedExercises: 28`; ביחידה 15.5 המזהים E13–E15 ו־`expectedExercises: 15`. קובצי התחלה ריקים (הערה עם המשימה ושם הייצוא), קישורים מקופסת התרגול של השיעור המתאים.
+  - **עוזרי בדיקות:** `tests/_src.mjs` בפרקים 13, 14 ו־15.5 (גרסת ESM: ההודעה אומרת `export function` / `export class`). ‏`tests/_ts.mjs` בפרקים 15–19, 21–22 (ב־15: הודעת `export const` לסכמות; **ב־21–22: עם `--typeRoots <course>/node_modules/@types --types node`**, אחרת `Buffer` ו־`node:crypto` לא מוכרים כשהקובץ לא מייבא חבילה). בוחן טיפוסים (`typeProbe`) רץ מתיקייה זמנית, ולכן אסור לו לייבא חבילות (`pg`, ‏`express`) — לוקחים את הטיפוס מהקובץ של הלומד (`Parameters<typeof f>[0]`).
+  - **פרקי SQL:** תרגילי SQL נבדקים עם `sandbox` + `fileRows`/`expectedRows`, ותרגילי DDL גם עם שורות שחייבות להידחות. את ה־```out של SQL מילאתי עם `node course-src/build.mjs --fill <prefix>` (גדר `out` עם `?` בלבד).
+  - **`tests/_schema.mjs` בפרק 19 (חדש):** `schemaToSql(testUrl, file)` מריץ `prisma migrate diff --from-empty --to-schema ... --script` בתיקייה זמנית. **חובה** קובץ config עם `datasource` (גם `{ url: undefined }`), אחרת Prisma 7 מחזיר פלט ריק עם קוד 0.
+  - **פרק 20:** הבודקים טוענים את הקובץ עם `loadNest` ובודקים בעצמם שהייצוא קיים (קובץ ריק מתקמפל לקובץ ריק).
+  - **פרק 22:** ‏E26 הוא "כתוב את הבדיקות" (`files/P22-E26/` עם `variants` ו־11 `mutants`); קובץ ה־spec בהתחלה ריק לגמרי (גם בלי imports). הקוד הנבדק הועתק גם ל־`starter/` ול־`solutions/` כמו בשאר התרגילים.
+  - **חדשים:**
+    - פרק 13: E26 ✍️ פירוק שורת לוג עם regex (Common Log Format), E27 🔁 העלאת גרסה semver (switch), E28 🔁 מיזוג קובצי הגדרות במקביל (Promise.all + reduce).
+    - פרק 14: E26 🔥 פירוק header של Cookie, E27 🔁 סטטיסטיקת בקשות כמחלקה (class + Map + sort), E28 🔁 לחכות שהשרת יעלה (while + await + fetch).
+    - פרק 15: E26 ✍️ API משימות מקובץ ריק (Express + Zod), E27 🔁 סכמת הרשמה עם regex (Zod ‏regex/transform/pipe), E28 🔁 סכום עגלה (Map + reduce בתוך route).
+    - יחידה 15.5: E13 ✍️ טבלת HTML מנתונים, E14 🔁 debounce (closure + setTimeout), E15 🔁 לוח בקרה במקביל (Promise.allSettled).
+    - פרק 16: E26 ✍️ יומן אימונים — CREATE TABLE + INSERT + שאילתה מקובץ ריק, E27 🔁 בונה שאילתות עם פרמטרים ב־TS (switch + type, רץ על המסד, בודק injection), E28 🔁 אזור לכל לקוח (CASE בצורה הקצרה כ־switch, NULL ב־ELSE).
+    - פרק 17: E26 ✍️ הספרייה מ־P17-E01 בקוד (5 טבלאות, CASCADE מול חסימה), E27 🔁 ההזמנה הכמה של הלקוח (CTE + ROW_NUMBER + SUM OVER), E28 🔁 JOIN ו־GROUP BY בקוד TS (Map + אגורות, מושווה ל־P17-E12).
+    - פרק 18: E26 ✍️ withTransaction generic + transferAll, E27 🔁 batch loader (closure + Map + new Promise, ‏ANY($1)), E28 🔁 שלושת הלקוחות המובילים בכל חודש (GROUP BY + ROW_NUMBER על 200,000 שורות).
+    - פרק 19: E26 ✍️ הספרייה כ־schema של Prisma (כתיבת `model`), E27 🔁 עמוד מוצרים (findMany + count ב־Promise.all), E28 🔁 repository לקטגוריות (interface + class + extends Error + switch על P2002/P2025).
+    - פרק 20: E26 ✍️ מודול סימניות מקובץ ריק, E27 🔁 slug — regex ב־slugify וב־SlugPipe, E28 🔁 סיכום לקוח משני repositories (tokens + Promise.all + reduce באגורות).
+    - פרק 21: E26 ✍️ JWT ביד עם node:crypto (זהה ל־jsonwebtoken, ‏timingSafeEqual), E27 🔁 פירוק header של Authorization (switch + regex + union), E28 🔁 רשימת חסימה לטוקנים (class + Map + שעון מוזרק).
+    - פרק 22: E26 ✍️ בדיקות ל־pagination (מוטציות), E27 🔁 מטמון LRU (Map + class + generics), E28 🔁 memoizeAsync עם שעון מוזרק (closure + Map + Promise).
+- **בוצע — פרקים 23–30 (בלי 25p ו־29x), סבב 4:** בכל יחידה E26–E28 ו־`expectedExercises: 28`; בפרקים 24, 26, 30 — ‏E31–E33 ו־`expectedExercises: 33`. קובצי התחלה ריקים, קישורים מקופסת התרגול של השיעור המתאים, ו־`tests/_ts.mjs` (מפרק 21) בכל יחידה.
+  - **"כתוב את הבדיקות" חוזר כל 2–3 יחידות** (‏`tools/mutation.mjs`, ‏`files/<id>/` עם `mutants.json`, והקוד הנבדק גם ב־`starter/` וב־`solutions/` של המקור): ‏P24-E32 (‏Retry-After, 9 מוטנטים), ‏P25.7-E27 (‏parseSort, 10 — כולל סדר מפתחות שרק `Object.entries` תופס), ‏P26.5-E27 (‏retry/dead-letter, 11), ‏P28-E27 (‏/health, 12), ‏P29-E27 (‏redactPII, 12), ‏P30-E32 (מספר זהות, 10).
+  - **נתונים חדשים:** ‏`26w-messaging/files/outbox-next.sql` (‏P26.5-E28), ‏`28w-scale/files/views-days.sql` (‏P28.5-E27, השעות 10–13 UTC כדי שהיום לא ישתנה באזורי זמן אחרים). ה־```out של SQL מולא עם `--fill`.
+  - **לקח — הדגמות שמתחברות לשירות:** קובץ הפתרון נטען גם בבודק, ולכן קוד הדגמה בסוף הקובץ רץ בכל בדיקה. ב־P26-E31 (‏Redis) ההדגמה עברה לקובץ `demo.mts` נפרד (פלט אמיתי ב־```term), והפתרון בלי `run`. ‏top-level `await` לא עובר `tsc` (הקובץ נחשב CommonJS) — הדגמות אסינכרוניות בתוך `async function demo() {...}; demo();`. ב־assemble, הדגמה שמתחברת ל־Redis צריכה `REDIS_URL=redis://localhost:6380`.
+  - **חדשים:**
+    - פרק 23: E26 ✍️ סבב גיבויים (bash), E27 🔁 קורא קובץ .env (indexOf/slice + regex), E28 🔁 כמה מקום תופסים ה־images (switch + reduce + toFixed).
+    - פרק 24: E31 ✍️ דוח latency מלוגים של JSON (Map + p95), E32 🔁 בדיקות ל־Retry-After, E33 🔁 התראה על שיעור שגיאות (class + while + שעון מוזרק).
+    - פרק 25: E26 ✍️ feature flags עם פריסה הדרגתית (sha256 ← דלי), E27 🔁 formatUptime (‏% + findIndex/slice/filter), E28 🔁 mapLimit (async + closure + while).
+    - יחידה 25.5: E26 ✍️ דוח לקוחות ב־MySQL (שני CTE + RANK + DATE_FORMAT), E27 🔁 INSERT מרובה שורות עם upsert (flatMap + regex לשמות), E28 🔁 שאילתה מ־PostgreSQL ל־MySQL (replace עם פונקציה).
+    - יחידה 25.7: E26 ✍️ חיפוש מוצרים מ־query string (פילטר Mongo + escape), E27 🔁 בדיקות ל־parseSort, E28 🔁 מה מסתתר ב־ObjectId (parseInt בבסיס 16 + padStart + Date.UTC).
+    - פרק 26: E31 ✍️ sessions ב־Redis (MULTI + EXPIRE NX/GT), E32 🔁 לקרוא את INFO (split(/\r?\n/) + fromEntries), E33 🔁 TypedEmitter (generics + keyof, בוחן טיפוסים).
+    - יחידה 26.3: E26 ✍️ label selector של Kubernetes (regex + union + switch), E27 🔁 חשבון S3 לפי מדרגות (לולאה עם מצטבר), E28 🔁 סיכום של kubectl get pods (טבלה לפי הכותרת, כמו P23-E28).
+    - יחידה 26.5: E26 ✍️ ReorderBuffer<T> (Map + while), E27 🔁 בדיקות ל־decide (retry/DLQ), E28 🔁 האירוע הבא לכל מפתח ב־outbox (SQL: ‏ROW_NUMBER + COUNT OVER).
+    - פרק 27: E26 🔥 הראשון שמופיע פעם אחת (Map, ‏O(n)), E27 🔁 מיזוג רשימות ממוינות (while עם שני אינדקסים), E28 🔁 דחיסת רצפים RLE (matchAll + repeat).
+    - פרק 28: E26 ✍️ quorum (R + W > N, read repair), E27 🔁 בדיקות ל־/health, E28 🔁 hedged request (new Promise + setTimeout).
+    - יחידה 28.5: E26 ✍️ Space-Saving TopK (זיכרון קבוע, ערבויות), E27 🔁 סיכום יומי של צפיות (SQL: ‏COUNT DISTINCT + ROW_NUMBER), E28 🔁 דוח של בדיקת עומס (padStart/padEnd + Intl).
+    - פרק 29: E26 ✍️ chunk + retrieve (‏RAG בלי embeddings, ‏\p{L}), E27 🔁 בדיקות ל־redactPII, E28 🔁 תבנית prompt (replace עם פונקציה + Object.hasOwn + <document>).
+    - יחידה 29.5: E26 ✍️ שומר לולאה לסוכן (stableKey רקורסיבי), E27 🔁 בודק JSON Schema קטן (union + רקורסיה + נתיבים), E28 🔁 trace כעץ טקסט (Map + רקורסיה + padEnd).
+    - פרק 30: E31 ✍️ מטלת בית: key-value עם טרנזקציות מקוננות, E32 🔁 בדיקות לבדיקת מספר זהות, E33 🔁 semver satisfies (23 מקרים שנבדקו מול חבילת semver).
+- **✔ המהלך הושלם:** תרגול הכתיבה קיים בכל 37 היחידות הממוספרות (1–30, ועוד 15.5, 25.5, 25.7, 26.3, 26.5, 28.5, 29.5). לא נכללו: פרק 0 והפרויקטים (08p, ‏15p, ‏25p, ‏29x). אפשר להמשיך (לא תוכנן): בודק לתרגילי התיקון E20–E23 בפרקים 1–4, ו"מסלול חזרה" מרוכז.
 
 ---
 

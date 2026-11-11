@@ -11,7 +11,7 @@ export default {
   nestProjects: ["solutions/coffee-shop"],
   testTimeout: 180000, // PR3-REDIS מעלה את השרת ומחכה לביטול אוטומטי
   time: "4 מפגשים",
-  expectedExercises: 30, // 25 + חמישה של שיעור 6 (זמן אמת)
+  expectedExercises: 33, // 25 + חמישה של שיעור 6 (זמן אמת) + שלושה של תרגול כתיבה
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, Docker Desktop, ופרויקט 3 (חנות הקפה) בשלב 4 — כל בודקי PR3 עוברים.</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>

@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ה׳ — ראיונות והרחבות",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24. <code>npm install</code> בתיקיית הקורס מוסיף את <code>@anthropic-ai/sdk</code> (ה־SDK הרשמי של Claude ל־TypeScript).</p>
 ${copyStep("29-ai-backend")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm install && npm run check P29-E06</code> ← הבודק רץ ונכשל על קובץ ההתחלה.</p>

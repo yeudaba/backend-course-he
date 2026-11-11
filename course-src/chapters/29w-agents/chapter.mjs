@@ -9,7 +9,7 @@ export default {
   checker: true,
   testTimeout: 30000,
   time: "3 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> פרק 29 — הקריאה ל־Claude, structured output, ולולאת כלים בסיסית.</p>
 <p><strong>מה מתקינים עכשיו:</strong> <code>npm install</code> בתיקיית הקורס — מוסיף את <code>@modelcontextprotocol/sdk</code>, ה־SDK הרשמי של MCP ל־TypeScript (שרתים ו־clients).</p>
 ${copyStep("29w-agents")}

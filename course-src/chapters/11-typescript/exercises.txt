@@ -1045,3 +1045,209 @@ console.log(JSON.stringify(orderSchema({ email: "a@b.c", items: [{ sku: "A", qty
 <p>שים לב ש־<code>hacker: true</code> לא עבר — רק השדות שבסכמה. זה בדיוק מה שספריות כמו Zod עושות (ועם טיפוסים מוסקים מהסכמה, כמו כאן עם <code>infer</code> — הטכניקה הכי מתקדמת בפרק). בפרק 15 תשתמש ב־Zod האמיתית ותזהה כל רעיון כאן.</p>
 @mistakes
 <ul><li>להחזיר את <code>value</code> המקורי מ־object — שדות זבל עוברים הלאה למסד.</li></ul>
+
+@@ P11-E26 | 2 | טיפוסים מטיפוסים: Omit, ‏Pick, ‏Partial, ‏Record 🤖 | 15 | שיעור 2
+@type scratch
+@task
+<p>לעיתים קרובות צריך טיפוס שהוא "כמעט" טיפוס קיים: משתמש בלי הסיסמה, או עדכון שבו כל השדות אופציונליים. אפשר להעתיק את השדות ידנית, אבל אז כל שינוי ב־<code>User</code> מחייב לעדכן כמה מקומות. ב־TypeScript יש <strong>utility types</strong> שבונים טיפוס חדש מטיפוס קיים:</p>
+<div class="table-wrap"><table>
+<tr><th>כותבים</th><th>מקבלים</th></tr>
+<tr><td><code>Omit&lt;User, "passwordHash"&gt;</code></td><td>כל השדות של User, חוץ מ־passwordHash</td></tr>
+<tr><td><code>Pick&lt;User, "name" | "email"&gt;</code></td><td>רק name ו־email</td></tr>
+<tr><td><code>Partial&lt;T&gt;</code></td><td>כל השדות של T, כאופציונליים</td></tr>
+<tr><td><code>Record&lt;"a" | "b", number&gt;</code></td><td><code>{ a: number; b: number }</code></td></tr>
+</table></div>
+<p>כתוב קובץ שמייצא (export):</p>
+<ul><li><code>type User</code> — <code>id</code> (מספר), <code>name</code>, <code>email</code>, <code>passwordHash</code> (מחרוזות), <code>role</code> (<code>"admin"</code> או <code>"member"</code>).</li><li><code>type PublicUser</code> — User בלי <code>passwordHash</code> (מה שמותר לשלוח ללקוח). השתמש ב־<code>Omit</code>.</li><li><code>type UserPatch</code> — עדכון: רק <code>name</code> ו־<code>email</code>, ושניהם אופציונליים. השתמש ב־<code>Partial</code> וב־<code>Pick</code>.</li><li><code>type RoleCounts</code> — מספר לכל role. השתמש ב־<code>Record</code> וב־<code>User["role"]</code>.</li><li><code>toPublic(u: User): PublicUser</code> — עותק בלי <code>passwordHash</code>.</li><li><code>applyPatch(u: User, patch: UserPatch): User</code> — עותק מעודכן.</li><li><code>countRoles(users: User[]): RoleCounts</code> — כמה מכל role (גם 0).</li></ul>
+<p>הבודק מריץ את הפונקציות, וגם בודק את הטיפוסים: למשל ש־<code>{ role: "admin" }</code> <strong>לא</strong> מתקבל כ־<code>UserPatch</code>.</p>
+<p>📄 כותבים בקובץ <code>11-typescript/starter/P11-E26.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 11-typescript/starter/P11-E26.ts
+% npm run check P11-E26
+```
+@hint1
+<p>הטיפוסים הם שורה אחת כל אחד: <code>export type PublicUser = Omit&lt;User, "passwordHash"&gt;;</code>. ב־<code>UserPatch</code> עוטפים: <code>Partial&lt;Pick&lt;...&gt;&gt;</code>. ‏<code>User["role"]</code> הוא הטיפוס של השדה role, כלומר <code>"admin" | "member"</code>.</p>
+@hint2
+<p><code>toPublic</code>: <code>const { passwordHash, ...rest } = u; return rest;</code>. ‏<code>applyPatch</code>: <code>{ ...u, ...patch }</code>. ‏<code>countRoles</code>: מתחילים מ־<code>{ admin: 0, member: 0 }</code> ומגדילים בלולאה.</p>
+@solution
+```ts run save=solutions/P11-E26.ts
+// P11-E26: טיפוסים מטיפוסים
+export type User = {
+  id: number;
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: "admin" | "member";
+};
+
+export type PublicUser = Omit<User, "passwordHash">;
+export type UserPatch = Partial<Pick<User, "name" | "email">>;
+export type RoleCounts = Record<User["role"], number>;
+
+export function toPublic(u: User): PublicUser {
+  const { passwordHash, ...rest } = u;
+  return rest;
+}
+
+export function applyPatch(u: User, patch: UserPatch): User {
+  return { ...u, ...patch };
+}
+
+export function countRoles(users: User[]): RoleCounts {
+  const counts: RoleCounts = { admin: 0, member: 0 };
+  for (const u of users) {
+    counts[u.role]++;
+  }
+  return counts;
+}
+
+const dana: User = { id: 1, name: "דנה", email: "dana@x.com", passwordHash: "h1", role: "admin" };
+console.log(toPublic(dana));
+console.log(applyPatch(dana, { name: "דנה כ." }).name);
+console.log(countRoles([dana]));
+```
+```out
+{ id: 1, name: 'דנה', email: 'dana@x.com', role: 'admin' }
+דנה כ.
+{ admin: 1, member: 0 }
+```
+<p>כל ארבעת הטיפוסים החדשים <strong>נגזרים</strong> מ־<code>User</code>. אם מחר יתווסף ל־User שדה <code>phone</code>, הוא יופיע אוטומטית ב־<code>PublicUser</code>. ואם יתווסף role שלישי, <code>countRoles</code> תפסיק להתקמפל עד שתוסיף אותו ל־<code>{ admin: 0, member: 0 }</code>. בדיוק את זה רוצים: TypeScript מזכיר לך את המקום ששכחת.</p>
+<p>ב־<code>toPublic</code>, ה־destructuring עם <code>...rest</code> (פרק 7) "מוציא" את <code>passwordHash</code> ואוסף את כל השאר לאובייקט חדש. ובפרק 20 תראה את אותם טיפוסים ב־NestJS: ‏<code>PartialType</code> ו־<code>OmitType</code> ל־DTOs.</p>
+@mistakes
+<ul><li><code>Pick&lt;Partial&lt;User&gt;, "name" | "email"&gt;</code> — עובד גם כן (הסדר לא משנה כאן). אבל <code>Partial&lt;User&gt;</code> לבד מתיר גם <code>{ role: "admin" }</code> — משתמש יכול לקדם את עצמו למנהל דרך טופס עדכון פרופיל.</li><li><code>Record&lt;string, number&gt;</code> — מקבל כל מפתח, ו־<code>{ admin: 1 }</code> (בלי member) עובר בלי שגיאה.</li><li><code>delete u.passwordHash</code> — משנה את האובייקט המקורי, ו־TypeScript גם מתלונן ש־passwordHash אינו אופציונלי.</li></ul>
+
+@@ P11-E27 | 3 | משך זמן: מטקסט למספר ובחזרה 🤖 | 15 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על <code>split</code>, ‏<code>endsWith</code>, ‏<code>slice</code> ו־<code>Number.isInteger</code> (פרקים 2 ו־6), על לולאה עם <code>return</code> מוקדם (פרקים 4–5), ועל <code>Math.floor</code> ו־<code>%</code> (פרק 2)</strong> — עם טיפוסים. כתוב וייצא שתי פונקציות:</p>
+<ul><li><code>parseDuration(text: string): number | null</code> — מחזירה דקות. הטקסט הוא מילים מופרדות ברווחים (אחד או יותר). כל מילה היא מספר שלם ואחריו <code>h</code> (שעות) או <code>m</code> (דקות). אם יש מילה לא תקינה, או שאין אף מילה — <code>null</code>.</li><li><code>formatDuration(minutes: number): string</code> — הכיוון ההפוך: <code>90</code> ← <code>"1h 30m"</code>, ‏<code>120</code> ← <code>"2h"</code>, ‏<code>45</code> ← <code>"45m"</code>, ‏<code>0</code> ← <code>"0m"</code>.</li></ul>
+```ts
+parseDuration("1h 30m");  // 90
+parseDuration(" 2h ");    // 120
+parseDuration("15m 1h");  // 75 — הסדר לא משנה
+parseDuration("1.5h");    // null — רק מספרים שלמים
+parseDuration("abc");     // null
+parseDuration("");        // null
+```
+<p>הבודק בודק גם את הטיפוסים: מי שקורא ל־<code>parseDuration</code> חייב לבדוק <code>null</code> לפני שהוא משתמש בתוצאה כמספר.</p>
+<p>📄 כותבים בקובץ <code>11-typescript/starter/P11-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 11-typescript/starter/P11-E27.ts
+% npm run check P11-E27
+```
+@hint1
+<p>מילים: <code>text.split(" ").filter((w) =&gt; w !== "")</code>. לכל מילה: היחידה היא התו האחרון (<code>w.slice(-1)</code>), והמספר הוא כל השאר (<code>Number(w.slice(0, -1))</code>).</p>
+@hint2
+<p>בלולאת <code>for...of</code>: אם המספר לא <code>Number.isInteger</code>, או שהמילה היא רק <code>"h"</code> (אז <code>slice(0, -1)</code> הוא <code>""</code>, ו־<code>Number("")</code> הוא 0) — <code>return null</code>. ב־<code>formatDuration</code>: <code>Math.floor(minutes / 60)</code> ו־<code>minutes % 60</code>, ומערך חלקים שמחברים ב־<code>join(" ")</code>.</p>
+@solution
+```ts run save=solutions/P11-E27.ts
+// P11-E27: משך זמן
+export function parseDuration(text: string): number | null {
+  const words = text.split(" ").filter((w) => w !== "");
+  if (words.length === 0) return null;
+
+  let total = 0;
+  for (const w of words) {
+    const unit = w.slice(-1);
+    const digits = w.slice(0, -1);
+    const n = Number(digits);
+    if (digits === "" || !Number.isInteger(n) || n < 0) return null;
+    if (unit === "h") {
+      total += n * 60;
+    } else if (unit === "m") {
+      total += n;
+    } else {
+      return null;
+    }
+  }
+  return total;
+}
+
+export function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0 || h === 0) parts.push(`${m}m`);
+  return parts.join(" ");
+}
+
+for (const t of ["1h 30m", "15m 1h", "1.5h", ""]) {
+  const minutes = parseDuration(t);
+  console.log(JSON.stringify(t), "→", minutes === null ? "לא תקין" : formatDuration(minutes));
+}
+```
+```out
+"1h 30m" → 1h 30m
+"15m 1h" → 1h 15m
+"1.5h" → לא תקין
+"" → לא תקין
+```
+<p>הטיפוס <code>number | null</code> הוא החוזה של הפונקציה: "אולי אין תשובה". בגלל זה, בשורת ההדפסה TypeScript מחייב לבדוק <code>minutes === null</code> לפני הקריאה ל־<code>formatDuration</code>. בלי הבדיקה — שגיאת קומפילציה, ולא <code>NaN</code> שמתגלה בייצור.</p>
+<p>הלולאה משתמשת ב־<code>return null</code> מוקדם, כמו ב־<code>isPrime</code> (P05-E28): ברגע שמילה אחת לא תקינה, אין טעם להמשיך. <code>digits === ""</code> תופס את המקרה של <code>"h"</code> לבד, כי <code>Number("")</code> הוא 0 ו־0 הוא מספר שלם.</p>
+@mistakes
+<ul><li><code>parseInt(w)</code> — ‏<code>parseInt("1.5h")</code> הוא 1, ו־<code>"1.5h"</code> הופך לשעה אחת בשקט.</li><li>להחזיר <code>0</code> במקום <code>null</code> לטקסט לא תקין — אי אפשר להבדיל בין <code>"0m"</code> לבין <code>"abc"</code>.</li><li>ב־<code>formatDuration</code>: <code>if (m &gt; 0)</code> בלבד — ‏<code>0</code> מחזיר מחרוזת ריקה.</li></ul>
+
+@@ P11-E28 | 3 | שליפת משתמשים: נמצאו וחסרים 🤖 | 15 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Promise.all</code> (פרק 10) ועל <code>Set</code> (פרק 7)</strong>, עם טיפוסים. כתוב קובץ שמייצא:</p>
+<ul><li><code>type User = { id: number; name: string }</code>.</li><li><code>async function findUsers(ids: number[], getUser: (id: number) =&gt; Promise&lt;User | undefined&gt;): Promise&lt;{ found: User[]; missing: number[] }&gt;</code></li></ul>
+<p>הפונקציה מבקשת את כל המשתמשים <strong>במקביל</strong>. ‏<code>getUser</code> מחזירה <code>undefined</code> כשאין משתמש כזה. מחזירים את מי שנמצא ב־<code>found</code> ואת ה־ids שלא נמצאו ב־<code>missing</code>. שניהם לפי הסדר שב־<code>ids</code>. id שמופיע כמה פעמים — מבקשים ומחזירים <strong>פעם אחת</strong>.</p>
+```ts
+// במסד: 1 → דנה, 3 → עומר
+await findUsers([3, 2, 1, 3], getUser);
+// { found: [{ id: 3, name: "עומר" }, { id: 1, name: "דנה" }], missing: [2] }
+```
+<p>📄 כותבים בקובץ <code>11-typescript/starter/P11-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 11-typescript/starter/P11-E28.ts
+% npm run check P11-E28
+```
+@hint1
+<p><code>const unique = [...new Set(ids)];</code> ואחר כך <code>await Promise.all(unique.map(getUser))</code>. מקבלים מערך של <code>User | undefined</code>, באותו סדר כמו <code>unique</code>.</p>
+@hint2
+<p>לולאה עם אינדקס: <code>unique.forEach((id, i) =&gt; { const user = results[i]; if (user) found.push(user); else missing.push(id); });</code>. בתוך ה־<code>if</code>, TypeScript כבר יודע ש־<code>user</code> הוא <code>User</code> ולא <code>undefined</code> (narrowing, שיעור 3).</p>
+@solution
+```ts run save=solutions/P11-E28.ts
+// P11-E28: שליפת משתמשים
+export type User = { id: number; name: string };
+
+export async function findUsers(
+  ids: number[],
+  getUser: (id: number) => Promise<User | undefined>
+): Promise<{ found: User[]; missing: number[] }> {
+  const unique = [...new Set(ids)];
+  const results = await Promise.all(unique.map(getUser));
+  const found: User[] = [];
+  const missing: number[] = [];
+  unique.forEach((id, i) => {
+    const user = results[i];
+    if (user) {
+      found.push(user);
+    } else {
+      missing.push(id);
+    }
+  });
+  return { found, missing };
+}
+
+const db = new Map<number, User>([
+  [1, { id: 1, name: "דנה" }],
+  [3, { id: 3, name: "עומר" }],
+]);
+const getUser = async (id: number) => db.get(id);
+
+console.log(await findUsers([3, 2, 1, 3], getUser));
+```
+```out
+{
+  found: [ { id: 3, name: 'עומר' }, { id: 1, name: 'דנה' } ],
+  missing: [ 2 ]
+}
+```
+<p><code>new Set(ids)</code> מסיר כפילויות ושומר על הסדר של ההופעה הראשונה, ו־<code>[...set]</code> מחזיר אותו למערך. זה חוסך בקשה כפולה למסד, ובמערכת אמיתית — גם שורה כפולה בתשובה.</p>
+<p><code>unique.map(getUser)</code> מעביר את הפונקציה עצמה ל־<code>map</code>. זה בטוח כאן, כי <code>getUser</code> מקבלת פרמטר אחד. (<code>map</code> שולחת גם אינדקס ומערך, ופונקציה עם פרמטר שני אופציונלי הייתה מקבלת אותם בטעות. ב־<code>parseInt</code> זה מפורסם: <code>["10", "10"].map(parseInt)</code> נותן <code>[10, NaN]</code>.)</p>
+<p>ה־<code>await</code> בשורת ההדפסה עובד בלי <code>async function</code> מסביב, כי קובץ <code>.ts</code> שיש בו <code>export</code> רץ כ־ES Module, ושם מותר top-level await.</p>
+@mistakes
+<ul><li><code>for (const id of ids) { const u = await getUser(id); ... }</code> — אחד אחרי השני. הבודק מודד, ונכשל.</li><li><code>results.filter((u) =&gt; u !== undefined)</code> בשביל <code>found</code> — עובד, אבל אז צריך לעבור שוב כדי למצוא את <code>missing</code>, ובגרסאות TypeScript ישנות הטיפוס נשאר <code>(User | undefined)[]</code>.</li><li>לשכוח את ה־<code>Set</code> — id כפול נשלף פעמיים, ומופיע פעמיים ב־<code>found</code>.</li></ul>

@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ג׳ — שרת, מסד נתונים ו־HTML בסיסי",
   checker: true,
   time: "5 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+, VS Code, תוסף REST Client (פרק 14).</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>

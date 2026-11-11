@@ -1,0 +1,6 @@
+-- P17-E27: ההזמנה הכמה של הלקוח — חזרה על JOIN, GROUP BY ופונקציות חלון
+-- רק הזמנות שלא בוטלו: full_name, order_id, order_no (1, 2, 3... לכל לקוח לפי created_at),
+-- total (סכום ההזמנה), running_total (כמה הלקוח הוציא עד ההזמנה הזו, כולל)
+-- מיון: full_name, order_no
+--
+-- בדיקה:  npm run check P17-E27

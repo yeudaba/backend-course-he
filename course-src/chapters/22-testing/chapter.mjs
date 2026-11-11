@@ -11,7 +11,7 @@ export default {
   nestProjects: ["solutions/tasks-api"],
   testTimeout: 300000, // PR2-TESTS מריץ את Jest כמה פעמים (גם עם באגים מכוונים)
   time: "5 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> <strong>Node.js 24</strong> (בדוק: <code>node -v</code>), VS Code, PostgreSQL, ופרויקט 2 בשלב ד׳.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>

@@ -517,3 +517,176 @@ export function createCors({ allow, credentials = false, maxAge = 600 }: { allow
 <p>למה לא <code>*</code> עם credentials? הדפדפן עצמו אוסר את השילוב — ובצדק: "כל אתר רשאי לקרוא, כולל עם העוגיות של המשתמש" זה בדיוק מה שה־Same-Origin Policy נועד למנוע. ותבניות preview (Vercel, Netlify) הן המקרה הנפוץ ביותר ל־wildcard — וגם המקום שבו regex רשלני (בלי <code>^...$</code>, בלי קידוד נקודות) פותח פרצה.</p>
 @mistakes
 <ul><li><code>origin.endsWith(".preview.example.com")</code> — מתיר גם <code>http://</code> וגם תת־דומיינים מקוננים. ו־<code>includes</code> גרוע עוד יותר: <code>https://preview.example.com.evil.io</code>.</li></ul>
+
+@@ P15.5-E13 | 3 | טבלת HTML מנתונים 🤖 | 20 | שיעור 1
+@type scratch
+@task
+<p>דף ניהול מציג כמעט תמיד טבלה: מוצרים, הזמנות, משתמשים. כתוב פונקציה אחת שבונה טבלה לכל רשימה. כתוב וייצא <code>renderTable(columns, rows)</code>, שמחזירה מחרוזת HTML:</p>
+<ul><li><code>columns</code> — מערך של <code>{ key, label, numeric? }</code>. ‏<code>rows</code> — מערך של אובייקטים.</li><li>המבנה, בשורה אחת ובלי רווחים בין התגיות: <code>&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;label&lt;/th&gt;...&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;...&lt;/td&gt;...&lt;/tr&gt;...&lt;/tbody&gt;&lt;/table&gt;</code>.</li><li>בכל שורה, תא לכל עמודה לפי הסדר של <code>columns</code>: הערך <code>row[key]</code>. ערך <code>null</code> או <code>undefined</code> ← <code>—</code> (קו מפריד ארוך).</li><li>עמודה עם <code>numeric: true</code> ← <code>&lt;td class="num"&gt;</code> (ב־CSS היא תיושר לשמאל, כמו מספרים).</li><li><strong>כל</strong> טקסט — גם הכותרות — מקודד כמו ב־P15.5-E06 (<code>&amp; &lt; &gt; " '</code>). את הקידוד כותבים שוב, בתוך הקובץ הזה.</li><li>אין שורות ← <code>&lt;p class="empty"&gt;אין נתונים להצגה&lt;/p&gt;</code> במקום הטבלה.</li></ul>
+<p>📄 כותבים בקובץ <code>15w-web-bridge/starter/P15.5-E13.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 15w-web-bridge/starter/P15.5-E13.mjs
+% npm run check P15.5-E13
+```
+<p>רוצה לראות אותה בדפדפן? הדבק את הפלט בתוך <code>&lt;body&gt;</code> של קובץ HTML, ופתח אותו עם Live Preview (שיעור 1).</p>
+@hint1
+<p>שלוש פונקציות קטנות: <code>escapeHtml(value)</code>, ‏<code>renderCell(column, row)</code>, ‏<code>renderTable</code>. כל חלק של הטבלה הוא <code>map</code> ואחריו <code>join("")</code>.</p>
+@hint2
+<p><code>rows.map((row) =&gt; `&lt;tr&gt;${columns.map((c) =&gt; renderCell(c, row)).join("")}&lt;/tr&gt;`).join("")</code> — <code>map</code> בתוך <code>map</code>: שורות בחוץ, עמודות בפנים.</p>
+@solution
+```js run mjs save=solutions/P15.5-E13.mjs
+// P15.5-E13: טבלת HTML מנתונים
+const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (ch) => ENTITIES[ch]);
+
+function renderCell(column, row) {
+  const value = row[column.key];
+  const text = value === null || value === undefined ? "—" : escapeHtml(value);
+  return column.numeric ? `<td class="num">${text}</td>` : `<td>${text}</td>`;
+}
+
+export function renderTable(columns, rows) {
+  if (rows.length === 0) {
+    return '<p class="empty">אין נתונים להצגה</p>';
+  }
+  const head = columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("");
+  const body = rows.map((row) => `<tr>${columns.map((c) => renderCell(c, row)).join("")}</tr>`).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+const columns = [
+  { key: "name", label: "מוצר" },
+  { key: "price", label: "מחיר", numeric: true },
+];
+console.log(renderTable(columns, [{ name: "כוס <קרמיקה>", price: 19.9 }, { name: "עט" }]));
+console.log(renderTable(columns, []));
+```
+```out
+<table><thead><tr><th>מוצר</th><th>מחיר</th></tr></thead><tbody><tr><td>כוס &lt;קרמיקה&gt;</td><td class="num">19.9</td></tr><tr><td>עט</td><td class="num">—</td></tr></tbody></table>
+<p class="empty">אין נתונים להצגה</p>
+```
+<p>הטבלה בנויה כמו הנתונים: <code>map</code> על השורות, ובתוך כל שורה <code>map</code> על העמודות. ה־<code>join("")</code> חשוב: בלעדיו מערך הופך למחרוזת עם פסיקים, ובדף מופיעים פסיקים בין התאים.</p>
+<p><code>renderCell</code> מטפלת בשלושה דברים: ערך חסר, קידוד, ו־class למספרים. כשהלוגיקה של תא אחד נמצאת בפונקציה משלה, הטבלה עצמה נשארת שורה קריאה אחת.</p>
+<p>למה לבדוק <code>null</code> ו־<code>undefined</code> במפורש ולא <code>value || "—"</code>? כי מחיר <code>0</code> או מלאי <code>0</code> הם ערכים אמיתיים. עם <code>||</code> הם היו הופכים ל־<code>—</code>.</p>
+@mistakes
+<ul><li>לשכוח <code>join("")</code> — בין התאים מופיעים פסיקים.</li><li><code>value || "—"</code> — ‏<code>0</code> נעלם מהטבלה.</li><li>לקודד רק את התאים ולא את הכותרות. גם כותרת יכולה להגיע מהמשתמש (למשל שם של שדה מותאם אישית).</li><li>לעבור על <code>Object.keys(row)</code> במקום על <code>columns</code> — הסדר משתנה משורה לשורה, ושדות שלא ביקשו (כמו <code>passwordHash</code>) מופיעים בדף.</li></ul>
+
+@@ P15.5-E14 | 3 | debounce לשדה חיפוש 🤖 | 15 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על closures (P05-E26) ועל <code>setTimeout</code> (פרק 10)</strong>. בשדה חיפוש, אם שולחים <code>fetch</code> על כל הקשה, המילה <code>cors</code> שולחת 4 בקשות לשרת. הפתרון המקובל הוא <strong>debounce</strong>: מחכים שהמשתמש יפסיק להקליד, ורק אז שולחים בקשה אחת. כתוב וייצא <code>debounce(fn, ms)</code>:</p>
+<ul><li>מחזירה פונקציה חדשה. כל קריאה אליה מבטלת את הטיימר הקודם ומתחילה חדש.</li><li><code>fn</code> רצה רק אחרי <code>ms</code> מילישניות <strong>בלי</strong> קריאה נוספת — פעם אחת, עם הארגומנטים של הקריאה <strong>האחרונה</strong>.</li><li>לפונקציה המוחזרת יש מתודה <code>cancel()</code>, שמבטלת קריאה שממתינה (למשל כשהמשתמש עוזב את הדף).</li><li>כל <code>debounce</code> עם טיימר משלו: שני שדות חיפוש לא מפריעים זה לזה.</li></ul>
+```js
+const search = debounce((q) => fetch(`/products?q=${q}`), 300);
+input.addEventListener("input", () => search(input.value));
+```
+<p>📄 כותבים בקובץ <code>15w-web-bridge/starter/P15.5-E14.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 15w-web-bridge/starter/P15.5-E14.mjs
+% npm run check P15.5-E14
+```
+@hint1
+<p>משתנה אחד <code>let timer</code> מחוץ לפונקציה המוחזרת, אבל בתוך <code>debounce</code>. זה ה־closure: הוא "זוכר" את הטיימר בין קריאה לקריאה. בכל קריאה: <code>clearTimeout(timer)</code> ואז <code>timer = setTimeout(...)</code>.</p>
+@hint2
+<p>ארגומנטים: <code>function debounced(...args) { ... setTimeout(() =&gt; fn(...args), ms) }</code>. מתודה על פונקציה: <code>debounced.cancel = () =&gt; clearTimeout(timer);</code> — פונקציה היא גם אובייקט.</p>
+@solution
+```js run mjs save=solutions/P15.5-E14.mjs
+// P15.5-E14: debounce לשדה חיפוש
+export function debounce(fn, ms) {
+  let timer = null;
+  function debounced(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...args);
+    }, ms);
+  }
+  debounced.cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+  };
+  return debounced;
+}
+
+// המשתמש מקליד "c", "co", "cor", "cors" — 30ms בין הקשות. החיפוש רץ פעם אחת, 100ms אחרי ההקשה האחרונה
+const search = debounce((q) => console.log("מחפשים:", q), 100);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+for (const q of ["c", "co", "cor", "cors"]) {
+  search(q);
+  await sleep(30);
+}
+await sleep(150);
+search("x");
+search.cancel();
+await sleep(150);
+console.log("סוף");
+```
+```out
+מחפשים: cors
+סוף
+```
+<p>ה־closure הוא <code>timer</code>: כל קריאה ל־<code>debounce</code> יוצרת משתנה חדש, וכל פונקציה מוחזרת רואה רק את שלה. זה אותו מנגנון כמו המונה ב־P05-E26. שם הזיכרון היה מספר, וכאן הוא טיימר.</p>
+<p><code>clearTimeout(null)</code> לא עושה כלום, ולכן אין צורך לבדוק אם יש טיימר לפני שמבטלים.</p>
+<p>בהדגמה, ארבע הקשות במרווח 30ms. כל אחת "מאפסת את השעון", ורק 100ms אחרי ההקשה האחרונה החיפוש רץ — פעם אחת, עם <code>"cors"</code>. הקריאה עם <code>"x"</code> בוטלה עם <code>cancel</code>, ולכן לא הודפסה.</p>
+@mistakes
+<ul><li><code>let timer</code> מחוץ ל־<code>debounce</code> (ברמת הקובץ) — כל השדות חולקים טיימר אחד, ושדה אחד מבטל את החיפוש של השני.</li><li>לשמור את הארגומנטים של הקריאה <em>הראשונה</em> — מחפשים <code>"c"</code> במקום <code>"cors"</code>.</li><li>להפעיל את <code>fn</code> מיד ולחסום קריאות בהמשך — זה throttle, לא debounce.</li></ul>
+
+@@ P15.5-E15 | 3 | טעינת לוח בקרה במקביל 🤖 | 15 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Promise.allSettled</code> (P10-E17) ועל destructuring של מערך (פרק 7)</strong>. דף ראשי של אפליקציה צריך שלושה דברים מהשרת: המשתמש (<code>/me</code>), המשימות (<code>/tasks</code>) והסטטיסטיקה (<code>/stats</code>). כתוב וייצא <code>async function loadDashboard(getJson)</code>:</p>
+<ul><li><code>getJson(path)</code> מחזירה Promise עם הנתונים (כמו המתודות של הלקוח מ־P15.5-E08). שולחים את שלוש הבקשות <strong>במקביל</strong>.</li><li>אם <code>/me</code> נכשלה — זורקים את אותה שגיאה בדיוק. בלי משתמש אין דף (כנראה צריך להתחבר).</li><li>אם <code>/tasks</code> או <code>/stats</code> נכשלה — הדף מוצג בכל זאת: הערך שלה <code>null</code>, ובמערך <code>errors</code> נוספת שורה <code>"tasks: &lt;הודעה&gt;"</code> או <code>"stats: &lt;הודעה&gt;"</code> (לפי הסדר הזה).</li><li>מחזירה <code>{ me, tasks, stats, errors }</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>15w-web-bridge/starter/P15.5-E15.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 15w-web-bridge/starter/P15.5-E15.mjs
+% npm run check P15.5-E15
+```
+@hint1
+<p><code>Promise.all</code> נכשל כולו אם בקשה אחת נכשלה, ולכן כאן משתמשים ב־<code>Promise.allSettled</code>: לכל בקשה מקבלים <code>{ status: "fulfilled", value }</code> או <code>{ status: "rejected", reason }</code>. ‏<code>const [me, tasks, stats] = await Promise.allSettled([...])</code>.</p>
+@hint2
+<p><code>if (me.status === "rejected") throw me.reason;</code>. לשתי האחרות — פונקציית עזר <code>valueOf(result, name)</code> שמחזירה <code>result.value</code>, או מוסיפה ל־<code>errors</code> ומחזירה <code>null</code>.</p>
+@solution
+```js run mjs save=solutions/P15.5-E15.mjs
+// P15.5-E15: טעינת לוח בקרה במקביל
+export async function loadDashboard(getJson) {
+  const [me, tasks, stats] = await Promise.allSettled([getJson("/me"), getJson("/tasks"), getJson("/stats")]);
+  if (me.status === "rejected") {
+    throw me.reason;
+  }
+  const errors = [];
+  const valueOf = (result, name) => {
+    if (result.status === "fulfilled") {
+      return result.value;
+    }
+    errors.push(`${name}: ${result.reason.message}`);
+    return null;
+  };
+  return { me: me.value, tasks: valueOf(tasks, "tasks"), stats: valueOf(stats, "stats"), errors };
+}
+
+const data = { "/me": { name: "דנה" }, "/tasks": [{ id: 1, title: "ללמוד CORS" }] };
+const getJson = async (path) => {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  if (!(path in data)) throw new Error("503 Service Unavailable");
+  return data[path];
+};
+
+const start = Date.now();
+const dashboard = await loadDashboard(getJson);
+console.log(dashboard);
+console.log(Date.now() - start < 100 ? "במקביל" : "אחד אחרי השני");
+```
+```out
+{
+  me: { name: 'דנה' },
+  tasks: [ { id: 1, title: 'ללמוד CORS' } ],
+  stats: null,
+  errors: [ 'stats: 503 Service Unavailable' ]
+}
+במקביל
+```
+<p>שלוש בקשות של 50ms לקחו פחות מ־100ms, כי הן יצאו יחד. אחת אחרי השנייה זה היה לוקח 150ms.</p>
+<p>ההחלטה מה "חובה" ומה "רשות" היא החלטה של הדף, לא של הרשת. בלי <code>/me</code> אי אפשר להציג כלום, ולכן זורקים, ומי שקרא ל־<code>loadDashboard</code> יעביר לדף ההתחברות. בלי סטטיסטיקה עדיין אפשר לעבוד, ולכן מציגים את הדף עם הודעה קטנה.</p>
+<p><code>throw me.reason</code> זורק את השגיאה המקורית ולא שגיאה חדשה. כך נשמרים ה־status וכל השדות ש־<code>ApiError</code> (P15.5-E08) הוסיפה.</p>
+@mistakes
+<ul><li><code>await getJson("/me")</code>, אחר כך <code>await getJson("/tasks")</code>... — עובד, אבל לאט פי שלושה. הבודק מודד.</li><li><code>Promise.all</code> — תקלה ב־<code>/stats</code> מפילה את כל הדף.</li><li><code>throw new Error("לא מחובר")</code> במקום <code>throw me.reason</code> — מאבדים את סוג השגיאה ואת ההודעה מהשרת.</li></ul>

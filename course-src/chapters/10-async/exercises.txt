@@ -900,3 +900,160 @@ module.exports = { memoizeAsync };
 <p>זה בדיוק "cache stampede protection" — כשאלף משתמשים מבקשים את אותו דבר באותה שנייה, השרת עושה עבודה אחת. נחזור לזה עם Redis בפרק 26.</p>
 @mistakes
 <ul><li>לשמור את התוצאה רק אחרי ש־fn סיימה — בקשות מקבילות כולן מפספסות את ה־cache וקוראות ל־fn.</li></ul>
+
+@@ P10-E26 | 2 | חיבור אסינכרוני עם callback 🤖 | 10 | שיעור 2
+@type warmup
+@task
+<p>כתוב <code>addLater(a, b, callback)</code> בסגנון error-first של Node (שיעור 2):</p>
+<ul><li>אחרי 10 מילישניות (<code>setTimeout</code>) — <code>callback(null, a + b)</code>.</li><li>אם <code>a</code> או <code>b</code> אינם מספרים — <code>callback(new TypeError("a ו־b חייבים להיות מספרים"))</code>. גם השגיאה מגיעה <strong>אחרי</strong> ההמתנה, לא מיד.</li><li>ה־callback נקרא בדיוק פעם אחת.</li></ul>
+```js
+addLater(2, 3, (err, sum) => console.log(err, sum)); // (אחרי 10ms) null 5
+console.log("קודם אני");                             // מודפס ראשון
+```
+<p>הבודק בודק גם שה־callback <strong>לא</strong> נקרא לפני ש־<code>addLater</code> חזרה.</p>
+<p>📄 כותבים בקובץ <code>10-async/starter/P10-E26.js</code> (יש בו רק הערה). בסוף הקובץ: <code>module.exports = { addLater };</code></p>
+```term
+% node 10-async/starter/P10-E26.js
+% npm run check P10-E26
+```
+@hint1
+<p>כל הקוד של הפונקציה נכנס לתוך <code>setTimeout(() =&gt; { ... }, 10)</code>. כך גם השגיאה וגם התוצאה מגיעות אחרי ההמתנה.</p>
+@hint2
+<p>בתוך ה־setTimeout: <code>if (typeof a !== "number" || typeof b !== "number") { callback(new TypeError(...)); return; }</code>, ואחריו <code>callback(null, a + b);</code>.</p>
+@solution
+```js run save=solutions/P10-E26.js
+// P10-E26: חיבור אסינכרוני עם callback
+function addLater(a, b, callback) {
+  setTimeout(() => {
+    if (typeof a !== "number" || typeof b !== "number") {
+      callback(new TypeError("a ו־b חייבים להיות מספרים"));
+      return;
+    }
+    callback(null, a + b);
+  }, 10);
+}
+
+addLater(2, 3, (err, sum) => console.log(err, sum));
+addLater(2, "3", (err) => console.log(err.message));
+console.log("קודם אני");
+
+module.exports = { addLater };
+```
+```out
+קודם אני
+null 5
+a ו־b חייבים להיות מספרים
+```
+<p><code>"קודם אני"</code> מודפס ראשון, כי שתי הקריאות ל־<code>addLater</code> רק <strong>רושמות</strong> טיימר וחוזרות מיד (שיעור 1). ה־callbacks רצים אחר כך, מתוך ה־event loop.</p>
+<p>למה גם השגיאה מחכה? כי פונקציה שלפעמים קוראת ל־callback מיד ולפעמים אחר כך מבלבלת את מי שמשתמש בה: הקוד שאחרי הקריאה רץ פעם לפני ה־callback ופעם אחריו. הכלל ב־Node: callback תמיד אסינכרוני.</p>
+@mistakes
+<ul><li>בדיקת הטיפוסים <strong>לפני</strong> ה־<code>setTimeout</code>, עם <code>callback(err)</code> מיד — השגיאה מגיעה בסנכרון. הבודק תופס את זה.</li><li>לשכוח <code>return</code> אחרי ה־callback של השגיאה — ה־callback נקרא פעמיים, פעם עם שגיאה ופעם עם <code>"23"</code>.</li><li><code>return a + b</code> מתוך ה־setTimeout — הערך הולך לאיבוד. מי שקרא ל־<code>addLater</code> כבר לא מחכה.</li></ul>
+
+@@ P10-E27 | 3 | סכום הזמנה במקביל 🤖 | 15 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>map</code> ו־<code>reduce</code> (פרק 6) ועל destructuring (פרק 7)</strong>, הפעם עם <code>Promise.all</code>. כתוב <code>async function orderTotal(items, getPrice)</code>:</p>
+<ul><li><code>items</code> — מערך של <code>{ sku, qty }</code>.</li><li><code>getPrice(sku)</code> — מחזירה Promise עם המחיר (כמו שאילתה למסד או ל־API).</li><li>מחזירה את סכום <code>price × qty</code> של כל הפריטים. כל המחירים נשלפים <strong>במקביל</strong>, לא אחד אחרי השני.</li><li>אם אחד המחירים נכשל — <code>orderTotal</code> נכשלת עם אותה שגיאה.</li></ul>
+```js
+const prices = { A: 10, B: 25 };
+const getPrice = async (sku) => prices[sku];
+await orderTotal([{ sku: "A", qty: 3 }, { sku: "B", qty: 2 }], getPrice); // 80
+```
+<p>הבודק נותן <code>getPrice</code> שמחכה 50ms לכל מחיר. עם 5 פריטים, אם הם במקביל — זה לוקח כ־50ms ולא 250ms.</p>
+<p>📄 כותבים בקובץ <code>10-async/starter/P10-E27.js</code> (יש בו רק הערה). בסוף הקובץ: <code>module.exports = { orderTotal };</code></p>
+```term
+% node 10-async/starter/P10-E27.js
+% npm run check P10-E27
+```
+@hint1
+<p>שלושה שלבים: <code>items.map(({ sku }) =&gt; getPrice(sku))</code> (מערך של Promises) ← <code>await Promise.all(...)</code> (מערך של מחירים, באותו סדר) ← <code>reduce</code>.</p>
+@hint2
+<p>ב־<code>reduce</code> הפרמטר השלישי הוא האינדקס: <code>prices.reduce((sum, price, i) =&gt; sum + price * items[i].qty, 0)</code>.</p>
+@solution
+```js run save=solutions/P10-E27.js
+// P10-E27: סכום הזמנה במקביל
+async function orderTotal(items, getPrice) {
+  const prices = await Promise.all(items.map(({ sku }) => getPrice(sku)));
+  return prices.reduce((sum, price, i) => sum + price * items[i].qty, 0);
+}
+
+const catalog = { A: 10, B: 25 };
+const getPrice = (sku) => new Promise((resolve) => setTimeout(() => resolve(catalog[sku]), 50));
+
+const start = Date.now();
+orderTotal([{ sku: "A", qty: 3 }, { sku: "B", qty: 2 }], getPrice).then((total) => {
+  console.log(total, Date.now() - start < 90 ? "במקביל" : "אחד אחרי השני");
+});
+
+module.exports = { orderTotal };
+```
+```out
+80 במקביל
+```
+<p><code>Promise.all</code> שומר על הסדר: המחיר במקום <code>i</code> שייך לפריט במקום <code>i</code>, גם אם התשובות הגיעו בסדר אחר. בזכות זה אפשר לחבר בין <code>prices[i]</code> ל־<code>items[i].qty</code>.</p>
+<p>והשגיאה? אם Promise אחד נכשל, <code>Promise.all</code> נכשל איתו, ו־<code>await</code> זורק אותה הלאה. לא צריך <code>try/catch</code> — מי שקרא ל־<code>orderTotal</code> יחליט מה לעשות. (כשרוצים תוצאות חלקיות, משתמשים ב־<code>Promise.allSettled</code>, כמו ב־P10-E17.)</p>
+@mistakes
+<ul><li><code>for (const item of items) { total += (await getPrice(item.sku)) * item.qty; }</code> — עובד, אבל אחד אחרי השני: 250ms במקום 50. הבודק תופס את זה.</li><li><code>items.map(async ...)</code> ואז <code>reduce</code> בלי <code>await Promise.all</code> — מחברים Promises ולא מספרים, ויוצא <code>"0[object Promise]..."</code>.</li><li><code>try { ... } catch { return 0; }</code> — שגיאה בשליפת מחיר הופכת להזמנה בחינם.</li></ul>
+
+@@ P10-E28 | 3 | כל העמודים 🤖 | 15 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>while</code> (פרק 4) ועל spread של מערכים (פרק 6)</strong>, עם <code>await</code>. הרבה APIs מחזירים תוצאות בעמודים: כל תשובה כוללת חלק מהפריטים ואת מספר העמוד הבא. כתוב <code>async function fetchAll(getPage, maxPages = 100)</code>:</p>
+<ul><li><code>getPage(n)</code> מחזירה Promise עם <code>{ items, next }</code>. ‏<code>next</code> הוא מספר העמוד הבא, או <code>null</code> אם זה העמוד האחרון.</li><li>מתחילים מעמוד 1, וממשיכים לפי <code>next</code> עד <code>null</code>. מחזירים מערך אחד עם כל הפריטים, לפי הסדר.</li><li>הגנה: אם קראנו כבר <code>maxPages</code> עמודים ועדיין יש <code>next</code> — זורקים <code>Error("יותר מדי עמודים")</code>. (API עם באג יכול להחזיר <code>next</code> לנצח.)</li></ul>
+```js
+// עמוד 1: { items: ["a", "b"], next: 2 }
+// עמוד 2: { items: ["c"], next: null }
+await fetchAll(getPage); // ["a", "b", "c"]
+```
+<p>📄 כותבים בקובץ <code>10-async/starter/P10-E28.js</code> (יש בו רק הערה). בסוף הקובץ: <code>module.exports = { fetchAll };</code></p>
+```term
+% node 10-async/starter/P10-E28.js
+% npm run check P10-E28
+```
+@hint1
+<p>כמה עמודים יהיו? לא יודעים מראש — רק מתי לעצור. זה <code>while</code>. משתנים: <code>all = []</code>, ‏<code>page = 1</code>, ‏<code>count = 0</code>.</p>
+@hint2
+<p><code>while (page !== null) { if (count === maxPages) throw ...; const { items, next } = await getPage(page); all.push(...items); page = next; count++; }</code>.</p>
+@solution
+```js run save=solutions/P10-E28.js
+// P10-E28: כל העמודים
+async function fetchAll(getPage, maxPages = 100) {
+  const all = [];
+  let page = 1;
+  let count = 0;
+  while (page !== null) {
+    if (count === maxPages) {
+      throw new Error("יותר מדי עמודים");
+    }
+    const { items, next } = await getPage(page);
+    all.push(...items);
+    page = next;
+    count++;
+  }
+  return all;
+}
+
+const pages = {
+  1: { items: ["a", "b"], next: 2 },
+  2: { items: ["c"], next: 3 },
+  3: { items: [], next: null },
+};
+const getPage = async (n) => {
+  console.log(`מביא עמוד ${n}`);
+  return pages[n];
+};
+
+fetchAll(getPage).then((all) => console.log(all));
+
+module.exports = { fetchAll };
+```
+```out
+מביא עמוד 1
+מביא עמוד 2
+מביא עמוד 3
+[ 'a', 'b', 'c' ]
+```
+<p>כאן <code>await</code> בתוך לולאה הוא <strong>הכרחי</strong>, בניגוד ל־P10-E27: את מספר העמוד הבא יודעים רק אחרי שהתשובה הנוכחית הגיעה, ולכן אי אפשר לבקש את כל העמודים במקביל.</p>
+<p><code>all.push(...items)</code> פורש את הפריטים אחד אחד לתוך המערך. <code>all.push(items)</code> (בלי שלוש הנקודות) היה מכניס מערך שלם כפריט אחד. ובדיקת <code>maxPages</code> קורית <strong>לפני</strong> הבקשה, כך שלעולם לא יוצאות יותר מ־<code>maxPages</code> בקשות. זה אותו "guard נגד לולאה אינסופית" כמו ב־P04-E25.</p>
+@mistakes
+<ul><li><code>all.push(items)</code> — יוצא <code>[["a", "b"], ["c"], []]</code>.</li><li><code>while (next)</code> בלי <code>await</code> — <code>getPage(page)</code> מחזירה Promise, ול־Promise אין שדה <code>next</code>.</li><li>לבדוק את <code>maxPages</code> אחרי הבקשה — יוצאת בקשה אחת יותר מהמותר.</li></ul>

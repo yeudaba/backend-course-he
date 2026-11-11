@@ -1,0 +1,82 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { exportsOf, typecheck } from "./_ts.mjs";
+
+const FILE = "P30-E31.ts";
+const get = async () => (await exportsOf(import.meta.url, FILE, ["KVStore"])).KVStore;
+
+test("עובר בדיקת טיפוסים (tsc --strict)", () => {
+  const r = typecheck(import.meta.url, FILE);
+  assert.ok(r.ok, r.output);
+});
+test("בלי טרנזקציות: get, set, delete, count", async () => {
+  const KVStore = await get();
+  const db = new KVStore();
+  assert.equal(db.get("a"), null, "מפתח שלא קיים ← null");
+  db.set("a", "10");
+  db.set("b", "10");
+  db.set("c", "20");
+  assert.equal(db.get("a"), "10");
+  assert.equal(db.count("10"), 2);
+  assert.equal(db.delete("a"), true);
+  assert.equal(db.delete("a"), false, "כבר נמחק");
+  assert.equal(db.get("a"), null);
+  assert.equal(db.count("10"), 1);
+  assert.equal(db.count("99"), 0);
+  assert.equal(db.depth, 0);
+});
+test("rollback מבטל, commit שומר", async () => {
+  const KVStore = await get();
+  const db = new KVStore();
+  db.set("a", "1");
+  db.begin();
+  db.set("a", "2");
+  db.set("b", "x");
+  assert.equal(db.get("a"), "2", "בתוך הטרנזקציה רואים את השינוי");
+  db.rollback();
+  assert.deepEqual([db.get("a"), db.get("b")], ["1", null]);
+  db.begin();
+  db.set("a", "3");
+  db.delete("missing");
+  db.commit();
+  assert.equal(db.get("a"), "3");
+  assert.equal(db.depth, 0);
+});
+test("טרנזקציות מקוננות: rollback רק לפנימית, commit לחיצונית", async () => {
+  const KVStore = await get();
+  const db = new KVStore();
+  db.set("a", "10");
+  db.begin();
+  db.set("a", "20");
+  db.begin();
+  db.delete("a");
+  assert.equal(db.get("a"), null, "מחיקה בטרנזקציה הפנימית");
+  assert.equal(db.count("20"), 0);
+  assert.equal(db.depth, 2);
+  db.rollback();
+  assert.equal(db.get("a"), "20", "rollback מחזיר למצב של הטרנזקציה החיצונית, לא להתחלה");
+  db.begin();
+  db.set("b", "20");
+  db.commit();
+  assert.equal(db.get("b"), "20", "commit של הפנימית — השינוי עובר לחיצונית");
+  assert.equal(db.count("20"), 2);
+  db.rollback();
+  assert.deepEqual([db.get("a"), db.get("b")], ["10", null], "rollback של החיצונית מבטל גם את מה שהפנימית עשתה לה commit");
+});
+test("מחיקה בטרנזקציה שעוברת ב־commit, ושגיאות בלי טרנזקציה", async () => {
+  const KVStore = await get();
+  const db = new KVStore();
+  db.set("a", "1");
+  db.begin();
+  db.begin();
+  assert.equal(db.delete("a"), true);
+  db.commit();
+  assert.equal(db.get("a"), null);
+  db.commit();
+  assert.equal(db.get("a"), null, "המחיקה נשמרה עד למטה");
+  db.set("a", "again");
+  assert.equal(db.get("a"), "again");
+  assert.throws(() => db.commit(), Error, "commit בלי begin");
+  assert.throws(() => db.rollback(), Error, "rollback בלי begin");
+  assert.deepEqual(Object.keys(db), [], "שדות פרטיים (#)");
+});

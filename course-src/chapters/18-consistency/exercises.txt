@@ -775,3 +775,172 @@ CREATE INDEX
 <p>שני indexes מכסים שלוש שאילתות, כי index על <code>(a, b)</code> משרת כל שאילתה ששוויון על a, ואולי טווח/מיון על b. חשיבה כזו ("אילו indexes מכסים את השאילתות שבאמת רצות") עדיפה על index לכל שאילתה.</p>
 @mistakes
 <ul><li>שלושה indexes — אחד לכל שאילתה — כשאחד מהם מיותר. כל INSERT משלם עליו.</li></ul>
+
+@@ P18-E26 | 3 | withTransaction — עוזר שכותבים פעם אחת 🤖 | 25 | שיעור 1
+@type scratch
+@task
+<p>ב־P18-E07 וב־P18-E13 כתבת שוב ושוב את אותו שלד: <code>connect</code>, ‏<code>BEGIN</code>, ‏<code>COMMIT</code>, ‏<code>ROLLBACK</code> ב־catch, ו־<code>release</code> ב־finally. מה שמשתנה הוא רק הקוד שבאמצע. כותבים את השלד פעם אחת, כפונקציה שמקבלת את האמצע כפרמטר. הקובץ ריק. כתוב וייצא:</p>
+<ul><li><code>withTransaction&lt;T&gt;(pool: Pool, fn: (client: PoolClient) =&gt; Promise&lt;T&gt;): Promise&lt;T&gt;</code> — לוקחת חיבור, ‏<code>BEGIN</code>, מריצה את <code>fn(client)</code>, ‏<code>COMMIT</code>, ומחזירה את מה ש־<code>fn</code> החזירה. אם <code>fn</code> זרקה — ‏<code>ROLLBACK</code>, ואותה שגיאה נזרקת הלאה. החיבור משתחרר תמיד.</li><li><code>transferAll(pool, fromId, toId): Promise&lt;number&gt;</code> — מעבירה את <strong>כל</strong> היתרה מחשבון לחשבון, ומחזירה את הסכום (מספר). כתוב אותה <strong>עם</strong> <code>withTransaction</code>: נעילת החשבון שממנו מעבירים (<code>FOR UPDATE</code>), איפוס שלו, הוספה לשני, ורישום ב־<code>transfers</code>.<ul><li>חשבון מקור לא קיים ← <code>Error(`חשבון לא קיים: ${fromId}`)</code>. חשבון יעד לא קיים ← <code>Error(`חשבון לא קיים: ${toId}`)</code>, וכלום לא משתנה.</li><li>יתרה 0 ← <code>Error("אין מה להעביר")</code>.</li></ul></li></ul>
+<p>הטבלאות — <code>accounts</code> ו־<code>transfers</code> מ־<code>files/bank.sql</code>, כמו בשאר הפרק.</p>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E26.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E26
+```
+@hint1
+<p>ה־import: <code>import type { Pool, PoolClient } from "pg";</code>. גוף <code>withTransaction</code> הוא בדיוק הדפוס מ־P18-E07. ההבדל היחיד: במקום שלוש שאילתות באמצע, ‏<code>const result = await fn(client);</code>.</p>
+@hint2
+<p><code>transferAll</code> מחזירה את מה ש־<code>withTransaction</code> מחזירה: <code>return withTransaction(pool, async (client) =&gt; { ...; return amount; });</code>. בתוך ה־callback, כל <code>throw</code> מגיע ל־catch של <code>withTransaction</code>, ומשם ל־ROLLBACK. ‏יעד לא קיים: ‏<code>rowCount === 0</code> אחרי ה־UPDATE שלו. ‏<code>balance</code> מגיע מ־<code>pg</code> כמחרוזת (‏<code>numeric</code>), ולכן <code>Number(...)</code>.</p>
+@solution
+```ts save=solutions/P18-E26.ts
+// P18-E26: withTransaction — עוזר שכותבים פעם אחת
+import type { Pool, PoolClient } from "pg";
+
+export async function withTransaction<T>(pool: Pool, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function transferAll(pool: Pool, fromId: number, toId: number): Promise<number> {
+  return withTransaction(pool, async (client) => {
+    const { rows } = await client.query("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE", [fromId]);
+    if (rows.length === 0) throw new Error(`חשבון לא קיים: ${fromId}`);
+    const amount = Number(rows[0].balance);
+    if (amount === 0) throw new Error("אין מה להעביר");
+    await client.query("UPDATE accounts SET balance = 0 WHERE id = $1", [fromId]);
+    const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    if (to.rowCount === 0) throw new Error(`חשבון לא קיים: ${toId}`);
+    await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [fromId, toId, amount]);
+    return amount;
+  });
+}
+```
+<p>עכשיו <code>transferAll</code> מכילה רק את מה שמיוחד לה. אין בה <code>BEGIN</code>, ‏<code>ROLLBACK</code> או <code>release</code>, ולכן גם אין איפה לשכוח אותם. כל פונקציה עתידית שצריכה transaction תקבל את אותה התנהגות נכונה בחינם. זה בדיוק מה ש־Prisma נותן ב־<code>$transaction(async (tx) =&gt; ...)</code> (פרק 19).</p>
+<p>ה־<code>&lt;T&gt;</code> (generic, פרק 11) מעביר את הטיפוס של מה ש־<code>fn</code> מחזירה הלאה. ‏<code>withTransaction(pool, async () =&gt; 5)</code> היא <code>Promise&lt;number&gt;</code>, ו־TypeScript יודע את זה בלי שתכתוב.</p>
+<p>שגיאה ב"יעד לא קיים" מגיעה <em>אחרי</em> שכבר איפסנו את המקור. בלי transaction הכסף היה נעלם. כאן ה־ROLLBACK מחזיר הכול.</p>
+@mistakes
+<ul><li>ב־catch לבלוע את השגיאה (<code>return null</code>) — מי שקרא חושב שהכול הצליח.</li><li><code>client.release()</code> בסוף ה־try ולא ב־finally — כל שגיאה משאירה חיבור תפוס, ואחרי כמה שגיאות ה־pool נתקע.</li><li><code>fn(client)</code> בלי <code>await</code> — ‏COMMIT רץ לפני שהשאילתות של <code>fn</code> הסתיימו, ושגיאה שלהן כבר לא תגיע ל־catch.</li><li>לקרוא ל־<code>pool.query</code> בתוך <code>fn</code> במקום ל־<code>client.query</code> — השאילתה רצה בחיבור אחר, מחוץ ל־transaction.</li></ul>
+
+@@ P18-E27 | 3 | מאחד שליפות (batch loader) 🤖 | 30 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על closures (פרק 5), ‏<code>Map</code> (פרק 7) ו־<code>new Promise</code> עם <code>setTimeout</code> (פרק 10)</strong>. ב־P18-E17 פתרת N+1 כשכל המזהים היו ידועים מראש. אבל לפעמים כמה חלקים נפרדים בקוד מבקשים כל אחד אדם אחד, באותו רגע, ואף אחד מהם לא יודע על האחרים. הפתרון המקובל הוא <strong>batch loader</strong> (כך עובדת הספרייה DataLoader): אוספים את כל הבקשות שהגיעו "באותו סיבוב", ושולחים שאילתה אחת.</p>
+<p>כתוב וייצא <code>type Person = { id: number; full_name: string }</code> ו־<code>createPersonLoader(pool)</code>, שמחזירה פונקציה <code>load(id): Promise&lt;Person | null&gt;</code>:</p>
+<ul><li>כל הקריאות ל־<code>load</code> שנעשו באותו סיבוב (לפני ש־<code>setTimeout(..., 0)</code> רץ) ← שאילתה <strong>אחת</strong>: <code>SELECT id, full_name FROM people WHERE id = ANY($1)</code>, עם מערך המזהים.</li><li>כל קורא מקבל את האדם שלו. ‏id שלא נמצא ← <code>null</code>. אותו id כמה פעמים ← נשלח פעם אחת בשאילתה, וכל הקוראים מקבלים את התשובה.</li><li>השאילתה נכשלה ← כל ה־Promises של אותו סיבוב נדחים עם אותה שגיאה.</li><li>קריאות בסיבוב הבא (אחרי <code>await</code>) ← שאילתה חדשה.</li></ul>
+```ts
+const load = createPersonLoader(pool);
+const [a, b, c] = await Promise.all([load(7), load(3), load(7)]); // שאילתה אחת: ids [7, 3]
+```
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E27.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E27
+```
+<p>הבודק סופר שאילתות (כמו ב־P18-E17), ובודק גם שגיאה מ־pool מזויף.</p>
+@hint1
+<p>ה־closure שומר <code>Map</code> של id ← רשימת "ממתינים" (<code>{ resolve, reject }</code> מתוך <code>new Promise</code>). ‏<code>load</code> מוסיף ממתין. אם ה־Map היה ריק לפני ההוספה, זו הקריאה הראשונה בסיבוב, ולכן היא מתזמנת את השליחה: <code>setTimeout(flush, 0)</code>.</p>
+@hint2
+<p>ב־<code>flush</code>: קודם <code>const batch = waiting; waiting = new Map();</code>, כדי שקריאות חדשות ייכנסו לסיבוב הבא. אחר כך שאילתה עם <code>[...batch.keys()]</code>, ‏<code>Map</code> של התוצאות לפי id, ולולאה שקוראת ל־<code>resolve(byId.get(id) ?? null)</code> לכל ממתין. ב־catch: ‏<code>reject(err)</code> לכולם.</p>
+@solution
+```ts save=solutions/P18-E27.ts
+// P18-E27: מאחד שליפות (batch loader)
+import type { Pool } from "pg";
+
+export type Person = { id: number; full_name: string };
+type Waiter = { resolve: (p: Person | null) => void; reject: (err: unknown) => void };
+
+export function createPersonLoader(pool: Pick<Pool, "query">) {
+  let waiting = new Map<number, Waiter[]>();
+
+  async function flush() {
+    const batch = waiting;
+    waiting = new Map();
+    try {
+      const { rows } = await pool.query("SELECT id, full_name FROM people WHERE id = ANY($1)", [[...batch.keys()]]);
+      const byId = new Map<number, Person>(rows.map((p: Person) => [p.id, p]));
+      for (const [id, waiters] of batch) {
+        for (const w of waiters) w.resolve(byId.get(id) ?? null);
+      }
+    } catch (err) {
+      for (const waiters of batch.values()) {
+        for (const w of waiters) w.reject(err);
+      }
+    }
+  }
+
+  return function load(id: number): Promise<Person | null> {
+    return new Promise((resolve, reject) => {
+      if (waiting.size === 0) setTimeout(flush, 0);
+      const list = waiting.get(id) ?? [];
+      list.push({ resolve, reject });
+      waiting.set(id, list);
+    });
+  };
+}
+```
+<p>שלושה דברים חיים ב־closure, ובכל loader יש עותק משלהם: ה־<code>Map</code> של הממתינים, הפונקציה <code>flush</code>, והחיבור למסד. לכן שני loaders לא מערבבים בקשות.</p>
+<p><code>new Promise((resolve, reject) =&gt; ...)</code> מאפשר "להחזיר תשובה אחר כך": ‏<code>load</code> מחזירה Promise מיד, ושומרת את <code>resolve</code> בצד. רק כשהשאילתה חוזרת, <code>flush</code> קוראת לו. זה ה־Promise "הידני" מפרק 10, ופה רואים בשביל מה הוא קיים.</p>
+<p>ההחלפה <code>waiting = new Map()</code> <em>לפני</em> ה־<code>await</code> חשובה. בזמן שהשאילתה רצה, קריאות חדשות נכנסות ל־Map החדש ומתזמנות סיבוב משלהן, במקום ללכת לאיבוד.</p>
+<p>בפרויקטי GraphQL זה הכלי הסטנדרטי נגד N+1: כל שדה "מבקש" את מה שהוא צריך, וה־loader מאחד הכול.</p>
+@mistakes
+<ul><li><code>setTimeout(flush, 0)</code> בכל קריאה — כמה <code>flush</code> רצים, והשני שולח שאילתה עם רשימה ריקה (או שולח שוב את אותם ids).</li><li>לנקות את ה־Map רק אחרי ה־<code>await</code> — קריאות שהגיעו בזמן השאילתה נמחקות ולא מקבלות תשובה לעולם.</li><li>לחזור עם <code>rows[i]</code> לפי מקום במערך — המסד לא מבטיח שהשורות יחזרו באותו סדר, ו־id חסר מזיז את כולם.</li><li>לשכוח <code>reject</code> ב־catch — כשהמסד נופל, כל הקוראים תקועים לנצח.</li></ul>
+
+@@ P18-E28 | 3 | שלושת הלקוחות המובילים בכל חודש 🤖 | 20 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>GROUP BY</code> ו־<code>date_trunc</code> (‏P17-E14) ועל <code>ROW_NUMBER</code> עם <code>PARTITION BY</code> (‏P17-E18)</strong>, על טבלה של 200,000 שורות. בקובץ <code>18-consistency/starter/P18-E28.sql</code>: מתוך <code>big_orders</code>, רק הזמנות בסטטוס <code>paid</code> או <code>shipped</code>, ברבעון הראשון של 2025 (מ־1 בינואר ועד לפני 1 באפריל). לכל חודש — שלושת הלקוחות שההכנסה מהם הכי גבוהה:</p>
+<ul><li>העמודות: <code>month</code> (תחילת החודש, כ־<code>date</code>), ‏<code>place</code> (1–3), ‏<code>customer_id</code>, ‏<code>revenue</code> (סכום <code>total</code>).</li><li>בתיקו בהכנסה — ה־<code>customer_id</code> הקטן במקום הגבוה יותר.</li><li>מיון: לפי <code>month</code>, ואחר כך <code>place</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E28.sql</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E28
+```
+@hint1
+<p>שלושה שלבים, כל אחד ב־CTE משלו: (1) <code>monthly</code> — ‏<code>GROUP BY</code> לפי חודש ולקוח. (2) <code>ranked</code> — ‏<code>ROW_NUMBER() OVER (PARTITION BY month ORDER BY revenue DESC, customer_id)</code>. ‏(3) <code>WHERE place &lt;= 3</code>.</p>
+@hint2
+<p>למה לא <code>WHERE ROW_NUMBER() ... &lt;= 3</code> ישר? כי <code>WHERE</code> רץ <em>לפני</em> פונקציות החלון, ולכן אי אפשר לסנן לפיהן באותה רמה. כאן צריך עוד שכבה. הטווח: <code>created_at &gt;= '2025-01-01' AND created_at &lt; '2025-04-01'</code>.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E28.sql
+WITH monthly AS (
+  SELECT date_trunc('month', created_at)::date AS month, customer_id, SUM(total) AS revenue
+  FROM big_orders
+  WHERE status IN ('paid', 'shipped')
+    AND created_at >= '2025-01-01' AND created_at < '2025-04-01'
+  GROUP BY 1, 2
+),
+ranked AS (
+  SELECT month, customer_id, revenue,
+         ROW_NUMBER() OVER (PARTITION BY month ORDER BY revenue DESC, customer_id) AS place
+  FROM monthly
+)
+SELECT month, place, customer_id, revenue
+FROM ranked
+WHERE place <= 3
+ORDER BY month, place;
+```
+```out
+   month    | place | customer_id | revenue
+------------+-------+-------------+---------
+ 2025-01-01 |     1 |        1139 | 2158.44
+ 2025-01-01 |     2 |        1708 | 2157.66
+ 2025-01-01 |     3 |        1789 | 2155.44
+ 2025-02-01 |     1 |         131 | 2159.40
+ 2025-02-01 |     2 |         536 | 2148.30
+ 2025-02-01 |     3 |         617 | 2146.08
+ 2025-03-01 |     1 |        1009 | 2319.04
+ 2025-03-01 |     2 |        1414 | 2307.94
+ 2025-03-01 |     3 |        1495 | 2305.72
+(9 rows)
+```
+<p>הדוח הזה דורש שני "צמצומים" שונים: ‏<code>GROUP BY</code> הופך מאות הזמנות של לקוח בחודש לשורה אחת, והחלון מדרג את השורות האלה בתוך כל חודש. כל שלב ב־CTE משלו, וכל שלב קריא לבד.</p>
+<p>הטווח נכתב כ־<code>&gt;=</code> התחלה ו־<code>&lt;</code> סוף, ולא <code>date_trunc(...) IN (...)</code>. כך, אם יש index על <code>created_at</code> (שיעור 3), המסד יכול לקרוא רק את שלושת החודשים במקום את כל 200,000 השורות. פונקציה על העמודה ב־WHERE מונעת שימוש ב־index.</p>
+<p><code>ORDER BY revenue DESC, customer_id</code> בתוך החלון: בלי קריטריון שני, בתיקו המסד בוחר סדר כרצונו, והדוח יוצא שונה בכל הרצה.</p>
+@mistakes
+<ul><li><code>RANK()</code> במקום <code>ROW_NUMBER()</code> — בתיקו שני לקוחות מקבלים אותו מקום, ויכולים לחזור ארבעה.</li><li><code>created_at &lt;= '2025-03-31'</code> — זה <code>2025-03-31 00:00</code>, ורוב היום האחרון נחתך.</li><li><code>PARTITION BY customer_id</code> — מדרג חודשים לכל לקוח, במקום לקוחות לכל חודש.</li></ul>

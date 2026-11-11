@@ -13,6 +13,255 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>30-career/solutions/</code>.</p></div>
+<div class="ex typed" id="P30-E31">
+    <h3>P30-E31 · מטלת בית: key-value עם טרנזקציות 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שכבות: <code>#data</code> (המאגר) ומחסנית <code>#layers</code> של <code>Map</code>, אחת לכל טרנזקציה פתוחה. ‏<code>set</code> כותב לשכבה העליונה. ‏<code>get</code> מחפש מלמעלה למטה, ומחזיר את הראשון שמוצא. ‏<code>rollback</code> הוא פשוט <code>pop()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מחיקה בשכבה: אי אפשר "למחוק" מ־<code>Map</code> של שכבה מפתח שנמצא בשכבה מתחתיה. צריך לרשום "נמחק". ערך מיוחד שלא יכול להתבלבל עם מחרוזת: <code>const DELETED = Symbol("deleted")</code>. ‏<code>get</code> שפוגש אותו מחזיר <code>null</code>. ‏<code>commit</code> מעתיק את השכבה לזו שמתחת. אם אין שכבה מתחת, ‏<code>DELETED</code> הופך ל־<code>#data.delete</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P30-E31 — מאגר key-value עם טרנזקציות מקוננות (מטלת בית קלאסית)
+const DELETED = Symbol("deleted");
+type Layer = Map&lt;string, string | typeof DELETED&gt;;
+
+export class KVStore {
+  #data = new Map&lt;string, string&gt;();
+  #layers: Layer[] = [];
+
+  get(key: string): string | null {
+    for (let i = this.#layers.length - 1; i &gt;= 0; i--) {
+      const v = this.#layers[i].get(key);
+      if (v === DELETED) return null;
+      if (v !== undefined) return v;
+    }
+    return this.#data.get(key) ?? null;
+  }
+
+  set(key: string, value: string): void {
+    const top = this.#layers.at(-1);
+    if (top) top.set(key, value);
+    else this.#data.set(key, value);
+  }
+
+  delete(key: string): boolean {
+    const existed = this.get(key) !== null;
+    const top = this.#layers.at(-1);
+    if (top) top.set(key, DELETED);
+    else this.#data.delete(key);
+    return existed;
+  }
+
+  count(value: string): number {
+    const seen = new Set&lt;string&gt;([...this.#data.keys(), ...this.#layers.flatMap((l) =&gt; [...l.keys()])]);
+    let n = 0;
+    for (const key of seen) if (this.get(key) === value) n++;
+    return n;
+  }
+
+  begin(): void {
+    this.#layers.push(new Map());
+  }
+
+  rollback(): void {
+    if (this.#layers.length === 0) throw new Error("אין טרנזקציה פתוחה");
+    this.#layers.pop();
+  }
+
+  commit(): void {
+    const top = this.#layers.pop();
+    if (!top) throw new Error("אין טרנזקציה פתוחה");
+    const target = this.#layers.at(-1);
+    for (const [key, value] of top) {
+      if (target) target.set(key, value);
+      else if (value === DELETED) this.#data.delete(key);
+      else this.#data.set(key, value);
+    }
+  }
+
+  get depth(): number {
+    return this.#layers.length;
+  }
+}
+
+const db = new KVStore();
+db.set("a", "10");
+db.begin();
+db.set("a", "20");
+db.begin();
+db.delete("a");
+console.log("depth", db.depth, "a =", db.get("a"));
+db.rollback();
+console.log("after rollback a =", db.get("a"));
+db.commit();
+console.log("after commit a =", db.get("a"), "depth", db.depth);
+db.set("b", "20");
+console.log("count('20') =", db.count("20"));
+try {
+  db.commit();
+} catch (err) {
+  console.log((err as Error).message);
+}</code></pre>
+<pre class="terminal">depth 2 a = null
+after rollback a = 20
+after commit a = 20 depth 0
+count('20') = 2
+אין טרנזקציה פתוחה</pre>
+<p>הרצף בדוגמה: <code>a=10</code>, טרנזקציה שמשנה ל־20, ובתוכה טרנזקציה שמוחקת. בפנימית <code>a</code> לא קיים. ‏<code>rollback</code> מחזיר ל־20 (המצב של החיצונית, לא של ההתחלה), ו־<code>commit</code> שומר את ה־20.</p>
+<p>למה "שכבות" ולא "עותק של הכול בכל <code>begin</code>"? עותק מלא עובד, אבל <code>begin</code> על מאגר של מיליון מפתחות מעתיק מיליון מפתחות. שכבה שומרת רק את מה שהשתנה, וזה גם מה שמסדים אמיתיים עושים (undo log ב־InnoDB, ו־MVCC ב־PostgreSQL, פרק 18). בראיון, להסביר את ה־trade-off הזה שווה יותר מהקוד עצמו.</p>
+<p>‏<code>count</code> כאן הוא O(n) על כל המפתחות. אם המראיין שואל "ואם <code>count</code> נקרא הרבה?", התשובה היא מונה לכל ערך (<code>Map&lt;value, number&gt;</code>), שמתעדכן ב־<code>set</code> וב־<code>delete</code>. אבל אז גם <code>rollback</code> צריך לעדכן אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>delete</code> בתוך טרנזקציה ישירות מ־<code>#data</code> — ‏<code>rollback</code> לא מחזיר את המפתח.</li><li><code>delete</code> שמוחק רק מהשכבה העליונה — המפתח "חוזר" מהשכבה שמתחת.</li><li><code>commit</code> שכותב ישר ל־<code>#data</code> גם כשיש טרנזקציה חיצונית — ‏<code>rollback</code> של החיצונית לא מבטל אותו.</li><li><code>get</code> שמחזיר <code>undefined</code> במקום <code>null</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P30-E32">
+    <h3>P30-E32 · בדיקות ל־בדיקת מספר זהות 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם צריך מספרים תקינים. חשב אחד ביד: ‏<code>123456782</code>: ‏1·1 + 2·2 + 3·1 + 4·2 (=8) + 5·1 + 6·2 (=12 ← 3) + 7·1 + 8·2 (=16 ← 7) + 2·1. הסכום 40, ולכן הוא תקין. מספר עם הרבה 9 (‏<code>999999998</code>) בודק את ה־"מחסירים 9", כי 9·2 = 18 ← 9.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לכל כלל — מקרה שמפריד בין נכון ללא נכון: ‏<code>"18"</code> (השלמה משמאל; מימין יוצא אחרת), ‏<code>"1234567820"</code> (10 ספרות, שהתשע הראשונות תקינות), ‏<code>"0"</code> (אפסים בלבד). ומה עם <code>"1 9"</code>? ‏<code>Number(" ")</code> הוא 0. מימוש עם regex בלי עוגנים יקבל אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P30-E32 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { isValidIsraeliId } from "./P30-E32.ts";
+
+test("מספרים תקינים", () =&gt; {
+  for (const id of ["123456782", "039337423", "999999998", "200000008"]) assert.equal(isValidIsraeliId(id), true, id);
+});
+
+test("ספרת ביקורת לא נכונה", () =&gt; {
+  for (const id of ["123456789", "123456783", "039337424", "301122334"]) assert.equal(isValidIsraeliId(id), false, id);
+});
+
+test("פחות מ־9 ספרות — משלימים באפסים משמאל", () =&gt; {
+  assert.equal(isValidIsraeliId("18"), true, "18 ← 000000018");
+  assert.equal(isValidIsraeliId("000000018"), true);
+  assert.equal(isValidIsraeliId("81"), false);
+});
+
+test("רווחים מסביב מותרים", () =&gt; {
+  assert.equal(isValidIsraeliId("  123456782 "), true);
+});
+
+test("קלט לא תקין ← false", () =&gt; {
+  for (const id of ["", "   ", "12345678a", "1234567820", "0", "000000000", "1 9", "-18", "12.3"]) assert.equal(isValidIsraeliId(id), false, JSON.stringify(id));
+});</code></pre>
+<p>שלושה מהקלטים "המוזרים" בבדיקה האחרונה עושים את רוב העבודה. ‏<code>"1234567820"</code> תופס מימוש שמקבל עד 10 ספרות: הוא קורא רק את התשע הראשונות, והן תקינות. ‏<code>"0"</code> תופס מימוש בלי בדיקת "אפסים בלבד": הסכום 0 מתחלק ב־10. ו־<code>"1 9"</code> תופס regex בלי <code>^</code> ו־<code>$</code>: הרווח הופך ל־0 בחישוב, והסכום יוצא 10.</p>
+<p>בראיון, "איך תבדוק את זה?" היא לרוב השאלה הבאה אחרי הקוד. תשובה טובה מחלקת לקבוצות כמו כאן: תקינים, ספרת ביקורת לא נכונה, השלמה, רווחים, קלט לא תקין. ולכל קבוצה — הגבול שבה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מספרים תקינים שהמצאת בלי לחשב — הבדיקה נכשלת על הקוד התקין. חשב ביד, או קח מספר שאתה יודע שהוא תקין.</li><li>רק 9 ספרות בכל הבדיקות — מימוש שלא משלים אפסים, או משלים מימין, עובר.</li><li><code>assert.ok(!isValidIsraeliId(x))</code> על קלט לא תקין — עובר גם כשהפונקציה מחזירה <code>undefined</code> או <code>0</code>. ‏<code>assert.equal(..., false)</code> דורש בדיוק <code>false</code>, כמו שהחוזה אומר</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P30-E33">
+    <h3>P30-E33 · האם הגרסה מתאימה לטווח? 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>compare</code>: ‏<code>text.match(/^v?(\d+)\.(\d+)\.(\d+)$/)</code>, ולולאה על שלושת המספרים: בהפרש הראשון שאינו 0 מחזירים <code>Math.sign(x[i] - y[i])</code>. תנאי בטווח: <code>/^(\^|~|&gt;=|&lt;=|&gt;|&lt;|=)?\s*(.+)$/</code>. ‏<code>&gt;=</code> לפני <code>&gt;</code> בחלופות, אחרת <code>&gt;=1.0.0</code> נקרא כ־<code>&gt;</code> ו־<code>=1.0.0</code>.</p>
+<p>‏<code>const [, op = "=", base] = match</code> — ברירת מחדל ב־destructuring מטפלת ב"גרסה לבד".</p>
+<p>‏<code>^</code> ו־<code>~</code> הם "<code>&gt;= base</code> וגם <code>&lt; upper</code>". פונקציה קטנה <code>upperBound(op, [major, minor, patch])</code> מחזירה את הגבול העליון כמחרוזת, ואז <code>compare</code> אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>case "^": case "~": return c &gt;= 0 &amp;&amp; compare(version, upperBound(op, parse(base))) &lt; 0;</code>. ‏<code>upperBound</code>: ‏<code>~</code> ← <code>major.(minor+1).0</code>. ‏<code>^</code> ← אם <code>major &gt; 0</code>: ‏<code>(major+1).0.0</code>. אחרת אם <code>minor &gt; 0</code>: ‏<code>0.(minor+1).0</code>. אחרת <code>0.0.(patch+1)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P30-E33 — האם הגרסה מתאימה לטווח? (semver: ^, ~, &gt;=, &lt;, מדויק)
+type Version = [number, number, number];
+
+function parse(text: string): Version {
+  const m = text.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) throw new SyntaxError(`גרסה לא תקינה: ${text}`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+export function compare(a: string, b: string): number {
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i &lt; 3; i++) if (x[i] !== y[i]) return Math.sign(x[i] - y[i]);
+  return 0;
+}
+
+function upperBound(op: "^" | "~", [major, minor, patch]: Version): string {
+  if (op === "~") return `${major}.${minor + 1}.0`;
+  if (major &gt; 0) return `${major + 1}.0.0`;
+  if (minor &gt; 0) return `0.${minor + 1}.0`;
+  return `0.0.${patch + 1}`;
+}
+
+function satisfiesOne(version: string, part: string): boolean {
+  const m = part.match(/^(\^|~|&gt;=|&lt;=|&gt;|&lt;|=)?\s*(.+)$/);
+  if (!m) throw new SyntaxError(`טווח לא תקין: ${part}`);
+  const [, op = "=", base] = m;
+  const c = compare(version, base);
+  switch (op) {
+    case "=":
+      return c === 0;
+    case "&gt;":
+      return c &gt; 0;
+    case "&gt;=":
+      return c &gt;= 0;
+    case "&lt;":
+      return c &lt; 0;
+    case "&lt;=":
+      return c &lt;= 0;
+    case "^":
+    case "~":
+      return c &gt;= 0 &amp;&amp; compare(version, upperBound(op, parse(base))) &lt; 0;
+    default:
+      throw new SyntaxError(`אופרטור לא מוכר: ${op}`);
+  }
+}
+
+export function satisfies(version: string, range: string): boolean {
+  return range.trim().split(/\s+/).every((part) =&gt; satisfiesOne(version, part));
+}
+
+const cases: [string, string][] = [
+  ["5.1.2", "^5.0.0"],
+  ["6.0.0", "^5.0.0"],
+  ["0.3.9", "^0.3.1"],
+  ["0.4.0", "^0.3.1"],
+  ["1.4.9", "~1.4.2"],
+  ["1.5.0", "~1.4.2"],
+  ["22.11.0", "&gt;=20.0.0 &lt;23.0.0"],
+  ["v24.1.0", "&gt;=20.0.0 &lt;23.0.0"],
+];
+for (const [v, r] of cases) console.log(v.padEnd(8), r.padEnd(18), satisfies(v, r));</code></pre>
+<pre class="terminal">5.1.2    ^5.0.0             true
+6.0.0    ^5.0.0             false
+0.3.9    ^0.3.1             true
+0.4.0    ^0.3.1             false
+1.4.9    ~1.4.2             true
+1.5.0    ~1.4.2             false
+22.11.0  &gt;=20.0.0 &lt;23.0.0   true
+v24.1.0  &gt;=20.0.0 &lt;23.0.0   false</pre>
+<p>‏<code>^0.3.1</code> לא מקבל את 0.4.0: לפני 1.0.0, כל minor חדש נחשב שובר. זה המקרה שמפתיע הכי הרבה אנשים, וזה גם מה ש־<code>npm install</code> עושה בפועל. ‏<code>v24.1.0</code> נכשל ב־<code>&lt;23.0.0</code>. כך <code>engines</code> ב־<code>package.json</code> מגביל גרסת Node.</p>
+<p>‏<code>compare</code> מספרי הוא הבסיס של הכול. השוואת מחרוזות (<code>"1.10.0" &lt; "1.9.0"</code>) היא <code>true</code>, כי <code>"1" &lt; "9"</code> בתו השלישי. זה באג קלאסי שמופיע גם במיון של גרסאות ב־Docker tags וב־git tags.</p>
+<p>מה חסר כאן, ו־<code>semver</code> מטפל בו? גרסאות טרום־שחרור (<code>1.0.0-beta.2</code>), טווחים עם <code>||</code>, ו־<code>x</code> (<code>1.2.x</code>). בראיון, להגיד "את זה לא מימשתי, וזה מה שהייתי מוסיף" שווה יותר מלנסות להספיק הכול.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>השוואת מחרוזות במקום מספרים — ‏<code>1.10.0</code> "קטן" מ־<code>1.9.0</code>.</li><li><code>^0.3.1</code> כאילו הוא <code>&lt;1.0.0</code> — מקבל את 0.4.0, שעשוי לשבור.</li><li><code>&gt;</code> לפני <code>&gt;=</code> בחלופות של ה־regex — ‏<code>&gt;=</code> לא מזוהה.</li><li><code>split(" ")</code> על <code>"&gt;=20.0.0  &lt;23.0.0"</code> (שני רווחים) — נוצר תנאי ריק. ‏<code>split(/\s+/)</code> אחרי <code>trim</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P30-E01">
     <h3>P30-E01 · 30 שניות על פרופיל GitHub <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

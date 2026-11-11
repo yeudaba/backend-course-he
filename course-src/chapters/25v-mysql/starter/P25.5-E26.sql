@@ -1,0 +1,6 @@
+-- P25.5-E26: דוח לקוחות ב־MySQL — מקובץ ריק
+-- לכל לקוח: name, city, orders (paid/shipped), spent (0 אם אין), last_order (DD/MM/YYYY או NULL),
+-- cart_units (סכום הכמויות בעגלה, 0 אם ריקה), city_rank (RANK לפי spent בתוך העיר)
+-- מיון: city, city_rank, name
+--
+-- בדיקה:  npm run check P25.5-E26

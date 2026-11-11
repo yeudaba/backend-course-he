@@ -1023,3 +1023,208 @@ export async function lakeReport(conn: DuckDBConnection, lakeDir: string) {
 }
 ```
 <p>זה ETL מצטבר "אמיתי" בקטן: Fivetran, Airbyte ו־Debezium עושים את אותו דבר (Debezium — מה־WAL, בלי לשאול את הטבלה). ו־"append-only + גרסה אחרונה בקריאה" הוא הבסיס של פורמטים כמו Delta Lake (Databricks) ו־Apache Iceberg — שמוסיפים מעל Parquet טרנזקציות ו־time travel.</p>
+
+@@ P28.5-E26 | 3 | הנפוצים ביותר בזרם, בזיכרון קבוע 🤖 | 30 | שיעור 3
+@type scratch
+@task
+<p>"אילו עשרה נתיבים הכי נפוצים היום?" על מיליארד בקשות, ‏<code>Map</code> של כל הנתיבים לא נכנס לזיכרון: יש מיליוני <code>/products/&lt;id&gt;</code> שונים. האלגוריתם Space-Saving עונה עם <strong>k מונים בלבד</strong>, ובערבות: כל פריט שמופיע יותר מ־N/k פעמים נמצא ברשימה. זה אותו רעיון כמו HyperLogLog (‏E18) ו־reservoir sampling (‏E19): לוותר על דיוק מלא תמורת זיכרון קבוע. כתוב מקובץ ריק וייצא <code>class TopK&lt;T&gt;</code>:</p>
+<ul><li><code>constructor(k)</code> — ‏<code>k</code> שאינו שלם חיובי ← <code>RangeError</code>.</li><li><code>add(item)</code>:<ul><li>יש לו מונה ← <code>count++</code>.</li><li>אין, ויש פחות מ־<code>k</code> מונים ← מונה חדש: <code>count: 1, error: 0</code>.</li><li>אין, והזיכרון מלא ← מוחקים את המונה עם ה־<code>count</code> הקטן ביותר (נקרא לו <code>min</code>). החדש מקבל <code>count: min + 1</code> ו־<code>error: min</code>: אולי הוא הופיע קודם, ונספר אצל מי שנמחק.</li></ul></li><li>getter <code>seen</code> — כמה פריטים נכנסו בסך הכול.</li><li><code>top(n = k)</code> ← <code>[{ item, count, error }]</code>, מה־<code>count</code> הגבוה לנמוך, ובתיקו לפי <code>String(item)</code>.</li><li>שדות פרטיים.</li></ul>
+<p>הבודק מריץ זרם של 60,000 פריטים ובודק את הערבויות: הכבדים נמצאים, ולכל פריט ברשימה <code>count - error &lt;= אמיתי &lt;= count</code>.</p>
+<p>📄 כותבים בקובץ <code>28w-scale/starter/P28.5-E26.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 28w-scale/starter/P28.5-E26.ts
+% npm run check P28.5-E26
+```
+@hint1
+<p>שדה <code>#counters = new Map&lt;T, { count: number; error: number }&gt;()</code>. ב־<code>add</code>, שלושת המקרים לפי הסדר עם <code>return</code> אחרי כל אחד. ‏<code>counter.count++</code> על האובייקט שב־Map מעדכן אותו במקום, בלי <code>set</code> נוסף.</p>
+@hint2
+<p>מציאת המינימום: לולאת <code>for (const [key, c] of this.#counters)</code> עם <code>min</code> ו־<code>minItem</code>. זה O(k) לכל החלפה. עם k של עשרות זה זניח, ובגרסאות מהירות מחזיקים את המונים ברשימה ממוינת. אחר כך <code>delete(minItem)</code> ו־<code>set(item, { count: min + 1, error: min })</code>.</p>
+@solution
+```ts run save=solutions/P28.5-E26.ts
+// P28.5-E26 — הנפוצים ביותר בזרם, בזיכרון קבוע (Space-Saving)
+export type Counted<T> = { item: T; count: number; error: number };
+
+export class TopK<T> {
+  #k: number;
+  #counters = new Map<T, { count: number; error: number }>();
+  #seen = 0;
+
+  constructor(k: number) {
+    if (!Number.isInteger(k) || k < 1) throw new RangeError("k חייב להיות מספר שלם חיובי");
+    this.#k = k;
+  }
+
+  add(item: T): void {
+    this.#seen++;
+    const counter = this.#counters.get(item);
+    if (counter) {
+      counter.count++;
+      return;
+    }
+    if (this.#counters.size < this.#k) {
+      this.#counters.set(item, { count: 1, error: 0 });
+      return;
+    }
+    // מחליפים את המונה הקטן ביותר: החדש "יורש" את הספירה שלו (וזו גם הטעות האפשרית)
+    let minItem: T | undefined;
+    let min = Infinity;
+    for (const [key, c] of this.#counters) {
+      if (c.count < min) {
+        min = c.count;
+        minItem = key;
+      }
+    }
+    this.#counters.delete(minItem as T);
+    this.#counters.set(item, { count: min + 1, error: min });
+  }
+
+  get seen(): number {
+    return this.#seen;
+  }
+
+  top(n = this.#k): Counted<T>[] {
+    return [...this.#counters]
+      .map(([item, c]) => ({ item, count: c.count, error: c.error }))
+      .sort((a, b) => b.count - a.count || String(a.item).localeCompare(String(b.item)))
+      .slice(0, n);
+  }
+}
+
+// זרם של 100,000 בקשות: 3 נתיבים "חמים" ו־5,000 נתיבים שמופיעים מעט
+let seed = 1;
+const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+const topk = new TopK<string>(20);
+const truth = new Map<string, number>();
+for (let i = 0; i < 100_000; i++) {
+  const r = rand();
+  const path = r < 0.2 ? "/products" : r < 0.3 ? "/cart" : r < 0.35 ? "/checkout" : `/products/${Math.floor(rand() * 5000)}`;
+  topk.add(path);
+  truth.set(path, (truth.get(path) ?? 0) + 1);
+}
+for (const { item, count, error } of topk.top(4)) {
+  console.log(item.padEnd(16), String(count).padStart(6), `(אמיתי: ${truth.get(item)}, טעות עד ${error})`);
+}
+console.log("seen:", topk.seen, "· מונים בזיכרון: 20 במקום", truth.size);
+```
+```out
+/products         20174 (אמיתי: 20174, טעות עד 0)
+/cart             10378 (אמיתי: 10378, טעות עד 0)
+/checkout          5550 (אמיתי: 5550, טעות עד 6)
+/products/1237     3759 (אמיתי: 31, טעות עד 3758)
+seen: 100000 · מונים בזיכרון: 20 במקום 2931
+```
+<p>שלושת הנתיבים החמים נספרו בדיוק, או כמעט: ב־<code>/checkout</code> הטעות האפשרית היא 6, מתוך 5,550. השורה הרביעית היא השיעור: ‏<code>/products/1237</code> הופיע 31 פעמים, אבל המונה שלו הוא 3,759, כי הוא "ירש" מונה של פריט אחר. ה־<code>error</code> (‏3,758) אומר את זה במפורש: ייתכן שהוא הופיע רק <code>count - error</code> = פעם אחת. לכן מציגים רק פריטים עם <code>count - error</code> גבוה, או לפחות מראים את הטעות.</p>
+<p>למה זה עובד? סכום כל המונים תמיד שווה ל־N (כל <code>add</code> מוסיף 1 בדיוק). לכן המונה הקטן ביותר הוא לכל היותר N/k. פריט שהופיע יותר מ־N/k פעמים לא יכול להימחק לצמיתות: בכל פעם שהוא חוזר, הוא מקבל מונה גדול מהמינימום. זה גם המבנה של "trending" ב־Redis ‏(<code>TOPK</code> ב־RedisBloom) ובמנועי סטרימינג.</p>
+@mistakes
+<ul><li>החדש מקבל <code>count: 1</code> במקום <code>min + 1</code> — הוא יימחק מיד בפעם הבאה, ופריט חם שנכנס מאוחר לא "יטפס" לעולם.</li><li>לשכוח את <code>error</code> — אי אפשר להבדיל בין 3,759 אמיתיים ל־3,759 שעברו בירושה.</li><li>לשמור <code>Map</code> של הכול "רק לבדיקה" — זה בדיוק מה שהאלגוריתם חוסך.</li><li><code>top()</code> שממיין את ה־Map עצמו — ‏<code>Map</code> לא ממוין; יוצרים מערך חדש.</li></ul>
+
+@@ P28.5-E27 | 2 | סיכום יומי של צפיות 🤖 | 20 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>GROUP BY</code> ו־<code>COUNT(DISTINCT ...)</code> (פרק 16), ‏CTE ו־<code>ROW_NUMBER</code> (‏P17-E27, ‏P26.5-E28)</strong>. דשבורד אנליטי (שיעור 4) מתחיל בדרך כלל בסיכום יומי. בטבלה <code>page_views(id, user_id, path, viewed_at)</code> כתוב שאילתה עם שורה לכל יום (<code>viewed_at::date</code>) והעמודות:</p>
+<ul><li><code>day</code>, ‏<code>views</code> — כמה צפיות, ‏<code>users</code> — כמה משתמשים <em>שונים</em>.</li><li><code>top_path</code> — הנתיב שנצפה הכי הרבה פעמים באותו יום. בתיקו — הראשון לפי שם. ‏<code>top_path_views</code> — כמה פעמים הוא נצפה.</li></ul>
+<p>מיון: <code>day</code>.</p>
+<p>📄 כותבים בקובץ <code>28w-scale/starter/P28.5-E27.sql</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P28.5-E27
+```
+@hint1
+<p>שני CTE. ‏<code>daily</code>: ‏<code>GROUP BY day</code> עם <code>COUNT(*)</code> ו־<code>COUNT(DISTINCT user_id)</code>. ‏<code>by_path</code>: ‏<code>GROUP BY day, path</code> עם <code>COUNT(*)</code>, ועליו חלון. אחר כך <code>JOIN</code> ביניהם, רק לשורה הראשונה בכל יום.</p>
+@hint2
+<p>אפשר לשים חלון על תוצאה של <code>GROUP BY</code> באותה שאילתה: <code>ROW_NUMBER() OVER (PARTITION BY viewed_at::date ORDER BY COUNT(*) DESC, path) AS rn</code>. החלון רץ <em>אחרי</em> הקיבוץ, ולכן <code>COUNT(*)</code> בתוכו הוא הספירה של הקבוצה. ‏<code>path</code> שני ב־<code>ORDER BY</code> שובר את התיקו.</p>
+@solution
+```sql run db=28w-scale/files/views-days.sql save=solutions/P28.5-E27.sql
+WITH daily AS (
+  SELECT viewed_at::date AS day, COUNT(*) AS views, COUNT(DISTINCT user_id) AS users
+  FROM page_views
+  GROUP BY day
+),
+by_path AS (
+  SELECT
+    viewed_at::date AS day,
+    path,
+    COUNT(*) AS path_views,
+    ROW_NUMBER() OVER (PARTITION BY viewed_at::date ORDER BY COUNT(*) DESC, path) AS rn
+  FROM page_views
+  GROUP BY viewed_at::date, path
+)
+SELECT d.day, d.views, d.users, p.path AS top_path, p.path_views AS top_path_views
+FROM daily d
+JOIN by_path p ON p.day = d.day AND p.rn = 1
+ORDER BY d.day;
+```
+```out
+    day     | views | users |  top_path   | top_path_views
+------------+-------+-------+-------------+----------------
+ 2026-11-01 |     6 |     3 | /products   |              3
+ 2026-11-02 |     5 |     3 | /cart       |              2
+ 2026-11-03 |     6 |     4 | /products/9 |              3
+(3 rows)
+```
+<p>ב־2 בנובמבר יש תיקו: ‏<code>/cart</code> ו־<code>/checkout</code> עם 2 צפיות כל אחד. בלי <code>path</code> ב־<code>ORDER BY</code> של החלון, הבחירה ביניהם תלויה בסדר הפיזי של השורות. היום יוצא <code>/cart</code>, ואחרי <code>VACUUM</code> אולי <code>/checkout</code>. דשבורד שמחליף ערך בלי שהנתונים השתנו מאבד אמון מהר.</p>
+<p>‏<code>COUNT(DISTINCT user_id)</code> הוא החלק היקר בשאילתה: צריך לזכור כל משתמש שנראה באותו יום. על מיליארד שורות משתמשים במקומו ב־HyperLogLog (‏E18), שנותן אומדן בזיכרון קבוע. ב־DuckDB (שיעור 4) זה <code>approx_count_distinct</code>.</p>
+@mistakes
+<ul><li><code>COUNT(user_id)</code> — סופר צפיות, לא משתמשים.</li><li>לשים <code>COUNT(DISTINCT user_id)</code> ב־CTE של הנתיבים ולצרף — מקבלים משתמשים לנתיב, לא ליום.</li><li><code>MAX(COUNT(*))</code> — אי אפשר לקנן פונקציות צבירה. ובכל מקרה זה נותן את המספר, לא את הנתיב.</li><li><code>date_trunc('day', viewed_at)</code> — עובד, אבל מחזיר <code>timestamptz</code> (חצות), לא תאריך.</li></ul>
+
+@@ P28.5-E28 | 2 | דוח של בדיקת עומס 🤖 | 20 | שיעור 1
+@type review
+@task
+<p><strong>🔁 חזרה על <code>padStart</code>/<code>padEnd</code> ו־<code>toFixed</code> (פרק 2, ‏P06-E28), ‏<code>Intl.NumberFormat</code>, ‏<code>sort</code> על עותק (פרק 6), ו־<code>map</code>/<code>join</code></strong>. אחרי בדיקת עומס (שיעור 1, ‏E08) רוצים טבלה קצרה ל־pull request: מי מהיר, ובכמה. כתוב וייצא:</p>
+<ul><li><code>type Result = { name: string; requests: number; seconds: number; p50: number; p99: number }</code>.</li><li><code>report(results): string</code> — טבלת טקסט. שורת כותרת: <code>name</code>, ‏<code>req/s</code>, ‏<code>p50 ms</code>, ‏<code>p99 ms</code>, ועמודה חמישית בלי כותרת. אחריה שורה לכל תוצאה, מהמהיר (req/s הגבוה) לאיטי:<ul><li><code>req/s</code> = <code>requests / seconds</code>, מעוגל למספר שלם, עם פסיקים: <code>40,150</code>.</li><li><code>p50</code> ו־<code>p99</code> עם ספרה אחת אחרי הנקודה.</li><li>עמודה אחרונה: <code>fastest</code> למהיר, ולשאר — פי כמה הוא איטי ממנו, עם שתי ספרות: <code>4.05x slower</code>.</li></ul></li><li>הרוחב של כל עמודה הוא הארוך מבין הכותרת והתאים שלה. ‏<code>name</code> והעמודה האחרונה מיושרות לשמאל (<code>padEnd</code>), והמספרים לימין (<code>padStart</code>). בין עמודות — שני רווחים. בסוף שורה — בלי רווחים.</li><li>בלי תוצאות ← <code>""</code>. לא משנים את המערך שקיבלת.</li></ul>
+<p>📄 כותבים בקובץ <code>28w-scale/starter/P28.5-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 28w-scale/starter/P28.5-E28.ts
+% npm run check P28.5-E28
+```
+@hint1
+<p>שלושה שלבים: (1) <code>map</code> שמוסיף <code>rps</code>, ואז <code>sort</code> (‏<code>map</code> יוצר מערך חדש, כך שהקלט לא משתנה). (2) מערך של מחרוזות לכל שורה, כולל הכותרת. (3) רוחב לכל עמודה: <code>header.map((h, i) =&gt; Math.max(h.length, ...cells.map((c) =&gt; c[i].length)))</code>.</p>
+@hint2
+<p>פסיקים: <code>new Intl.NumberFormat("en-US").format(40150)</code> ← <code>"40,150"</code> (ב־<code>"he-IL"</code> זה אותו דבר, אבל עדיף לא להיות תלוי בהגדרות המחשב). שורה: <code>c.map((v, i) =&gt; i === 0 || i === last ? v.padEnd(w[i]) : v.padStart(w[i])).join("  ").trimEnd()</code>.</p>
+@solution
+```ts run save=solutions/P28.5-E28.ts
+// P28.5-E28 — דוח של בדיקת עומס
+export type Result = { name: string; requests: number; seconds: number; p50: number; p99: number };
+
+const fmt = new Intl.NumberFormat("en-US");
+
+export function report(results: Result[]): string {
+  if (results.length === 0) return "";
+  const rows = results
+    .map((r) => ({ ...r, rps: r.requests / r.seconds }))
+    .sort((a, b) => b.rps - a.rps);
+  const best = rows[0].rps;
+  const cells = rows.map((r) => [
+    r.name,
+    fmt.format(Math.round(r.rps)),
+    r.p50.toFixed(1),
+    r.p99.toFixed(1),
+    r.rps === best ? "fastest" : `${(best / r.rps).toFixed(2)}x slower`,
+  ]);
+  const header = ["name", "req/s", "p50 ms", "p99 ms", ""];
+  const widths = header.map((h, i) => Math.max(h.length, ...cells.map((c) => c[i].length)));
+  const line = (c: string[]) =>
+    c
+      .map((v, i) => (i === 0 || i === c.length - 1 ? v.padEnd(widths[i]) : v.padStart(widths[i])))
+      .join("  ")
+      .trimEnd();
+  return [line(header), ...cells.map(line)].join("\n");
+}
+
+console.log(
+  report([
+    { name: "express + pg", requests: 182_400, seconds: 30, p50: 4.2, p99: 31.75 },
+    { name: "fastify + pg", requests: 297_300, seconds: 30, p50: 2.61, p99: 18.4 },
+    { name: "express + cache", requests: 1_204_500, seconds: 30, p50: 0.8, p99: 6.04 },
+  ]),
+);
+```
+```out
+name              req/s  p50 ms  p99 ms
+express + cache  40,150     0.8     6.0  fastest
+fastify + pg      9,910     2.6    18.4  4.05x slower
+express + pg      6,080     4.2    31.8  6.60x slower
+```
+<p>המטמון נותן פי 6.6 מה־baseline, ו־p99 של 6ms במקום 31.8ms. טבלה כזו ב־PR עונה על השאלה "האם השינוי שווה את המורכבות?" טוב יותר מפסקה. ‏<code>p99</code> לצד <code>req/s</code> חשוב: שינוי שמעלה תפוקה ומכפיל את p99 הוא לא תמיד שיפור (שיעור 1).</p>
+<p>‏<code>trimEnd</code> בסוף כל שורה: העמודה האחרונה מרופדת לרוחב הארוך שלה (<code>6.60x slower</code>), ובשורת הכותרת היא ריקה. בלי <code>trimEnd</code> נשארים רווחים בסוף שורות, ו־git מסמן אותם באדום ב־diff.</p>
+@mistakes
+<ul><li><code>results.sort(...)</code> ישר על הקלט — מי שקרא לפונקציה מגלה שהמערך שלו השתנה.</li><li>רוחב קבוע (<code>padStart(10)</code>) — שם ארוך שובר את היישור.</li><li><code>toLocaleString()</code> בלי שפה — הפלט תלוי בהגדרות המחשב (‏<code>40.150</code> בגרמניה).</li><li>"פי כמה" הפוך (<code>r.rps / best</code>) — ‏<code>0.25x slower</code>.</li></ul>

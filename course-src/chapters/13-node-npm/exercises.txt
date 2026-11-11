@@ -969,3 +969,181 @@ console.log((await fs.readdir(tmp)).sort());
 ```
 @mistakes
 <ul><li>להתחיל מ־app.log ← .1 — דורס את .1 הקיים לפני שהועבר.</li></ul>
+
+@@ P13-E26 | 3 | פירוק שורת לוג עם regex 🤖 | 20 | שיעור 4
+@type scratch
+@task
+<p>שרתי web (nginx, Apache) כותבים כל בקשה כשורה בפורמט קבוע, שנקרא Common Log Format:</p>
+```text
+203.0.113.7 - - [10/Nov/2026:13:05:01 +0000] "GET /api/users?page=2 HTTP/1.1" 200 512
+```
+<p>ב־P13-E18 פירקת שורות פשוטות עם <code>split(" ")</code>. כאן <code>split</code> לא מספיק: בתוך הסוגריים המרובעים ובתוך המירכאות יש רווחים. הכלי הנכון הוא <strong>ביטוי רגולרי (regex)</strong> עם קבוצות בשם.</p>
+<p>כתוב וייצא <code>parseAccessLine(line)</code>:</p>
+<ul><li>מחזירה <code>{ ip, time, method, path, status, bytes }</code>. ‏<code>time</code> — מה שבין <code>[</code> ל־<code>]</code>. ‏<code>status</code> ו־<code>bytes</code> — מספרים.</li><li>כשאין גוף בתשובה השרת כותב <code>-</code> במקום מספר הבתים. במקרה כזה <code>bytes: 0</code>.</li><li>רווחים בתחילת השורה ובסופה לא מפריעים.</li><li>שורה שלא בפורמט — <code>null</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>13-node-npm/starter/P13-E26.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 13-node-npm/starter/P13-E26.mjs
+% npm run check P13-E26
+```
+@hint1
+<p>בונים את ה־regex חלק אחר חלק, משמאל לימין: <code>\S+</code> ("רצף בלי רווחים") ל־ip ולשני המקפים, <code>\[([^\]]+)\]</code> לזמן ("כל מה שאינו <code>]</code>"), ואז <code>"([A-Z]+) (\S+) HTTP\/[\d.]+"</code>. מסיימים ב־<code>(\d{3}) (\d+|-)</code>. ‏<code>^</code> בהתחלה ו־<code>$</code> בסוף — כדי שכל השורה תתאים, ולא רק חלק ממנה.</p>
+@hint2
+<p>קבוצה בשם: <code>(?&lt;ip&gt;\S+)</code>. אחרי <code>const m = line.trim().match(LINE)</code> הערכים נמצאים ב־<code>m.groups</code>, ואפשר לפרק אותם: <code>const { ip, time, ... } = m.groups</code>. אם <code>m</code> הוא <code>null</code> — אין התאמה.</p>
+@solution
+```js run save=solutions/P13-E26.mjs
+// P13-E26: פירוק שורת לוג עם regex
+const LINE = /^(?<ip>\S+) \S+ \S+ \[(?<time>[^\]]+)\] "(?<method>[A-Z]+) (?<path>\S+) HTTP\/[\d.]+" (?<status>\d{3}) (?<bytes>\d+|-)$/;
+
+export function parseAccessLine(line) {
+  const m = line.trim().match(LINE);
+  if (!m) {
+    return null;
+  }
+  const { ip, time, method, path, status, bytes } = m.groups;
+  return {
+    ip,
+    time,
+    method,
+    path,
+    status: Number(status),
+    bytes: bytes === "-" ? 0 : Number(bytes),
+  };
+}
+
+console.log(parseAccessLine('203.0.113.7 - - [10/Nov/2026:13:05:01 +0000] "GET /api/users?page=2 HTTP/1.1" 200 512'));
+console.log(parseAccessLine('10.0.0.1 - dana [10/Nov/2026:13:05:02 +0000] "DELETE /api/users/7 HTTP/1.1" 204 -'));
+console.log(parseAccessLine("משהו אחר לגמרי"));
+```
+```out
+{
+  ip: '203.0.113.7',
+  time: '10/Nov/2026:13:05:01 +0000',
+  method: 'GET',
+  path: '/api/users?page=2',
+  status: 200,
+  bytes: 512
+}
+{
+  ip: '10.0.0.1',
+  time: '10/Nov/2026:13:05:02 +0000',
+  method: 'DELETE',
+  path: '/api/users/7',
+  status: 204,
+  bytes: 0
+}
+null
+```
+<p>ה־regex נקרא משמאל לימין, בדיוק כמו השורה: ip, שני שדות שלא מעניינים אותנו (<code>\S+ \S+</code>), זמן בסוגריים, בקשה במירכאות, סטטוס ובתים. ‏<code>[^\]]+</code> פירושו "תו אחד או יותר שאינם <code>]</code>" — כך הזמן נעצר בדיוק בסוגר, גם אם יש בו רווח.</p>
+<p>קבוצות בשם (<code>?&lt;name&gt;</code>) הופכות את התוצאה לאובייקט קריא. בלעדיהן הייתי כותב <code>m[1]</code>, <code>m[5]</code>, ובכל שינוי ב־regex המספרים זזים.</p>
+<p>מה שיוצא מ־regex הוא תמיד מחרוזת. לכן <code>Number(status)</code>, ולכן גם <code>(\d+|-)</code>: הבתים הם מספר <em>או</em> מקף, ובקוד הופכים מקף ל־0.</p>
+@mistakes
+<ul><li>בלי <code>^</code> ו־<code>$</code> — שורה עם זבל בסוף עדיין "מתאימה", והבודק מצפה ל־<code>null</code>.</li><li><code>.*</code> במקום <code>[^\]]+</code> — ‏<code>.*</code> "חמדן" ובולע עד ה־<code>]</code> האחרון בשורה.</li><li>לשכוח <code>\</code> לפני <code>[</code>, <code>]</code> או <code>/</code> — בתוך regex אלה תווים מיוחדים.</li><li>להחזיר <code>status: "200"</code> — מחרוזת ולא מספר.</li></ul>
+
+@@ P13-E27 | 3 | העלאת גרסה (semver) 🤖 | 15 | שיעור 1
+@type review
+@task
+<p><strong>🔁 חזרה על <code>switch</code> (פרק 4) ועל destructuring של מערך (פרק 7)</strong>, על נושא משיעור 1. בגרסה <code>MAJOR.MINOR.PATCH</code>, הפקודה <code>npm version patch</code> (או <code>minor</code>, <code>major</code>) מעלה את אחד החלקים. כתוב וייצא <code>bump(version, kind)</code> שעושה את אותו דבר:</p>
+<ul><li><code>"patch"</code>: <code>1.4.2</code> ← <code>1.4.3</code>. ‏<code>"minor"</code>: ‏<code>1.4.2</code> ← <code>1.5.0</code>. ‏<code>"major"</code>: ‏<code>1.4.2</code> ← <code>2.0.0</code>. שים לב: החלקים שאחרי זה שהועלה מתאפסים.</li><li>גרסה שאינה בדיוק שלושה מספרים עם נקודות ביניהם (<code>"1.4"</code>, ‏<code>"1.4.x"</code>, ‏<code>"v1.4.2"</code>) ← <code>Error(`גרסה לא תקינה: ${version}`)</code>.</li><li>סוג אחר ← <code>Error(`סוג לא מוכר: ${kind}`)</code>.</li><li>כתוב את הבחירה בין הסוגים עם <code>switch</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>13-node-npm/starter/P13-E27.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 13-node-npm/starter/P13-E27.mjs
+% npm run check P13-E27
+```
+@hint1
+<p>קודם בדיקה: <code>/^\d+\.\d+\.\d+$/.test(version)</code> (הנקודה עם <code>\</code>, אחרת היא "כל תו"). אחר כך: <code>const [major, minor, patch] = version.split(".").map(Number)</code>.</p>
+@hint2
+<p>בכל <code>case</code> אפשר להחזיר ישר: <code>case "minor": return `${major}.${minor + 1}.0`;</code>. כש־<code>case</code> מסתיים ב־<code>return</code>, לא צריך <code>break</code>. ה־<code>default</code> זורק.</p>
+@solution
+```js run save=solutions/P13-E27.mjs
+// P13-E27: העלאת גרסה (semver) עם switch
+export function bump(version, kind) {
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`גרסה לא תקינה: ${version}`);
+  }
+  const [major, minor, patch] = version.split(".").map(Number);
+  switch (kind) {
+    case "major":
+      return `${major + 1}.0.0`;
+    case "minor":
+      return `${major}.${minor + 1}.0`;
+    case "patch":
+      return `${major}.${minor}.${patch + 1}`;
+    default:
+      throw new Error(`סוג לא מוכר: ${kind}`);
+  }
+}
+
+console.log(bump("1.4.2", "patch"), bump("1.4.2", "minor"), bump("1.4.2", "major"));
+console.log(bump("0.9.9", "minor"));
+try {
+  bump("1.4", "patch");
+} catch (err) {
+  console.log(err.message);
+}
+```
+```out
+1.4.3 1.5.0 2.0.0
+0.10.0
+גרסה לא תקינה: 1.4
+```
+<p><code>map(Number)</code> חשוב: בלי זה <code>minor + 1</code> על המחרוזת <code>"9"</code> נותן <code>"91"</code> ולא 10. ‏<code>0.9.9</code> ← <code>0.10.0</code> מראה שגרסאות הן מספרים ולא טקסט (את זה ראית כבר ב־P13-E13, במיון גרסאות).</p>
+<p>ה־<code>switch</code> מתאים כאן כי משווים ערך אחד לכמה מחרוזות קבועות, ולכל אחת יש פעולה אחרת. ‏<code>return</code> בתוך <code>case</code> חוסך את ה־<code>break</code>. ה־<code>default</code> הוא המקום הטבעי לשגיאה.</p>
+@mistakes
+<ul><li>לשכוח לאפס: <code>minor</code> על <code>1.4.2</code> נותן <code>1.5.2</code> במקום <code>1.5.0</code>.</li><li><code>/^\d+.\d+.\d+$/</code> בלי <code>\</code> לפני הנקודות — <code>"1x4x2"</code> נחשבת תקינה.</li><li><code>case "minor":</code> בלי <code>return</code> ובלי <code>break</code> — ממשיכים ל־<code>case</code> הבא.</li></ul>
+
+@@ P13-E28 | 3 | מיזוג קובצי הגדרות במקביל 🤖 | 15 | שיעור 4
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Promise.all</code> (פרק 10), <code>reduce</code> (פרק 6) ו־spread של אובייקטים (פרק 7)</strong>. הרבה פרויקטים שומרים הגדרות בכמה קובצי JSON: <code>default.json</code>, ואחריו <code>local.json</code> שגובר עליו. כתוב וייצא <code>async function loadConfigs(files)</code>:</p>
+<ul><li><code>files</code> — מערך נתיבים. קוראים את כל הקבצים <strong>במקביל</strong> (<code>fs/promises</code> ו־<code>Promise.all</code>).</li><li>מחזירה אובייקט אחד: מיזוג של כולם לפי הסדר במערך. כשמפתח מופיע בכמה קבצים, הערך מהקובץ <strong>המאוחר</strong> גובר.</li><li>קובץ שאינו JSON תקין ← <code>Error(`${שם הקובץ}: JSON לא תקין`)</code>, עם שם הקובץ בלבד, בלי התיקייה (<code>path.basename</code>).</li><li>קובץ שלא קיים — לא מטפלים. השגיאה של <code>readFile</code> (‏<code>ENOENT</code>) עוברת הלאה כמו שהיא.</li><li>מערך ריק ← <code>{}</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>13-node-npm/starter/P13-E28.mjs</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 13-node-npm/starter/P13-E28.mjs
+% npm run check P13-E28
+```
+@hint1
+<p>פונקציית עזר <code>readJson(file)</code>: ‏<code>await fs.readFile(file, "utf8")</code>, ואז <code>JSON.parse</code> בתוך <code>try/catch</code> שזורק את השגיאה החדשה. אחר כך: <code>await Promise.all(files.map(readJson))</code>.</p>
+<p>שים לב ש־<code>try</code> עוטף רק את <code>JSON.parse</code>, ולא את <code>readFile</code>. כך שגיאת "קובץ לא קיים" לא הופכת ל"JSON לא תקין".</p>
+@hint2
+<p>מיזוג: <code>configs.reduce((merged, config) =&gt; ({ ...merged, ...config }), {})</code>. ב־spread, מה שמופיע מאוחר יותר גובר.</p>
+@solution
+```js run save=solutions/P13-E28.mjs
+// P13-E28: מיזוג קובצי הגדרות במקביל
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+async function readJson(file) {
+  const text = await fs.readFile(file, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${path.basename(file)}: JSON לא תקין`);
+  }
+}
+
+export async function loadConfigs(files) {
+  const configs = await Promise.all(files.map(readJson));
+  return configs.reduce((merged, config) => ({ ...merged, ...config }), {});
+}
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cfg-"));
+await fs.writeFile(path.join(dir, "default.json"), '{ "port": 3000, "logLevel": "info" }');
+await fs.writeFile(path.join(dir, "local.json"), '{ "logLevel": "debug" }');
+await fs.writeFile(path.join(dir, "broken.json"), "{ port: 1 }");
+
+console.log(await loadConfigs([path.join(dir, "default.json"), path.join(dir, "local.json")]));
+try {
+  await loadConfigs([path.join(dir, "default.json"), path.join(dir, "broken.json")]);
+} catch (err) {
+  console.log(err.message);
+}
+```
+```out
+{ port: 3000, logLevel: 'debug' }
+broken.json: JSON לא תקין
+```
+<p><code>Promise.all</code> שומר על הסדר של המערך, גם אם קובץ אחד נקרא מהר מהאחר. לכן ה־<code>reduce</code> ממזג בדיוק לפי הסדר שביקשו, והקובץ האחרון גובר.</p>
+<p>ה־<code>try</code> הצר הוא העיקר כאן: הוא תופס רק את השגיאה שאנחנו יודעים להסביר (JSON שבור), ומוסיף לה את שם הקובץ. שגיאה אחרת, כמו קובץ חסר, עוברת כמו שהיא. ככה מי שקורא את ההודעה יודע מה באמת קרה.</p>
+@mistakes
+<ul><li><code>for ... of</code> עם <code>await</code> בתוכו — עובד, אבל קורא קובץ אחרי קובץ. הבודק מחפש <code>Promise.all</code>.</li><li><code>{ ...config, ...merged }</code> — הסדר הפוך, והקובץ הראשון גובר.</li><li><code>try</code> סביב הכול עם <code>catch</code> שזורק "JSON לא תקין" — קובץ חסר מקבל הודעה שקרית.</li><li>להחזיר את <code>err.message</code> המקורי של <code>JSON.parse</code> — הוא לא אומר באיזה קובץ הבעיה.</li></ul>

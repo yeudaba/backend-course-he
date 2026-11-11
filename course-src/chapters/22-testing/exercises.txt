@@ -1132,3 +1132,202 @@ test("כל מפתח — לבד", () => {
 <p>זה ההבדל מה"חלון הקבוע" של P20-E25: אין "התחלה של חלון" — כל בקשה יוצאת בזמן משלה. לכן הבדיקות בודקות זמנים <em>בין</em> בקשות, ולא רק "אחרי 10 שניות הכול מתאפס".</p>
 @mistakes
 <ul><li>לקדם את השעון בקפיצות עגולות בלבד (10 שניות) — אף באג של "&gt;" מול "&gt;=" לא נתפס.</li></ul>
+
+@@ P22-E26 | 3 | בדיקות ל־pagination — מקובץ ריק 🤖 | 25 | שיעור 1
+@type scratch
+@task
+<p>ב־<code>22-testing/starter/P22-E26.ts</code> יש <code>paginate(total, page, pageSize = 10)</code>, שמחשבת את מה ש־API של רשימה צריך (‏P16-E14, ‏P19-E27):</p>
+<ul><li><code>pages</code> — כמה עמודים יש (עמוד חלקי נחשב עמוד). ‏<code>offset</code> — כמה שורות לדלג. ‏<code>hasPrev</code> / ‏<code>hasNext</code> — האם יש עמוד קודם / הבא.</li><li><code>total</code> שאינו שלם לא שלילי, ‏<code>pageSize</code> שאינו שלם בין 1 ל־100, או <code>page</code> שאינו שלם חיובי ← <code>RangeError</code>.</li></ul>
+<p>כתוב בדיקות ב־<code>P22-E26.spec.ts</code>. בתרגילים הקודמים קובץ הבדיקות התחיל עם ה־imports ועם <code>test.todo</code>. הפעם הוא ריק: גם את ה־imports (‏<code>node:test</code>, ‏<code>node:assert/strict</code>, והפונקציה מ־<code>./P22-E26.ts</code>) כותבים לבד.</p>
+<p class="muted">איך עובד הבודק בתרגיל הזה: הוא מריץ את <strong>הבדיקות שלך</strong> על הקוד התקין (חייבות לעבור), על שני מימושים אחרים <em>תקינים</em> (חייבות לעבור, כלומר הבדיקות בודקות "מה" ולא "איך"), ואז על 11 גרסאות שבכל אחת באג אחד (חייבות להיכשל). הוא מראה אילו באגים "שרדו". את <code>P22-E26.ts</code> עצמו לא משנים. הרצה ידנית: <code>node --test 22-testing/starter/P22-E26.spec.ts</code>.</p>
+```term
+% node --test 22-testing/starter/P22-E26.spec.ts
+% npm run check P22-E26
+```
+@hint1
+<p>לכל השוואה בקוד (<code>&lt;</code>, ‏<code>&gt;</code>, ‏<code>&gt;=</code>) — בדיקה בדיוק על הגבול. ‏<code>hasNext</code> בעמוד האחרון, ‏<code>hasPrev</code> בעמוד הראשון, ‏<code>pageSize</code> של 100 ושל 101. ולספירת עמודים: מספר שורות שמתחלק בדיוק, ואחד שלא.</p>
+@hint2
+<p>טבלת מקרים (‏P22-E17) חוסכת הרבה שורות לקלט לא תקין: <code>for (const [total, page, size] of bad) assert.throws(() =&gt; paginate(total, page, size), RangeError, ...)</code>. וקריאה <em>בלי</em> pageSize בודקת את ברירת המחדל.</p>
+@solution
+```ts save=solutions/P22-E26.spec.ts
+// P22-E26 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { paginate } from "./P22-E26.ts";
+
+test("עמוד ראשון, אמצעי ואחרון", () => {
+  assert.deepEqual(paginate(23, 1), { pages: 3, offset: 0, hasPrev: false, hasNext: true });
+  assert.deepEqual(paginate(23, 2), { pages: 3, offset: 10, hasPrev: true, hasNext: true });
+  assert.deepEqual(paginate(23, 3), { pages: 3, offset: 20, hasPrev: true, hasNext: false });
+});
+
+test("מספר עמודים: מתחלק בדיוק, לא מתחלק, ואפס שורות", () => {
+  assert.equal(paginate(20, 1).pages, 2);
+  assert.equal(paginate(21, 1).pages, 3);
+  assert.deepEqual(paginate(0, 1), { pages: 0, offset: 0, hasPrev: false, hasNext: false });
+});
+
+test("pageSize מפורש, וגבולות 1 ו־100", () => {
+  assert.deepEqual(paginate(5, 2, 2), { pages: 3, offset: 2, hasPrev: true, hasNext: true });
+  assert.equal(paginate(500, 1, 1).pages, 500);
+  assert.equal(paginate(500, 1, 100).pages, 5);
+});
+
+test("קלט לא תקין ← RangeError", () => {
+  const bad: [number, number, number?][] = [
+    [-1, 1],
+    [10.5, 1],
+    [10, 0],
+    [10, -1],
+    [10, 1.5],
+    [10, 1, 0],
+    [10, 1, 101],
+    [10, 1, 2.5],
+  ];
+  for (const [total, page, size] of bad) {
+    assert.throws(() => paginate(total, page, size), RangeError, `paginate(${total}, ${page}, ${size})`);
+  }
+});
+```
+<p>הבדיקה הראשונה עושה הרבה עבודה: ‏<code>deepEqual</code> על כל האובייקט בשלושה עמודים תופס את רוב הבאגים בבת אחת. ‏<code>offset</code> שגוי, ‏<code>hasPrev</code> בעמוד 1, ‏<code>hasNext</code> בעמוד האחרון, וברירת מחדל שגויה (עם 20 בעמוד יש רק 2 עמודים).</p>
+<p>23 שורות נבחרו בכוונה: מספר שלא מתחלק ב־10 מבדיל בין <code>ceil</code> ל־<code>floor</code>. עם 20 או 30 שתי הגרסאות נותנות אותה תשובה, והבאג שורד.</p>
+<p><code>assert.throws(..., RangeError)</code> בודק גם את <em>סוג</em> השגיאה. בלי הארגומנט השני, באג שזורק <code>Error</code> רגיל היה עובר. וה־controller שמתרגם <code>RangeError</code> ל־400 היה מחזיר 500.</p>
+@mistakes
+<ul><li>לבדוק רק "עמוד 1 של 100 שורות" — ‏<code>floor</code> ו־<code>ceil</code> נותנים 10 בשניהם, ו־<code>hasNext</code> בעמוד האחרון לא נבדק.</li><li>לבדוק <code>pageSize</code> של 1000 במקום 101 — לא תופס <code>&gt; 101</code>. הגבול הוא 100, ולכן בודקים 100 (עובר) ו־101 (נכשל).</li><li>לבדוק את המימוש (למשל שהקוד קורא ל־<code>Math.ceil</code>) — שני המימושים התקינים האחרים נכשלים, והבודק מתלונן ש"הבדיקות בודקות איך ולא מה".</li></ul>
+
+@@ P22-E27 | 3 | מטמון LRU עם Map 🤖 | 25 | שיעור 2
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Map</code> (פרק 7), ‏<code>class</code> עם שדות פרטיים ו־getter (פרק 12) ו־generics (פרק 11)</strong>. מטמון בזיכרון חייב גבול, אחרת הוא ממלא את הזיכרון. המדיניות הנפוצה היא <strong>LRU</strong> (Least Recently Used): כשאין מקום, מוציאים את הפריט שלא נגעו בו הכי הרבה זמן. כתוב וייצא <code>class LruCache&lt;K, V&gt;</code>:</p>
+<ul><li><code>constructor(capacity)</code> — מספר שלם חיובי, אחרת <code>RangeError("capacity חייב להיות מספר שלם חיובי")</code>.</li><li><code>get(key): V | undefined</code> — ואם המפתח קיים, הוא נהיה "האחרון שנגעו בו".</li><li><code>set(key, value)</code> — מוסיף או מעדכן, וגם זו "נגיעה". אם עברנו את <code>capacity</code> — מוציאים את זה שלא נגעו בו הכי הרבה זמן.</li><li>getter <code>size</code>, ו־<code>keys()</code> — המפתחות מהישן לחדש.</li><li>ערכים כמו <code>0</code> ו־<code>""</code> הם ערכים לכל דבר.</li></ul>
+<p>הטריק: <code>Map</code> זוכרת את סדר ההכנסה. ‏<code>delete</code> ואז <code>set</code> מעבירים מפתח לסוף, והמפתח הראשון ב־<code>keys()</code> הוא הישן ביותר. לא צריך מערך נוסף.</p>
+<p>📄 כותבים בקובץ <code>22-testing/starter/P22-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 22-testing/starter/P22-E27.ts
+% npm run check P22-E27
+```
+@hint1
+<p>שני שדות: <code>#items = new Map&lt;K, V&gt;()</code> ו־<code>#capacity</code>. ב־<code>get</code>: ‏<code>if (!this.#items.has(key)) return undefined;</code> (לא <code>if (!value)</code>, בגלל <code>0</code>), ואז <code>delete</code> ו־<code>set</code> מחדש.</p>
+@hint2
+<p>הישן ביותר: <code>this.#items.keys().next().value</code> — האיבר הראשון של ה־iterator. ‏TypeScript לא יודע שהוא קיים, ולכן <code>as K</code>. ב־<code>set</code>: קודם <code>delete(key)</code> (אם הוא קיים, כדי שיעבור לסוף), אחר כך <code>set</code>, ורק אז בודקים אם <code>size &gt; capacity</code>.</p>
+@solution
+```ts run save=solutions/P22-E27.ts
+// P22-E27: מטמון LRU עם Map
+export class LruCache<K, V> {
+  #items = new Map<K, V>();
+  #capacity: number;
+
+  constructor(capacity: number) {
+    if (!Number.isInteger(capacity) || capacity < 1) throw new RangeError("capacity חייב להיות מספר שלם חיובי");
+    this.#capacity = capacity;
+  }
+
+  get(key: K): V | undefined {
+    if (!this.#items.has(key)) return undefined;
+    const value = this.#items.get(key) as V;
+    // "נגיעה": מוציאים ומכניסים מחדש — עכשיו הוא האחרון בסדר של ה־Map
+    this.#items.delete(key);
+    this.#items.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    this.#items.delete(key);
+    this.#items.set(key, value);
+    if (this.#items.size > this.#capacity) {
+      const oldest = this.#items.keys().next().value as K;
+      this.#items.delete(oldest);
+    }
+  }
+
+  get size(): number {
+    return this.#items.size;
+  }
+
+  keys(): K[] {
+    return [...this.#items.keys()];
+  }
+}
+
+const cache = new LruCache<string, number>(2);
+cache.set("a", 1);
+cache.set("b", 2);
+cache.get("a"); // a נהיה "האחרון שנגעו בו"
+cache.set("c", 3); // אין מקום — b יוצא
+console.log(cache.keys(), cache.get("b"), cache.size);
+```
+```out
+[ 'a', 'c' ] undefined 2
+```
+<p>כל פעולה היא כמה פעולות על <code>Map</code>, וכל אחת מהן מהירה (O(1)). מימוש עם מערך של מפתחות (<code>indexOf</code> ו־<code>splice</code> בכל <code>get</code>) עובד, אבל לאט יותר ככל שהמטמון גדל.</p>
+<p>ה־<code>&lt;K, V&gt;</code> אומר ש־<code>new LruCache&lt;string, number&gt;(2)</code> מקבל רק מספרים, ו־<code>get</code> מחזיר <code>number | undefined</code>. ה־<code>undefined</code> בטיפוס מכריח את מי שמשתמש במטמון לטפל במקרה של "לא נמצא".</p>
+<p>למה זה בפרק הבדיקות? כי זו מחלקה שקל לבדוק: אין שעון, אין רשת, רק קלט ופלט. כדאי לכתוב לעצמך בדיקה לפני שמריצים את הבודק: מה ייצא כשמוסיפים פריט שלישי ל־capacity 2?</p>
+@mistakes
+<ul><li><code>set</code> למפתח קיים בלי <code>delete</code> קודם — ‏<code>Map.set</code> משאיר אותו במקום הישן, והוא ייצא ראשון למרות שעדכנו אותו.</li><li><code>if (!value) return undefined</code> — ‏<code>0</code> ו־<code>""</code> "לא נמצאים", ולא עוברים לסוף.</li><li>להוציא את הישן <em>לפני</em> ה־<code>set</code> גם כשהמפתח כבר קיים — מוציאים פריט בלי סיבה.</li></ul>
+
+@@ P22-E28 | 3 | memoizeAsync עם שעון מוזרק 🤖 | 25 | שיעור 2
+@type review
+@task
+<p><strong>🔁 חזרה על closures (פרק 5), ‏<code>Map</code> (פרק 7) ו־Promises (פרק 10)</strong>, ועל העיקרון של שיעור 2: תלות בזמן מזריקים כדי שאפשר יהיה לבדוק. כתוב וייצא:</p>
+<p><code>memoizeAsync(fn, { ttlMs, now = Date.now })</code> — מחזירה פונקציה עם אותה חתימה כמו <code>fn</code> (ארגומנט אחד, מחרוזת או מספר), שזוכרת תשובות:</p>
+<ul><li>קריאה ראשונה לארגומנט ← קוראת ל־<code>fn</code>. קריאות נוספות עם אותו ארגומנט בתוך <code>ttlMs</code> ← אותה תשובה, בלי לקרוא שוב.</li><li><strong>גם בזמן ההמתנה:</strong> אם שלוש קריאות הגיעו לפני שהתשובה הראשונה חזרה, ‏<code>fn</code> נקראת פעם אחת, וכולן מקבלות את אותה תוצאה.</li><li>כש־<code>now() &gt;= זמן הקריאה + ttlMs</code> — התשובה פגה, וקוראים שוב.</li><li>אם <code>fn</code> נכשלה — כל מי שחיכה מקבל את השגיאה, אבל היא <strong>לא</strong> נשמרת: הקריאה הבאה מנסה שוב.</li></ul>
+<p>📄 כותבים בקובץ <code>22-testing/starter/P22-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 22-testing/starter/P22-E28.ts
+% npm run check P22-E28
+```
+@hint1
+<p>שומרים במטמון את ה־<strong>Promise</strong>, לא את התוצאה: ‏<code>Map&lt;A, { promise, expiresAt }&gt;</code>. כך מי שמגיע בזמן ההמתנה מקבל את אותו Promise. ה־Map חי בתוך <code>memoizeAsync</code>, והפונקציה המוחזרת סוגרת עליו (closure).</p>
+<p>חתימה עם generics: <code>memoizeAsync&lt;A extends string | number, R&gt;(fn: (arg: A) =&gt; Promise&lt;R&gt;, { ttlMs, now = Date.now }: { ttlMs: number; now?: () =&gt; number }): (arg: A) =&gt; Promise&lt;R&gt;</code>.</p>
+@hint2
+<p>שגיאה: <code>promise.catch(() =&gt; cache.delete(arg))</code> מיד אחרי השמירה. ה־<code>catch</code> הזה לא "בולע" את השגיאה למי שקרא: הוא יוצר Promise חדש, ומי שקרא קיבל את המקורי. בדיקה זהירה יותר: למחוק רק אם במטמון עדיין יושב אותו Promise.</p>
+@solution
+```ts run save=solutions/P22-E28.ts
+// P22-E28: memoizeAsync — מטמון לפונקציה אסינכרונית, עם שעון מוזרק
+export function memoizeAsync<A extends string | number, R>(
+  fn: (arg: A) => Promise<R>,
+  { ttlMs, now = Date.now }: { ttlMs: number; now?: () => number },
+): (arg: A) => Promise<R> {
+  const cache = new Map<A, { promise: Promise<R>; expiresAt: number }>();
+
+  return (arg: A) => {
+    const hit = cache.get(arg);
+    if (hit && hit.expiresAt > now()) return hit.promise;
+
+    const promise = fn(arg);
+    cache.set(arg, { promise, expiresAt: now() + ttlMs });
+    // שגיאה לא נשמרת: הקריאה הבאה תנסה שוב
+    promise.catch(() => {
+      if (cache.get(arg)?.promise === promise) cache.delete(arg);
+    });
+    return promise;
+  };
+}
+
+let clock = 0;
+let calls = 0;
+const getRate = memoizeAsync(
+  async (currency: string) => {
+    calls++;
+    return currency === "USD" ? 3.7 : 4;
+  },
+  { ttlMs: 60_000, now: () => clock },
+);
+
+Promise.all([getRate("USD"), getRate("USD")])
+  .then(([a, b]) => {
+    console.log(a, b, "קריאות:", calls);
+    clock = 60_000;
+    return getRate("USD");
+  })
+  .then(() => console.log("אחרי דקה — קריאות:", calls));
+```
+```out
+3.7 3.7 קריאות: 1
+אחרי דקה — קריאות: 2
+```
+<p>שמירת ה־Promise היא העיקר. אילו שמרנו את התוצאה (אחרי <code>await</code>), שתי הקריאות הראשונות היו מגיעות לפני שיש תוצאה, ושתיהן היו קוראות ל־<code>fn</code>. בשרת עמוס זה נקרא <em>cache stampede</em>: מאה בקשות בבת אחת מפעילות מאה שאילתות זהות, בדיוק כשהמטמון התרוקן.</p>
+<p>השעון המוזרק הופך "אחרי דקה" לשורה אחת בבדיקה (<code>clock = 60_000</code>), בלי לחכות דקה ובלי טיימרים מזויפים. זה הדפוס של שיעור 2: כל מה שתלוי בזמן מקבל <code>now</code> מבחוץ.</p>
+<p>בפרק 26 תראה את אותו רעיון עם Redis: ‏<code>GET</code>, ואם אין — מחשבים ושומרים עם <code>EX</code>.</p>
+@mistakes
+<ul><li><code>const value = await fn(arg); cache.set(arg, value)</code> — קריאות במקביל קוראות כולן ל־<code>fn</code>.</li><li>לשמור גם שגיאות — תקלה רגעית ברשת "נתקעת" במטמון לכל ה־TTL.</li><li><code>Date.now()</code> ישירות בתוך הפונקציה במקום <code>now()</code> — הבודק לא יכול "להזיז את השעון".</li><li><code>expiresAt &gt;= now()</code> — התשובה תקפה גם ברגע שהיא אמורה לפוג.</li></ul>

@@ -13,6 +13,181 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+<div class="ex typed" id="P25.5-E26">
+    <h3>P25.5-E26 · דוח לקוחות ב־MySQL — מקובץ ריק 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי טבלאות "רבות" לכל לקוח (הזמנות ועגלה). ‏<code>JOIN</code> לשתיהן יחד מכפיל שורות: לדנה יש שני פריטים בעגלה, וההזמנה שלה נספרת פעמיים. לכן מסכמים כל אחת בנפרד ב־CTE (<code>WITH spent AS (... GROUP BY customer_id), cart AS (...)</code>), ואז <code>LEFT JOIN</code> ללקוחות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>MySQL: ‏<code>IFNULL(s.spent, 0)</code> (או <code>COALESCE</code>), ‏<code>DATE_FORMAT(s.last_at, '%d/%m/%Y')</code>. ‏<code>DATE_FORMAT</code> של <code>NULL</code> הוא <code>NULL</code>. בחלון: <code>RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC)</code>, ובסוף <code>ORDER BY c.city, city_rank, c.name</code> (מותר למיין לפי כינוי של עמודה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH spent AS (
+  SELECT customer_id, COUNT(*) AS orders, SUM(total) AS spent, MAX(created_at) AS last_at
+  FROM orders
+  WHERE status IN ('paid', 'shipped')
+  GROUP BY customer_id
+),
+cart AS (
+  SELECT customer_id, SUM(quantity) AS units
+  FROM cart_items
+  GROUP BY customer_id
+)
+SELECT
+  c.name,
+  c.city,
+  IFNULL(s.orders, 0) AS orders,
+  IFNULL(s.spent, 0) AS spent,
+  DATE_FORMAT(s.last_at, '%d/%m/%Y') AS last_order,
+  IFNULL(ct.units, 0) AS cart_units,
+  RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC) AS city_rank
+FROM customers c
+LEFT JOIN spent s ON s.customer_id = c.id
+LEFT JOIN cart ct ON ct.customer_id = c.id
+ORDER BY c.city, city_rank, c.name;</code></pre>
+<pre class="terminal">+-------------+-----------+--------+--------+------------+------------+-----------+
+| name        | city      | orders | spent  | last_order | cart_units | city_rank |
++-------------+-----------+--------+--------+------------+------------+-----------+
+| Dana Levi   | Haifa     |      1 | 278.90 | 01/03/2026 |          3 |         1 |
+| Maya Katz   | Haifa     |      0 |   0.00 | NULL       |          1 |         2 |
+| Avi Peretz  | Jerusalem |      1 | 119.00 | 06/03/2026 |          0 |         1 |
+| Yossi Cohen | Tel Aviv  |      1 | 649.00 | 02/03/2026 |          0 |         1 |
+| Noa Mizrahi | Tel Aviv  |      1 | 238.00 | 04/03/2026 |          0 |         2 |
++-------------+-----------+--------+--------+------------+------------+-----------+</pre>
+<p>דנה: הזמנה אחת ששולמה (278.90). ההזמנה המבוטלת לא נספרת. בעגלה שלה 2 + 1 = 3 יחידות. מי שמצרף את <code>orders</code> ואת <code>cart_items</code> באותו <code>FROM</code> מקבל לה <code>spent</code> של 557.80, כי כל הזמנה מופיעה פעם לכל פריט בעגלה. זה ה־"fan-out" מפרק 17, והוא נראה בדיוק אותו דבר ב־MySQL.</p>
+<p>מה כאן MySQL ומה לא? ‏CTE, ‏<code>LEFT JOIN</code>, ‏<code>RANK</code> ו־<code>GROUP BY</code> זהים ל־PostgreSQL (מגרסה 8). ההבדלים: ‏<code>DATE_FORMAT</code> עם <code>%d/%m/%Y</code> (ב־PostgreSQL: ‏<code>to_char(..., 'DD/MM/YYYY')</code>), ו־<code>IFNULL</code>, שקיים רק ב־MySQL. ‏<code>COALESCE</code> עובד בשניהם, ולכן הוא בחירה טובה כשכותבים SQL שצריך לרוץ בשני המסדים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>JOIN</code> במקום <code>LEFT JOIN</code> — מאיה, שעוד לא הזמינה, נעלמת מהדוח.</li><li><code>WHERE o.status IN (...)</code> אחרי <code>LEFT JOIN</code> ל־<code>orders</code> — הופך אותו ל־<code>JOIN</code> רגיל, ומאיה שוב נעלמת. את הסינון שמים בתוך ה־CTE (או בתנאי ה־<code>ON</code>).</li><li><code>ROW_NUMBER</code> במקום <code>RANK</code> — בתיקו אחד מקבל 1 והשני 2, לפי סדר מקרי.</li><li><code>'%d/%m/%y'</code> — ‏<code>y</code> קטנה היא שנה בשתי ספרות (<code>26</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E27">
+    <h3>P25.5-E27 · INSERT מרובה שורות, עם upsert 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות לא יכולים להיות פרמטרים (<code>?</code> הוא רק לערכים), ולכן בודקים אותם מול רשימה מותרת: פונקציה קטנה <code>ident(name)</code> שזורקת אם ה־regex לא מתאים, ומחזירה את השם עטוף ב־backticks. כל שם עובר דרכה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>const columns = Object.keys(rows[0])</code>. השוואת עמודות: <code>Object.keys(row).sort().join(",")</code> מול אותו דבר בשורה הראשונה. פרמטרים: <code>rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]))</code>. ‏placeholders: ‏<code>rows.map(() =&gt; "(?, ?, ?)").join(", ")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E27 — INSERT מרובה שורות, עם upsert
+type Value = string | number | boolean | null;
+
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+
+function ident(name: string): string {
+  if (!IDENT.test(name)) throw new Error(`שם לא חוקי: ${name}`);
+  return `\`${name}\``;
+}
+
+export function buildBulkInsert(
+  table: string,
+  rows: Record&lt;string, Value&gt;[],
+  options: { add?: string[]; set?: string[] } = {},
+): { sql: string; params: Value[] } {
+  if (rows.length === 0) throw new Error("אין שורות");
+  const columns = Object.keys(rows[0]);
+  const key = [...columns].sort().join(",");
+  for (const row of rows) {
+    if (Object.keys(row).sort().join(",") !== key) throw new Error("לכל השורות צריכות להיות אותן עמודות");
+  }
+
+  const placeholders = `(${columns.map(() =&gt; "?").join(", ")})`;
+  let sql = `INSERT INTO ${ident(table)} (${columns.map(ident).join(", ")}) VALUES ${rows.map(() =&gt; placeholders).join(", ")}`;
+  const params = rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]));
+
+  const updates = [
+    ...(options.add ?? []).map((c) =&gt; `${ident(c)} = ${ident(table)}.${ident(c)} + new.${ident(c)}`),
+    ...(options.set ?? []).map((c) =&gt; `${ident(c)} = new.${ident(c)}`),
+  ];
+  if (updates.length &gt; 0) sql += ` AS new ON DUPLICATE KEY UPDATE ${updates.join(", ")}`;
+  return { sql, params };
+}
+
+console.log(buildBulkInsert("cart_items", [
+  { customer_id: 1, product_id: 3, quantity: 2 },
+  { product_id: 4, customer_id: 1, quantity: 1 },
+], { add: ["quantity"] }));
+try {
+  buildBulkInsert("products; DROP TABLE orders", [{ id: 1 }]);
+} catch (err) {
+  console.log((err as Error).message);
+}</code></pre>
+<pre class="terminal">{
+  sql: 'INSERT INTO `cart_items` (`customer_id`, `product_id`, `quantity`) VALUES (?, ?, ?), (?, ?, ?) AS new ON DUPLICATE KEY UPDATE `quantity` = `cart_items`.`quantity` + new.`quantity`',
+  params: [ 1, 3, 2, 1, 4, 1 ]
+}
+שם לא חוקי: products; DROP TABLE orders</pre>
+<p>שני חלקים, ולכל אחד הגנה משלו מ־injection. ערכים עוברים תמיד כ־<code>?</code>, ולכן <code>"x'); DROP TABLE orders; --"</code> נשמר כשם של לקוח. שמות אי אפשר להעביר כפרמטר, ולכן הם עוברים בדיקה מול regex קשוח. שם כמו <code>products; DROP TABLE orders</code> לא מגיע ל־SQL בכלל.</p>
+<p><code>flatMap</code> לפי <code>columns</code>, ולא <code>Object.values(row)</code>: בשורה השנייה בדוגמה המפתחות כתובים בסדר אחר. ‏<code>Object.values</code> היה מכניס את מספר המוצר לעמודת הלקוח, בלי שום שגיאה.</p>
+<p>‏MySQL מגביל את מספר ה־placeholders בשאילתה (65,535). לכן בטעינה גדולה מחלקים את השורות לקבוצות של כמה מאות, ומריצים כל קבוצה בנפרד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Object.values(row)</code> — תלוי בסדר שבו המפתחות נכתבו בכל שורה.</li><li>לשרשר ערכים לתוך ה־SQL (<code><code>VALUES ('${name}')</code></code>) — ‏injection, וגם שבירה על כל שם עם גרש (<code>O'Brien</code>).</li><li><code>VALUES(quantity)</code> במקום <code>new.quantity</code> — עובד, אבל deprecated מ־MySQL 8.0.20.</li><li>לבדוק רק שמספר העמודות שווה — ‏<code>{a, b}</code> ו־<code>{a, c}</code> עוברים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E28">
+    <h3>P25.5-E28 · שאילתה מ־PostgreSQL ל־MySQL 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטריק: regex אחד עם שלוש חלופות, ו־<code>replace</code> עם פונקציה. החלופה של המחרוזת באה <em>ראשונה</em>: ‏<code>/'(?:[^']|'')*'|"([^"]+)"|\$(\d+)/g</code>. ה־regex סורק משמאל לימין, וכשהוא פוגש <code>'</code> הוא "בולע" את כל המחרוזת. כך <code>$1</code> שבתוכה לא נתפס בנפרד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הפונקציה מקבלת <code>(match, name, n)</code> — קבוצה 1 וקבוצה 2. אם <code>name !== undefined</code> ← backticks. אם <code>n !== undefined</code> ← <code>out.push(params[Number(n) - 1])</code> ומחזירים <code>"?"</code>. אחרת זו מחרוזת ← <code>return match</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E28 — שאילתה מ־PostgreSQL ל־MySQL: placeholders ושמות
+export function pgToMysql(sql: string, params: unknown[]): { sql: string; params: unknown[] } {
+  const out: unknown[] = [];
+  // מחרוזת '...' (עם '' בפנים) — כמו שהיא; "שם" ← `שם`; $n ← ?
+  const converted = sql.replace(/'(?:[^']|'')*'|"([^"]+)"|\$(\d+)/g, (match, name, n) =&gt; {
+    if (name !== undefined) return `\`${name}\``;
+    if (n !== undefined) {
+      const i = Number(n);
+      if (i &lt; 1 || i &gt; params.length) throw new RangeError(`$${n} — אין פרמטר כזה (יש ${params.length})`);
+      out.push(params[i - 1]);
+      return "?";
+    }
+    return match;
+  });
+  return { sql: converted, params: out };
+}
+
+console.log(pgToMysql('SELECT "name", price FROM products WHERE category = $2 AND price &lt; $1 OR name = $2', [100, "beans"]));
+console.log(pgToMysql("SELECT 'it''s $1 \"x\"' AS note, $1 AS v", [7]));
+try {
+  pgToMysql("SELECT $3", [1, 2]);
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}</code></pre>
+<pre class="terminal">{
+  sql: 'SELECT `name`, price FROM products WHERE category = ? AND price &lt; ? OR name = ?',
+  params: [ 'beans', 100, 'beans' ]
+}
+{ sql: `SELECT 'it''s $1 "x"' AS note, ? AS v`, params: [ 7 ] }
+RangeError $3 — אין פרמטר כזה (יש 2)</pre>
+<p>ב־PostgreSQL ‏<code>$2</code> הוא "הפרמטר השני", בכל מקום שהוא מופיע. ב־MySQL כל <code>?</code> הוא "הפרמטר הבא". לכן ההמרה צריכה לבנות מערך חדש לפי סדר ההופעה, ו־<code>$2</code> שמופיע פעמיים נכנס פעמיים.</p>
+<p>הסדר של החלופות ב־regex הוא מה שעושה את העבודה. ה־regex לא "יודע" שהוא בתוך מחרוזת. הוא פשוט פוגש קודם את הגרש הפותח, ומתאים את כל המחרוזת כחתיכה אחת. זה אותו רעיון כמו ה־<code>TOKENS</code> ב־<code>_ts.mjs</code> של הבודקים, שמוריד הערות בלי לגעת במחרוזות.</p>
+<p>ההמרה הזו מכסה את ההבדלים התחביריים בלבד. ‏<code>ILIKE</code>, ‏<code>RETURNING</code> ו־<code>::int</code> צריכים שינוי ידני (שיעור 1).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>sql.replace(/\$\d+/g, "?")</code> ושמירת <code>params</code> כמו שהם — ‏<code>$2 ... $1</code> מחליף בין הערכים, ו־<code>$2</code> כפול חסר.</li><li>בלי חלופה למחרוזות — <code>'cost: $1'</code> הופך ל־<code>'cost: ?'</code>, נוסף פרמטר מיותר, ו־MySQL נכשל (או, גרוע יותר, מקבל ערך במקום הלא נכון).</li><li><code>/\$(\d)/</code> — ‏<code>$10</code> נקרא כ־<code>$1</code> ואחריו <code>0</code>.</li><li>להחליף <code>"</code> גם בתוך מחרוזות — הטקסט <code>'say "hi"'</code> שנשמר במסד משתנה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.5-E01">
     <h3>P25.5-E01 · מילון PostgreSQL ← MySQL <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

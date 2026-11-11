@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true,
   time: "5 מפגשים",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> PostgreSQL, מסד <code>course</code>, <code>.env</code> (פרק 16).</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום. טוענים את נתוני הפרק (כמה שניות — יש בהם 200,000 שורות):</p>
 ${copyStep("18-consistency")}

@@ -1,0 +1,6 @@
+-- P18-E28: שלושת הלקוחות המובילים בכל חודש — חזרה על GROUP BY ו־ROW_NUMBER
+-- big_orders, רק paid/shipped, מ־2025-01-01 ועד לפני 2025-04-01
+-- לכל חודש: month (date), place (1–3), customer_id, revenue (SUM(total))
+-- תיקו בהכנסה — customer_id הקטן קודם. מיון: month, place
+--
+-- בדיקה:  npm run check P18-E28

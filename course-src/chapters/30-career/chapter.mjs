@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true, // סימולציית SQL (E15, E16, E22)
   time: "3 מפגשים — ואחר כך כל שבוע, עד שמגיעה הצעה",
-  expectedExercises: 30, // 25 + חמישה של שיעור 5 (עבודה עם AI)
+  expectedExercises: 33, // 25 + חמישה של שיעור 5 (עבודה עם AI) + שלושה של תרגול כתיבה
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, PostgreSQL עם <code>COURSE_DATABASE_URL</code> (פרק 16) — לסימולציית ה־SQL. ופרויקט 3 באוויר, עם README (פרויקט 3, שלב 4).</p>
 ${copyStep("30-career")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm run check P30-E06</code> ← הבודק רץ ונכשל על התבנית (יש בה TODO).</p>

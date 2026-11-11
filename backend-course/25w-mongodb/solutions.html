@@ -13,6 +13,204 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
+<div class="ex typed" id="P25.7-E26">
+    <h3>P25.7-E26 · חיפוש מוצרים מ־query string 🤖 <span class="tag type scratch">✍️ מאפס</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בונים אובייקט ריק, ומוסיפים לו מפתח לכל פרמטר שהגיע: <code>if (query.q) filter.name = {...}</code>. ה־escape: ‏<code>s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;")</code>. ‏<code>$&amp;</code> בתוך מחרוזת ההחלפה הוא "מה שנמצא".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למחיר: אובייקט <code>range</code> נפרד, ורק בסוף <code>if (Object.keys(range).length &gt; 0) filter.price = range</code>. בדיקת מספר: ‏<code>Number("")</code> הוא 0, ולכן בודקים גם <code>value.trim() === ""</code>, וגם <code>Number.isFinite(n)</code>. ב־<code>searchProducts</code>: ‏<code>find(filter).sort({ name: 1 }).project({ _id: 0, name: 1 }).toArray()</code>, ואז <code>map</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E26 — חיפוש מוצרים מ־query string
+import type { Db } from "mongodb";
+
+type Query = Record&lt;string, string | undefined&gt;;
+
+const escapeRegex = (s: string) =&gt; s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;");
+
+function price(value: string, name: string): number {
+  const n = Number(value);
+  if (value.trim() === "" || !Number.isFinite(n) || n &lt; 0) throw new RangeError(`${name} לא תקין: ${value}`);
+  return n;
+}
+
+export function buildProductFilter(query: Query): Record&lt;string, unknown&gt; {
+  const filter: Record&lt;string, unknown&gt; = {};
+  if (query.q) filter.name = { $regex: escapeRegex(query.q.trim()), $options: "i" };
+  if (query.category) filter.category = query.category;
+
+  const range: Record&lt;string, number&gt; = {};
+  if (query.minPrice !== undefined) range.$gte = price(query.minPrice, "minPrice");
+  if (query.maxPrice !== undefined) range.$lte = price(query.maxPrice, "maxPrice");
+  if (range.$gte !== undefined &amp;&amp; range.$lte !== undefined &amp;&amp; range.$gte &gt; range.$lte) throw new RangeError("minPrice גדול מ־maxPrice");
+  if (Object.keys(range).length &gt; 0) filter.price = range;
+
+  if (query.tags) {
+    const tags = query.tags.split(",").map((t) =&gt; t.trim()).filter((t) =&gt; t !== "");
+    if (tags.length &gt; 0) filter.tags = { $all: tags };
+  }
+
+  switch (query.inStock) {
+    case undefined:
+      break;
+    case "true":
+      filter.stock = { $gt: 0 };
+      break;
+    case "false":
+      filter.stock = 0;
+      break;
+    default:
+      throw new RangeError(`inStock חייב להיות true או false: ${query.inStock}`);
+  }
+  return filter;
+}
+
+export async function searchProducts(db: Db, query: Query): Promise&lt;string[]&gt; {
+  const docs = await db.collection("products").find(buildProductFilter(query)).sort({ name: 1 }).project({ _id: 0, name: 1 }).toArray();
+  return docs.map((d) =&gt; d.name);
+}
+
+console.log(JSON.stringify(buildProductFilter({ q: " v60 (ceramic) ", minPrice: "50", tags: "pour-over, ", inStock: "true", sort: "x" })));
+console.log(JSON.stringify(buildProductFilter({ category: "beans", maxPrice: "55", inStock: "false" })));
+try {
+  buildProductFilter({ minPrice: "100", maxPrice: "50" });
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}</code></pre>
+<pre class="terminal">{"name":{"$regex":"v60 \\(ceramic\\)","$options":"i"},"price":{"$gte":50},"tags":{"$all":["pour-over"]},"stock":{"$gt":0}}
+{"category":"beans","price":{"$lte":55},"stock":0}
+RangeError minPrice גדול מ־maxPrice</pre>
+<p>הפילטר נבנה רק ממפתחות שאנחנו מכירים, וכל ערך נכנס למקום שקבענו מראש. כך <code>?category={"$ne":null}</code> מחפש קטגוריה שזה השם שלה, ולא "כל מה שאינו null". זו אותה הגנה כמו ב־P25.7-E20: בלי להעביר את <code>req.query</code> ישר ל־<code>find</code>.</p>
+<p>ה־escape חשוב פעמיים. ‏<code>q=.</code> בלי escape מתאים לכל מוצר: נקודה ב־regex היא "כל תו". ‏<code>q=(</code> בלי escape מפיל את השאילתה עם שגיאת regex של Mongo, כלומר 500 על קלט של משתמש. ‏regex עם <code>$options: "i"</code> בלי <code>^</code> בהתחלה לא משתמש באינדקס. בחנות של 8 מוצרים זה לא משנה, ובקטלוג גדול עוברים ל־Atlas Search או לאינדקס טקסט (שיעור 4).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>{ price: { $gte: query.minPrice } }</code> — מחרוזת. ב־Mongo <code>"50"</code> ו־<code>50</code> הם טיפוסים שונים, ואף מוצר לא יתאים.</li><li><code>$regex: query.q</code> בלי escape — ‏<code>q=(</code> מחזיר 500.</li><li><code>filter.price = { $gte: min, $lte: max }</code> גם כשנשלח רק אחד — ‏<code>$lte: undefined</code>. הדרייבר משמיט שדות <code>undefined</code>, אבל כדאי לא לסמוך על זה.</li><li><code>tags: { $in: [...] }</code> — מוצר עם <em>אחת</em> מהתגיות. המשימה: כולן (<code>$all</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.7-E27">
+    <h3>P25.7-E27 · בדיקות ל־parseSort 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה חשובה: האם <code>assert.deepEqual({ a: 1, b: 1 }, { b: 1, a: 1 })</code> עובר? כן, כי <code>deepEqual</code> לא בודק את סדר המפתחות. אבל במיון של Mongo הסדר הוא כל העניין: <code>{ price: -1, name: 1 }</code> ו־<code>{ name: 1, price: -1 }</code> הם שני מיונים שונים. השווה את <code>Object.entries(...)</code>, שהוא מערך, ומערך כן נבדק לפי הסדר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לכל שורה בתיאור — לפחות בדיקה אחת, ולכל "או" — בדיקה לכל צד: <code>undefined</code>, ‏<code>""</code> וגם <code>"   "</code>. ‏<code>-_id</code> לבד. שדה לא מותר עם מינוס ובלי. ‏<code>"price,"</code> (פסיק בסוף) ו־<code>"-"</code> לבד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E27 — הבדיקות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { parseSort } from "./P25.7-E27.ts";
+
+const ALLOWED = ["name", "price", "createdAt", "_id"];
+
+// deepEqual לא בודק את סדר המפתחות — ובמיון של Mongo הסדר הוא כל העניין
+function sameSort(actual: Record&lt;string, number&gt;, expected: Record&lt;string, number&gt;) {
+  assert.deepEqual(Object.entries(actual), Object.entries(expected));
+}
+
+test("עולה, יורד, וכמה שדות לפי הסדר", () =&gt; {
+  sameSort(parseSort("name", ALLOWED), { name: 1, _id: 1 });
+  sameSort(parseSort("-price", ALLOWED), { price: -1, _id: 1 });
+  sameSort(parseSort("-price,name", ALLOWED), { price: -1, name: 1, _id: 1 });
+  sameSort(parseSort("name,-price", ALLOWED), { name: 1, price: -1, _id: 1 });
+});
+
+test("רווחים", () =&gt; {
+  sameSort(parseSort(" -price , name ", ALLOWED), { price: -1, name: 1, _id: 1 });
+});
+
+test("_id: לא מוסיפים פעמיים, ולא משנים את הכיוון שנבחר", () =&gt; {
+  sameSort(parseSort("-_id", ALLOWED), { _id: -1 });
+  sameSort(parseSort("_id,name", ALLOWED), { _id: 1, name: 1 });
+});
+
+test("בלי value, או value ריק ← { _id: 1 }", () =&gt; {
+  sameSort(parseSort(undefined, ALLOWED), { _id: 1 });
+  sameSort(parseSort("", ALLOWED), { _id: 1 });
+  sameSort(parseSort("   ", ALLOWED), { _id: 1 });
+});
+
+test("שדה לא מותר, ריק או כפול ← RangeError", () =&gt; {
+  for (const bad of ["password", "-password", "name,secret", "price,", "-", "name,-name", "price,price"]) {
+    assert.throws(() =&gt; parseSort(bad, ALLOWED), RangeError, bad);
+  }
+});</code></pre>
+<p>הפונקציה <code>sameSort</code> היא הבדיקה החשובה בתרגיל. בלעדיה, מימוש שמוסיף את <code>_id</code> <em>ראשון</em> (<code>{ _id: 1, price: -1 }</code>) עובר את כל הבדיקות. אבל ב־Mongo המיון הזה הוא "לפי <code>_id</code>", ו־<code>price</code> כבר לא משפיע, כי <code>_id</code> ייחודי.</p>
+<p>הטבלה של הקלטים הלא תקינים תופסת כמה באגים יחד: בלי בדיקת <code>allowed</code> (מיון לפי <code>password</code> מאפשר לנחש סיסמאות: "מי לפני מי"), שדה כפול, ופסיק בסוף. ‏<code>"   "</code> נפרד מ־<code>""</code>, כי שני מימושים "כמעט נכונים" מטפלים רק באחד מהם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>assert.deepEqual</code> על אובייקט המיון — לא תופס סדר מפתחות לא נכון.</li><li>לבדוק רק את <code>"-price,name"</code> — כל הבאגים במקרי הקצה: <code>_id</code>, ריק, כפול, לא מותר.</li><li>לבדוק את הודעת השגיאה המדויקת — מימוש תקין עם ניסוח אחר נכשל. מספיק <code>RangeError</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.7-E28">
+    <h3>P25.7-E28 · מה מסתתר ב־ObjectId 🤖 <span class="tag type review">🔁 חזרה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>parseInt(id.slice(0, 8), 16)</code> ← שניות. בכיוון השני: <code>seconds.toString(16).padStart(8, "0") + "0".repeat(16)</code>. בלי <code>padStart</code>, תאריכים ישנים (לפני 1978) נותנים פחות מ־8 תווים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>day.match(/^(\d{4})-(\d{2})-(\d{2})$/)</code>, ואז <code>new Date(Date.UTC(y, m - 1, d))</code> (החודש מ־0). חצות של מחר: <code>start.getTime() + 24 * 60 * 60 * 1000</code>. ב־UTC אין שעון קיץ, ולכן כל יום הוא בדיוק 24 שעות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E28 — מה מסתתר ב־ObjectId
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+
+export function objectIdDate(id: string): Date {
+  if (!OBJECT_ID.test(id)) throw new TypeError(`ObjectId לא תקין: ${id}`);
+  const seconds = parseInt(id.slice(0, 8), 16);
+  return new Date(seconds * 1000);
+}
+
+export function objectIdFromDate(date: Date): string {
+  const seconds = Math.floor(date.getTime() / 1000);
+  return seconds.toString(16).padStart(8, "0") + "0".repeat(16);
+}
+
+export function idRangeForDay(day: string): { $gte: string; $lt: string } {
+  const match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw new TypeError(`תאריך לא תקין: ${day}`);
+  const start = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { $gte: objectIdFromDate(start), $lt: objectIdFromDate(end) };
+}
+
+console.log(objectIdDate("6af2d6084b1c2d3e4f5a6b7c").toISOString());
+console.log(objectIdFromDate(new Date("2026-11-10T08:30:00Z")));
+console.log(idRangeForDay("2026-11-10"));
+try {
+  objectIdDate("6af2d608");
+} catch (err) {
+  console.log((err as Error).name, (err as Error).message);
+}</code></pre>
+<pre class="terminal">2026-11-10T08:30:00.000Z
+6af2d6080000000000000000
+{
+  '$gte': '6af25e800000000000000000',
+  '$lt': '6af3b0000000000000000000'
+}
+TypeError ObjectId לא תקין: 6af2d608</pre>
+<p>הבודק משווה את התוצאות שלך ל־<code>ObjectId.getTimestamp()</code> ול־<code>ObjectId.createFromTime()</code> של הדרייבר, ומריץ את הטווח על Mongo אמיתי. כדי להשתמש בו בשאילתה, הופכים את המחרוזות ל־ObjectId: <code>{ _id: { $gte: new ObjectId(r.$gte), $lt: new ObjectId(r.$lt) } }</code>. השוואה בין ObjectId לפי בתים היא קודם כל השוואה לפי הזמן.</p>
+<p>למה זה שימושי? ‏<code>_id</code> תמיד מאונדקס. טווח עליו הוא "כל ההזמנות מאתמול", בלי אינדקס נוסף על <code>createdAt</code>. שני דברים להיזהר מהם: הדיוק הוא שנייה, והזמן נקבע אצל מי שיצר את ה־ObjectId (בדרך כלל הדרייבר, כלומר השעון של השרת שלך). לדוחות מדויקים עדיף שדה <code>createdAt</code> אמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>parseInt(id.slice(0, 8))</code> בלי 16 — ‏<code>6af2d608</code> נקרא כ־6.</li><li>לשכוח את <code>* 1000</code> — ‏<code>new Date</code> מקבל מילישניות, והתאריך יוצא בינואר 1970.</li><li><code>new Date("2026-11-10")</code> — עובד (מחרוזת תאריך בלבד נקראת כ־UTC), אבל <code>new Date(2026, 10, 10)</code> הוא חצות לפי השעון <em>המקומי</em>, ובישראל זה 22:00 של היום הקודם ב־UTC.</li><li><code>$lte</code> במקום <code>$lt</code> לסוף הטווח — מסמכים מהשנייה הראשונה של מחר נכנסים.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.7-E01">
     <h3>P25.7-E01 · Mongo או Postgres? <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>

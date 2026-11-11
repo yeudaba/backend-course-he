@@ -1263,3 +1263,245 @@ export async function runEvalSuite({
 }
 ```
 <p>flaky הוא המדד החשוב: תרחיש שעובר ב־2 מתוך 3 "עובד בהדגמה" ונכשל אצל כל לקוח שלישי. מודלים לא דטרמיניסטיים — לכן כמה ניסיונות לכל תרחיש, ולכן מריצים את החבילה לפני כל שינוי ב־prompt, בכלים או במודל.</p>
+
+@@ P29.5-E26 | 3 | שומר לולאה לסוכן 🤖 | 25 | שיעור 1
+@type scratch
+@task
+<p>סוכן שנתקע עושה את אותו דבר שוב ושוב: מחפש הזמנות, לא מוצא, ומחפש שוב עם אותו קלט. כל סיבוב עולה כסף. ‏<code>max_turns</code> (שיעור 1) עוצר בסוף, אבל מאוחר מדי. כתוב מקובץ ריק "שומר" שנבדק לפני כל קריאה לכלי, וייצא:</p>
+<ul><li><code>stableKey(value): string</code> — כמו <code>JSON.stringify</code>, אבל המפתחות של כל אובייקט ממוינים, בכל עומק. כך <code>{ status, email }</code> ו־<code>{ email, status }</code> נותנים אותו מפתח. במערכים הסדר נשמר. ‏<code>stableKey({ b: 1, a: 2 })</code> ← <code>{"a":2,"b":1}</code>.</li><li><code>class LoopGuard</code> עם <code>constructor({ maxSteps, maxRepeats, maxCostUsd })</code>:<ul><li><code>check(tool, input, costUsd)</code> — קודם סופרת: עוד צעד, עוד עלות, ועוד הופעה של הקריאה (שם הכלי + <code>stableKey(input)</code>). אחר כך בודקת, לפי הסדר: צעדים מעל <code>maxSteps</code> ← <code>reason: "steps"</code>. עלות מעל <code>maxCostUsd</code> ← <code>"cost"</code>. אותה קריאה יותר מ־<code>maxRepeats</code> פעמים ← <code>"repeat"</code>. מחזירה <code>{ ok: true }</code>, או <code>{ ok: false, reason, message }</code>.</li><li>getters: ‏<code>steps</code>, ו־<code>costUsd</code> מעוגל ל־4 ספרות אחרי הנקודה.</li><li>כל השדות פרטיים.</li></ul></li></ul>
+<p>📄 כותבים בקובץ <code>29w-agents/starter/P29.5-E26.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 29w-agents/starter/P29.5-E26.ts
+% npm run check P29.5-E26
+```
+@hint1
+<p><code>stableKey</code> רקורסיבית, עם שלושה מקרים: מערך ← <code>`[${value.map(stableKey).join(",")}]`</code>. אובייקט (לא <code>null</code>) ← המפתחות ממוינים, וכל אחד <code>`${JSON.stringify(k)}:${stableKey(v)}`</code>. כל השאר ← <code>JSON.stringify(value)</code>.</p>
+@hint2
+<p>שדות: <code>#steps</code>, ‏<code>#cost</code>, ‏<code>#calls = new Map&lt;string, number&gt;()</code>. הטיפוס של התוצאה הוא union: <code>{ ok: true } | { ok: false; reason: "steps" | "repeat" | "cost"; message: string }</code>. בעיגול: <code>Math.round(x * 10_000) / 10_000</code>. ‏0.1 + 0.1 + 0.1 + 0.1 ב־JavaScript הוא <code>0.4000000000000001</code>.</p>
+@solution
+```ts run save=solutions/P29.5-E26.ts
+// P29.5-E26 — שומר לולאה לסוכן: צעדים, חזרות ועלות
+export function stableKey(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableKey).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableKey((value as Record<string, unknown>)[k])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+type Limits = { maxSteps: number; maxRepeats: number; maxCostUsd: number };
+export type Verdict = { ok: true } | { ok: false; reason: "steps" | "repeat" | "cost"; message: string };
+
+export class LoopGuard {
+  #limits: Limits;
+  #steps = 0;
+  #cost = 0;
+  #calls = new Map<string, number>();
+
+  constructor(limits: Limits) {
+    this.#limits = limits;
+  }
+
+  check(tool: string, input: unknown, costUsd: number): Verdict {
+    this.#steps++;
+    this.#cost += costUsd;
+    const key = `${tool}:${stableKey(input)}`;
+    const times = (this.#calls.get(key) ?? 0) + 1;
+    this.#calls.set(key, times);
+
+    if (this.#steps > this.#limits.maxSteps) return { ok: false, reason: "steps", message: `יותר מ־${this.#limits.maxSteps} צעדים` };
+    if (this.#cost > this.#limits.maxCostUsd) return { ok: false, reason: "cost", message: `העלות עברה $${this.#limits.maxCostUsd}` };
+    if (times > this.#limits.maxRepeats) return { ok: false, reason: "repeat", message: `${tool} נקרא ${times} פעמים עם אותו קלט` };
+    return { ok: true };
+  }
+
+  get steps(): number {
+    return this.#steps;
+  }
+
+  get costUsd(): number {
+    return Math.round(this.#cost * 10_000) / 10_000;
+  }
+}
+
+console.log(stableKey({ b: [1, { y: 2, x: 1 }], a: "שלום" }), stableKey({ a: "שלום", b: [1, { x: 1, y: 2 }] }));
+const guard = new LoopGuard({ maxSteps: 10, maxRepeats: 2, maxCostUsd: 0.5 });
+console.log(guard.check("search_orders", { email: "dana@example.com", status: "open" }, 0.01));
+console.log(guard.check("get_order", { id: 17 }, 0.01));
+console.log(guard.check("search_orders", { status: "open", email: "dana@example.com" }, 0.01));
+console.log(guard.check("search_orders", { email: "dana@example.com", status: "open" }, 0.01));
+console.log(guard.steps, guard.costUsd);
+```
+```out
+{"a":"שלום","b":[1,{"x":1,"y":2}]} {"a":"שלום","b":[1,{"x":1,"y":2}]}
+{ ok: true }
+{ ok: true }
+{ ok: true }
+{
+  ok: false,
+  reason: 'repeat',
+  message: 'search_orders נקרא 3 פעמים עם אותו קלט'
+}
+4 0.04
+```
+<p>הקריאה השלישית ל־<code>search_orders</code> נכתבה עם השדות בסדר אחר, ועדיין נספרה כחזרה. בלי <code>stableKey</code>, המודל (שלא מקפיד על סדר שדות) היה עוקף את השומר בלי כוונה. הקריאה הרביעית כבר עוברת את <code>maxRepeats: 2</code>.</p>
+<p>מה עושים עם <code>ok: false</code>? לא זורקים חריגה ומפילים את הריצה. מחזירים למודל <code>tool_result</code> עם <code>is_error: true</code> וההודעה ("search_orders נקרא 3 פעמים עם אותו קלט — נסה גישה אחרת או החזר תשובה"). לעיתים קרובות זה מספיק כדי שהמודל ישנה כיוון. ב־<code>"cost"</code> וב־<code>"steps"</code> עוצרים, ומחזירים למשתמש תשובה חלקית (שיעור 4).</p>
+@mistakes
+<ul><li><code>JSON.stringify(input)</code> כמפתח — סדר שדות שונה נראה כמו קריאה אחרת.</li><li>למיין רק את המפתחות של הרמה העליונה — <code>{ filter: { b, a } }</code> עדיין שונה מ־<code>{ filter: { a, b } }</code>.</li><li>למיין גם מערכים — ‏<code>[1, 2]</code> ו־<code>[2, 1]</code> הם קלטים שונים (סדר עדיפויות, למשל).</li><li>לבדוק לפני שסופרים — הקריאה ה־<code>maxRepeats + 1</code> עוברת, ונעצרת רק זו שאחריה.</li></ul>
+
+@@ P29.5-E27 | 3 | בודק קלט של כלי לפי JSON Schema 🤖 | 25 | שיעור 2
+@type review
+@task
+<p><strong>🔁 חזרה על union עם שדה מבחין ו־<code>switch</code> (פרק 11), ‏<code>typeof</code>/<code>Array.isArray</code> (פרק 7), ‏<code>flatMap</code> (פרק 6) ורקורסיה (פרק 27)</strong>. כלי MCP מגדיר <code>inputSchema</code> ב־JSON Schema (שיעור 2), והמודל לא תמיד שולח קלט תקין. Zod עושה את זה בשבילך (‏E07), אבל כדאי לראות שזה פחות קסם ממה שנראה. כתוב וייצא:</p>
+<ul><li><code>type Schema</code> — union של: <code>{ type: "string"; enum? }</code>, ‏<code>{ type: "number" | "integer"; minimum?; maximum? }</code> (גבולות כוללים), ‏<code>{ type: "boolean" }</code>, ‏<code>{ type: "array"; items }</code>, ‏<code>{ type: "object"; properties; required? }</code>.</li><li><code>validate(schema, value, path = "input"): string[]</code> — <em>כל</em> השגיאות, כל אחת בפורמט <code>"נתיב: הסבר"</code>. נתיבים: <code>input.items[1].qty</code>.<ul><li>מספר: <code>NaN</code> ו־<code>Infinity</code> לא תקינים. ‏<code>integer</code> — רק שלם.</li><li>אובייקט: <code>null</code> ומערך הם לא אובייקט. שדה מ־<code>required</code> שחסר ← שגיאה עם הנתיב שלו. שדה שלא מופיע ב־<code>properties</code> ← שגיאה (המודל המציא שדה).</li><li>אם הטיפוס עצמו לא נכון, מספיקה שגיאה אחת לנתיב הזה.</li></ul></li></ul>
+<p>📄 כותבים בקובץ <code>29w-agents/starter/P29.5-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 29w-agents/starter/P29.5-E27.ts
+% npm run check P29.5-E27
+```
+@hint1
+<p><code>switch (schema.type)</code>. בכל <code>case</code>, ‏TypeScript יודע איזה חלק של ה־union זה: ב־<code>case "array"</code> יש <code>schema.items</code>, וב־<code>case "object"</code> יש <code>schema.properties</code>. מערך: <code>value.flatMap((item, i) =&gt; validate(schema.items, item, `${path}[${i}]`))</code>.</p>
+@hint2
+<p>אובייקט: קודם <code>for (const key of schema.required ?? [])</code> ← חסרים. אחר כך <code>for (const key of Object.keys(obj))</code>: אין <code>properties[key]</code> ← "שדה לא מוכר", ואחרת <code>errors.push(...validate(sub, obj[key], `${path}.${key}`))</code>. ‏<code>case "number": case "integer": { ... }</code> — שני case עם אותו קוד, וסוגריים בגלל ה־<code>const</code>.</p>
+@solution
+```ts run save=solutions/P29.5-E27.ts
+// P29.5-E27 — בודק קלט של כלי לפי JSON Schema (חלק קטן)
+export type Schema =
+  | { type: "string"; enum?: string[] }
+  | { type: "number" | "integer"; minimum?: number; maximum?: number }
+  | { type: "boolean" }
+  | { type: "array"; items: Schema }
+  | { type: "object"; properties: Record<string, Schema>; required?: string[] };
+
+export function validate(schema: Schema, value: unknown, path = "input"): string[] {
+  switch (schema.type) {
+    case "string":
+      if (typeof value !== "string") return [`${path}: צריך להיות string`];
+      if (schema.enum && !schema.enum.includes(value)) return [`${path}: חייב להיות אחד מ־${schema.enum.join(", ")}`];
+      return [];
+    case "number":
+    case "integer": {
+      if (typeof value !== "number" || !Number.isFinite(value)) return [`${path}: צריך להיות number`];
+      if (schema.type === "integer" && !Number.isInteger(value)) return [`${path}: צריך להיות מספר שלם`];
+      if (schema.minimum !== undefined && value < schema.minimum) return [`${path}: לפחות ${schema.minimum}`];
+      if (schema.maximum !== undefined && value > schema.maximum) return [`${path}: לכל היותר ${schema.maximum}`];
+      return [];
+    }
+    case "boolean":
+      return typeof value === "boolean" ? [] : [`${path}: צריך להיות boolean`];
+    case "array":
+      if (!Array.isArray(value)) return [`${path}: צריך להיות array`];
+      return value.flatMap((item, i) => validate(schema.items, item, `${path}[${i}]`));
+    case "object": {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return [`${path}: צריך להיות object`];
+      const obj = value as Record<string, unknown>;
+      const errors: string[] = [];
+      for (const key of schema.required ?? []) if (!(key in obj)) errors.push(`${path}.${key}: חסר`);
+      for (const key of Object.keys(obj)) {
+        const sub = schema.properties[key];
+        if (!sub) errors.push(`${path}.${key}: שדה לא מוכר`);
+        else errors.push(...validate(sub, obj[key], `${path}.${key}`));
+      }
+      return errors;
+    }
+  }
+}
+
+const createOrder: Schema = {
+  type: "object",
+  required: ["customerEmail", "items"],
+  properties: {
+    customerEmail: { type: "string" },
+    items: {
+      type: "array",
+      items: { type: "object", required: ["productId", "qty"], properties: { productId: { type: "integer" }, qty: { type: "integer", minimum: 1, maximum: 10 } } },
+    },
+    shipping: { type: "string", enum: ["standard", "express"] },
+  },
+};
+console.log(validate(createOrder, { customerEmail: "dana@example.com", items: [{ productId: 3, qty: 2 }] }));
+console.log(validate(createOrder, { items: [{ productId: 3, qty: 0 }, { productId: "4", qty: 1.5 }], shipping: "drone", discount: 100 }));
+```
+```out
+[]
+[
+  'input.customerEmail: חסר',
+  'input.items[0].qty: לפחות 1',
+  'input.items[1].productId: צריך להיות number',
+  'input.items[1].qty: צריך להיות מספר שלם',
+  'input.shipping: חייב להיות אחד מ־standard, express',
+  'input.discount: שדה לא מוכר'
+]
+```
+<p>שש שגיאות בבת אחת, כל אחת עם נתיב מדויק. זה מה שמחזירים למודל ב־<code>tool_result</code> עם <code>is_error: true</code>. מודל שמקבל "input.items[1].productId: צריך להיות number" מתקן בניסיון הבא. מודל שמקבל "invalid input" מנחש.</p>
+<p>הרקורסיה היא העיקר: <code>validate</code> של אובייקט קוראת ל־<code>validate</code> על כל שדה, וזו של מערך על כל איבר. כך מבנה בכל עומק עובד עם אותן חמש שורות. זה גם ה־"discriminated union" של פרק 11 במיטבו: ‏<code>switch</code> על <code>type</code>, ו־TypeScript מוודא שלא שכחת אף מקרה (אם תוסיף <code>"null"</code> ל־union ולא תטפל בו, ‏tsc יתלונן שהפונקציה לא מחזירה ערך).</p>
+@mistakes
+<ul><li><code>typeof value === "object"</code> בלבד — ‏<code>null</code> ומערכים עוברים כאובייקט.</li><li>לעצור בשגיאה הראשונה — המודל מתקן שגיאה אחת בכל סיבוב, וכל סיבוב עולה כסף.</li><li>להתעלם משדות לא מוכרים — המודל שולח <code>discount: 100</code>, והקוד שלך מתעלם ממנו בשקט, או גרוע מזה, מעביר אותו הלאה.</li><li><code>typeof value === "number"</code> בלי <code>Number.isFinite</code> — ‏<code>NaN</code> עובר.</li></ul>
+
+@@ P29.5-E28 | 2 | trace כעץ טקסט 🤖 | 20 | שיעור 5
+@type review
+@task
+<p><strong>🔁 חזרה על <code>Map</code> של רשימות (קיבוץ, פרק 7), ‏<code>sort</code> עם שני קריטריונים, רקורסיה, ו־<code>padEnd</code>/<code>padStart</code> (פרק 2)</strong>. trace של סוכן (שיעור 5) הוא רשימה שטוחה של spans, שכל אחד מצביע על ההורה שלו. כדי להבין מה קרה, מציגים אותה כעץ. כתוב וייצא:</p>
+<ul><li><code>type Span = { id: string; parentId: string | null; name: string; start: number; end: number }</code> (זמנים במילישניות).</li><li><code>renderTrace(spans): string</code> — שורה לכל span. השם עם הזחה של שני רווחים לכל רמה, מרופד ל־32 תווים (<code>padEnd</code>), ואחריו המשך (<code>end - start</code> ו־<code>ms</code>) מרופד ל־8 תווים (<code>padStart</code>). השורות מופרדות ב־<code>"\n"</code>.</li><li>מתחת לכל span — הילדים שלו, לפי <code>start</code>, ובתיקו לפי <code>name</code>. גם השורשים באותו סדר.</li><li>span שה־<code>parentId</code> שלו לא נמצא ברשימה (ה־trace נחתך) מוצג כשורש, ולא נעלם. בלי spans ← <code>""</code>.</li></ul>
+<p>📄 כותבים בקובץ <code>29w-agents/starter/P29.5-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 29w-agents/starter/P29.5-E28.ts
+% npm run check P29.5-E28
+```
+@hint1
+<p>קודם קיבוץ: <code>Map&lt;string | null, Span[]&gt;</code> מהורה לילדים. ‏<code>null</code> הוא מפתח חוקי ב־<code>Map</code>, והוא מייצג "שורש". הורה שלא קיים: <code>const ids = new Set(spans.map((s) =&gt; s.id))</code>, ו־<code>ids.has(parentId) ? parentId : null</code>.</p>
+@hint2
+<p>אחר כך פונקציה פנימית <code>walk(parent, depth)</code>: לוקחת את הילדים, ממיינת עותק (<code>[...list].sort(...)</code>), ולכל אחד מוסיפה שורה וקוראת ל־<code>walk(span.id, depth + 1)</code>. השורה: <code>`${"  ".repeat(depth)}${span.name}`.padEnd(32) + `${span.end - span.start}ms`.padStart(8)</code>.</p>
+@solution
+```ts run save=solutions/P29.5-E28.ts
+// P29.5-E28 — trace כעץ טקסט
+export type Span = { id: string; parentId: string | null; name: string; start: number; end: number };
+
+export function renderTrace(spans: Span[]): string {
+  const children = new Map<string | null, Span[]>();
+  const ids = new Set(spans.map((s) => s.id));
+  for (const span of spans) {
+    // הורה שלא נמצא ב־trace (נחתך, או עוד לא הגיע) — מציגים את ה־span כשורש
+    const parent = span.parentId !== null && ids.has(span.parentId) ? span.parentId : null;
+    const list = children.get(parent) ?? [];
+    list.push(span);
+    children.set(parent, list);
+  }
+  const lines: string[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    const list = [...(children.get(parent) ?? [])].sort((a, b) => a.start - b.start || a.name.localeCompare(b.name));
+    for (const span of list) {
+      lines.push(`${"  ".repeat(depth)}${span.name}`.padEnd(32) + `${span.end - span.start}ms`.padStart(8));
+      walk(span.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return lines.join("\n");
+}
+
+console.log(
+  renderTrace([
+    { id: "t3", parentId: "t2", name: "tool:search_orders", start: 1210, end: 1290 },
+    { id: "t1", parentId: null, name: "agent.run", start: 1000, end: 2950 },
+    { id: "t2", parentId: "t1", name: "llm.call#1", start: 1005, end: 1200 },
+    { id: "t5", parentId: "t1", name: "llm.call#2", start: 1300, end: 2900 },
+    { id: "t4", parentId: "t2", name: "tool:get_order", start: 1210, end: 1250 },
+    { id: "t9", parentId: "lost", name: "retry", start: 3000, end: 3010 },
+  ]),
+);
+```
+```out
+agent.run                         1950ms
+  llm.call#1                       195ms
+    tool:get_order                  40ms
+    tool:search_orders              80ms
+  llm.call#2                      1600ms
+retry                               10ms
+```
+<p>מהעץ רואים מיד מה שקשה לראות ברשימה: ‏<code>llm.call#2</code> לקח 1.6 שניות מתוך 1.95, כלומר הזמן הלך על המודל ולא על הכלים. שני הכלים בתוך הקריאה הראשונה התחילו באותו רגע (‏1210). הם רצו במקביל, ולכן הם ממוינים לפי שם.</p>
+<p>‏<code>retry</code> הוא span שההורה שלו לא הגיע. זה קורה כשה־trace נחתך, או כשה־span של ההורה עדיין פתוח. כלי שמעלים spans כאלה מציג עץ שחסר בו מידע, בלי שום סימן. מי שמציג אותם כשורש לפחות רואה שמשהו קרה.</p>
+@mistakes
+<ul><li>לולאה בתוך לולאה (לכל span — לחפש את הילדים ב־<code>filter</code>) — עובד, אבל O(n²). קיבוץ ב־<code>Map</code> פעם אחת הוא O(n).</li><li>להניח שההורה מופיע לפני הילדים ברשימה — spans נשלחים כשהם <em>נגמרים</em>, ולכן ילדים מגיעים בדרך כלל לפני ההורה.</li><li>לדלג על span עם הורה חסר — הוא נעלם מהתצוגה.</li><li>להזיח רק את השם אחרי <code>padEnd</code> — העמודה של הזמנים זזה בכל רמה.</li></ul>

@@ -1871,3 +1871,206 @@ export class ApiKeysModule {}
 <p>זה המבנה של מפתחות אמיתיים (GitHub, Stripe ודומיהם): קידומת שמזהה את סוג המפתח (<code>tk_</code>) — כך כלים שסורקים קוד ב־Git מזהים מפתח שדלף; prefix גלוי שמאפשר להציג "tk_3f9a…" ברשימה ולמצוא את הרשומה בלי לסרוק הכול; ו־hash בלבד במסד. ו־scopes: מפתח של CI שרק קורא לא צריך הרשאת כתיבה — אם הוא ידלוף, הנזק מוגבל ("least privilege").</p>
 @mistakes
 <ul><li>להחזיר את המפתח ב־<code>GET /keys</code> — ואז כל מי שרואה את הרשימה (או את הלוגים) מקבל אותו.</li><li><code>record.hash === sha256(key)</code> עם <code>===</code> — עובד, אבל מדליף תזמון (E18).</li></ul>
+
+@@ P21-E26 | 3 | JWT ביד, עם node:crypto 🤖 | 30 | שיעור 2
+@type scratch
+@task
+<p>בשיעור 2 פירקת JWT ביד וראית שהוא שלושה חלקים ב־base64url, והאחרון הוא חתימה. עכשיו תכתוב את <code>sign</code> ו־<code>verify</code> בעצמך, בלי ספרייה, רק עם <code>node:crypto</code>. כך תדע בדיוק מה <code>jsonwebtoken</code> עושה (ומה הוא בודק). כתוב וייצא:</p>
+<ul><li><code>type Claims = { sub: number; role: string; iat: number; exp: number }</code>.</li><li><code>signJwt(payload, secret, expiresInSec, now = שניות מעכשיו): string</code>. ‏header: ‏<code>{"alg":"HS256","typ":"JWT"}</code>. ‏payload: ‏<code>{ sub, role, iat: now, exp: now + expiresInSec }</code>, בסדר הזה. חתימה: ‏HMAC-SHA256 של <code>`${header}.${payload}`</code> עם הסוד, ב־base64url. הבודק משווה לטוקן של <code>jsonwebtoken</code>, תו אחר תו.</li><li><code>verifyJwt(token, secret, now = שניות מעכשיו): Claims</code>, שבודקת לפי הסדר:<ul><li>לא בדיוק שלושה חלקים ← <code>Error("טוקן לא תקין")</code>.</li><li>החתימה לא תואמת ← <code>Error("חתימה לא תקינה")</code>. משווים עם <code>timingSafeEqual</code>, ולא עם <code>===</code>.</li><li>header שאינו JSON, או <code>alg</code> שאינו <code>"HS256"</code> ← <code>Error("טוקן לא תקין")</code>.</li><li><code>now &gt;= exp</code> ← <code>Error("פג תוקף")</code>.</li></ul></li></ul>
+<p>📄 כותבים בקובץ <code>21-auth/starter/P21-E26.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 21-auth/starter/P21-E26.ts
+% npm run check P21-E26
+```
+@hint1
+<p>שתי פונקציות עזר: <code>b64 = (v) =&gt; Buffer.from(JSON.stringify(v)).toString("base64url")</code> ו־<code>sign = (data, secret) =&gt; createHmac("sha256", secret).update(data).digest("base64url")</code>. אחר כך <code>signJwt</code> היא שתי שורות.</p>
+@hint2
+<p>ב־<code>verifyJwt</code>: מחשבים מחדש את החתימה מ־<code>header.payload</code>, ומשווים לזו שבטוקן. ‏<code>timingSafeEqual</code> מקבלת שני <code>Buffer</code> <em>באותו אורך</em>, אחרת היא זורקת. לכן קודם בודקים את האורך: <code>expected.length !== actual.length || !timingSafeEqual(expected, actual)</code>. רק אחרי שהחתימה תקינה מפענחים JSON.</p>
+@solution
+```ts run save=solutions/P21-E26.ts
+// P21-E26: JWT ביד — HS256 עם node:crypto
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export type Claims = { sub: number; role: string; iat: number; exp: number };
+
+const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const sign = (data: string, secret: string) => createHmac("sha256", secret).update(data).digest("base64url");
+
+export function signJwt(payload: { sub: number; role: string }, secret: string, expiresInSec: number, now = Math.floor(Date.now() / 1000)): string {
+  const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ ...payload, iat: now, exp: now + expiresInSec })}`;
+  return `${data}.${sign(data, secret)}`;
+}
+
+export function verifyJwt(token: string, secret: string, now = Math.floor(Date.now() / 1000)): Claims {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("טוקן לא תקין");
+  const [header, payload, signature] = parts;
+
+  const expected = Buffer.from(sign(`${header}.${payload}`, secret));
+  const actual = Buffer.from(signature);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    throw new Error("חתימה לא תקינה");
+  }
+
+  let head: { alg?: string };
+  let claims: Claims;
+  try {
+    head = JSON.parse(Buffer.from(header, "base64url").toString());
+    claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch {
+    throw new Error("טוקן לא תקין");
+  }
+  if (head.alg !== "HS256") throw new Error("טוקן לא תקין");
+  if (typeof claims.exp !== "number" || now >= claims.exp) throw new Error("פג תוקף");
+  return claims;
+}
+
+const SECRET = "dev-secret-at-least-32-characters-long!!";
+const token = signJwt({ sub: 7, role: "user" }, SECRET, 900, 1793872800);
+console.log(token);
+console.log(verifyJwt(token, SECRET, 1793872900));
+for (const [t, now] of [[token, 1793873700], [token.slice(0, -2) + "xx", 1793872900]] as const) {
+  try {
+    verifyJwt(t, SECRET, now);
+  } catch (err) {
+    console.log((err as Error).message);
+  }
+}
+```
+```out
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjcsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkzODcyODAwLCJleHAiOjE3OTM4NzM3MDB9.BtQfGhYiwcPBa9fXaOY0yRlRwSCbE_mwFGlsBvczPig
+{ sub: 7, role: 'user', iat: 1793872800, exp: 1793873700 }
+פג תוקף
+חתימה לא תקינה
+```
+<p>הטוקן בשורה הראשונה זהה לטוקן ש־<code>jsonwebtoken</code> מייצר מאותם נתונים. אין בספרייה קסם: שני JSON ב־base64url, וחתימת HMAC על שניהם.</p>
+<p>הסדר ב־<code>verifyJwt</code> הוא העיקר: <strong>קודם החתימה</strong>, ורק אחר כך מאמינים לתוכן. מי שבודק <code>exp</code> או קורא <code>role</code> לפני שבדק חתימה, פועל לפי נתונים שכל אחד יכול לכתוב. בדיקת <code>alg</code> סוגרת את התקיפה הקלאסית עם <code>"alg": "none"</code> (שיעור 2, ‏<code>algorithms: ["HS256"]</code>).</p>
+<p>למה <code>timingSafeEqual</code>? ‏<code>===</code> על מחרוזות עוצר בתו הראשון ששונה. תוקף שמודד זמני תגובה יכול לנחש חתימה תו אחרי תו. ‏<code>timingSafeEqual</code> משווה תמיד את כל הבתים. בפרויקט עדיין משתמשים בספרייה, אבל עכשיו אתה יודע מה היא בודקת.</p>
+@mistakes
+<ul><li>לפענח את ה־payload ולבדוק <code>exp</code> לפני החתימה — טוקן מזויף מקבל "פג תוקף" במקום "חתימה לא תקינה", ובקוד אמיתי היית כבר משתמש בנתונים שלו.</li><li><code>toString("base64")</code> במקום <code>"base64url"</code> — מופיעים <code>+</code>, ‏<code>/</code> ו־<code>=</code>, והטוקן לא תואם לאף ספרייה.</li><li><code>timingSafeEqual</code> בלי בדיקת אורך — חתימה קצרה מפילה את השרת ב־<code>RangeError</code> במקום להחזיר 401.</li><li><code>Date.now()</code> בלי חלוקה ל־1000 — ‏<code>exp</code> של JWT הוא בשניות.</li></ul>
+
+@@ P21-E27 | 2 | פירוק header של Authorization 🤖 | 15 | שיעור 2
+@type review
+@task
+<p><strong>🔁 חזרה על <code>switch</code> (פרק 4), ביטויים רגולריים (P13-E26) ו־<code>indexOf</code>/<code>slice</code> (‏P14-E26)</strong>. ה־header ‏<code>Authorization</code> מגיע בכמה צורות: <code>Bearer &lt;token&gt;</code>, או <code>Basic &lt;base64 של user:password&gt;</code>. כתוב וייצא:</p>
+<ul><li><code>type Credentials = { scheme: "bearer"; token: string } | { scheme: "basic"; username: string; password: string }</code>.</li><li><code>parseAuthorization(header: string | undefined): Credentials | null</code>:<ul><li>אחרי <code>trim</code>: בדיוק שתי מילים (scheme וערך), עם רווח אחד או יותר ביניהן. אחרת ← <code>null</code>.</li><li>ה־scheme בלי תלות באותיות (<code>Bearer</code>, ‏<code>bearer</code>, ‏<code>BASIC</code>). הבחירה — עם <code>switch</code>. scheme אחר ← <code>null</code>.</li><li>bearer: הטוקן רק מהתווים <code>A–Z a–z 0–9 - . _ ~ + /</code>, ואחריהם אפשר <code>=</code> אחד או יותר <em>רק בסוף</em>. אחרת ← <code>null</code>.</li><li>basic: מפענחים base64. הנקודתיים <strong>הראשונות</strong> מפרידות בין שם לסיסמה (בסיסמה מותר <code>:</code>). אין נקודתיים, או שם משתמש ריק ← <code>null</code>.</li></ul></li></ul>
+<p>📄 כותבים בקובץ <code>21-auth/starter/P21-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 21-auth/starter/P21-E27.ts
+% npm run check P21-E27
+```
+@hint1
+<p><code>const match = header?.trim().match(/^(\S+)\s+(\S+)$/);</code> — ‏<code>?.</code> מטפל ב־<code>undefined</code>. אחר כך <code>const [, scheme, value] = match;</code> ו־<code>switch (scheme.toLowerCase())</code>.</p>
+@hint2
+<p>טוקן: <code>/^[A-Za-z0-9._~+/-]+=*$/</code> (המקף בסוף הסוגריים, כדי שלא ייקרא כטווח). ‏basic: ‏<code>Buffer.from(value, "base64").toString("utf8")</code>, ואז <code>indexOf(":")</code> ו־<code>slice</code>, כמו בעוגיות. בתוך <code>case</code> שמגדיר <code>const</code> צריך סוגריים מסולסלים: <code>case "basic": { ... }</code>.</p>
+@solution
+```ts run save=solutions/P21-E27.ts
+// P21-E27: פירוק header של Authorization
+export type Credentials =
+  | { scheme: "bearer"; token: string }
+  | { scheme: "basic"; username: string; password: string };
+
+export function parseAuthorization(header: string | undefined): Credentials | null {
+  const match = header?.trim().match(/^(\S+)\s+(\S+)$/);
+  if (!match) return null;
+  const [, scheme, value] = match;
+
+  switch (scheme.toLowerCase()) {
+    case "bearer":
+      return /^[A-Za-z0-9._~+/-]+=*$/.test(value) ? { scheme: "bearer", token: value } : null;
+    case "basic": {
+      const decoded = Buffer.from(value, "base64").toString("utf8");
+      const i = decoded.indexOf(":");
+      if (i <= 0) return null;
+      return { scheme: "basic", username: decoded.slice(0, i), password: decoded.slice(i + 1) };
+    }
+    default:
+      return null;
+  }
+}
+
+console.log(parseAuthorization("Bearer eyJhbGciOi.eyJzdWIiOjd9.c2ln"));
+console.log(parseAuthorization("basic " + Buffer.from("dana:pa:ss").toString("base64")));
+console.log(parseAuthorization("Token abc"), parseAuthorization(undefined), parseAuthorization("Bearer"));
+```
+```out
+{ scheme: 'bearer', token: 'eyJhbGciOi.eyJzdWIiOjd9.c2ln' }
+{ scheme: 'basic', username: 'dana', password: 'pa:ss' }
+null null null
+```
+<p>ה־union ב־<code>Credentials</code> (פרק 11) עושה עבודה: אחרי <code>if (c.scheme === "basic")</code> ‏TypeScript יודע שיש <code>username</code>, ושאין <code>token</code>. מי שמשתמש בפונקציה לא יכול לבלבל בין שני הסוגים.</p>
+<p><code>case "basic": { ... }</code> עם סוגריים: בלי הסוגריים, ה־<code>const</code> של case אחד "נראה" בכל ה־switch. TypeScript ו־ESLint מתריעים על זה.</p>
+<p>למה <code>indexOf</code> ולא <code>split(":")</code>? מאותה סיבה כמו בעוגיות (P14-E26): בסיסמה מותר <code>:</code>, ו־<code>split</code> חותך אותה.</p>
+@mistakes
+<ul><li><code>header.split(" ")</code> — שני רווחים באמצע נותנים מילה ריקה, ו־<code>undefined</code> בלי <code>?.</code> מפיל את השרת.</li><li><code>if (scheme === "Bearer")</code> — לקוחות ששולחים <code>bearer</code> נדחים. לפי התקן ה־scheme לא תלוי באותיות.</li><li><code>const [user, pass] = decoded.split(":")</code> — הסיסמה <code>pa:ss</code> נחתכת ל־<code>pa</code>.</li></ul>
+
+@@ P21-E28 | 3 | רשימת חסימה לטוקנים 🤖 | 20 | שיעור 3
+@type review
+@task
+<p><strong>🔁 חזרה על <code>class</code> עם שדות פרטיים ו־getter (פרק 12), ‏<code>Map</code> ומחיקה תוך כדי מעבר (פרק 7), ושעון מוזרק (‏P21-E12)</strong>. access token אי אפשר "לבטל": הוא תקף עד ה־<code>exp</code> שלו. כשחייבים לבטל אחד מיד (משתמש נחסם, טוקן דלף), שומרים את המזהה שלו (<code>jti</code>) ברשימת חסימה, עד שהוא פג ממילא. כתוב וייצא <code>class TokenBlocklist</code>:</p>
+<ul><li><code>constructor(now = () =&gt; Math.floor(Date.now() / 1000))</code> — שעון בשניות, שאפשר להחליף בבדיקות.</li><li><code>block(jti, exp)</code> — חוסמת עד <code>exp</code>. טוקן שכבר פג (<code>exp &lt;= now()</code>) — לא נשמר בכלל.</li><li><code>isBlocked(jti)</code> — ‏<code>true</code> רק אם הוא ברשימה ועוד לא פג.</li><li><code>cleanup()</code> — מוחקת את כל מה שפג, ומחזירה כמה נמחקו.</li><li>getter <code>size</code>. הנתונים בשדות פרטיים.</li></ul>
+<p>📄 כותבים בקובץ <code>21-auth/starter/P21-E28.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+```term
+% node 21-auth/starter/P21-E28.ts
+% npm run check P21-E28
+```
+@hint1
+<p>שני שדות: <code>#blocked = new Map&lt;string, number&gt;()</code> (‏jti ← exp) ו־<code>#now: () =&gt; number</code>. ‏<code>isBlocked</code>: ‏<code>const exp = this.#blocked.get(jti); return exp !== undefined &amp;&amp; exp &gt; this.#now();</code>.</p>
+@hint2
+<p><code>cleanup</code>: ‏<code>for (const [jti, exp] of this.#blocked) { if (exp &lt;= now) { this.#blocked.delete(jti); removed++; } }</code>. ב־<code>Map</code> מותר למחוק את הרשומה הנוכחית תוך כדי מעבר. קרא ל־<code>this.#now()</code> פעם אחת לפני הלולאה.</p>
+@solution
+```ts run save=solutions/P21-E28.ts
+// P21-E28: רשימת חסימה לטוקנים (logout ל־access token)
+export class TokenBlocklist {
+  #blocked = new Map<string, number>();
+  #now: () => number;
+
+  constructor(now: () => number = () => Math.floor(Date.now() / 1000)) {
+    this.#now = now;
+  }
+
+  block(jti: string, exp: number): void {
+    if (exp <= this.#now()) return; // כבר פג תוקף — אין מה לחסום
+    this.#blocked.set(jti, exp);
+  }
+
+  isBlocked(jti: string): boolean {
+    const exp = this.#blocked.get(jti);
+    return exp !== undefined && exp > this.#now();
+  }
+
+  cleanup(): number {
+    const now = this.#now();
+    let removed = 0;
+    for (const [jti, exp] of this.#blocked) {
+      if (exp <= now) {
+        this.#blocked.delete(jti);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  get size(): number {
+    return this.#blocked.size;
+  }
+}
+
+let now = 1000;
+const list = new TokenBlocklist(() => now);
+list.block("a", 1900);
+list.block("b", 1100);
+list.block("old", 900);
+console.log(list.size, list.isBlocked("a"), list.isBlocked("old"));
+now = 1200;
+console.log(list.isBlocked("b"), list.cleanup(), list.size);
+```
+```out
+2 true false
+false 1 1
+```
+<p>השעון המוזרק הוא מה שמאפשר לבדוק את המחלקה. בלעדיו, כדי לראות טוקן פג היית צריך לחכות 15 דקות. זה אותו רעיון כמו <code>CLOCK</code> ב־P21-E12, רק בלי Nest.</p>
+<p>הרשימה לא גדלה לנצח: כל טוקן נשמר רק עד ה־<code>exp</code> שלו, כי אחר כך ה־guard ממילא ידחה אותו. לכן הגודל המקסימלי הוא "כמה טוקנים חסמו ב־15 הדקות האחרונות". ‏<code>cleanup</code> רץ בתזמון (למשל כל דקה), וגם <code>isBlocked</code> נכון בלעדיו.</p>
+<p>בשרת עם כמה מופעים, רשימה בזיכרון לא מספיקה: מופע אחד חוסם, והשני לא יודע. שם שומרים אותה ב־Redis עם TTL. זה בדיוק <code>SET jti 1 EX ttl</code>, ותראה אותו בפרק 26.</p>
+@mistakes
+<ul><li><code>Date.now()</code> בלי חלוקה — ‏<code>exp</code> של JWT בשניות, ולכן כל טוקן נראה כאילו פג מזמן.</li><li><code>isBlocked</code> שבודק רק <code>has(jti)</code> — טוקן שפג (ועוד לא נוקה) נחשב חסום. כאן זה לא מזיק, אבל זה לא מה שהפונקציה מבטיחה.</li><li>לשמור טוקנים שכבר פגו — הרשימה גדלה בלי סיבה.</li><li><code>size()</code> כמתודה במקום <code>get size()</code>.</li></ul>

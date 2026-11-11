@@ -6,8 +6,9 @@ export default {
   title: "פעולות ומחרוזות",
   part: "חטיבה א׳ — יסודות JavaScript",
   fast: true,
+  checker: true,
   time: "3 מפגשים (במסלול המהיר: 1–2)",
-  expectedExercises: 25,
+  expectedExercises: 28,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, Error Lens.</p>
 <p><strong>מה מתקינים עכשיו:</strong> תוסף <strong>Prettier</strong> — מסדר את הקוד אוטומטית (רווחים, הזחות, מירכאות) בכל שמירה.</p>
 <ol class="steps">
@@ -16,6 +17,7 @@ export default {
 <li>בהגדרות חפש <code>format on save</code> ← סמן ✔ את <strong>Editor: Format On Save</strong>.</li>
 <li>בדיקה: כתוב בקובץ <code>.js</code> את השורה <code>console.log(  "x"   )</code> ושמור — הרווחים המיותרים ייעלמו.</li>
 </ol>
+<p><strong>🤖 הבודק האוטומטי:</strong> תרגילי הכתיבה נבדקים כמו בפרק 1 — <code>npm run check P02-E06</code> (לפי מזהה התרגיל). אם דילגת על פרק 1: העתק פעם אחת את <code>package.json</code> ואת התיקייה <code>tools</code> (ראה קופסת 🧰 של פרק 1).</p>
 ${copyStep("02-operators-strings")}
 ${verifyNode}`,
   entryTest: `<p>10 שאלות, בלי להריץ (~15 דקות):</p>
