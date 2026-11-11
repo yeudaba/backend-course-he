@@ -34,6 +34,162 @@
 
 </div></details>
   </div>
+<div class="ex" id="P11-E69">
+    <h3>P11-E69 · אותו קוד — עם any ועם unknown <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>any</code> — "אל תבדוק כלום". <code>unknown</code> — "אסור הכול עד שבודקים".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בגרסה ב׳: מה ההבדל בין השורה הראשונה בפונקציה לבין מה שבתוך ה־<code>if</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function totalA(data: any): number {
+  const n = data.items.length;
+  return data.total * 2 + n;
+}
+
+function totalB(data: unknown): number {
+  const n = data.items.length;
+  if (typeof data === "object" &amp;&amp; data !== null &amp;&amp; "total" in data &amp;&amp; typeof data.total === "number") {
+    return data.total * 2;
+  }
+  return 0;
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>בגרסת <code>any</code> — אפס שגיאות, אבל <code>totalA(null)</code> או <code>totalA({ total: "5" })</code> יקרסו או יחזירו שטויות בזמן ריצה. בגרסת <code>unknown</code> השורה הראשונה נפסלת (לא בדקנו כלום), ומה שבתוך ה־<code>if</code> מותר — כי כל שלב בבדיקה מצמצם את הטיפוס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>unknown</code> "מעצבן" ולחזור ל־<code>any</code>. השגיאה היא בדיוק המקום שבו הייתה קריסה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E70">
+    <h3>P11-E70 · as שמבטיח שקר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>as</code> לא בודק כלום — מה באמת יש ב־<code>p.price</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"5" + 1</code> בזמן ריצה — פרק 2.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Product = { name: string; price: number };
+
+const text = '{"name": "עט", "price": "5"}';
+const p = JSON.parse(text) as Product;
+
+console.log(typeof p.price);
+console.log(p.price + 1);
+try {
+  console.log(p.price.toFixed(2));
+} catch (err) {
+  console.log("קרס:", (err as Error).message);
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>TypeScript בטוח ש־<code>price</code> הוא מספר, כי <code>as</code> הבטיח לו. בזמן ריצה זו מחרוזת: החיבור נותן <code>"51"</code> והמתודה לא קיימת. הבאג לא מופיע בשורת ה־<code>as</code> — הוא מופיע שלוש שורות אחר כך, ואולי בקובץ אחר. (ה־<code>as Error</code> ב־catch הוא שימוש "סביר": כאן אנחנו באמת יודעים מה נזרק — ובכל זאת, P11-E72 מראה דרך בטוחה יותר.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש את הבאג בשורה שקרסה. המקור הוא ה־<code>as</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E71">
+    <h3>P11-E71 · type guard שמשקר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>value is Product</code> הוא הבטחה של <strong>מי שכתב</strong> את הפונקציה. TypeScript לא בודק שהגוף באמת מוודא הכול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה בודקים לגבי <code>price</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Product = { name: string; price: number };
+
+function isProduct(value: unknown): value is Product {
+  return typeof value === "object" &amp;&amp; value !== null &amp;&amp; "name" in value;
+}
+
+const raw: unknown = JSON.parse('[{"name":"עט","price":5},{"name":"דף"}]');
+if (Array.isArray(raw)) {
+  for (const item of raw.filter(isProduct)) {
+    console.log(item.name, item.price * 2);
+  }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>"דף" עבר את הבדיקה בלי מחיר, ו־<code>undefined * 2</code> נתן <code>NaN</code>. ה־guard בודק רק <code>name</code> — וגם לא את הטיפוס שלו. type guard הוא כמו <code>as</code> שעטוף בפונקציה: אם הבדיקה לא שלמה, TypeScript "מאמין" לשקר. לכן כותבים בו בדיקה <strong>לכל שדה</strong> (כמו בשיעור), ובפרק 15 נותנים לספרייה (Zod) לכתוב אותה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק type guard בלי לקרוא אותו. כל שדה שלא נבדק — חור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E72">
+    <h3>P11-E72 · מה הטיפוס של err ב־catch? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־JavaScript אפשר לזרוק <strong>כל דבר</strong>: <code>throw "טקסט"</code>, ‏<code>throw 42</code>. מה TypeScript יכול להניח על <code>err</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תחת <code>--strict</code>, המשתנה של <code>catch</code> הוא <code>unknown</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function risky(): number {
+  if (Math.random() &gt; 2) return 1;
+  throw new RangeError("מחוץ לטווח");
+}
+
+try {
+  risky();
+} catch (err) {
+  console.log(err.message);
+  if (err instanceof Error) {
+    console.log(err.message);
+  }
+  if (typeof err === "string") {
+    console.log(err.toUpperCase());
+  }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>רק השורה הראשונה ב־catch נכשלת. <code>err</code> הוא <code>unknown</code> — בדיוק כמו <code>JSON.parse</code> בקוד בטוח — ולכן צריך narrowing: <code>instanceof Error</code> (פרק 8) או <code>typeof</code>. זה גם הבסיס ל־P11-E76.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>catch (err: any)</code> — "פותר" את השגיאה, ומחזיר את הבעיה: <code>err.message</code> של <code>throw "טקסט"</code> הוא <code>undefined</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E73">
+    <h3>P11-E73 · מתי as בסדר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאל: האם אני <strong>באמת</strong> יודע יותר מבודק הטיפוסים — או שאני רק מקווה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סעיף 5 הוא <code>as const</code> — לא "תאמין לי", אלא "תסיק את הטיפוס הכי מדויק".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>לא.</strong> נתונים מהעולם — <code>unknown</code> ובדיקה (type guard, ובפרק 15 — Zod).</li><li><strong>סביר.</strong> אתה יודע על ה־HTML משהו ש־TypeScript לא יודע. ועדיין, אם מישהו ימחק את ה־input — תקבל <code>null</code> בזמן ריצה; בדיקה <code class="mid">instanceof HTMLInputElement</code> בטוחה יותר.</li><li><strong>תלוי.</strong> קובץ שאתה כתבת ונמצא בפרויקט — סיכון קטן. אבל קובץ הגדרות של שרת ישתנה בידי אנשים — עדיף לבדוק (P11-E77).</li><li><strong>לא בשום מקרה.</strong> "as כפול" הוא הודאה שהטיפוסים לא מתאימים. מתקנים את הסיבה.</li><li><strong>כן.</strong> <code>as const</code> לא מבטיח שקר — הוא מבקש מ־TypeScript להסיק <code class="mid">readonly ["pending", "paid"]</code> במקום <code>string[]</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"as זה כמו המרה". לא — <code>as</code> לא משנה את הערך בזמן ריצה; הוא רק משנה את מה ש־TypeScript חושב.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P11-E12">
     <h3>P11-E12 · מספר מתוך unknown 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -231,62 +387,270 @@ try {
 
 </div></details>
   </div>
-<div class="ex typed" id="P11-E28">
-    <h3>P11-E28 · שליפת משתמשים: נמצאו וחסרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+<div class="ex typed" id="P11-E74">
+    <h3>P11-E74 · מערך של מחרוזות? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p><code class="mid">const unique = [...new Set(ids)];</code> ואחר כך <code class="mid">await Promise.all(unique.map(getUser))</code>. מקבלים מערך של <code>User | undefined</code>, באותו סדר כמו <code>unique</code>.</p>
+<p><code class="long">Array.isArray(value) &amp;&amp; value.every((x) =&gt; typeof x === "string")</code></p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>לולאה עם אינדקס: <code class="long">unique.forEach((id, i) =&gt; { const user = results[i]; if (user) found.push(user); else missing.push(id); });</code>. בתוך ה־<code>if</code>, TypeScript כבר יודע ש־<code>user</code> הוא <code>User</code> ולא <code>undefined</code> (narrowing, שיעור 3).</p>
+<p>ב־<code>tagsOf</code>: <code class="long">if (isStringArray(value)) return value.map((t) =&gt; t.toLowerCase());</code> — בתוך ה־<code>if</code>, ‏<code>value</code> הוא <code>string[]</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P11-E28: שליפת משתמשים
-export type User = { id: number; name: string };
-
-export async function findUsers(
-  ids: number[],
-  getUser: (id: number) =&gt; Promise&lt;User | undefined&gt;
-): Promise&lt;{ found: User[]; missing: number[] }&gt; {
-  const unique = [...new Set(ids)];
-  const results = await Promise.all(unique.map(getUser));
-  const found: User[] = [];
-  const missing: number[] = [];
-  unique.forEach((id, i) =&gt; {
-    const user = results[i];
-    if (user) {
-      found.push(user);
-    } else {
-      missing.push(id);
-    }
-  });
-  return { found, missing };
+<pre><code class="lang-ts">// P11-E74: מערך של מחרוזות?
+export function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) &amp;&amp; value.every((x) =&gt; typeof x === "string");
 }
 
-const db = new Map&lt;number, User&gt;([
-  [1, { id: 1, name: "דנה" }],
-  [3, { id: 3, name: "עומר" }],
-]);
-const getUser = async (id: number) =&gt; db.get(id);
+export function tagsOf(value: unknown): string[] {
+  if (isStringArray(value)) return value.map((t) =&gt; t.toLowerCase());
+  return [];
+}
 
-console.log(await findUsers([3, 2, 1, 3], getUser));</code></pre>
-<pre class="terminal">{
-  found: [ { id: 3, name: 'עומר' }, { id: 1, name: 'דנה' } ],
-  missing: [ 2 ]
-}</pre>
-<p><code>new Set(ids)</code> מסיר כפילויות ושומר על הסדר של ההופעה הראשונה, ו־<code>[...set]</code> מחזיר אותו למערך. זה חוסך בקשה כפולה למסד, ובמערכת אמיתית — גם שורה כפולה בתשובה.</p>
-<p><code>unique.map(getUser)</code> מעביר את הפונקציה עצמה ל־<code>map</code>. זה בטוח כאן, כי <code>getUser</code> מקבלת פרמטר אחד. (<code>map</code> שולחת גם אינדקס ומערך, ופונקציה עם פרמטר שני אופציונלי הייתה מקבלת אותם בטעות. ב־<code>parseInt</code> זה מפורסם: <code>["10", "10"].map(parseInt)</code> נותן <code>[10, NaN]</code>.)</p>
-<p>ה־<code>await</code> בשורת ההדפסה עובד בלי <code>async function</code> מסביב, כי קובץ <code>.ts</code> שיש בו <code>export</code> רץ כ־ES Module, ושם מותר top-level await.</p>
+console.log(isStringArray(["a", "b"]), isStringArray(["a", 1]), isStringArray([]), isStringArray("ab"));
+console.log(tagsOf(["New", "SALE"]), tagsOf("new"));</code></pre>
+<pre class="terminal">?</pre>
+<p>שורה אחת של בדיקה, ומרגע שהיא עברה — <code>value</code> הוא <code>string[]</code> אמיתי, עם <code>map</code> והשלמה אוטומטית. בלי ה־guard היית צריך את אותה בדיקה בכל מקום.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code class="mid">for (const id of ids) { const u = await getUser(id); ... }</code> — אחד אחרי השני. הבודק מודד, ונכשל.</li><li><code class="mid">results.filter((u) =&gt; u !== undefined)</code> בשביל <code>found</code> — עובד, אבל אז צריך לעבור שוב כדי למצוא את <code>missing</code>, ובגרסאות TypeScript ישנות הטיפוס נשאר <code>(User | undefined)[]</code>.</li><li>לשכוח את ה־<code>Set</code> — id כפול נשלף פעמיים, ומופיע פעמיים ב־<code>found</code>.</li></ul>
+<ul><li><code>typeof value === "object"</code> במקום <code>Array.isArray</code> — גם <code>{}</code> ו־<code>null</code> עוברים.</li><li><code>some</code> במקום <code>every</code> — <code>["a", 1]</code> עובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E75">
+    <h3>P11-E75 · משימה מ־JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">let data: unknown; try { data = JSON.parse(json); } catch { return null; }</code> — ואז שרשרת בדיקות כמו ב־<code>isProduct</code> מהשיעור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־<code>priority</code>: <code>"priority" in data</code> → אם כן, <code class="mid">data.priority === "low" || data.priority === "high"</code>. בסוף: <code class="long">const todo: Todo = { title: data.title, done: data.done }; if (...) todo.priority = data.priority;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P11-E75: משימה מ־JSON
+export type Todo = { title: string; done: boolean; priority?: "low" | "high" };
+
+export function parseTodo(json: string): Todo | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  if (!("title" in data) || typeof data.title !== "string" || data.title.trim() === "") return null;
+  if (!("done" in data) || typeof data.done !== "boolean") return null;
+  const todo: Todo = { title: data.title, done: data.done };
+  if ("priority" in data) {
+    if (data.priority !== "low" &amp;&amp; data.priority !== "high") return null;
+    todo.priority = data.priority;
+  }
+  return todo;
+}
+
+console.log(parseTodo('{"title": "לקנות חלב", "done": false, "extra": 1}'));
+console.log(parseTodo('{"title": "x", "done": true, "priority": "high"}'));
+console.log(parseTodo('{"title": "x", "done": "no"}'), parseTodo("{oops"), parseTodo("[]"));</code></pre>
+<pre class="terminal">?</pre>
+<p>שים לב איך TypeScript "לומד" לאורך הבדיקות: אחרי <code class="mid">typeof data.title !== "string"</code> עם <code>return</code>, בשורות הבאות <code>data.title</code> הוא <code>string</code>. ואחרי הבדיקה של <code>priority</code> — הוא <code>"low" | "high"</code>, ולכן ההשמה ל־<code>todo.priority</code> מותרת בלי <code>as</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את <code>data</code> עצמו — שדות נוספים מה־JSON (כמו <code>extra</code>) עוברים הלאה.</li><li>לשכוח <code>Array.isArray</code> — מערך הוא <code>"object"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E76">
+    <h3>P11-E76 · הודעה מכל שגיאה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש בדיקות, כל אחת עם <code>return</code>: <code>instanceof Error</code>, <code>typeof err === "string"</code>, ו־<code class="long">typeof err === "object" &amp;&amp; err !== null &amp;&amp; "message" in err &amp;&amp; ...</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בבדיקה השלישית צריך גם <code class="mid">typeof err.message === "string"</code> — אחרי <code>"message" in err</code>, ‏TypeScript מרשה לגשת ל־<code>err.message</code> (כ־<code>unknown</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P11-E76: הודעה מכל שגיאה
+export function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string" &amp;&amp; err !== "") return err;
+  if (typeof err === "object" &amp;&amp; err !== null &amp;&amp; "message" in err &amp;&amp; typeof err.message === "string") {
+    return err.message;
+  }
+  return "שגיאה לא ידועה";
+}
+
+for (const thrown of [new RangeError("מחוץ לטווח"), "נגמר המלאי", { message: "מהשרת" }, 42, null]) {
+  try {
+    throw thrown;
+  } catch (err) {
+    console.log(errorMessage(err));
+  }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>פונקציה קטנה שכמעט כל פרויקט TypeScript מחזיק: ב־<code>catch</code> כותבים <code>errorMessage(err)</code> במקום <code>err.message</code>, וזה בטוח לכל מה שמישהו (או ספרייה) זרק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>(err as Error).message</code> — עובד רק אם באמת נזרק Error.</li><li>לבדוק <code>"message" in err</code> בלי <code>err !== null</code> — <code>in</code> על <code>null</code> קורס.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P11-E77">
+    <h3>P11-E77 · הגדרות שרת — עם הודעת שגיאה מדויקת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמו P11-E75, אבל במקום <code>return null</code> — <code>throw</code> עם שם השדה. כך מי שכתב קובץ הגדרות שבור יודע בדיוק מה לתקן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־port: <code class="long">!("port" in raw) || typeof raw.port !== "number" || !Number.isInteger(raw.port) || raw.port &lt; 1 || raw.port &gt; 65535</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P11-E77: הגדרות שרת — עם הודעת שגיאה מדויקת
+export type Config = { host: string; port: number; debug: boolean };
+
+export function parseConfig(raw: unknown): Config {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error("ההגדרות חייבות להיות אובייקט");
+  }
+  if (!("host" in raw) || typeof raw.host !== "string" || raw.host.trim() === "") {
+    throw new Error("host לא תקין");
+  }
+  if (!("port" in raw) || typeof raw.port !== "number" || !Number.isInteger(raw.port) || raw.port &lt; 1 || raw.port &gt; 65535) {
+    throw new Error("port לא תקין");
+  }
+  let debug = false;
+  if ("debug" in raw) {
+    if (typeof raw.debug !== "boolean") throw new Error("debug לא תקין");
+    debug = raw.debug;
+  }
+  return { host: raw.host, port: raw.port, debug };
+}
+
+console.log(parseConfig({ host: "localhost", port: 3000 }));
+for (const bad of [[], { host: "x", port: "3000" }, { host: "x", port: 80, debug: "yes" }]) {
+  try {
+    parseConfig(bad);
+  } catch (err) {
+    console.log(err instanceof Error ? err.message : err);
+  }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>זו הגרסה ה"קשוחה" של type guard: במקום <code>true</code>/<code>false</code>, היא מחזירה ערך בטוח או זורקת עם הסבר. בדיוק כך נבנים validators — ובפרק 13 תטען הגדרות ממשתני סביבה באותו סגנון.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">typeof raw.port === "number"</code> בלבד — ‏<code>3000.5</code> ו־<code>NaN</code> עוברים.</li><li><code>debug: raw.debug ?? false</code> בלי בדיקה — <code>"yes"</code> עובר כ"בוליאני".</li></ul>
 
 
 </div></details>
   </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P11-E78">
+    <h3>P11-E78 · JSON.parse בתוך async <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>data</code> ב־<code>portA</code> הוא <code>any</code>, ולכן <code>data.port</code> הוא <code>any</code> — ומותר להחזיר אותו בתור <code>number</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם בקובץ כתוב <code>{"port": "8080"}</code> — מה כל פונקציה תעשה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">async function portA(read: () =&gt; Promise&lt;string&gt;): Promise&lt;number&gt; {
+  const data = JSON.parse(await read());
+  return data.port;
+}
+
+async function portB(read: () =&gt; Promise&lt;string&gt;): Promise&lt;number&gt; {
+  const data: unknown = JSON.parse(await read());
+  return data.port;
+}
+
+async function portC(read: () =&gt; Promise&lt;string&gt;): Promise&lt;number&gt; {
+  const data: unknown = JSON.parse(await read());
+  if (typeof data === "object" &amp;&amp; data !== null &amp;&amp; "port" in data &amp;&amp; typeof data.port === "number") {
+    return data.port;
+  }
+  throw new Error("port חסר או לא מספר");
+}</code></pre>
+<pre class="terminal">?</pre>
+<p><code>portA</code> עוברת בלי שגיאה — והיא זו שתחזיר <code>"8080"</code> כ"מספר". מי שיעשה <code>port + 1</code> יקבל <code>"80801"</code>. ‏<code>portB</code> נפסלת — וזה טוב: ה־<code>unknown</code> מכריח לבדוק. ‏<code>portC</code> בודקת, ונכשלת עם הודעה ברורה כשהקובץ שבור.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שחתימה <code>Promise&lt;number&gt;</code> "מבטיחה" מספר. היא מבטיחה רק מה שהקוד בפנים באמת בודק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E79">
+    <h3>P11-E79 · instanceof על מחלקות שגיאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בתוך <code class="mid">if (err instanceof NotFoundError)</code> — מה הטיפוס? ובתוך <code>instanceof Error</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־<code>Error</code> רגיל אין <code>resource</code>. ואחרי שני ה־<code>if</code>, ‏<code>err</code> עדיין <code>unknown</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">class NotFoundError extends Error {
+  constructor(public resource: string) {
+    super(`${resource} לא נמצא`);
+  }
+}
+
+function handle(err: unknown): number {
+  if (err instanceof NotFoundError) {
+    console.log("חסר:", err.resource);
+    return 404;
+  }
+  if (err instanceof Error) {
+    console.log(err.resource);
+    return 500;
+  }
+  console.log(err.message);
+  return 500;
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>שתי שגיאות: ל־<code>Error</code> כללי אין <code>resource</code>, ומחוץ לבדיקות <code>err</code> נשאר <code>unknown</code>. הסדר חשוב: הבדיקה של המחלקה המיוחדת לפני הכללית — אחרת <code>instanceof Error</code> "תופס" גם את <code>NotFoundError</code>. (<code>public resource</code> ב־constructor — קיצור שנלמד בפרק 12.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code class="mid">err.name === "NotFoundError"</code> — TypeScript לא מצמצם לפי זה, וגם קל לטעות בכתיב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P11-E80">
+    <h3>P11-E80 · ממי הטיפוסים מגינים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי מריץ את הבדיקה של <code>body: CreateOrder</code>? מתי?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"abc" * 10</code> בזמן ריצה — פרק 2.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>לא.</strong> הטיפוסים נמחקו; בזמן ריצה <code>body</code> הוא מה שהגיע. <code>price * "abc"</code> הוא <code>NaN</code> — וההזמנה נשמרת עם סכום <code>NaN</code>.</li><li>סכום שלילי — זיכוי ללקוח במקום חיוב. "מספר" בטיפוס לא אומר "מספר הגיוני".</li><li>אובייקט (לא <code>null</code>, לא מערך); <code>productId</code> מספר שלם חיובי; <code>quantity</code> מספר שלם בין 1 לגבול סביר (למשל 100); <code>coupon</code> — אם קיים — מחרוזת לא ריקה. נכשל ← שגיאה ברורה (400 ללקוח), כמו <code>parseConfig</code> ב־P11-E77.</li><li>"טיפוסים מגינים עליך מ<strong>עצמך</strong> (טעויות בקוד שלך); validation מגן עליך מ<strong>העולם</strong> (נתונים שאתה לא שולט בהם)."</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתפק ב־<code>quantity: number</code> בטיפוס ולחשוב שזה "validation". בדיוק השאלה שמבדילה מועמד שהבין בראיון.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P11-E24">
     <h3>P11-E24 · אתגר: אירועים מוקלדים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -436,6 +800,61 @@ console.log(JSON.stringify(orderSchema({ email: "a@b.c", items: [{ sku: "A", qty
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להחזיר את <code>value</code> המקורי מ־object — שדות זבל עוברים הלאה למסד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P11-E28">
+    <h3>P11-E28 · שליפת משתמשים: נמצאו וחסרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const unique = [...new Set(ids)];</code> ואחר כך <code class="mid">await Promise.all(unique.map(getUser))</code>. מקבלים מערך של <code>User | undefined</code>, באותו סדר כמו <code>unique</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לולאה עם אינדקס: <code class="long">unique.forEach((id, i) =&gt; { const user = results[i]; if (user) found.push(user); else missing.push(id); });</code>. בתוך ה־<code>if</code>, TypeScript כבר יודע ש־<code>user</code> הוא <code>User</code> ולא <code>undefined</code> (narrowing, שיעור 3).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P11-E28: שליפת משתמשים
+export type User = { id: number; name: string };
+
+export async function findUsers(
+  ids: number[],
+  getUser: (id: number) =&gt; Promise&lt;User | undefined&gt;
+): Promise&lt;{ found: User[]; missing: number[] }&gt; {
+  const unique = [...new Set(ids)];
+  const results = await Promise.all(unique.map(getUser));
+  const found: User[] = [];
+  const missing: number[] = [];
+  unique.forEach((id, i) =&gt; {
+    const user = results[i];
+    if (user) {
+      found.push(user);
+    } else {
+      missing.push(id);
+    }
+  });
+  return { found, missing };
+}
+
+const db = new Map&lt;number, User&gt;([
+  [1, { id: 1, name: "דנה" }],
+  [3, { id: 3, name: "עומר" }],
+]);
+const getUser = async (id: number) =&gt; db.get(id);
+
+console.log(await findUsers([3, 2, 1, 3], getUser));</code></pre>
+<pre class="terminal">{
+  found: [ { id: 3, name: 'עומר' }, { id: 1, name: 'דנה' } ],
+  missing: [ 2 ]
+}</pre>
+<p><code>new Set(ids)</code> מסיר כפילויות ושומר על הסדר של ההופעה הראשונה, ו־<code>[...set]</code> מחזיר אותו למערך. זה חוסך בקשה כפולה למסד, ובמערכת אמיתית — גם שורה כפולה בתשובה.</p>
+<p><code>unique.map(getUser)</code> מעביר את הפונקציה עצמה ל־<code>map</code>. זה בטוח כאן, כי <code>getUser</code> מקבלת פרמטר אחד. (<code>map</code> שולחת גם אינדקס ומערך, ופונקציה עם פרמטר שני אופציונלי הייתה מקבלת אותם בטעות. ב־<code>parseInt</code> זה מפורסם: <code>["10", "10"].map(parseInt)</code> נותן <code>[10, NaN]</code>.)</p>
+<p>ה־<code>await</code> בשורת ההדפסה עובד בלי <code>async function</code> מסביב, כי קובץ <code>.ts</code> שיש בו <code>export</code> רץ כ־ES Module, ושם מותר top-level await.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">for (const id of ids) { const u = await getUser(id); ... }</code> — אחד אחרי השני. הבודק מודד, ונכשל.</li><li><code class="mid">results.filter((u) =&gt; u !== undefined)</code> בשביל <code>found</code> — עובד, אבל אז צריך לעבור שוב כדי למצוא את <code>missing</code>, ובגרסאות TypeScript ישנות הטיפוס נשאר <code>(User | undefined)[]</code>.</li><li>לשכוח את ה־<code>Set</code> — id כפול נשלף פעמיים, ומופיע פעמיים ב־<code>found</code>.</li></ul>
 
 
 </div></details>
