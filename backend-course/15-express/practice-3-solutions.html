@@ -34,6 +34,148 @@
 
 </div></details>
   </div>
+<div class="ex" id="P15-E57">
+    <h3>P15-E57 · תכנון API למרפאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות עצם ברבים, פרמטרים לסינון ב־query, פעולה שאינה CRUD — פועל בסוף (<code>/cancel</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"ביטול" שלא מוחק את התור הוא לא DELETE.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code class="mid">GET /doctors?specialty=cardiology</code> ← 200.</li><li><code class="mid">GET /doctors/4/slots?date=2026-11-20</code> ← 200 (תורים פנויים "שייכים" לרופא).</li><li><code>POST /appointments</code> עם <code class="mid">{ doctorId, patientId, startsAt }</code> ← 201 + <code>Location</code>; תפוס ← 409.</li><li><code class="mid">GET /patients/17/appointments?sort=-startsAt&amp;page=1&amp;limit=10</code> ← 200 עם <code>{ data, meta }</code>.</li><li><code>PATCH /appointments/88</code> עם <code>{ startsAt }</code> ← 200.</li><li><code class="mid">POST /appointments/88/cancel</code> ← 200 (התור עם <code>status: "cancelled"</code>). פעולה עם משמעות עסקית — לא DELETE.</li><li><code>DELETE /patients/17</code> ← 204.</li></ol>
+<p>התור הוא משאב בפני עצמו (<code>/appointments</code>) — שם יוצרים ומשנים אותו. הכתובות המקוננות הן "תצוגות" נוחות לרשימות: התורים של רופא, התורים של מטופל. עד שתי רמות; לא <code class="mid">/doctors/4/patients/17/appointments</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>DELETE /appointments/88</code> לביטול — המידע נעלם, ואין דרך לדעת שהמטופל ביטל (חשוב לדוחות, לחיוב על אי־הגעה).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E58">
+    <h3>P15-E58 · pagination כשהרשימה זזה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>offset אומר "דלג על 3 הראשונים" — לא "תתחיל אחרי מה שראיתי".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ההוספה, 7 ו־6 זזו לעמוד 2.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function paginate&lt;T&gt;(items: T[], page: number, limit: number) {
+  const start = (page - 1) * limit;
+  return items.slice(start, start + limit);
+}
+
+let tasks = [7, 6, 5, 4, 3, 2, 1]; // מזהים, מהחדש לישן
+console.log("עמוד 1:", paginate(tasks, 1, 3));
+tasks = [9, 8, ...tasks]; // נוספו שתי משימות
+console.log("עמוד 2:", paginate(tasks, 2, 3));
+tasks = tasks.filter((id) =&gt; id !== 8 &amp;&amp; id !== 9 &amp;&amp; id !== 7);
+console.log("עמוד 3 אחרי מחיקות:", paginate(tasks, 3, 3));</code></pre>
+<pre class="terminal">עמוד 1: [ 7, 6, 5 ]
+עמוד 2: [ 6, 5, 4 ]
+עמוד 3 אחרי מחיקות: []</pre>
+<p>בעמוד 2 הלקוח רואה שוב את 7 ו־6 (כפילות), ואחרי מחיקות — מדלג על פריטים שלא ראה אף פעם. pagination לפי offset "זז" עם הרשימה. ברוב המסכים זה נסבל; בפיד שמתעדכן כל הזמן, או בייצוא של כל הנתונים — לא. הפתרון הוא cursor: "תן לי 3 שה־id שלהם קטן מ־5" — שאר הרשימה לא משנה. נכתוב אותו בפרק 18.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שזה באג של הלקוח — הוא ביקש בדיוק "עמוד 2".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E59">
+    <h3>P15-E59 · מה ה־Router רואה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בתוך ה־router, הכתובות יחסיות לקידומת — <code>req.baseUrl</code> הוא הקידומת, ו־<code>req.path</code> מה שאחריה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>/:id</code> תופס חלק <strong>אחד</strong> (P15-E30).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express, { Router } from "express";
+
+const router = Router();
+router.get("/", (req, res) =&gt; {
+  res.json({ route: "list", baseUrl: req.baseUrl, path: req.path, originalUrl: req.originalUrl });
+});
+router.get("/:id", (req, res) =&gt; {
+  res.json({ route: "one", id: req.params.id, path: req.path });
+});
+
+const app = express();
+app.use("/api/tasks", router);
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/api/tasks?page=2", "/api/tasks/", "/api/tasks/7", "/api/tasks/7/comments", "/tasks/7"]) {
+    const res = await fetch(base + path);
+    console.log(path.padEnd(22), res.status, res.headers.get("content-type")?.includes("json") ? await res.text() : "");
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">/api/tasks?page=2      200 {"route":"list","baseUrl":"/api/tasks","path":"/","originalUrl":"/api/tasks?page=2"}
+/api/tasks/            200 {"route":"list","baseUrl":"/api/tasks","path":"/","originalUrl":"/api/tasks/"}
+/api/tasks/7           200 {"route":"one","id":"7","path":"/7"}
+/api/tasks/7/comments  404
+/tasks/7               404</pre>
+<p>ה־router לא יודע איפה הוא "מחובר" — וזה היתרון: אותו router יכול לעבור ל־<code>/api/v2/tasks</code> בלי לשנות בו שורה. ‏<code>req.baseUrl</code> מגלה את הקידומת כשצריך (למשל לבניית <code>Location</code>). ו־<code>/api/tasks/7/comments</code> לא תפס את <code>/:id</code> — צריך לו route משלו (P15-E63).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב בתוך ה־router <code class="mid">router.get("/api/tasks/:id")</code> — יחד עם הקידומת זה הופך ל־<code>/api/tasks/api/tasks/:id</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E60">
+    <h3>P15-E60 · איזו שכבה אחראית? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>routes — כל מה שקשור ל־HTTP. service — חוקים של התחום. repository — איך שומרים ושולפים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאל: אם מחר יהיה גם כלי שורת פקודה שמשתמש באותה לוגיקה — מה הוא צריך, ומה לא?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>routes</strong> — פרמטר של כתובת הוא עניין של HTTP.</li><li><strong>service</strong> — חוק עסקי ("אימייל ייחודי"); הוא <em>שואל</em> את ה־repository.</li><li><strong>repository</strong> — רק הוא יודע איך הנתונים שמורים.</li><li><strong>service</strong> מחליט "לא קיים" וזורק — בשיעור זה <code>HttpError</code>; בגרסה נקייה יותר (P15-E54) השגיאה היא של התחום, וה־error handler מתרגם ל־404.</li><li><strong>routes</strong>.</li><li><strong>service</strong> — חוק של התחום.</li><li><strong>service</strong> (או פונקציית עזר שהוא קורא לה): ה־repository מחזיר נתונים ו־<code>total</code>, וה־route רק שולח.</li><li><strong>repository</strong>.</li></ol>
+<p>המבחן: כלי שורת פקודה ישתמש ב־service וב־repository כמו שהם — ולא יצטרך שום דבר מ־routes.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים חוקים עסקיים ב־route "כי שם מגיע הקלט" — אז כל ממשק חדש (תור, CLI, cron) צריך להעתיק אותם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E61">
+    <h3>P15-E61 · code מול message <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשיעור: "<code>code</code> — קבוע, באנגלית, בשביל קוד. <code>message</code> — לבני אדם, ואפשר לשנות אותו".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>details</code> — כשצריך לומר <strong>איזה שדה</strong> לא תקין.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הבדיקה תיכשל בשקט: במקום מסך "לא נמצא", המשתמש יראה שגיאה כללית. אף בדיקה בשרת לא תתפוס את זה — השרת "רק שינה טקסט".</li><li><code class="mid">if (err.code === "TASK_NOT_FOUND")</code> — ואת <code>message</code> רק מציגים.</li><li><code>TASK_NOT_FOUND</code> (404), ‏<code>VALIDATION_ERROR</code> (400), ‏<code>EMAIL_TAKEN</code> (409), ‏<code>TASK_COMPLETED</code> (409), ‏<code>VALIDATION_ERROR</code> (400).</li><li>בשתי שגיאות הקלט: <code class="mid">details: [{ "path": "title", "message": "חובה" }]</code>, ‏<code>[{ "path": "page", ... }]</code> — כדי שהטופס יסמן את השדה הנכון.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמציא code לכל שדה (<code>TITLE_EMPTY</code>, ‏<code>PAGE_INVALID</code>...) — עשרות קודים. קוד אחד לשגיאות קלט, והפירוט ב־<code>details</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E13">
     <h3>P15-E13 · רשימה עם pagination 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -448,6 +590,389 @@ const server = createApp().listen(0, async () =&gt; {
 
 </div></details>
   </div>
+<div class="ex typed" id="P15-E62">
+    <h3>P15-E62 · מיון לפי כמה שדות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם הופכים את <code>sort</code> לרשימת <code>{ field, dir }</code> (1 או ‎-1), ובודקים כל שדה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">[...items].sort((a, b) =&gt; { for (const { field, dir } of keys) { const c = compare(a[field], b[field]); if (c !== 0) return c * dir; } return 0; })</code>. ‏<code>sort</code> של JavaScript יציב.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E62: מיון לפי כמה שדות
+function compare(a: unknown, b: unknown): number {
+  if (typeof a === "number" &amp;&amp; typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
+}
+
+export function sortBy&lt;T&gt;(items: T[], sort: string, allowed: string[]): T[] {
+  const keys = sort
+    .split(",")
+    .map((s) =&gt; s.trim())
+    .filter(Boolean)
+    .map((s) =&gt; (s.startsWith("-") ? { field: s.slice(1), dir: -1 } : { field: s, dir: 1 }));
+  for (const { field } of keys) {
+    if (!allowed.includes(field)) throw new Error(`אי אפשר למיין לפי ${field}`);
+  }
+  return [...items].sort((a, b) =&gt; {
+    for (const { field, dir } of keys) {
+      const c = compare((a as Record&lt;string, unknown&gt;)[field], (b as Record&lt;string, unknown&gt;)[field]);
+      if (c !== 0) return c * dir;
+    }
+    return 0;
+  });
+}
+
+const tasks = [
+  { id: 1, status: "open", priority: 2 },
+  { id: 2, status: "done", priority: 5 },
+  { id: 3, status: "open", priority: 9 },
+  { id: 4, status: "done", priority: 5 },
+];
+const allowed = ["status", "priority", "id"];
+console.log(sortBy(tasks, "status,-priority", allowed).map((t) =&gt; t.id));
+console.log(sortBy(tasks, "-priority", allowed).map((t) =&gt; t.id));
+console.log(sortBy(tasks, "", allowed).map((t) =&gt; t.id));
+try {
+  sortBy(tasks, "status,password", allowed);
+} catch (err) {
+  console.log((err as Error).message);
+}</code></pre>
+<pre class="terminal">[ 2, 4, 3, 1 ]
+[ 3, 2, 4, 1 ]
+[ 1, 2, 3, 4 ]
+אי אפשר למיין לפי password</pre>
+<p>בשורה השנייה, 2 ו־4 שווים בעדיפות (5) ונשארו בסדר המקורי — זה "מיון יציב", ו־<code>Array.prototype.sort</code> מבטיח אותו. ‏<code>c * dir</code> הופך כיוון בלי לכתוב שתי השוואות. והרשימה הסגורה (<code>allowed</code>) היא אותה הגנה כמו ב־P15-E34: אסור למיין לפי שדה שהלקוח לא אמור לדעת שקיים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>items.sort(...)</code> — משנה את המערך של מי שקרא.</li><li>להשוות מספרים עם <code>localeCompare</code> — <code>"10"</code> לפני <code>"9"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E63">
+    <h3>P15-E63 · משאב מקונן ב־Router 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר בתוך ה־router: <code class="long">const findTask = (req, res) =&gt; { ... return task או undefined אחרי ששלחה 404 }</code> — שלושת ה־routes משתמשים בה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Location</code>: <code><code class="mid">${req.baseUrl}/${task.id}/comments/${comment.id}</code></code> — ‏<code>req.baseUrl</code> הוא <code>"/tasks"</code> (P15-E59).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E63: משאב מקונן ב־Router
+import express, { Router, type Request, type Response } from "express";
+
+export type Task = { id: number; title: string };
+export type Comment = { id: number; text: string };
+export type Service = {
+  getTask(id: number): Task | undefined;
+  listComments(taskId: number): Comment[];
+  addComment(taskId: number, text: string): Comment;
+};
+
+export function createTasksRouter(service: Service) {
+  const router = Router();
+  router.use(express.json());
+
+  function findTask(req: Request, res: Response): Task | undefined {
+    const raw = String(req.params.id);
+    const task = /^\d+$/.test(raw) &amp;&amp; Number(raw) &gt; 0 ? service.getTask(Number(raw)) : undefined;
+    if (!task) res.status(404).json({ error: { code: "TASK_NOT_FOUND", message: "המשימה לא נמצאה" } });
+    return task;
+  }
+
+  router.get("/:id", (req, res) =&gt; {
+    const task = findTask(req, res);
+    if (task) res.json(task);
+  });
+
+  router.get("/:id/comments", (req, res) =&gt; {
+    const task = findTask(req, res);
+    if (task) res.json({ data: service.listComments(task.id) });
+  });
+
+  router.post("/:id/comments", (req, res) =&gt; {
+    const task = findTask(req, res);
+    if (!task) return;
+    const text = req.body?.text;
+    if (typeof text !== "string" || text.trim().length &lt; 1 || text.trim().length &gt; 500) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "text לא תקין" } });
+      return;
+    }
+    const comment = service.addComment(task.id, text.trim());
+    res.status(201).location(`${req.baseUrl}/${task.id}/comments/${comment.id}`).json(comment);
+  });
+
+  return router;
+}
+
+const comments: Comment[] = [];
+const service: Service = {
+  getTask: (id) =&gt; (id === 7 ? { id: 7, title: "לקנות חלב" } : undefined),
+  listComments: () =&gt; comments,
+  addComment: (taskId, text) =&gt; {
+    const c = { id: comments.length + 1, text };
+    comments.push(c);
+    return c;
+  },
+};
+const app = express();
+app.use("/tasks", createTasksRouter(service));
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const post = await fetch(`${base}/tasks/7/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"text":" עם 3% "}' });
+  console.log(post.status, post.headers.get("location"), await post.text());
+  for (const path of ["/tasks/7/comments", "/tasks/8/comments", "/tasks/abc"]) {
+    const res = await fetch(base + path);
+    console.log(path, res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">201 /tasks/7/comments/1 {"id":1,"text":"עם 3%"}
+/tasks/7/comments 200 {"data":[{"id":1,"text":"עם 3%"}]}
+/tasks/8/comments 404 {"error":{"code":"TASK_NOT_FOUND","message":"המשימה לא נמצאה"}}
+/tasks/abc 404 {"error":{"code":"TASK_NOT_FOUND","message":"המשימה לא נמצאה"}}</pre>
+<p>שלושת ה־routes מתחילים באותה שאלה — "המשימה קיימת?" — ולכן היא בפונקציה אחת. התגובות "שייכות" למשימה, ולכן הכתובת מקוננת (סעיף 1 בשיעור); וה־router בונה את <code>Location</code> מ־<code>req.baseUrl</code>, בלי לדעת שהוא מחובר ב־<code>/tasks</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code>listComments</code> בלי לבדוק את המשימה — משימה שלא קיימת מחזירה <code>{ data: [] }</code> במקום 404, והלקוח לא יודע שטעה בכתובת.</li><li>לכתוב <code>Location</code> קבוע (<code>/tasks/...</code>) — שובר כשה־router עובר לקידומת אחרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E64">
+    <h3>P15-E64 · פעולה שאינה CRUD: ביטול הזמנה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>switch (order.status)</code> — ‏<code class="mid">case "pending": case "paid":</code> יחד (P14-E40).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">type Order = { id: number; status: "pending" | "paid" | "shipped" | "cancelled"; cancelledAt?: string; cancelReason?: string | null }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E64: פעולה שאינה CRUD — ביטול הזמנה
+import express from "express";
+
+export type Order = { id: number; status: "pending" | "paid" | "shipped" | "cancelled"; cancelledAt?: string; cancelReason?: string | null };
+
+export function createApp(orders: Order[]) {
+  const app = express();
+  app.use(express.json());
+
+  const find = (id: string) =&gt; orders.find((o) =&gt; o.id === Number(id));
+  const notFound = { error: { code: "ORDER_NOT_FOUND", message: "ההזמנה לא נמצאה" } };
+
+  app.get("/orders/:id", (req, res) =&gt; {
+    const order = find(req.params.id);
+    if (!order) {
+      res.status(404).json(notFound);
+      return;
+    }
+    res.json(order);
+  });
+
+  app.post("/orders/:id/cancel", (req, res) =&gt; {
+    const order = find(req.params.id);
+    if (!order) {
+      res.status(404).json(notFound);
+      return;
+    }
+    switch (order.status) {
+      case "pending":
+      case "paid":
+        order.status = "cancelled";
+        order.cancelledAt = new Date().toISOString();
+        order.cancelReason = typeof req.body?.reason === "string" ? req.body.reason : null;
+        break;
+      case "cancelled":
+        break;
+      case "shipped":
+        res.status(409).json({ error: { code: "ORDER_SHIPPED", message: "אי אפשר לבטל הזמנה שנשלחה" } });
+        return;
+    }
+    res.json(order);
+  });
+
+  return app;
+}
+
+const orders: Order[] = [
+  { id: 1, status: "paid" },
+  { id: 2, status: "shipped" },
+];
+const server = createApp(orders).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const cancel = (id: number) =&gt; fetch(`${base}/orders/${id}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"reason":"הזמנתי בטעות"}' });
+  for (const id of [1, 1, 2, 9]) {
+    const res = await cancel(id);
+    const body = await res.json();
+    console.log(id, res.status, body.status ?? body.error.code, body.cancelReason ?? "");
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">1 200 cancelled הזמנתי בטעות
+1 200 cancelled הזמנתי בטעות
+2 409 ORDER_SHIPPED
+9 404 ORDER_NOT_FOUND</pre>
+<p>ביטול הוא <strong>פעולה</strong> על המשאב — לא מחיקה ולא "עדכון שדה" שהלקוח שולט בו (אחרת לקוח היה יכול לשלוח <code>PATCH {"status":"paid"}</code>). הכתובת <code>/orders/1/cancel</code> והחוקים יושבים במקום אחד. וביטול כפול מחזיר 200: הלקוח שלא קיבל תשובה (רשת נפלה) יכול לשלוח שוב בבטחה — idempotent, למרות שזה POST.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 409 על ביטול כפול — לקוח שניסה שוב אחרי timeout יחשוב שהביטול נכשל.</li><li>לשנות את <code>cancelledAt</code> בביטול השני — מאבדים את הזמן האמיתי.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P15-E65">
+    <h3>P15-E65 · service ששולף במקביל <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>await</code> בשורה נפרדת מחכה לסיום לפני שהשורה הבאה בכלל מתחילה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלוש הקריאות לא תלויות זו בזו — אין סיבה לחכות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const repo = {
+  user: async (id: number) =&gt; (await sleep(100), { id, name: "דנה" }),
+  orders: async (id: number) =&gt; (await sleep(100), [{ id: 1 }, { id: 2 }]),
+  points: async (id: number) =&gt; (await sleep(100), 340),
+};
+
+async function sequential(id: number) {
+  const user = await repo.user(id);
+  const orders = await repo.orders(id);
+  const points = await repo.points(id);
+  return { user, orders: orders.length, points };
+}
+async function parallel(id: number) {
+  const [user, orders, points] = await Promise.all([repo.user(id), repo.orders(id), repo.points(id)]);
+  return { user, orders: orders.length, points };
+}
+
+for (const fn of [sequential, parallel]) {
+  const start = Date.now();
+  const result = await fn(7);
+  const ms = Date.now() - start;
+  console.log(fn.name, JSON.stringify(result), ms &gt;= 290 ? "~300ms" : ms &lt; 150 ? "~100ms" : "?");
+}</code></pre>
+<pre class="terminal">sequential {"user":{"id":7,"name":"דנה"},"orders":2,"points":340} ~300ms
+parallel {"user":{"id":7,"name":"דנה"},"orders":2,"points":340} ~100ms</pre>
+<p>אותה תוצאה, פי 3 מהר יותר. ב־route אמיתי מול מסד, זה ההבדל בין דף שנטען ב־30ms ל־90ms. שים לב: <code>Promise.all</code> מתאים רק כשהקריאות <strong>בלתי תלויות</strong> — אם צריך את ה־user כדי לדעת איזו הזמנה לשלוף, חייבים לחכות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפוך <strong>כל</strong> רצף ל־<code>Promise.all</code> — גם כשקריאה אחת תלויה בתוצאה של אחרת, או כשהסדר חשוב (כתיבה ואחריה קריאה).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E66">
+    <h3>P15-E66 · repository מזויף שלא מתאים ל־interface <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לאובייקט שמוקלד כ־<code>TasksRepository</code> חייבות להיות <strong>כל</strong> המתודות, עם הטיפוסים הנכונים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>fake3</code> לא הוקלד — TypeScript בודק אותו רק כשמעבירים אותו, ומתודה נוספת (<code>clear</code>) לא מפריעה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Task = { id: number; title: string; done: boolean };
+
+interface TasksRepository {
+  findAll(): Task[];
+  findById(id: number): Task | undefined;
+  save(task: Task): void;
+}
+
+class TasksService {
+  constructor(private repo: TasksRepository) {}
+  open() {
+    return this.repo.findAll().filter((t) =&gt; !t.done);
+  }
+}
+
+const fake1: TasksRepository = {
+  findAll: () =&gt; [{ id: 1, title: "א", done: false }],
+  findById: () =&gt; undefined,
+};
+const fake2: TasksRepository = {
+  findAll: () =&gt; [{ id: 1, title: "א" }],
+  findById: () =&gt; undefined,
+  save: () =&gt; {},
+};
+const fake3 = {
+  findAll: () =&gt; [],
+  findById: () =&gt; undefined,
+  save: () =&gt; {},
+  clear: () =&gt; {},
+};
+new TasksService(fake3);</code></pre>
+<pre class="terminal">snippet.ts(16,7): error TS2741: Property 'save' is missing in type '{ findAll: () =&gt; { id: number; title: string; done: false; }[]; findById: () =&gt; undefined; }' but required in type 'TasksRepository'.
+snippet.ts(21,19): error TS2741: Property 'done' is missing in type '{ id: number; title: string; }' but required in type 'Task'.</pre>
+<p><code>fake1</code> חסר את <code>save</code>, ו־<code>fake2</code> מחזיר משימה בלי <code>done</code> — שני repositories שהיו "עובדים" בבדיקה עד שה־service יקרא לחלק החסר. ‏<code>fake3</code> עובר: יש לו כל מה שה־interface דורש (מתודה נוספת לא מזיקה). זה היתרון של interface לשכבות: מוסיפים מתודה ל־repository האמיתי — וכל המזויפים שלא עודכנו נצבעים באדום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב <code>as TasksRepository</code> כדי "לסדר" את השגיאה — הבדיקה תעבור, וה־service יקרוס כשיקרא ל־<code>save</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E67">
+    <h3>P15-E67 · קצוות של slice <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>slice</code> עם מספר שלילי סופר מהסוף: <code>slice(-2)</code> = שני האחרונים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>5 / 0</code> ב־JavaScript הוא <code>Infinity</code>. ומה <code>JSON.stringify(Infinity)</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function paginate&lt;T&gt;(items: T[], page: number, limit: number) {
+  const start = (page - 1) * limit;
+  return {
+    data: items.slice(start, start + limit),
+    meta: { page, limit, total: items.length, totalPages: Math.ceil(items.length / limit) },
+  };
+}
+
+const items = [1, 2, 3, 4, 5];
+console.log(JSON.stringify(paginate(items, 3, 2)));
+console.log(JSON.stringify(paginate(items, 9, 2)));
+console.log(JSON.stringify(paginate(items, 0, 2)));
+console.log(JSON.stringify(paginate(items, -1, 2)));
+console.log(JSON.stringify(paginate(items, 1, 0)));
+console.log(JSON.stringify(paginate([], 1, 10)));</code></pre>
+<pre class="terminal">{"data":[5],"meta":{"page":3,"limit":2,"total":5,"totalPages":3}}
+{"data":[],"meta":{"page":9,"limit":2,"total":5,"totalPages":3}}
+{"data":[],"meta":{"page":0,"limit":2,"total":5,"totalPages":3}}
+{"data":[2,3],"meta":{"page":-1,"limit":2,"total":5,"totalPages":3}}
+{"data":[],"meta":{"page":1,"limit":0,"total":5,"totalPages":null}}
+{"data":[],"meta":{"page":1,"limit":10,"total":0,"totalPages":0}}</pre>
+<p>עמוד 0 ועמוד ‎-1 לא נכשלים — הם מחזירים נתונים <strong>שגויים</strong> בשקט (‏<code>slice(-2, 0)</code> ריק, ‏<code>slice(-4, -2)</code> נותן אמצע הרשימה). ‏<code>limit=0</code> נותן <code>totalPages: null</code> (כי <code>Infinity</code> לא קיים ב־JSON). עמוד מעבר לסוף — מערך ריק, וזה בסדר. לכן בודקים את הקלט בגבול: <code>page ≥ 1</code>, ‏<code>1 ≤ limit ≤ תקרה</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתמך על "הלקוח שלנו לא ישלח 0" — כל אחד יכול לשלוח כל query עם curl.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P15-E28">
     <h3>P15-E28 · סכום עגלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -535,7 +1060,152 @@ const server = createApp(catalog).listen(0, async () =&gt; {
 
 </div></details>
   </div>
+<div class="ex" id="P15-E68">
+    <h3>P15-E68 · רשימה עם meta וקישורים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקת מספר: <code class="long">const int = (v: unknown, def: number) =&gt; v === undefined ? def : typeof v === "string" &amp;&amp; /^\d+$/.test(v) ? Number(v) : NaN;</code> — ואחר כך בדיקת טווח (‏<code>NaN</code> נכשל בכל השוואה).</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קישור: <code>const link = (p: number) =&gt; { const params = new URLSearchParams(); if (q !== undefined) params.set("q", q); params.set("page", String(p)); params.set("limit", String(limit)); return <code class="mid">${req.baseUrl}${req.path}?${params}</code>; };</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E68: רשימה עם meta וקישורים
+import express from "express";
+
+export type Product = { id: number; name: string; price: number };
+
+const int = (v: unknown, def: number) =&gt; (v === undefined ? def : typeof v === "string" &amp;&amp; /^\d+$/.test(v) ? Number(v) : NaN);
+
+export function createApp(products: Product[]) {
+  const app = express();
+  app.get("/products", (req, res) =&gt; {
+    const page = int(req.query.page, 1);
+    const limit = int(req.query.limit, 10);
+    if (!(page &gt;= 1) || !(limit &gt;= 1 &amp;&amp; limit &lt;= 50)) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "page או limit לא תקינים" } });
+      return;
+    }
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const list = q === undefined ? products : products.filter((p) =&gt; p.name.toLowerCase().includes(q.toLowerCase()));
+    const total = list.length;
+    const totalPages = Math.ceil(total / limit);
+    const link = (p: number) =&gt; {
+      const params = new URLSearchParams();
+      if (q !== undefined) params.set("q", q);
+      params.set("page", String(p));
+      params.set("limit", String(limit));
+      return `/products?${params}`;
+    };
+    res.json({
+      data: list.slice((page - 1) * limit, page * limit),
+      meta: { page, limit, total, totalPages },
+      links: { self: link(page), next: page &lt; totalPages ? link(page + 1) : null, prev: page &gt; 1 ? link(page - 1) : null },
+    });
+  });
+  return app;
+}
+
+const products = Array.from({ length: 12 }, (_, i) =&gt; ({ id: i + 1, name: i % 2 ? `Mouse ${i + 1}` : `Keyboard ${i + 1}`, price: 100 + i }));
+const server = createApp(products).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const r = await (await fetch(`${base}/products?q=mouse&amp;page=2&amp;limit=2`)).json();
+  console.log(r.data.map((p: Product) =&gt; p.id), JSON.stringify(r.meta));
+  console.log(JSON.stringify(r.links));
+  console.log((await fetch(`${base}/products?limit=0`)).status);
+  server.close();
+});</code></pre>
+<pre class="terminal">[ 6, 8 ] {"page":2,"limit":2,"total":6,"totalPages":3}
+{"self":"/products?q=mouse&amp;page=2&amp;limit=2","next":"/products?q=mouse&amp;page=3&amp;limit=2","prev":"/products?q=mouse&amp;page=1&amp;limit=2"}
+400</pre>
+<p>עם <code>links</code>, הלקוח לא צריך לדעת איך בונים כתובת עמוד — הוא פשוט עוקב אחרי <code>next</code> עד שהוא <code>null</code> (כמו ב־P10-E28, "כל העמודים"). כך גם אפשר לעבור בעתיד ל־cursor בלי לשבור לקוחות: רק הקישור משתנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>q</code> בקישורים — "העמוד הבא" מאבד את החיפוש וחוזר לכל המוצרים.</li><li><code>Number("2abc")</code> ← <code>NaN</code>, אבל <code>Number("")</code> ← 0, ו־<code>Number(" 2 ")</code> ← 2: בדיקה עם regex פשוטה יותר מכל המקרים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E69">
+    <h3>P15-E69 · יצירה מרובה — הכול או כלום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שלבים: לולאה שאוספת <code>details</code> (בלי לשמור כלום), ורק אם הרשימה ריקה — לולאה שנייה ששומרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Array.isArray(req.body)</code> — גוף JSON יכול להיות מערך. ל־<code>Set</code> של שמות: <code>name.trim().toLowerCase()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E69: יצירה מרובה — הכול או כלום
+import express from "express";
+
+export type Product = { id: number; name: string; price: number };
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const products: Product[] = [];
+  let nextId = 1;
+
+  app.get("/products", (req, res) =&gt; {
+    res.json(products);
+  });
+
+  app.post("/products/bulk", (req, res) =&gt; {
+    const items: unknown = req.body;
+    if (!Array.isArray(items) || items.length &lt; 1 || items.length &gt; 100) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "שלח מערך של 1–100 מוצרים" } });
+      return;
+    }
+    const details: { index: number; message: string }[] = [];
+    const seen = new Set&lt;string&gt;();
+    items.forEach((item, index) =&gt; {
+      const name = item?.name;
+      if (typeof name !== "string" || name.trim() === "") return void details.push({ index, message: "name לא תקין" });
+      if (!Number.isInteger(item.price) || item.price &lt;= 0) return void details.push({ index, message: "price לא תקין" });
+      const key = name.trim().toLowerCase();
+      if (seen.has(key)) return void details.push({ index, message: "שם כפול" });
+      seen.add(key);
+    });
+    if (details.length &gt; 0) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "חלק מהמוצרים לא תקינים", details } });
+      return;
+    }
+    const created = items.map((item) =&gt; ({ id: nextId++, name: item.name.trim(), price: item.price }));
+    products.push(...created);
+    res.status(201).json({ created });
+  });
+
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/products`;
+  const bulk = (body: unknown) =&gt; fetch(`${base}/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let r = await bulk([{ name: "עט", price: 450 }, { name: "", price: 10 }, { name: "עט ", price: 5 }, { name: "דף", price: 1.5 }]);
+  console.log(r.status, await r.text());
+  console.log((await (await fetch(base)).json()).length);
+  r = await bulk([{ name: " עט ", price: 450 }, { name: "דף", price: 20 }]);
+  console.log(r.status, await r.text());
+  server.close();
+});</code></pre>
+<pre class="terminal">400 {"error":{"code":"VALIDATION_ERROR","message":"חלק מהמוצרים לא תקינים","details":[{"index":1,"message":"name לא תקין"},{"index":2,"message":"שם כפול"},{"index":3,"message":"price לא תקין"}]}}
+0
+201 {"created":[{"id":1,"name":"עט","price":450},{"id":2,"name":"דף","price":20}]}</pre>
+<p>"הכול או כלום" חשוב ללקוח: אם חצי נשמר וחצי לא, הוא צריך להבין מה נשמר לפני שהוא מנסה שוב — ואחרת ייצרו כפילויות. כאן קודם בודקים <strong>הכול</strong>, ואז שומרים. מול מסד נתונים, אותו עיקרון נקרא טרנזקציה (פרק 18). ו־<code>details</code> עם <code>index</code> מאפשר ללקוח לסמן בדיוק אילו שורות בטבלה שגויות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור כל פריט מיד אחרי שבדקת אותו — כשפריט 3 נכשל, 1 ו־2 כבר שמורים.</li><li>לעצור בשגיאה הראשונה — הלקוח מתקן אחת, שולח, ומגלה את הבאה. מחזירים את כולן.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-zod.html"><small>הבא</small>שיעור 4 — בדיקת קלט עם Zod</a></div>
 </main>
 </body>

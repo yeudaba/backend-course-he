@@ -35,6 +35,254 @@
 
 </div></details>
   </div>
+<div class="ex" id="P15-E43">
+    <h3>P15-E43 · middleware ששוכח את next <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>middleware עושה אחד משניים: עונה, או קורא <code>next()</code>. מה קורה כשהוא לא עושה אף אחד מהם?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Express לא "ממשיך לבד" — אין timeout בצד השרת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.use((req, res, next) =&gt; {
+  console.log("לוג:", req.method, req.path);
+  if (req.path.startsWith("/admin")) next();
+});
+app.get("/health", (req, res) =&gt; {
+  res.json({ ok: true });
+});
+app.get("/admin/stats", (req, res) =&gt; {
+  res.json({ users: 42 });
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/admin/stats", "/health"]) {
+    try {
+      const res = await fetch(base + path, { signal: AbortSignal.timeout(300) });
+      console.log(path, res.status, await res.text());
+    } catch (err) {
+      console.log(path, (err as Error).name);
+    }
+  }
+  server.closeAllConnections();
+  server.close();
+});</code></pre>
+<pre class="terminal">לוג: GET /admin/stats
+/admin/stats 200 {"users":42}
+לוג: GET /health
+/health TimeoutError</pre>
+<p>הבקשה ל־<code>/health</code> נתקעה: ה־middleware לא ענה ולא קרא <code>next()</code>, ו־Express מחכה לנצח. בלי timeout בלקוח (פרק 14) — גם הלקוח מחכה לנצח. וזה באג שקט: אין שגיאה ביומן, רק "השרת לא עונה". כלל: בכל ענף של middleware — או תשובה, או <code>next()</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש את הבאג ב־route של <code>/health</code> — הוא בכלל לא רץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E44">
+    <h3>P15-E44 · app.use עם קידומת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקידומת מתאימה ל<strong>חלקים שלמים</strong> של הנתיב — <code>/api</code> ו־<code>/api/...</code>, לא כל מחרוזת שמתחילה ב־"api".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך middleware עם קידומת, Express "מוריד" את הקידומת מ־<code>req.path</code>. ‏<code>originalUrl</code> נשאר מלא — כולל query.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+const seen: string[] = [];
+app.use("/api", (req, res, next) =&gt; {
+  seen.push(`${req.originalUrl} → path=${req.path}`);
+  next();
+});
+app.use((req, res) =&gt; {
+  res.sendStatus(204);
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/api", "/api/users?x=1", "/API/users", "/apis", "/v2/api/users"]) await fetch(base + path);
+  console.log(seen.join("\n"));
+  server.close();
+});</code></pre>
+<pre class="terminal">/api → path=/
+/api/users?x=1 → path=/users
+/API/users → path=/users</pre>
+<p>שלוש בקשות עברו: <code>/api</code>, ‏<code>/api/users</code> — ו־<code>/API/users</code> (Express לא רגיש לאותיות). ‏<code>/apis</code> ו־<code>/v2/api/users</code> לא. בתוך ה־middleware, ‏<code>req.path</code> הוא מה ש<strong>אחרי</strong> הקידומת — ולכן middleware של לוג משתמש ב־<code>originalUrl</code> (P15-E09). זה גם מה שמאפשר ל־Router של שיעור 3 לכתוב <code>router.get("/:id")</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק הרשאה ב־<code>app.use("/admin", ...)</code> ולסמוך על <code class="mid">req.path.startsWith("/admin")</code> בתוכו — שם <code>req.path</code> כבר בלי <code>/admin</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E45">
+    <h3>P15-E45 · error handler עם שלושה פרמטרים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Express מבדיל בין middleware רגיל ל־error handler לפי <strong>מספר הפרמטרים</strong> של הפונקציה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם אין error handler משלך — Express עונה בעצמו, בדף HTML.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.get("/boom", () =&gt; {
+  throw new Error("משהו נשבר");
+});
+// @ts-ignore — Express "מבין" רק לפי מספר הפרמטרים
+app.use((err: Error, req: express.Request, res: express.Response) =&gt; {
+  res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  const res = await fetch(`${base}/boom`);
+  const body = await res.text();
+  console.log(res.status, res.headers.get("content-type"));
+  console.log(body.includes("משהו נשבר") ? "ההודעה הפנימית נחשפה בגוף" : "ההודעה לא נחשפה");
+  server.close();
+});</code></pre>
+<pre class="terminal">500 text/html; charset=utf-8
+ההודעה הפנימית נחשפה בגוף</pre>
+<p>עם שלושה פרמטרים, Express חושב שזה middleware רגיל (<code>req, res, next</code>) — ומדלג עליו כשיש שגיאה. השגיאה מגיעה ל־handler המובנה, שמחזיר דף HTML (ובמצב פיתוח — עם ה־stack וההודעה הפנימית; ב־<code>NODE_ENV=production</code> רק "Internal Server Error"). הלקוח מקבל HTML במקום מבנה השגיאה שלך. לכן בשיעור: "גם אם לא משתמשים ב־<code>next</code>, חובה לכתוב אותו". (ה־<code>@ts-ignore</code> כאן רק כדי שהדוגמה תעבור — TypeScript דווקא עזר לזהות את הבעיה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לנקות" פרמטר שלא בשימוש כי ESLint מתלונן — בפונקציה הזו הוא חלק מהחתימה. קוראים לו <code>_next</code> במקום למחוק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E46">
+    <h3>P15-E46 · ארבע דרכים להגיע ל־error handler <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־Express 5, גם <code>throw</code> בפונקציה <code>async</code> מגיע ל־error handler (קופסת 💡 בשיעור).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>next()</code> בלי ארגומנט = "תמשיך לתחנה הבאה". <code>next(err)</code> = "קפוץ ל־error handler".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const app = express();
+app.get("/sync", () =&gt; {
+  throw new HttpError(400, "sync");
+});
+app.get("/async", async () =&gt; {
+  await new Promise((r) =&gt; setTimeout(r, 5));
+  throw new HttpError(409, "async");
+});
+app.get("/next-err", (req, res, next) =&gt; {
+  next(new HttpError(403, "next"));
+});
+app.get("/next-empty", (req, res, next) =&gt; {
+  next();
+});
+app.use((req, res) =&gt; {
+  res.status(404).json({ error: "לא נמצא" });
+});
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) =&gt; {
+  const status = err instanceof HttpError ? err.status : 500;
+  res.status(status).json({ error: err instanceof Error ? err.message : "?" });
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/sync", "/async", "/next-err", "/next-empty"]) {
+    const res = await fetch(base + path);
+    console.log(path.padEnd(11), res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">/sync       400 {"error":"sync"}
+/async      409 {"error":"async"}
+/next-err   403 {"error":"next"}
+/next-empty 404 {"error":"לא נמצא"}</pre>
+<p>שלוש הדרכים הראשונות שקולות: <code>throw</code> רגיל, <code>throw</code> אחרי <code>await</code> (Express 5), ו־<code>next(err)</code>. ‏<code>next()</code> בלי שגיאה ממשיך הלאה — אין עוד route מתאים, ולכן ה־404.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב <code>next(err)</code> ואחריו להמשיך את הפונקציה (בלי <code>return</code>) — אותה בעיה כמו תשובה כפולה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E47">
+    <h3>P15-E47 · איפה לרשום את הלוג? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>route שענה — האם הבקשה ממשיכה לתחנות שאחריו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>finish</code> נורה אחרי שהתשובה נשלחה — ולכן <code>statusCode</code> הוא הסופי, גם אם נקבע מאוחר יותר בשרשרת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const lines: string[] = [];
+function logger(tag: string): express.RequestHandler {
+  return (req, res, next) =&gt; {
+    res.on("finish", () =&gt; lines.push(`${tag}: ${req.method} ${req.originalUrl} ${res.statusCode}`));
+    next();
+  };
+}
+
+const app = express();
+app.use(logger("לפני"));
+app.get("/a", (req, res) =&gt; {
+  res.json("A");
+});
+app.use(logger("אחרי"));
+app.use((req, res) =&gt; {
+  res.status(404).json("לא נמצא");
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  await fetch(`${base}/a`);
+  await fetch(`${base}/b?x=1`);
+  await new Promise((r) =&gt; setTimeout(r, 20));
+  console.log(lines.join("\n"));
+  server.close();
+});</code></pre>
+<pre class="terminal">לפני: GET /a 200
+לפני: GET /b?x=1 404
+אחרי: GET /b?x=1 404</pre>
+<p>ה־logger ש"אחרי" ה־routes ראה רק את הבקשה שאף route לא ענה לה. לוג שרשום מאוחר מדי "מפספס" בדיוק את הבקשות המוצלחות — ולכן בשיעור הוא נרשם מיד אחרי <code>express.json()</code>. וה־404 נרשם ב"לפני" עם status 404 — כי ה־<code>finish</code> רץ בסוף, אחרי שה־404 נקבע.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להדפיס את <code>res.statusCode</code> מיד ב־middleware (בלי <code>finish</code>) — תמיד 200, כי התשובה עוד לא נקבעה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E09">
     <h3>P15-E09 · middleware לוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -271,7 +519,579 @@ export function createApp() {
 
 </div></details>
   </div>
+<div class="ex typed" id="P15-E48">
+    <h3>P15-E48 · X-Request-Id 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>req.get("x-request-id")</code> — בלי תלות באותיות. בדיקה: <code>/^[A-Za-z0-9-]{1,64}$/</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החתימה: <code class="mid">(req: Request, res: Response, next: NextFunction) =&gt; { ... }</code>, ו־<code class="mid">res.set("X-Request-Id", id)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E48: X-Request-Id
+import express, { type Request, type Response, type NextFunction } from "express";
+
+const VALID = /^[A-Za-z0-9-]{1,64}$/;
+
+export function requestId() {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const incoming = req.get("x-request-id");
+    const id = incoming &amp;&amp; VALID.test(incoming) ? incoming : crypto.randomUUID();
+    res.locals.requestId = id;
+    res.set("X-Request-Id", id);
+    next();
+  };
+}
+
+const app = express();
+app.use(requestId());
+app.get("/", (req, res) =&gt; {
+  res.json({ id: res.locals.requestId });
+});
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const a = await fetch(base, { headers: { "X-Request-Id": "abc-123" } });
+  console.log(a.headers.get("x-request-id"), await a.text());
+  const b = await fetch(base, { headers: { "X-Request-Id": "&lt;script&gt;" } });
+  console.log(b.headers.get("x-request-id") === (await b.json()).id ? "UUID חדש, זהה ב־header ובגוף" : "?");
+  server.close();
+});</code></pre>
+<pre class="terminal">abc-123 {"id":"abc-123"}
+UUID חדש, זהה ב־header ובגוף</pre>
+<p>למה לבדוק את המזהה שהגיע? כי הוא נכתב ליומנים ומוחזר ללקוח — ערך כמו <code>&lt;script&gt;</code> או מחרוזת של מגה־בייט הוא דרך "לזהם" את היומנים. ולמה לקבל מזהה מבחוץ בכלל? כי כשהבקשה עוברת דרך כמה שירותים, כולם כותבים את <strong>אותו</strong> מזהה — ואפשר לעקוב אחריה מקצה לקצה (פרק 24).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור את המזהה ב־<code>req.query</code> או ב־משתנה גלובלי — <code>res.locals</code> הוא המקום לנתונים של בקשה אחת.</li><li>לשכוח <code>next()</code> — כל הבקשות נתקעות (P15-E43).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E49">
+    <h3>P15-E49 · רק JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const type = (req.get("content-type") ?? "").split(";")[0].trim().toLowerCase();</code> — כמו <code>parseContentType</code> ב־P14-E50.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">["POST", "PUT", "PATCH"].includes(req.method)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E49: רק JSON
+import express, { type Request, type Response, type NextFunction } from "express";
+
+const WITH_BODY = ["POST", "PUT", "PATCH"];
+
+export function requireJson(req: Request, res: Response, next: NextFunction) {
+  if (WITH_BODY.includes(req.method)) {
+    const type = (req.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (type !== "application/json") {
+      res.status(415).json({ error: { code: "UNSUPPORTED_MEDIA_TYPE", message: "שלח JSON עם Content-Type: application/json" } });
+      return;
+    }
+  }
+  next();
+}
+
+const app = express();
+app.use(requireJson);
+app.use(express.json());
+app.post("/items", (req, res) =&gt; {
+  res.status(201).json(req.body);
+});
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const url = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/items`;
+  for (const type of ["application/json; charset=utf-8", "text/plain", undefined]) {
+    const res = await fetch(url, { method: "POST", headers: type ? { "Content-Type": type } : {}, body: '{"a":1}' });
+    console.log(String(type).padEnd(32), res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">application/json; charset=utf-8  201 {"a":1}
+text/plain                       415 {"error":{"code":"UNSUPPORTED_MEDIA_TYPE","message":"שלח JSON עם Content-Type: application/json"}}
+undefined                        415 {"error":{"code":"UNSUPPORTED_MEDIA_TYPE","message":"שלח JSON עם Content-Type: application/json"}}</pre>
+<p>שימו לב לשורה השלישית: fetch עם גוף מחרוזת ובלי header שולח בעצמו <code>text/plain;charset=UTF-8</code> — ולכן גם היא נדחתה. 415 עם הודעה ברורה חוסך ללקוח שעה של "למה השרת לא רואה את השדות שלי?".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">req.get("content-type") === "application/json"</code> — לקוח ששולח <code>; charset=utf-8</code> נדחה.</li><li>לבדוק גם GET ו־DELETE — אין להם גוף, ואין סיבה לדרוש header.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E50">
+    <h3>P15-E50 · מצב תחזוקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>החתימה: <code class="long">export function maintenance(isOn: () =&gt; boolean, { allow = ["/health"] }: { allow?: string[] } = {})</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קורא ל־<code>isOn()</code> <strong>בתוך</strong> ה־middleware, לא מחוץ לו — אחרת הערך "קפוא" מרגע היצירה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E50: מצב תחזוקה
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function maintenance(isOn: () =&gt; boolean, { allow = ["/health"] }: { allow?: string[] } = {}) {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    if (!isOn() || allow.includes(req.path)) {
+      next();
+      return;
+    }
+    res
+      .status(503)
+      .set("Retry-After", "60")
+      .json({ error: { code: "MAINTENANCE", message: "השירות בתחזוקה, נסה שוב בעוד דקה" } });
+  };
+}
+
+let on = false;
+const app = express();
+app.use(maintenance(() =&gt; on));
+app.get("/health", (req, res) =&gt; {
+  res.json({ ok: true });
+});
+app.get("/orders", (req, res) =&gt; {
+  res.json([]);
+});
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  console.log((await fetch(`${base}/orders`)).status);
+  on = true;
+  const r = await fetch(`${base}/orders`);
+  console.log(r.status, r.headers.get("retry-after"), (await fetch(`${base}/health`)).status);
+  server.close();
+});</code></pre>
+<pre class="terminal">200
+503 60 200</pre>
+<p>הפונקציה <code>isOn</code> היא closure (פרק 5) שקוראת את המצב <strong>ברגע הבקשה</strong>. אילו היינו מעבירים <code>boolean</code>, הערך היה נקבע פעם אחת כשהאפליקציה נבנתה. ו־<code>/health</code> נשאר פתוח — כדי שמערכת הניטור לא תחשוב שהשרת מת ותפעיל אותו מחדש באמצע תחזוקה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>const on = isOn();</code> מחוץ ל־middleware — "מצב תחזוקה" נקבע לתמיד.</li><li>להחזיר 500 — לקוחות וכלים מבינים ש־503 עם <code>Retry-After</code> הוא זמני, ומנסים שוב.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P15-E51">
+    <h3>P15-E51 · middleware שנוצר פעמיים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה פעמים קוראים ל־<code>counter(...)</code> בכל התוכנית? כל קריאה — מונה משלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.append</code> מוסיף ערך ל־header שכבר קיים; כשקוראים header כזה, הערכים מחוברים בפסיק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+function counter(name: string): express.RequestHandler {
+  let n = 0;
+  return (req, res, next) =&gt; {
+    n++;
+    res.append("X-Count", `${name}=${n}`);
+    next();
+  };
+}
+
+const app = express();
+app.use(counter("global"));
+app.get("/a", counter("a"), (req, res) =&gt; {
+  res.end();
+});
+app.get("/b", counter("b"), (req, res) =&gt; {
+  res.end();
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/a", "/a", "/b", "/a"]) {
+    console.log(path, (await fetch(base + path)).headers.get("x-count"));
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">/a global=1, a=1
+/a global=2, a=2
+/b global=3, b=1
+/a global=4, a=3</pre>
+<p>שלושה מונים נפרדים — אחד לכל קריאה ל־<code>counter</code>. זה בדיוק מה שמאפשר <code>validateBody(schema)</code> בשיעור 4 (ו־<code>requireApiKey(keys)</code> ב־P15-E18): פונקציה שמייצרת middleware עם הגדרות (ומצב) משלו. ואם רוצים מונה <strong>משותף</strong> — יוצרים פעם אחת: <code>const c = counter("x");</code> ומשתמשים ב־<code>c</code> בשני ה־routes.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לצפות ש־<code>counter("a")</code> ב־route ידע כמה בקשות היו בסך הכול — הוא רואה רק את הבקשות של ה־route שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E52">
+    <h3>P15-E52 · מה קורה אחרי next()? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>next()</code> קורא ל־route. route סינכרוני מסתיים לפני ש־<code>next()</code> חוזר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>route אסינכרוני מגיע ל־<code>await</code> ו"חוזר" מיד (עם Promise) — ואז <code>next()</code> חוזר, עוד לפני שהתשובה נשלחה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const log: string[] = [];
+const app = express();
+app.use((req, res, next) =&gt; {
+  log.push(`${req.path}: לפני next`);
+  res.on("finish", () =&gt; log.push(`${req.path}: finish`));
+  next();
+  log.push(`${req.path}: אחרי next`);
+});
+app.get("/sync", (req, res) =&gt; {
+  log.push("/sync: route");
+  res.end();
+});
+app.get("/async", async (req, res) =&gt; {
+  await new Promise((r) =&gt; setTimeout(r, 20));
+  log.push("/async: route");
+  res.end();
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  await fetch(`${base}/sync`);
+  await fetch(`${base}/async`);
+  await new Promise((r) =&gt; setTimeout(r, 20));
+  console.log(log.join("\n"));
+  server.close();
+});</code></pre>
+<pre class="terminal">/sync: לפני next
+/sync: route
+/sync: אחרי next
+/sync: finish
+/async: לפני next
+/async: אחרי next
+/async: route
+/async: finish</pre>
+<p>ב־<code>/async</code>, השורה "אחרי next" הודפסה <strong>לפני</strong> ה־route עצמו. מי שמודד זמן תגובה כך — <code>start</code> לפני <code>next()</code>, ‏<code>end</code> אחריו — יקבל כמעט 0ms לכל route אסינכרוני (כלומר לכולם, מול מסד). ‏<code>finish</code> נורה רק כשהתשובה באמת יצאה — ולכן ה־logger בשיעור מודד שם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>await next()</code> — ‏<code>next</code> לא מחזיר Promise של ה־route; זה לא עוזר ב־Express (ב־Koa, ספרייה אחרת, זה דווקא עובד).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E53">
+    <h3>P15-E53 · מה נחשב HttpError? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">new NotFoundError(...) instanceof HttpError</code> — האם יורש נחשב?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אובייקט רגיל עם אותם שדות — לא נוצר מהמחלקה, ולכן <code>instanceof</code> מחזיר <code>false</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+class HttpError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+class NotFoundError extends HttpError {
+  constructor(what: string) {
+    super(404, "NOT_FOUND", `${what} לא נמצא`);
+  }
+}
+
+const thrown: Record&lt;string, () =&gt; unknown&gt; = {
+  sub: () =&gt; new NotFoundError("המוצר"),
+  plain: () =&gt; ({ status: 404, code: "NOT_FOUND", message: "אובייקט רגיל" }),
+  text: () =&gt; "שגיאה כטקסט",
+  type: () =&gt; new TypeError("x is undefined"),
+};
+
+const app = express();
+app.get("/:kind", (req) =&gt; {
+  throw thrown[req.params.kind]();
+});
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) =&gt; {
+  if (err instanceof HttpError) {
+    res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return;
+  }
+  res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית" } });
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const kind of Object.keys(thrown)) {
+    const res = await fetch(`${base}/${kind}`);
+    console.log(kind.padEnd(6), res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">sub    404 {"error":{"code":"NOT_FOUND","message":"המוצר לא נמצא"}}
+plain  500 {"error":{"code":"INTERNAL","message":"שגיאה פנימית"}}
+text   500 {"error":{"code":"INTERNAL","message":"שגיאה פנימית"}}
+type   500 {"error":{"code":"INTERNAL","message":"שגיאה פנימית"}}</pre>
+<p>מחלקות יורשות (<code>NotFoundError</code>, ‏<code>ConflictError</code>...) עובדות בלי לשנות את ה־error handler — זה היתרון של היררכיה. אבל "משהו שנראה כמו שגיאה" (אובייקט עם <code>status</code>) נופל ל־500. ספריות לפעמים זורקות אובייקטים כאלה — ואז או שבודקים את המבנה במפורש, או שעוטפים את השגיאה שלהן ב־<code>HttpError</code> במקום שבו קוראים להן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (err.status)</code> במקום <code>instanceof</code> — כל ספרייה עם שדה <code>status</code> (למשל 401 של שירות חיצוני) תעביר ללקוח שלך status שאינו שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E54">
+    <h3>P15-E54 · שגיאות של התחום ל־HTTP 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מפה מ"סוג שגיאה" ל־<code>[status, code]</code> בתוך ה־error handler: שרשרת <code>if (err instanceof ...)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־route קצר: בדיקת <code>amount</code>, ‏<code class="mid">const balance = bank.withdraw(req.params.id, amount);</code> ו־<code>res.json(...)</code>. אם <code>withdraw</code> זורק — Express מעביר ל־error handler.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E54: שגיאות של התחום ל־HTTP
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export class InsufficientFundsError extends Error {
+  constructor(balance: number, amount: number) {
+    super(`אין מספיק כסף: יתרה ${balance}, ביקשת ${amount}`);
+    this.name = "InsufficientFundsError";
+  }
+}
+export class AccountNotFoundError extends Error {
+  constructor(id: string) {
+    super(`חשבון ${id} לא קיים`);
+    this.name = "AccountNotFoundError";
+  }
+}
+
+export class Bank {
+  #balances: Map&lt;string, number&gt;;
+  constructor(balances: Map&lt;string, number&gt;) {
+    this.#balances = balances;
+  }
+  withdraw(id: string, amount: number): number {
+    const balance = this.#balances.get(id);
+    if (balance === undefined) throw new AccountNotFoundError(id);
+    if (amount &gt; balance) throw new InsufficientFundsError(balance, amount);
+    this.#balances.set(id, balance - amount);
+    return balance - amount;
+  }
+}
+
+function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
+  const send = (status: number, code: string, message: string) =&gt; res.status(status).json({ error: { code, message } });
+  if (err instanceof AccountNotFoundError) return void send(404, "ACCOUNT_NOT_FOUND", err.message);
+  if (err instanceof InsufficientFundsError) return void send(409, "INSUFFICIENT_FUNDS", err.message);
+  console.error(err);
+  send(500, "INTERNAL", "שגיאה פנימית");
+}
+
+export function createApp(bank: Bank) {
+  const app = express();
+  app.use(express.json());
+  app.post("/accounts/:id/withdraw", (req, res) =&gt; {
+    const amount = req.body?.amount;
+    if (!Number.isInteger(amount) || amount &lt;= 0) {
+      res.status(400).json({ error: { code: "VALIDATION", message: "amount חייב להיות מספר שלם חיובי" } });
+      return;
+    }
+    const balance = bank.withdraw(req.params.id, amount);
+    res.json({ id: req.params.id, balance });
+  });
+  app.use(errorHandler);
+  return app;
+}
+
+const server = createApp(new Bank(new Map([["A1", 500]]))).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const withdraw = (id: string, amount: unknown) =&gt;
+    fetch(`${base}/accounts/${id}/withdraw`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount }) });
+  for (const res of [await withdraw("A1", 200), await withdraw("A1", 400), await withdraw("B2", 1), await withdraw("A1", "10")]) {
+    console.log(res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"id":"A1","balance":300}
+409 {"error":{"code":"INSUFFICIENT_FUNDS","message":"אין מספיק כסף: יתרה 300, ביקשת 400"}}
+404 {"error":{"code":"ACCOUNT_NOT_FOUND","message":"חשבון B2 לא קיים"}}
+400 {"error":{"code":"VALIDATION","message":"amount חייב להיות מספר שלם חיובי"}}</pre>
+<p>ה־<code>Bank</code> לא יודע מה זה status או JSON — אפשר להשתמש בו גם מכלי שורת פקודה, מתור הודעות, או מבדיקה. התרגום ל־HTTP נמצא במקום <strong>אחד</strong>. ‏<code>return void send(...)</code> הוא קיצור ל"שלח וצא" שלא מחזיר ערך (כדי ש־TypeScript לא יתלונן על ה־handler). בפרק 20, ב־NestJS, אותו רעיון נקרא exception filter.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לזרוק <code>HttpError(409, ...)</code> מתוך <code>Bank</code> — עכשיו שכבת הלוגיקה תלויה ב־HTTP.</li><li><code>try/catch</code> בכל route שמתרגם בעצמו — שכפול, ובסוף route אחד ישכח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E55">
+    <h3>P15-E55 · מדדים לשרת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>משתנים בתוך <code>createMetrics</code>: <code class="long">let total = 0, sumMs = 0, maxMs = 0, slowest: string | null = null; const byStatus: Record&lt;string, number&gt; = {};</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">snapshot: () =&gt; ({ total, byStatus: { ...byStatus }, ... })</code> — העתקה של <code>byStatus</code>, אחרת מי שמשנה את התוצאה משנה את המונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E55: מדדים לשרת
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function createMetrics(now = () =&gt; performance.now()) {
+  let total = 0;
+  let sumMs = 0;
+  let maxMs = 0;
+  let slowest: string | null = null;
+  const byStatus: Record&lt;string, number&gt; = {};
+
+  function middleware(req: Request, res: Response, next: NextFunction) {
+    const start = now();
+    res.on("finish", () =&gt; {
+      const ms = now() - start;
+      total++;
+      sumMs += ms;
+      const key = `${Math.floor(res.statusCode / 100)}xx`;
+      byStatus[key] = (byStatus[key] ?? 0) + 1;
+      if (slowest === null || ms &gt; maxMs) {
+        maxMs = ms;
+        slowest = `${req.method} ${req.originalUrl}`;
+      }
+    });
+    next();
+  }
+
+  const snapshot = () =&gt; ({
+    total,
+    byStatus: { ...byStatus },
+    avgMs: total === 0 ? 0 : Math.round(sumMs / total),
+    maxMs,
+    slowest,
+  });
+
+  return { middleware, snapshot };
+}
+
+const metrics = createMetrics();
+const app = express();
+app.use(metrics.middleware);
+app.get("/fast", (req, res) =&gt; {
+  res.json("ok");
+});
+app.get("/slow", async (req, res) =&gt; {
+  await new Promise((r) =&gt; setTimeout(r, 50));
+  res.json("ok");
+});
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  await fetch(`${base}/fast`);
+  await fetch(`${base}/slow?x=1`);
+  await fetch(`${base}/nope`);
+  await new Promise((r) =&gt; setTimeout(r, 10));
+  const s = metrics.snapshot();
+  console.log(s.total, JSON.stringify(s.byStatus), s.slowest, s.maxMs &gt;= 50 ? "maxMs ≥ 50" : "?");
+  server.close();
+});</code></pre>
+<pre class="terminal">3 {"2xx":2,"4xx":1} GET /slow?x=1 maxMs ≥ 50</pre>
+<p><code>middleware</code> ו־<code>snapshot</code> הן שתי פונקציות שנוצרו באותה קריאה, ולכן "רואות" את אותם משתנים — מצב פרטי בלי מחלקה. זה בסיס של כל ספריית ניטור (Prometheus, פרק 24): middleware שסופר, ו־endpoint שמציג את המונים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשב את המשך מיד אחרי <code>next()</code> — ל־route אסינכרוני יוצא כמעט 0 (P15-E52).</li><li><code>byStatus</code> בלי העתקה ב־snapshot — הקוד שקרא יכול לאפס את המונים בטעות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E56">
+    <h3>P15-E56 · timeout ל־route אסינכרוני 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">return async (req, res, next) =&gt; { const timer = setTimeout(() =&gt; { if (!res.headersSent) res.status(503).json(...); }, ms); try { await handler(req, res); } catch (err) { ... } finally { clearTimeout(timer); } };</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־catch: <code class="mid">if (!res.headersSent) next(err);</code> — אם כבר ענינו 503, אין טעם להעביר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E56: timeout ל־route אסינכרוני
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function withTimeout(handler: (req: Request, res: Response) =&gt; Promise&lt;unknown&gt;, ms: number) {
+  return async (req: Request, res: Response, next: NextFunction) =&gt; {
+    const timer = setTimeout(() =&gt; {
+      if (!res.headersSent) {
+        res.status(503).json({ error: { code: "TIMEOUT", message: "הבקשה לקחה יותר מדי זמן" } });
+      }
+    }, ms);
+    try {
+      await handler(req, res);
+    } catch (err) {
+      if (!res.headersSent) next(err);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const app = express();
+app.get(
+  "/fast",
+  withTimeout(async (req, res) =&gt; {
+    await sleep(10);
+    res.json({ ok: true });
+  }, 100),
+);
+app.get(
+  "/slow",
+  withTimeout(async (req, res) =&gt; {
+    await sleep(300);
+    if (!res.headersSent) res.json({ ok: true });
+  }, 100),
+);
+const server = app.listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  for (const path of ["/fast", "/slow"]) {
+    const start = Date.now();
+    const res = await fetch(base + path);
+    console.log(path, res.status, await res.text(), Date.now() - start &lt; 250 ? "(מהר)" : "(איטי)");
+  }
+  await sleep(300);
+  server.close();
+});</code></pre>
+<pre class="terminal">/fast 200 {"ok":true} (מהר)
+/slow 503 {"error":{"code":"TIMEOUT","message":"הבקשה לקחה יותר מדי זמן"}} (מהר)</pre>
+<p>ה־route האיטי עדיין רץ ברקע אחרי ה־503 — JavaScript לא יכול "להרוג" פונקציה באמצע. לכן ה־timeout רק מגן על הלקוח; כדי באמת לעצור את העבודה (למשל בקשה לשירות אחר) מעבירים <code>AbortSignal</code> הלאה (פרק 14). ‏<code>clearTimeout</code> ב־<code>finally</code> חשוב: בלעדיו כל בקשה מהירה משאירה טיימר פתוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.race</code> בלי <code>clearTimeout</code> — עובד, אבל אלפי טיימרים "מתים" מצטברים.</li><li>לענות 503 בלי לבדוק <code>headersSent</code> — אם ה־handler ענה בדיוק באותו רגע, נזרק "Cannot set headers".</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-rest.html"><small>הבא</small>שיעור 3 — תכנון REST: כתובות, pagination ושכבות</a></div>
 </main>
 </body>

@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 15</a> ‹ תרגול שיעור 4</div>
   <h1>✍️ תרגול שיעור 4 — בדיקת קלט עם Zod</h1>
-  <p class="subtitle">פרק 15 · 9 שאלות · 0 הבנה · 9 קוד · ⏱ כ־240 דק׳</p>
+  <p class="subtitle">פרק 15 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־365 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,152 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 4: בדיקת קלט עם Zod</h2>
-  <p class="subtitle">7 שאלות · 0 הבנה · 7 קוד · ⏱ כ־140 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־215 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P15-E70">
+    <h3>P15-E70 · מה safeParse יחזיר?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>בלי להריץ — לכל קלט: <code>success</code> או לא, ומה ב־<code>data</code> (או מה ה־<code>path</code> של הבעיה הראשונה)?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const userSchema = z.object({
+  name: z.string().trim().min(2),
+  age: z.number().int().min(0).optional(),
+  role: z.enum(["user", "admin"]).default("user"),
+});
+
+const inputs: unknown[] = [
+  { name: "  דנה  " },
+  { name: "דנה", age: "31" },
+  { name: "ד" },
+  { name: "דנה", age: 31.5 },
+  { name: "דנה", isAdmin: true },
+  { name: "דנה", role: undefined, age: undefined },
+  "דנה",
+];
+for (const input of inputs) {
+  const r = userSchema.safeParse(input);
+  console.log(r.success ? `✔ ${JSON.stringify(r.data)}` : `✘ ${r.error.issues[0].path.join(".") || "(השורש)"}: ${r.error.issues[0].message}`);
+}</code></pre>
+
+  </div>
+<div class="ex" id="P15-E71">
+    <h3>P15-E71 · object, strictObject ו־partial</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מה יודפס? ומה המשמעות של השורה האחרונה ל־<code>PATCH</code>?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const task = z.object({ title: z.string().min(1), done: z.boolean() });
+const strict = z.strictObject({ title: z.string().min(1), done: z.boolean() });
+const patch = task.partial();
+
+const body = { title: "לקנות חלב", done: false, ownerId: 99 };
+console.log(JSON.stringify(task.parse(body)));
+const s = strict.safeParse(body);
+console.log(s.success, s.success ? "" : s.error.issues[0].message);
+console.log(JSON.stringify(patch.parse({ done: true })));
+console.log(JSON.stringify(patch.parse({ ownerId: 5 })));
+console.log(patch.safeParse({ title: "" }).success);</code></pre>
+
+  </div>
+<div class="ex" id="P15-E72">
+    <h3>P15-E72 · path של בעיה בתוך מערך</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מה יודפס? (זה ה־<code>details</code> שה־middleware מהשיעור יחזיר ללקוח.)</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const orderSchema = z.object({
+  customer: z.object({ email: z.email() }),
+  items: z.array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1) })).min(1),
+});
+
+const r = orderSchema.safeParse({
+  customer: { email: "not-an-email" },
+  items: [{ sku: "PEN", qty: 2 }, { sku: "", qty: 0 }, { qty: 1 }],
+});
+if (!r.success) {
+  for (const i of r.error.issues) console.log(i.path.join("."), "—", i.message);
+}
+console.log(orderSchema.safeParse({ customer: { email: "a@b.co" }, items: [] }).error?.issues[0].path.join("."));</code></pre>
+
+  </div>
+<div class="ex" id="P15-E73">
+    <h3>P15-E73 · default, optional ו־nullable</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מה יודפס לכל אחד מארבעת הקלטים?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const schema = z.object({
+  note: z.string().optional(),
+  dueDate: z.iso.date().nullable(),
+  priority: z.enum(["low", "high"]).default("low"),
+});
+
+for (const input of [{ dueDate: null }, { dueDate: "2026-12-01", note: undefined }, { note: null, dueDate: null }, {}, { dueDate: null, priority: null }]) {
+  const r = schema.safeParse(input);
+  console.log(JSON.stringify(input).padEnd(42), r.success ? JSON.stringify(r.data) : `✘ ${r.error.issues.map((i) =&gt; i.path.join(".")).join(", ")}`);
+}</code></pre>
+
+  </div>
+<div class="ex" id="P15-E74">
+    <h3>P15-E74 · coerce.boolean ו־"false"</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>ב־query, ‏<code>?inStock=false</code> מגיע כמחרוזת. מה יודפס?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const a = z.coerce.boolean();
+const b = z.stringbool();
+const c = z.enum(["true", "false"]).transform((v) =&gt; v === "true");
+
+for (const v of ["true", "false", "0", "", "yes", "maybe"]) {
+  const show = (r: { success: boolean; data?: boolean }) =&gt; (r.success ? String(r.data) : "✘");
+  console.log(JSON.stringify(v).padEnd(8), show(a.safeParse(v)), show(b.safeParse(v)), show(c.safeParse(v)));
+}</code></pre>
+
+  </div>
+<div class="ex" id="P15-E75">
+    <h3>P15-E75 · parse שזורק בתוך route</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>בשיעור כתוב: "בשרת — <code>safeParse</code>". מה קורה אם משתמשים ב־<code>parse</code>? בשרת <code>a</code> אין error handler משלך; ב־<code>b</code> יש אחד שמכיר את <code>z.ZodError</code>. מה יקבל הלקוח?</p>
+<pre><code class="lang-ts">import express from "express";
+import { z } from "zod";
+
+const schema = z.object({ qty: z.number().int().min(1) });
+
+function build(withHandler: boolean) {
+  const app = express();
+  app.use(express.json());
+  app.post("/cart", (req, res) =&gt; {
+    const { qty } = schema.parse(req.body);
+    res.json({ qty });
+  });
+  if (withHandler) {
+    app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) =&gt; {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: { code: "VALIDATION_ERROR", details: err.issues.map((i) =&gt; i.path.join(".")) } });
+        return;
+      }
+      res.status(500).json({ error: { code: "INTERNAL" } });
+    });
+  }
+  return app;
+}
+
+const a = build(false).listen(0);
+const b = build(true).listen(0);
+const post = (s: typeof a, body: unknown) =&gt;
+  fetch(`http://localhost:${(s.address() as { port: number }).port}/cart`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+setTimeout(async () =&gt; {
+  for (const [name, server] of [["a", a], ["b", b]] as const) {
+    const ok = await post(server, { qty: 2 });
+    const bad = await post(server, { qty: 0 });
+    const text = await bad.text();
+    console.log(name, ok.status, bad.status, bad.headers.get("content-type"), text.startsWith("{") ? text : "(דף HTML)");
+  }
+  a.close();
+  b.close();
+}, 50);</code></pre>
+
+  </div>
 <div class="ex" id="P15-E11">
     <h3>P15-E11 · סכמת מוצר 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
@@ -64,20 +209,84 @@
 <p>בקובץ <code class="mid">15-express/starter/P15-E22.ts</code>, <code class="mid">GET /products?page=2&amp;limit=5</code>: (1) תמיד מחזיר שגיאה, גם לקלט תקין; (2) כשהקלט לא תקין — 500 במקום 400; (3) אחרי ש"מתקנים" את 1 ו־2 — זה זורק <code>Cannot set property query</code>. תקן; התשובה: <code class="mid">{ data, meta: { page, limit, total } }</code>, וקלט לא תקין ← 400 <code>VALIDATION_ERROR</code>.</p>
 
   </div>
-<div class="ex typed" id="P15-E27">
-    <h3>P15-E27 · סכמת הרשמה עם regex 🤖</h3>
-    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
-<p><strong>🔁 חזרה על ביטויים רגולריים (P13-E26) ועל <code>replace</code> (פרק 2)</strong>, הפעם בתוך Zod. ‏<code class="mid">z.string().regex(re, message)</code> בודק שהמחרוזת מתאימה ל־regex. כתוב וייצא <code>signupSchema</code> ו־<code>type Signup</code> לטופס הרשמה:</p>
-<ul><li><code>username</code>: קודם <code>trim</code> והמרה לאותיות קטנות. אחר כך: 3–16 תווים, רק אותיות באנגלית, ספרות ו־<code>_</code>, ומתחיל באות. הודעה: <code class="long">"שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"</code>.</li><li><code>phone</code>: טלפון נייד ישראלי. מסירים רווחים ומקפים, ואז מקבלים <code>05</code> ועוד 8 ספרות, או <code>+9725</code> ועוד 8 ספרות. התוצאה תמיד בצורה <code>0501234567</code> (‏<code>+972</code> הופך ל־<code>0</code>). הודעה: <code class="mid">"טלפון נייד ישראלי: 05XXXXXXXX"</code>.</li><li><code>password</code>: לפחות 8 תווים (<code>"סיסמה: לפחות 8 תווים"</code>), לפחות אות גדולה באנגלית (<code class="mid">"סיסמה: לפחות אות גדולה אחת"</code>) ולפחות ספרה (<code>"סיסמה: לפחות ספרה אחת"</code>).</li></ul>
-<pre><code class="lang-ts">signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" });
-// { username: "dana_88", phone: "0501234567", password: "Secret123" }</code></pre>
-<p>📄 כותבים בקובץ <code class="mid">15-express/starter/P15-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
-<pre class="terminal"><span class="prompt">% </span>node 15-express/starter/P15-E27.ts
-<span class="prompt">% </span>npm run check P15-E27</pre>
+<div class="ex typed" id="P15-E76">
+    <h3>P15-E76 · סכמת טופס יצירת קשר 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type warmup">🔥 חימום</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>כתוב וייצא <code>contactSchema</code> ו־<code class="mid">type Contact = z.infer&lt;typeof contactSchema&gt;</code>:</p>
+<ul><li><code>name</code> — מחרוזת, אחרי trim 2–50 תווים.</li><li><code>email</code> — אימייל תקין (<code>z.email()</code>). נשמר באותיות קטנות — אחרי הבדיקה, עם <code class="mid">.transform((e) =&gt; e.toLowerCase())</code>.</li><li><code>phone</code> — אופציונלי; אם נשלח — מחרוזת של 9–10 ספרות בדיוק (<code>.regex(...)</code>).</li><li><code>topic</code> — <code>"general"</code>, ‏<code>"billing"</code> או <code>"support"</code>; ברירת מחדל <code>"general"</code>.</li><li><code>message</code> — מחרוזת, אחרי trim 10–1000 תווים.</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">15-express/starter/P15-E76.ts</code> (יש בו רק הערה).</p>
+<pre class="terminal"><span class="prompt">% </span>node 15-express/starter/P15-E76.ts
+<span class="prompt">% </span>npm run check P15-E76</pre>
+
+  </div>
+<div class="ex" id="P15-E77">
+    <h3>P15-E77 · שגיאות לפי שדה 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>טופס בצד הלקוח רוצה את השגיאות "לפי שדה". כתוב וייצא:</p>
+<ul><li><code class="mid">toFieldErrors(error: z.ZodError)</code> ← אובייקט: לכל <code>path</code> (מחובר בנקודות, למשל <code>"items.1.qty"</code>; בעיה בשורש ← <code>"_root"</code>) — מערך ההודעות שלו, לפי הסדר.</li><li><code>signupSchema</code>: ‏<code>email</code> — <code>z.email("אימייל לא תקין")</code>; ‏<code>password</code> — מחרוזת, לפחות 8 תווים (<code>"לפחות 8 תווים"</code>), עם לפחות ספרה אחת (<code>.regex(/\d/, "חייבת ספרה")</code>); ‏<code>tags</code> — מערך מחרוזות לא ריקות (<code>"תגית ריקה"</code>), ברירת מחדל <code>[]</code>.</li><li><code>createApp()</code> עם <code>POST /signup</code>: לא תקין ← 400 <code class="long">{ error: { code: "VALIDATION_ERROR", fields: toFieldErrors(...) } }</code>; תקין ← 201 <code>{ email, tags }</code> (בלי הסיסמה!).</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">15-express/starter/P15-E77.ts</code> (יש בו רק הערה).</p>
+<pre class="terminal"><span class="prompt">% </span>node 15-express/starter/P15-E77.ts
+<span class="prompt">% </span>npm run check P15-E77</pre>
 
   </div>
   <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
-  <p class="subtitle">2 שאלות · 0 הבנה · 2 קוד · ⏱ כ־100 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־150 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P15-E78">
+    <h3>P15-E78 · safeParse ו־narrowing</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 11, שיעור 4</span></div>
+<p>התוצאה של <code>safeParse</code> היא union — "הצלחה עם data" או "כישלון עם error". הקוד משתמש בטיפוס שמחקה את זה של Zod (בקובץ אמיתי — <code>schema.safeParse</code>). אילו שורות TypeScript יפסול?</p>
+<pre><code class="lang-ts">// כך (בקירוב) מוגדרת התוצאה של schema.safeParse ב־Zod:
+type SafeParseResult&lt;T&gt; =
+  | { success: true; data: T; error?: never }
+  | { success: false; error: { issues: { path: string[]; message: string }[] }; data?: never };
+declare function safeParse(body: unknown): SafeParseResult&lt;{ qty: number }&gt;;
+
+function handle(body: unknown) {
+  const r = safeParse(body);
+  const a = r.data.qty;
+  if (r.success) {
+    const b = r.data.qty * 2;
+    const c = r.error.issues;
+  } else {
+    const d = r.error.issues.length;
+  }
+  if (!r.success) return;
+  const e: number = r.data.qty;
+}</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> discriminated unions ו־narrowing מפרק 11 — <code>success</code> הוא השדה שמבחין. השיעור: <code>safeParse</code> במקום <code>parse</code>.</p>
+
+  </div>
+<div class="ex" id="P15-E79">
+    <h3>P15-E79 · coerce.number והמרות של JavaScript</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 1, שיעור 4</span></div>
+<p><code>z.coerce.number()</code> קורא ל־<code>Number(value)</code> ואז בודק שהתוצאה מספר תקין. מה יודפס לכל ערך של <code>?maxPrice=</code>?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const plain = z.coerce.number();
+const safe = z.coerce.number().positive().max(100000);
+
+for (const v of ["", " 12 ", "1e2", "0x10", "12px", "abc", "Infinity", "-5"]) {
+  const show = (r: { success: boolean; data?: number }) =&gt; (r.success ? String(r.data) : "✘");
+  console.log(JSON.stringify(v).padEnd(11), show(plain.safeParse(v)), show(safe.safeParse(v)));
+}</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>Number</code> מפרק 1 (וכמו ב־P15-E37). השיעור: ה"מלכודת" של שורה 4 בסעיף 2 — ערך ריק שהופך בשקט ל־0.</p>
+
+  </div>
+<div class="ex" id="P15-E80">
+    <h3>P15-E80 · regex בסכמה — עם עוגנים ובלי</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 13, שיעור 4</span></div>
+<p>שתי סכמות לטלפון ישראלי. מה יודפס?</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const loose = z.string().regex(/05\d-?\d{7}/);
+const strict = z.string().regex(/^05\d-?\d{7}$/);
+
+for (const phone of ["050-1234567", "0501234567", "x050-1234567y", "050-12345678", "+972-50-1234567"]) {
+  console.log(phone.padEnd(16), loose.safeParse(phone).success, strict.safeParse(phone).success);
+}</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> regex עם <code>^</code> ו־<code>$</code> מפרק 13 (P13-E26) ומפרק 14 (P14-E42). השיעור: <code>.regex()</code> בתוך סכמה של Zod.</p>
+
+  </div>
 <div class="ex" id="P15-E24">
     <h3>P15-E24 · אתגר: API לספרייה 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l5">רמה 5</span><span class="tag">⏱ 60 דק׳</span><span class="tag">ידע נדרש: כל הפרק</span></div>
@@ -90,6 +299,7 @@
 <tr><td><code>POST /loans/:id/return</code></td><td>200 עם <code>returnedAt</code>. כבר הוחזר ← 409 <code>ALREADY_RETURNED</code>. לא קיים ← 404 <code>LOAN_NOT_FOUND</code></td></tr>
 <tr><td><code>GET /loans/overdue</code></td><td>השאלות שלא הוחזרו ו־<code>dueAt</code> עבר (לפי <code>now()</code>)</td></tr></table></div>
 <p>וגם: id לא תקין ← 400; JSON שבור ← 400 <code>INVALID_JSON</code>; כתובת לא קיימת ← 404 <code>NOT_FOUND</code>; ids של ספרים ושל השאלות — כל אחד מ־1.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כל הפרק ביחד — routes ו־status (שיעור 1), error handler במבנה אחיד (שיעור 2), שכבות ו־pagination (שיעור 3) ו־Zod (שיעור 4) — ועוד שעון מוזרק (<code>now</code>) ותאריכים כמו בפרקים 10 ו־12.</p>
 
   </div>
 <div class="ex" id="P15-E25">
@@ -98,6 +308,20 @@
 <p>לקוח לחץ "הזמן", הרשת נפלה, והאפליקציה שלחה שוב. האם נוצרו שתי הזמנות? בקובץ <code class="mid">15-express/starter/P15-E25.ts</code> בנה <code>idempotency()</code> — middleware לבקשות POST:</p>
 <ul><li>בלי header <code>Idempotency-Key</code> ← 400 <code>MISSING_IDEMPOTENCY_KEY</code>.</li><li>מפתח חדש ← הבקשה ממשיכה כרגיל, וה־status והגוף של התשובה נשמרים (יחד עם הגוף <em>של הבקשה</em>).</li><li>אותו מפתח ואותו גוף בקשה ← אותה תשובה בדיוק (status + גוף), <strong>בלי</strong> להריץ שוב את ה־handler, ועם header <code>Idempotent-Replayed: true</code>.</li><li>אותו מפתח, גוף אחר ← 422 <code>IDEMPOTENCY_KEY_REUSED</code>.</li><li>בקשה שנייה עם אותו מפתח <em>בזמן שהראשונה עוד רצה</em> ← 409 <code>REQUEST_IN_PROGRESS</code>.</li></ul>
 <p>והשלם <code>createApp()</code> עם <code>POST /orders</code> (מוגן, יוצר <code>{ id, ...body }</code> ← 201, אחרי המתנה של 50ms שמדמה מסד נתונים) ו־<code>GET /orders</code>.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> idempotency מפרק 14 (שיעור 1 — למה POST לא בטוח לחזור), ‏<code>Map</code> מפרק 7 ו־middleware מהשיעור 2 — יחד עם Zod מהשיעור הזה.</p>
+
+  </div>
+<div class="ex typed" id="P15-E27">
+    <h3>P15-E27 · סכמת הרשמה עם regex 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p><strong>🔁 חזרה על ביטויים רגולריים (P13-E26) ועל <code>replace</code> (פרק 2)</strong>, הפעם בתוך Zod. ‏<code class="mid">z.string().regex(re, message)</code> בודק שהמחרוזת מתאימה ל־regex. כתוב וייצא <code>signupSchema</code> ו־<code>type Signup</code> לטופס הרשמה:</p>
+<ul><li><code>username</code>: קודם <code>trim</code> והמרה לאותיות קטנות. אחר כך: 3–16 תווים, רק אותיות באנגלית, ספרות ו־<code>_</code>, ומתחיל באות. הודעה: <code class="long">"שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"</code>.</li><li><code>phone</code>: טלפון נייד ישראלי. מסירים רווחים ומקפים, ואז מקבלים <code>05</code> ועוד 8 ספרות, או <code>+9725</code> ועוד 8 ספרות. התוצאה תמיד בצורה <code>0501234567</code> (‏<code>+972</code> הופך ל־<code>0</code>). הודעה: <code class="mid">"טלפון נייד ישראלי: 05XXXXXXXX"</code>.</li><li><code>password</code>: לפחות 8 תווים (<code>"סיסמה: לפחות 8 תווים"</code>), לפחות אות גדולה באנגלית (<code class="mid">"סיסמה: לפחות אות גדולה אחת"</code>) ולפחות ספרה (<code>"סיסמה: לפחות ספרה אחת"</code>).</li></ul>
+<pre><code class="lang-ts">signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" });
+// { username: "dana_88", phone: "0501234567", password: "Secret123" }</code></pre>
+<p>📄 כותבים בקובץ <code class="mid">15-express/starter/P15-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>node 15-express/starter/P15-E27.ts
+<span class="prompt">% </span>npm run check P15-E27</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> regex מפרק 13 (ראה גם P15-E80) ו־<code>transform</code> — יחד עם הסכמה של Zod מהשיעור.</p>
 
   </div>
 <div class="pager"><a href="lesson-04-zod.html"><small>חזרה לשיעור</small>שיעור 4 — בדיקת קלט עם Zod</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>

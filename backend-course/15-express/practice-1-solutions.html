@@ -82,6 +82,134 @@ router.get("/:id/loans", listLoans);   // GET /books/7/loans</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P15-E29">
+    <h3>P15-E29 · מתי req.body ריק? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בסעיף 2: ‏<code>req.body</code> — "יש ערך רק אם נשלח JSON <em>וגם</em> <code>express.json()</code> רץ".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>express.json()</code> מפרש רק בקשות שה־<code>Content-Type</code> שלהן JSON. את השאר הוא משאיר בשקט.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+function build(withJson: boolean) {
+  const app = express();
+  if (withJson) app.use(express.json());
+  app.post("/echo", (req, res) =&gt; {
+    res.json({ type: typeof req.body, body: req.body ?? null });
+  });
+  return app;
+}
+
+const a = build(false).listen(0);
+const b = build(true).listen(0);
+const url = (s: typeof a) =&gt; `http://localhost:${(s.address() as { port: number }).port}/echo`;
+const json = { "Content-Type": "application/json" };
+setTimeout(async () =&gt; {
+  for (const [name, server] of [["a", a], ["b", b]] as const) {
+    const r1 = await fetch(url(server), { method: "POST", headers: json, body: '{"x":1}' });
+    const r2 = await fetch(url(server), { method: "POST", headers: { "Content-Type": "text/plain" }, body: '{"x":1}' });
+    const r3 = await fetch(url(server), { method: "POST" });
+    console.log(name, JSON.stringify(await r1.json()), JSON.stringify(await r2.json()), JSON.stringify(await r3.json()));
+  }
+  a.close();
+  b.close();
+}, 50);</code></pre>
+<pre class="terminal">a {"type":"undefined","body":null} {"type":"undefined","body":null} {"type":"undefined","body":null}
+b {"type":"object","body":{"x":1}} {"type":"undefined","body":null} {"type":"undefined","body":null}</pre>
+<p>בלי <code>express.json()</code> — <code>req.body</code> תמיד <code>undefined</code>, גם כשנשלח JSON תקין. ועם <code>express.json()</code> — רק בקשה עם <code class="mid">Content-Type: application/json</code> מקבלת גוף. ולכן קוד כמו <code>req.body.name</code> ב־route קורס ב־TypeError (= 500) על כל לקוח ששכח header. בשיעור 4, Zod יהפוך את זה ל־400.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק עם REST Client (שבו כתבת <code>Content-Type</code>) ולהסיק "עובד" — לקוח אחר ששולח בלי header יקבל 500.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E30">
+    <h3>P15-E30 · איזו כתובת מתאימה ל־:id? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>:id</code> תופס <strong>חלק אחד</strong> של הנתיב — בין שני <code>/</code>. לא ריק, ולא כמה חלקים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Express ברירת המחדל סלחנית לאותיות גדולות ול־<code>/</code> בסוף. ו־404 של Express (בלי <code>notFound</code> משלך) הוא דף HTML.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.get("/users/:id", (req, res) =&gt; {
+  res.json(req.params);
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  for (const path of ["/users/7", "/users/7/", "/USERS/7", "/users/a%20b", "/users/", "/users/7/orders"]) {
+    const res = await fetch(base + path);
+    const type = res.headers.get("content-type") ?? "";
+    console.log(path.padEnd(16), res.status, type.includes("json") ? await res.text() : "(דף HTML)");
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">/users/7         200 {"id":"7"}
+/users/7/        200 {"id":"7"}
+/USERS/7         200 {"id":"7"}
+/users/a%20b     200 {"id":"a b"}
+/users/          404 (דף HTML)
+/users/7/orders  404 (דף HTML)</pre>
+<p>Express מפענח את הפרמטר בשבילך (<code>a%20b</code> ← <code>"a b"</code>), סלחן ל־<code>/</code> בסוף ולאותיות גדולות, ולא מתאים כשהחלק ריק או כשיש עוד חלקים אחריו (<code>/users/7/orders</code> הוא route אחר). וה־404 שחזר הוא HTML — זה מה שהלקוח מקבל עד שתוסיף <code>notFound</code> ב־JSON (שיעור 2).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לצפות ש־<code>/users/7/orders</code> "ייפול" ל־<code>/users/:id</code> עם <code>id = "7/orders"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E31">
+    <h3>P15-E31 · מה יש ב־req.query? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פרמטר שחוזר פעמיים — ב־<code>URLSearchParams.get</code> (פרק 14) קיבלת רק את הראשון. Express אוסף את כולם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Express 5 ה־query מפורש "פשוט": סוגריים מרובעים הם חלק מהשם, ופסיקים — חלק מהערך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+const app = express();
+app.get("/search", (req, res) =&gt; {
+  res.json(req.query);
+});
+
+const server = app.listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}/search`;
+  for (const q of ["?tag=a&amp;tag=b", "?inStock", "?ids=1,2,3", "?filter[price]=5", "?q=red+shoes&amp;page=2"]) {
+    console.log(q.padEnd(20), await (await fetch(base + q)).text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">?tag=a&amp;tag=b         {"tag":["a","b"]}
+?inStock             {"inStock":""}
+?ids=1,2,3           {"ids":"1,2,3"}
+?filter[price]=5     {"filter[price]":"5"}
+?q=red+shoes&amp;page=2  {"q":"red shoes","page":"2"}</pre>
+<p>שלוש מסקנות: ערך יכול להיות <strong>מערך</strong> (<code>tag</code>) — ולכן הטיפוס של <code>req.query.tag</code> ב־TypeScript אינו סתם <code>string</code> (ראה P15-E39); פרמטר בלי ערך הוא <code>""</code>; ו־<code>ids=1,2,3</code> היא מחרוזת אחת — אם רוצים רשימה, מפרקים בעצמך (<code>split(",")</code>). ‏<code>filter[price]</code> הוא שם רגיל — ב־Express 4 הוא היה הופך לאובייקט מקונן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">req.query.tag.toLowerCase()</code> — קורס כשהלקוח שולח את <code>tag</code> פעמיים (מערך).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E06">
     <h3>P15-E06 · שלום Express 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -237,7 +365,728 @@ export function createApp() {
 
 </div></details>
   </div>
+<div class="ex typed" id="P15-E32">
+    <h3>P15-E32 · ברכה לפי שפה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const lang = req.query.lang ?? "he";</code> — ואז שתי השוואות (<code>===</code>) למחרוזות. מערך לא שווה לאף אחת מהן.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי <code>res.status(400).json(...)</code> — <code>return;</code> בשורה נפרדת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E32: ברכה לפי שפה
+import express from "express";
+
+export function createApp() {
+  const app = express();
+  app.get("/greet/:name", (req, res) =&gt; {
+    const lang = req.query.lang ?? "he";
+    if (lang === "he") {
+      res.json({ greeting: `שלום ${req.params.name}` });
+      return;
+    }
+    if (lang === "en") {
+      res.json({ greeting: `Hello ${req.params.name}` });
+      return;
+    }
+    res.status(400).json({ error: "שפה לא נתמכת" });
+  });
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  for (const path of ["/greet/דנה", "/greet/Dana?lang=en", "/greet/x?lang=fr", "/greet/x?lang=en&amp;lang=he"]) {
+    const res = await fetch(base + encodeURI(path));
+    console.log(res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"greeting":"שלום דנה"}
+200 {"greeting":"Hello Dana"}
+400 {"error":"שפה לא נתמכת"}
+400 {"error":"שפה לא נתמכת"}</pre>
+<p>Express כבר פענח את <code>%D7%93...</code> חזרה ל"דנה" ב־<code>req.params.name</code>. ו־<code>lang=en&amp;lang=he</code> הוא מערך — לא <code>"en"</code> ולא <code>"he"</code> — ולכן 400, בלי שכתבנו בדיקה מיוחדת: השוואה עם <code>===</code> למחרוזת מסננת אותו לבד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">if (req.query.lang === "en") ... else ...</code> — כל ערך אחר (גם <code>"fr"</code>) מקבל עברית, במקום 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E33">
+    <h3>P15-E33 · PUT שיוצר או מחליף 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const settings = new Map&lt;string, unknown&gt;();</code> בתוך <code>createApp</code>. ‏<code class="mid">const isNew = !settings.has(key);</code> — לפני ה־<code>set</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">req.body?.value === undefined</code> תופס גם גוף חסר וגם שדה חסר. ל־<code>GET /settings</code>: <code class="mid">Object.fromEntries(settings)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E33: PUT שיוצר או מחליף
+import express from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const settings = new Map&lt;string, unknown&gt;();
+
+  app.get("/settings", (req, res) =&gt; {
+    res.json(Object.fromEntries(settings));
+  });
+
+  app.get("/settings/:key", (req, res) =&gt; {
+    const { key } = req.params;
+    if (!settings.has(key)) {
+      res.status(404).json({ error: "אין הגדרה כזו" });
+      return;
+    }
+    res.json({ key, value: settings.get(key) });
+  });
+
+  app.put("/settings/:key", (req, res) =&gt; {
+    const { key } = req.params;
+    const value = req.body?.value;
+    if (value === undefined) {
+      res.status(400).json({ error: "חסר value" });
+      return;
+    }
+    const isNew = !settings.has(key);
+    settings.set(key, value);
+    if (isNew) res.status(201).location(`/settings/${key}`);
+    res.json({ key, value });
+  });
+
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const put = (key: string, body: unknown) =&gt;
+    fetch(`${base}/settings/${key}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  for (const res of [await put("theme", { value: "dark" }), await put("theme", { value: "light" }), await put("x", {})]) {
+    console.log(res.status, res.headers.get("location"), await res.text());
+  }
+  console.log(await (await fetch(`${base}/settings`)).text());
+  server.close();
+});</code></pre>
+<pre class="terminal">201 /settings/theme {"key":"theme","value":"dark"}
+200 null {"key":"theme","value":"light"}
+400 null {"error":"חסר value"}
+{"theme":"light"}</pre>
+<p>זה ההבדל בין PUT ל־POST: ב־PUT <strong>הלקוח</strong> בוחר את הכתובת (<code>/settings/theme</code>), ולכן אותה בקשה יכולה ליצור (201) או להחליף (200) — ושליחה חוזרת לא יוצרת כפילות (idempotent, פרק 14). ‏<code>value: false</code> או <code>0</code> הם ערכים תקינים, ולכן הבדיקה היא על <code>undefined</code> ולא על "falsy".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (!req.body.value)</code> — דוחה את <code>false</code>, ‏<code>0</code> ו־<code>""</code>, וקורס כשאין גוף בכלל.</li><li>לבדוק אם המפתח קיים <strong>אחרי</strong> ה־<code>set</code> — תמיד "קיים", ותמיד 200.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E34">
+    <h3>P15-E34 · X-Total-Count ובחירת שדות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">res.set("X-Total-Count", String(products.length))</code> — ערך של header הוא מחרוזת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">const fields = String(req.query.fields).split(",").map((f) =&gt; f.trim()).filter(Boolean);</code> ואז <code class="long">Object.fromEntries([["id", p.id], ...fields.filter((f) =&gt; f !== "id").map((f) =&gt; [f, p[f]])])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E34: X-Total-Count ובחירת שדות
+import express from "express";
+
+export type Product = { id: number; name: string; price: number; stock: number };
+const KNOWN = ["id", "name", "price", "stock"];
+
+export function createApp(products: Product[]) {
+  const app = express();
+  app.get("/products", (req, res) =&gt; {
+    res.set("X-Total-Count", String(products.length));
+    if (req.query.fields === undefined) {
+      res.json(products);
+      return;
+    }
+    const fields = String(req.query.fields)
+      .split(",")
+      .map((f) =&gt; f.trim())
+      .filter(Boolean);
+    const unknown = fields.find((f) =&gt; !KNOWN.includes(f));
+    if (unknown) {
+      res.status(400).json({ error: `שדה לא מוכר: ${unknown}` });
+      return;
+    }
+    const picked = ["id", ...fields.filter((f) =&gt; f !== "id")];
+    res.json(products.map((p) =&gt; Object.fromEntries(picked.map((f) =&gt; [f, p[f as keyof Product]]))));
+  });
+  return app;
+}
+
+const products = [
+  { id: 1, name: "מקלדת", price: 249, stock: 3 },
+  { id: 2, name: "עכבר", price: 89, stock: 0 },
+];
+const server = createApp(products).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  for (const q of ["", "?fields=price, name", "?fields=name,password"]) {
+    const res = await fetch(`${base}/products${q}`);
+    console.log(res.status, res.headers.get("x-total-count"), await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 2 [{"id":1,"name":"מקלדת","price":249,"stock":3},{"id":2,"name":"עכבר","price":89,"stock":0}]
+200 2 [{"id":1,"price":249,"name":"מקלדת"},{"id":2,"price":89,"name":"עכבר"}]
+400 2 {"error":"שדה לא מוכר: password"}</pre>
+<p>"רשימה סגורה" של שדות (<code>KNOWN</code>) היא הגנה: בלעדיה, <code>?fields=passwordHash</code> היה מחזיר כל שדה פנימי שיש לאובייקט. ‏<code>X-Total-Count</code> הוא מוסכמה נפוצה להעביר "כמה יש" בלי לשנות את מבנה הגוף (בשיעור 3 נראה את החלופה — <code>meta</code> בגוף).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">res.set("X-Total-Count", products.length)</code> — TypeScript יתלונן (ערך header הוא מחרוזת או מערך מחרוזות).</li><li>לבנות את האובייקט עם <code>delete</code> על המוצר עצמו — משנה את הנתונים לבקשה הבאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E35">
+    <h3>P15-E35 · מונים בשם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const by = req.body?.by ?? 1;</code> — ואז <code class="mid">Number.isInteger(by) &amp;&amp; by &gt;= 1 &amp;&amp; by &lt;= 100</code>. (<code>"5"</code> מחרוזת — לא שלם.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.sendStatus(204)</code> למחיקה. ‏<code>counters.delete(name)</code> מחזיר <code>false</code> אם לא היה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E35: מונים בשם
+import express from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const counters = new Map&lt;string, number&gt;();
+
+  app.post("/counters/:name/increment", (req, res) =&gt; {
+    const { name } = req.params;
+    const by = req.body?.by ?? 1;
+    if (!Number.isInteger(by) || by &lt; 1 || by &gt; 100) {
+      res.status(400).json({ error: "by חייב להיות מספר שלם 1–100" });
+      return;
+    }
+    const value = (counters.get(name) ?? 0) + by;
+    counters.set(name, value);
+    res.json({ name, value });
+  });
+
+  app.get("/counters/:name", (req, res) =&gt; {
+    const { name } = req.params;
+    res.json({ name, value: counters.get(name) ?? 0 });
+  });
+
+  app.delete("/counters/:name", (req, res) =&gt; {
+    if (!counters.delete(req.params.name)) {
+      res.status(404).json({ error: "אין מונה כזה" });
+      return;
+    }
+    res.sendStatus(204);
+  });
+
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/counters`;
+  const inc = (name: string, body?: unknown) =&gt;
+    fetch(`${base}/${name}/increment`, { method: "POST", headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  for (const res of [await inc("visits"), await inc("visits", { by: 5 }), await inc("visits", { by: "5" }), await fetch(`${base}/visits`), await fetch(`${base}/visits`, { method: "DELETE" }), await fetch(`${base}/visits`, { method: "DELETE" })]) {
+    console.log(res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"name":"visits","value":1}
+200 {"name":"visits","value":6}
+400 {"error":"by חייב להיות מספר שלם 1–100"}
+200 {"name":"visits","value":6}
+204
+404 {"error":"אין מונה כזה"}</pre>
+<p>שלוש החלטות של API: מונה שלא קיים הוא 0 ב־GET (זה ה"ערך" שלו), אבל 404 ב־DELETE (אין מה למחוק). ‏<code>"5"</code> נדחה — JSON מבחין בין מספר למחרוזת, ואין סיבה להמיר בשקט. וגוף חסר לגמרי (<code>req.body</code> הוא <code>undefined</code>, P15-E29) הוא בסדר — בזכות <code>?.</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>req.body.by ?? 1</code> בלי <code>?.</code> — בקשה בלי גוף קורסת ב־500.</li><li><code>Number(req.body.by)</code> — מקבל <code>"5"</code> ו־<code>true</code> (‏=1) בשקט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E36">
+    <h3>P15-E36 · קישורים מקוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי Maps: <code>codeToUrl</code> ו־<code>urlToCode</code> — כדי לענות מהר על "הכתובת כבר קיימת?".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדיקת הכתובת: <code class="mid">try { new URL(url); } catch { ... }</code>, יחד עם <code class="mid">typeof url === "string" &amp;&amp; /^https?:\/\//.test(url)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E36: קישורים מקוצרים
+import express from "express";
+
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !/^https?:\/\//.test(value)) return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const codeToUrl = new Map&lt;string, string&gt;();
+  const urlToCode = new Map&lt;string, string&gt;();
+  let next = 1;
+
+  app.post("/links", (req, res) =&gt; {
+    const url = req.body?.url;
+    if (!isHttpUrl(url)) {
+      res.status(400).json({ error: "כתובת לא תקינה" });
+      return;
+    }
+    const existing = urlToCode.get(url);
+    if (existing) {
+      res.json({ code: existing, url });
+      return;
+    }
+    const code = String(next++);
+    codeToUrl.set(code, url);
+    urlToCode.set(url, code);
+    res.status(201).location(`/links/${code}`).json({ code, url });
+  });
+
+  app.get("/links/:code", (req, res) =&gt; {
+    const url = codeToUrl.get(req.params.code);
+    if (!url) {
+      res.status(404).json({ error: "קישור לא קיים" });
+      return;
+    }
+    res.status(302).location(url).end();
+  });
+
+  return app;
+}
+
+const server = createApp().listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  const post = (url: unknown) =&gt; fetch(`${base}/links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+  for (const res of [await post("https://example.com/a?b=1"), await post("https://example.com/a?b=1"), await post("javascript:alert(1)")]) {
+    console.log(res.status, await res.text());
+  }
+  const go = await fetch(`${base}/links/1`, { redirect: "manual" });
+  console.log(go.status, go.headers.get("location"));
+  server.close();
+});</code></pre>
+<pre class="terminal">201 {"code":"1","url":"https://example.com/a?b=1"}
+200 {"code":"1","url":"https://example.com/a?b=1"}
+400 {"error":"כתובת לא תקינה"}
+302 https://example.com/a?b=1</pre>
+<p><code>redirect: "manual"</code> בדוגמה אומר ל־fetch לא "לקפוץ" לכתובת החדשה — כדי שנראה את ה־302 עצמו. דפדפן היה עובר לכתובת מיד. ולמה לבדוק <code>https?://</code>? כי <code>javascript:alert(1)</code> היא כתובת תקינה לגמרי בעיני <code>new URL</code> — ושירות קיצור שמפנה אליה הוא כלי תקיפה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך רק על <code>new URL</code> — מקבל גם <code>javascript:</code> ו־<code>file:</code>.</li><li>ליצור קוד חדש בכל פעם — אותו קישור מקבל עשרה קודים.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P15-E37">
+    <h3>P15-E37 · Number על מזהה מהנתיב <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Number</code> מתעלם מרווחים מסביב, מבין <code>1e3</code> ו־<code>0x</code>, ומחזיר <code>0</code> למחרוזת ריקה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ההמרה, ההשוואה היא בין מספרים — <code>7 === 7.0</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const products = [{ id: 7 }, { id: 1000 }, { id: 0 }];
+for (const id of ["7", "007", " 7 ", "1e3", "7abc", "", "0x7", "7.0"]) {
+  const n = Number(id);
+  const found = products.find((p) =&gt; p.id === n);
+  console.log(JSON.stringify(id).padEnd(8), n, found ? `נמצא ${found.id}` : "לא נמצא");
+}</code></pre>
+<pre class="terminal">"7"      7 נמצא 7
+"007"    7 נמצא 7
+" 7 "    7 נמצא 7
+"1e3"    1000 נמצא 1000
+"7abc"   NaN לא נמצא
+""       0 נמצא 0
+"0x7"    7 נמצא 7
+"7.0"    7 נמצא 7</pre>
+<p>שש כתובות שונות מגיעות לאותו מוצר 7 (<code>/products/007</code>, <code>/products/0x7</code>...), ו־<code>/products/1e3</code> מוצא את מוצר 1000. מחרוזת ריקה הופכת ל־0 ומוצאת את מוצר 0. זה לא אסון — אבל כתובות שונות לאותו משאב מבלבלות cache וסטטיסטיקה. בדיקה קפדנית: <code>/^\d+$/.test(id)</code> לפני ההמרה, או ב־Zod: <code class="mid">z.coerce.number().int().positive()</code> (שיעור 4).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>parseInt(id)</code> במקום <code>Number</code> — <code>"7abc"</code> הופך ל־7, ועוד כתובת "עובדת".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E38">
+    <h3>P15-E38 · המערך שהועבר ל־createApp <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־route דוחף ל־<code>products</code> — שהוא בדיוק <code>seed</code>, לא עותק שלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>seed.length = 0</code> מרוקן את המערך — גם "מבפנים" של האפליקציה. ומה יהיה <code>products.length + 1</code> אז?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+
+type Product = { id: number; name: string };
+
+function createApp(products: Product[]) {
+  const app = express();
+  app.use(express.json());
+  app.post("/products", (req, res) =&gt; {
+    const product = { id: products.length + 1, name: req.body.name };
+    products.push(product);
+    res.status(201).json(product);
+  });
+  return app;
+}
+
+const seed: Product[] = [{ id: 1, name: "מקלדת" }];
+const copy = [...seed];
+const server = createApp(seed).listen(0, async () =&gt; {
+  const base = `http://localhost:${(server.address() as { port: number }).port}`;
+  await fetch(`${base}/products`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"name":"עכבר"}' });
+  console.log(seed.length, copy.length);
+  seed.length = 0;
+  const r = await fetch(`${base}/products`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"name":"מסך"}' });
+  console.log(JSON.stringify(await r.json()), seed.length);
+  server.close();
+});</code></pre>
+<pre class="terminal">2 1
+{"id":1,"name":"מסך"} 1</pre>
+<p>שני לקחים: (1) האפליקציה והקוד שקרא לה חולקים את אותו מערך — שינוי מכל צד נראה בצד השני. לפעמים זה רצוי (בדיקה שבודקת מה נשמר), לפעמים מפתיע; אם רוצים לבודד — <code>createApp([...products])</code>. (2) <code>id: products.length + 1</code> הוא מזהה שבור: אחרי מחיקה, שני מוצרים יקבלו אותו id. מונה נפרד (<code>let nextId</code>) — כמו בשיעור.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח ש־<code>createApp</code> "מעתיק" את מה שקיבל. פרמטר הוא עוד שם לאותו ערך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E39">
+    <h3>P15-E39 · למה TypeScript לא מרשה toLowerCase? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>על union אפשר לקרוא רק מתודה שקיימת ב<strong>כל</strong> החלקים שלו. האם יש <code>toLowerCase</code> למערך?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>??</code> מוריד רק את <code>undefined</code>/<code>null</code> מה־union. <code>String(...)</code> ו־<code>typeof</code> — כל אחד בדרך אחרת — משאירים מחרוזת בלבד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type QueryValue = undefined | string | string[] | { [key: string]: unknown };
+
+function search(query: { [key: string]: QueryValue }) {
+  const q1 = query.q.toLowerCase();
+  const q2 = (query.q ?? "").toLowerCase();
+  const q3 = String(query.q ?? "").toLowerCase();
+  const page = Number(query.page ?? 1);
+  if (typeof query.q === "string") {
+    const q4 = query.q.toLowerCase();
+  }
+}</code></pre>
+<pre class="terminal">snippet.ts(4,14): error TS18048: 'query.q' is possibly 'undefined'.
+snippet.ts(4,22): error TS2339: Property 'toLowerCase' does not exist on type 'string | { [key: string]: unknown; } | string[]'.
+  Property 'toLowerCase' does not exist on type 'string[]'.
+snippet.ts(5,30): error TS2339: Property 'toLowerCase' does not exist on type 'string | { [key: string]: unknown; } | string[]'.
+  Property 'toLowerCase' does not exist on type 'string[]'.</pre>
+<p><code>q1</code> נפסל כי הערך יכול להיות <code>undefined</code>, ו־<code>q2</code> — כי גם אחרי <code>??</code> הוא יכול להיות מערך או אובייקט. ‏<code>q3</code> עובר, אבל זה "השתקה": מערך <code>["a","b"]</code> יהפוך ל־<code>"a,b"</code>. ‏<code>q4</code> הוא הדרך הנכונה — בודקים ומצמצמים. בשיעור 4, Zod יעשה את הצמצום הזה לכל ה־query בבת אחת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>req.query.q as string</code> — TypeScript שותק, ובזמן ריצה <code>?q=a&amp;q=b</code> קורס.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E40">
+    <h3>P15-E40 · חיפוש לפי מק"ט עם Map 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const bySku = new Map(products.map((p) =&gt; [p.sku.toUpperCase(), p]));</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־<code>missing</code> שומרים את ה־sku כמו שנשלח (אחרי trim). ‏<code>new Set(list)</code> מסיר כפילויות ושומר על סדר — אבל <code>pen-1</code> ו־<code>PEN-1</code> הם "אותו" sku: בדוק כפילות לפי האותיות הגדולות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E40: חיפוש לפי מק"ט עם Map
+import express from "express";
+
+export type Product = { sku: string; name: string; price: number };
+
+export function createApp(products: Product[]) {
+  const app = express();
+  const bySku = new Map(products.map((p) =&gt; [p.sku.toUpperCase(), p]));
+
+  app.get("/products/by-sku", (req, res) =&gt; {
+    const list = String(req.query.skus ?? "")
+      .split(",")
+      .map((s) =&gt; s.trim())
+      .filter(Boolean);
+    if (list.length === 0) {
+      res.status(400).json({ error: "חסר skus" });
+      return;
+    }
+    const seen = new Set&lt;string&gt;();
+    const found: Product[] = [];
+    const missing: string[] = [];
+    for (const sku of list) {
+      const key = sku.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const product = bySku.get(key);
+      if (product) found.push(product);
+      else missing.push(sku);
+    }
+    res.json({ found, missing });
+  });
+
+  app.get("/products/by-sku/:sku", (req, res) =&gt; {
+    const product = bySku.get(req.params.sku.toUpperCase());
+    if (!product) {
+      res.status(404).json({ error: `לא נמצא: ${req.params.sku}` });
+      return;
+    }
+    res.json(product);
+  });
+
+  return app;
+}
+
+const server = createApp([
+  { sku: "PEN-1", name: "עט", price: 450 },
+  { sku: "CUP-2", name: "כוס", price: 1990 },
+]).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  for (const path of ["/products/by-sku/pen-1", "/products/by-sku/x", "/products/by-sku?skus=cup-2, PEN-1,nope,Cup-2", "/products/by-sku"]) {
+    const res = await fetch(base + path);
+    console.log(res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"sku":"PEN-1","name":"עט","price":450}
+404 {"error":"לא נמצא: x"}
+200 {"found":[{"sku":"CUP-2","name":"כוס","price":1990},{"sku":"PEN-1","name":"עט","price":450}],"missing":["nope"]}
+400 {"error":"חסר skus"}</pre>
+<p>ה־<code>Map</code> נבנית <strong>פעם אחת</strong>, כשהאפליקציה נוצרת — ולא בכל בקשה. בכל בקשה, ‏<code>get</code> מהיר כמעט כמו גישה למשתנה, גם עם מיליון מוצרים, בניגוד ל־<code>find</code> שעובר על כולם (פרק 27). ושני ה־routes לא מתנגשים: <code>/products/by-sku</code> (בלי חלק נוסף) לא מתאים ל־<code>/products/by-sku/:sku</code> (P15-E30).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות את ה־Map בתוך ה־handler — עובד, אבל מבזבז את כל היתרון.</li><li><code>new Set(list)</code> על הרשימה המקורית — <code>cup-2</code> ו־<code>Cup-2</code> נחשבים שונים, והמוצר מופיע פעמיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E41">
+    <h3>P15-E41 · סטטיסטיקה של הזמנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const day = o.createdAt.slice(0, 10);</code> ואז <code class="mid">(!from || day &gt;= from) &amp;&amp; (!to || day &lt;= to)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־topCustomer: <code>Map&lt;string, number&gt;</code> של הכנסה לפי לקוח, ואחריה לולאה עם <code>&gt;</code> (לא <code>&gt;=</code>) — כך בשוויון נשאר הראשון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E41: סטטיסטיקה של הזמנות
+import express from "express";
+
+export type Order = { id: number; customer: string; status: "paid" | "shipped" | "cancelled"; totalAgorot: number; createdAt: string };
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function createApp(orders: Order[]) {
+  const app = express();
+  app.get("/stats", (req, res) =&gt; {
+    const { from, to } = req.query;
+    for (const value of [from, to]) {
+      if (value !== undefined &amp;&amp; (typeof value !== "string" || !DAY.test(value))) {
+        res.status(400).json({ error: "תאריך לא תקין" });
+        return;
+      }
+    }
+    const list = orders.filter((o) =&gt; {
+      const day = o.createdAt.slice(0, 10);
+      return (from === undefined || day &gt;= String(from)) &amp;&amp; (to === undefined || day &lt;= String(to));
+    });
+
+    const byStatus = { paid: 0, shipped: 0, cancelled: 0 };
+    const byCustomer = new Map&lt;string, number&gt;();
+    for (const o of list) {
+      byStatus[o.status]++;
+      if (o.status !== "cancelled") byCustomer.set(o.customer, (byCustomer.get(o.customer) ?? 0) + o.totalAgorot);
+    }
+    let topCustomer: string | null = null;
+    let best = -1;
+    for (const [customer, sum] of byCustomer) {
+      if (sum &gt; best) {
+        best = sum;
+        topCustomer = customer;
+      }
+    }
+    const revenueAgorot = list.filter((o) =&gt; o.status !== "cancelled").reduce((sum, o) =&gt; sum + o.totalAgorot, 0);
+    res.json({ count: list.length, byStatus, revenueAgorot, topCustomer });
+  });
+  return app;
+}
+
+const orders: Order[] = [
+  { id: 1, customer: "דנה", status: "paid", totalAgorot: 5000, createdAt: "2026-11-01T09:00:00Z" },
+  { id: 2, customer: "יוסי", status: "shipped", totalAgorot: 12000, createdAt: "2026-11-02T10:00:00Z" },
+  { id: 3, customer: "דנה", status: "paid", totalAgorot: 8000, createdAt: "2026-11-03T23:30:00Z" },
+  { id: 4, customer: "רון", status: "cancelled", totalAgorot: 90000, createdAt: "2026-11-03T08:00:00Z" },
+];
+const server = createApp(orders).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}`;
+  for (const q of ["", "?from=2026-11-02", "?from=2026-11-02&amp;to=2026-11-02", "?to=3.11.2026"]) {
+    const res = await fetch(`${base}/stats${q}`);
+    console.log(res.status, await res.text());
+  }
+  server.close();
+});</code></pre>
+<pre class="terminal">200 {"count":4,"byStatus":{"paid":2,"shipped":1,"cancelled":1},"revenueAgorot":25000,"topCustomer":"דנה"}
+200 {"count":3,"byStatus":{"paid":1,"shipped":1,"cancelled":1},"revenueAgorot":20000,"topCustomer":"יוסי"}
+200 {"count":1,"byStatus":{"paid":0,"shipped":1,"cancelled":0},"revenueAgorot":12000,"topCustomer":"יוסי"}
+400 {"error":"תאריך לא תקין"}</pre>
+<p>רון קנה בהכי הרבה — אבל ביטל, ולכן הוא לא "הלקוח המוביל". ההשוואה <code>day &gt;= from</code> בין מחרוזות עובדת כי ISO כותב שנה־חודש־יום עם אפסים מובילים — הסדר האלפביתי זהה לסדר הכרונולוגי. (אזור הזמן: <code>23:30Z</code> הוא כבר 4 בנובמבר בישראל. בפרק 24 נטפל בזה כמו שצריך.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>new Date(from)</code> בלי בדיקת תבנית — <code>"3.11.2026"</code> הופך בשקט לתאריך אחר (או ל־Invalid Date), וההשוואה מחזירה תוצאות שגויות.</li><li>לסכם את ה־revenue לפני הסינון של cancelled.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E42">
+    <h3>P15-E42 · מחלקת אחסון מוזרקת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־TypeScript: <code class="mid">#notes = new Map&lt;number, Note&gt;();</code> ו־<code class="mid">type Note = { id: number; text: string; createdAt: string }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־route: <code class="mid">store.get(Number(req.params.id))</code> — ה־Map מפתחת לפי מספר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E42: מחלקת אחסון מוזרקת
+import express from "express";
+
+export type Note = { id: number; text: string; createdAt: string };
+
+export class NotesStore {
+  #notes = new Map&lt;number, Note&gt;();
+  #nextId = 1;
+
+  add(text: string): Note {
+    const note = { id: this.#nextId++, text, createdAt: new Date().toISOString() };
+    this.#notes.set(note.id, note);
+    return note;
+  }
+  get(id: number): Note | undefined {
+    return this.#notes.get(id);
+  }
+  list(): Note[] {
+    return [...this.#notes.values()].sort((a, b) =&gt; a.id - b.id);
+  }
+  remove(id: number): boolean {
+    return this.#notes.delete(id);
+  }
+}
+
+export function createApp(store = new NotesStore()) {
+  const app = express();
+  app.use(express.json());
+
+  app.get("/notes", (req, res) =&gt; {
+    res.json(store.list());
+  });
+
+  app.post("/notes", (req, res) =&gt; {
+    const text = req.body?.text;
+    if (typeof text !== "string" || text.trim().length &lt; 1 || text.trim().length &gt; 200) {
+      res.status(400).json({ error: "text לא תקין" });
+      return;
+    }
+    const note = store.add(text.trim());
+    res.status(201).location(`/notes/${note.id}`).json(note);
+  });
+
+  app.get("/notes/:id", (req, res) =&gt; {
+    const note = store.get(Number(req.params.id));
+    if (!note) {
+      res.status(404).json({ error: "לא נמצא" });
+      return;
+    }
+    res.json(note);
+  });
+
+  app.delete("/notes/:id", (req, res) =&gt; {
+    if (!store.remove(Number(req.params.id))) {
+      res.status(404).json({ error: "לא נמצא" });
+      return;
+    }
+    res.sendStatus(204);
+  });
+
+  return app;
+}
+
+const store = new NotesStore();
+store.add("פתק מוכן");
+const server = createApp(store).listen(0, async () =&gt; {
+  const address = server.address();
+  const base = `http://localhost:${typeof address === "object" &amp;&amp; address ? address.port : 0}/notes`;
+  const created = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"text":"  לקנות חלב  "}' });
+  console.log(created.status, created.headers.get("location"));
+  console.log(store.list().map((n) =&gt; n.text));
+  console.log((await fetch(`${base}/1`, { method: "DELETE" })).status, (await fetch(`${base}/1`)).status);
+  server.close();
+});</code></pre>
+<pre class="terminal">201 /notes/2
+[ 'פתק מוכן', 'לקנות חלב' ]
+204 404</pre>
+<p>הקוד שמחוץ לאפליקציה רואה בדיוק את מה שנשמר (<code>store.list()</code>) — כי שניהם עובדים עם <strong>אותו</strong> אובייקט. כך בדיוק בודקים שרת: נותנים לו store עם נתונים ידועים, שולחים בקשות, ובודקים את ה־store. בשיעור 3 ה־store יהפוך ל־repository, ובפרק 19 — למסד נתונים, בלי לגעת ב־routes.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>createApp()</code> שיוצר <code>new NotesStore()</code> בפנים תמיד — ה־store שהבדיקה העבירה נשאר ריק, והפתקים המוכנים "לא נמצאים".</li><li><code>this.notes</code> ציבורי — כל קוד יכול לשנות את ה־Map בלי לעבור דרך <code>add</code> (ובלי id תקין).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-middleware.html"><small>הבא</small>שיעור 2 — middleware, שגיאות ו־404</a></div>
 </main>
 </body>

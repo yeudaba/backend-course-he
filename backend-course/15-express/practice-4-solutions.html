@@ -14,6 +14,265 @@
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>15-express/solutions/</code>.</p></div>
   <h2>🎯 חלק 1</h2>
+<div class="ex" id="P15-E70">
+    <h3>P15-E70 · מה safeParse יחזיר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>z.number()</code> לא ממיר מחרוזת (רק <code>z.coerce.number()</code>). ‏<code>.trim()</code> רץ <strong>לפני</strong> <code>.min(2)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שדה שלא בסכמה — נמחק. שדה עם <code>undefined</code> — כמו שדה חסר: ‏<code>default</code> נכנס לפעולה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const userSchema = z.object({
+  name: z.string().trim().min(2),
+  age: z.number().int().min(0).optional(),
+  role: z.enum(["user", "admin"]).default("user"),
+});
+
+const inputs: unknown[] = [
+  { name: "  דנה  " },
+  { name: "דנה", age: "31" },
+  { name: "ד" },
+  { name: "דנה", age: 31.5 },
+  { name: "דנה", isAdmin: true },
+  { name: "דנה", role: undefined, age: undefined },
+  "דנה",
+];
+for (const input of inputs) {
+  const r = userSchema.safeParse(input);
+  console.log(r.success ? `✔ ${JSON.stringify(r.data)}` : `✘ ${r.error.issues[0].path.join(".") || "(השורש)"}: ${r.error.issues[0].message}`);
+}</code></pre>
+<pre class="terminal">✔ {"name":"דנה","role":"user"}
+✘ age: Invalid input: expected number, received string
+✘ name: Too small: expected string to have &gt;=2 characters
+✘ age: Invalid input: expected int, received number
+✔ {"name":"דנה","role":"user"}
+✔ {"name":"דנה","role":"user"}
+✘ (השורש): Invalid input: expected object, received string</pre>
+<p>שלושה דברים שכדאי לזכור: <code>data</code> הוא הקלט <strong>אחרי</strong> ניקוי (trim, ‏default, בלי שדות זרים) — ממשיכים איתו, לא עם <code>req.body</code>; ‏<code>age: "31"</code> נכשל — בגוף JSON, מחרוזת היא לא מספר (בניגוד ל־query, שבו צריך <code>coerce</code>); ומחרוזת במקום אובייקט נכשלת "בשורש" — <code>path</code> ריק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק עם <code>safeParse</code> ולהמשיך עם <code>req.body</code> — מאבדים את ה־trim וה־default, ו־<code>isAdmin</code> עובר הלאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E71">
+    <h3>P15-E71 · object, strictObject ו־partial <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>z.object</code> מוחק שדות זרים; ‏<code>z.strictObject</code> נכשל עליהם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>partial()</code> הופך כל שדה לאופציונלי — כולל המצב שבו <strong>אף</strong> שדה לא נשלח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const task = z.object({ title: z.string().min(1), done: z.boolean() });
+const strict = z.strictObject({ title: z.string().min(1), done: z.boolean() });
+const patch = task.partial();
+
+const body = { title: "לקנות חלב", done: false, ownerId: 99 };
+console.log(JSON.stringify(task.parse(body)));
+const s = strict.safeParse(body);
+console.log(s.success, s.success ? "" : s.error.issues[0].message);
+console.log(JSON.stringify(patch.parse({ done: true })));
+console.log(JSON.stringify(patch.parse({ ownerId: 5 })));
+console.log(patch.safeParse({ title: "" }).success);</code></pre>
+<pre class="terminal">{"title":"לקנות חלב","done":false}
+false Unrecognized key: "ownerId"
+{"done":true}
+{}
+false</pre>
+<p>השורה הרביעית היא הבעיה: <code>PATCH</code> עם <code>{"ownerId": 5}</code> עובר את הבדיקה ונותן <code>{}</code> — "עדכון" שלא מעדכן כלום, ומחזיר 200. לכן ב־P15-E17 דורשים "לפחות שדה אחד" (ושם גם <code>strictObject</code> — כדי שהלקוח יידע ש־<code>ownerId</code> לא נתמך). ובשורה האחרונה: <code>partial</code> לא מבטל את הבדיקות של שדה <strong>שנשלח</strong>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>partial()</code> "מוותר" על הבדיקות — הוא רק הופך שדות לאופציונליים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E72">
+    <h3>P15-E72 · path של בעיה בתוך מערך <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>path</code>, אינדקס של מערך הוא מספר: <code>["items", 1, "qty"]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Zod לא עוצר בבעיה הראשונה — הוא מחזיר את כולן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const orderSchema = z.object({
+  customer: z.object({ email: z.email() }),
+  items: z.array(z.object({ sku: z.string().min(1), qty: z.number().int().min(1) })).min(1),
+});
+
+const r = orderSchema.safeParse({
+  customer: { email: "not-an-email" },
+  items: [{ sku: "PEN", qty: 2 }, { sku: "", qty: 0 }, { qty: 1 }],
+});
+if (!r.success) {
+  for (const i of r.error.issues) console.log(i.path.join("."), "—", i.message);
+}
+console.log(orderSchema.safeParse({ customer: { email: "a@b.co" }, items: [] }).error?.issues[0].path.join("."));</code></pre>
+<pre class="terminal">customer.email — Invalid email address
+items.1.sku — Too small: expected string to have &gt;=1 characters
+items.1.qty — Too small: expected number to be &gt;=1
+items.2.sku — Invalid input: expected string, received undefined
+items</pre>
+<p>ארבע בעיות, וכל אחת עם "כתובת" מדויקת: <code>items.1.qty</code> — הפריט השני. טופס בצד הלקוח יכול לסמן בדיוק את התא. ובמערך ריק הבעיה היא על המערך עצמו — <code>items</code>. ההודעות באנגלית הן ברירת המחדל של Zod; ‏<code>.min(1, "חובה")</code> מחליף אותן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר רק <code>issues[0]</code> — הלקוח מתקן שדה אחד, שולח, ומקבל את הבא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E73">
+    <h3>P15-E73 · default, optional ו־nullable <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>optional</code> — מותר <code>undefined</code> (או חסר). ‏<code>nullable</code> — מותר <code>null</code>, אבל <strong>חובה</strong> לשלוח את השדה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>default</code> נכנס רק כשהערך <code>undefined</code> — לא על <code>null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const schema = z.object({
+  note: z.string().optional(),
+  dueDate: z.iso.date().nullable(),
+  priority: z.enum(["low", "high"]).default("low"),
+});
+
+for (const input of [{ dueDate: null }, { dueDate: "2026-12-01", note: undefined }, { note: null, dueDate: null }, {}, { dueDate: null, priority: null }]) {
+  const r = schema.safeParse(input);
+  console.log(JSON.stringify(input).padEnd(42), r.success ? JSON.stringify(r.data) : `✘ ${r.error.issues.map((i) =&gt; i.path.join(".")).join(", ")}`);
+}</code></pre>
+<pre class="terminal">{"dueDate":null}                           {"dueDate":null,"priority":"low"}
+{"dueDate":"2026-12-01"}                   {"dueDate":"2026-12-01","priority":"low"}
+{"note":null,"dueDate":null}               ✘ note
+{}                                         ✘ dueDate
+{"dueDate":null,"priority":null}           ✘ priority</pre>
+<p>שלושה מצבים שונים של "אין ערך": חסר (<code>undefined</code>), ‏<code>null</code> מפורש, וערך ברירת מחדל. ב־PATCH זה חשוב במיוחד: <code>{"dueDate": null}</code> אומר "מחק את התאריך", ושדה חסר אומר "אל תיגע". לכן <code>dueDate</code> ב־PATCH הוא <code>.nullable().optional()</code> — שני הדברים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>.optional()</code> כשהכוונה "אפשר לנקות" — הלקוח שולח <code>null</code> ומקבל 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E74">
+    <h3>P15-E74 · coerce.boolean ו־"false" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>z.coerce.boolean()</code> עושה <code>Boolean(value)</code> — כמו ב־P14-E39.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>z.stringbool()</code> (מ־Zod 4) מכיר רשימה של מילים: true/false, ‏1/0, ‏yes/no, ‏on/off — ונכשל על כל השאר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const a = z.coerce.boolean();
+const b = z.stringbool();
+const c = z.enum(["true", "false"]).transform((v) =&gt; v === "true");
+
+for (const v of ["true", "false", "0", "", "yes", "maybe"]) {
+  const show = (r: { success: boolean; data?: boolean }) =&gt; (r.success ? String(r.data) : "✘");
+  console.log(JSON.stringify(v).padEnd(8), show(a.safeParse(v)), show(b.safeParse(v)), show(c.safeParse(v)));
+}</code></pre>
+<pre class="terminal">"true"   true true true
+"false"  true false false
+"0"      true false ✘
+""       false ✘ ✘
+"yes"    true true ✘
+"maybe"  true ✘ ✘</pre>
+<p><code>z.coerce.boolean()</code> הופך כל מחרוזת לא ריקה ל־<code>true</code> — גם <code>"false"</code>. ‏<code>?inStock=false</code> יחזיר רק מוצרים במלאי, ההפך ממה שביקשו. ל־query משתמשים ב־<code>z.stringbool()</code>, או ב־enum מפורש (העמודה השלישית) — שנכשל על כל ערך לא צפוי במקום לנחש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"תיקון" עם <code>z.coerce.boolean()</code> כי "גם coerce.number עבד" — לכל טיפוס, coerce מתנהג כמו פונקציית ההמרה של JavaScript.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E75">
+    <h3>P15-E75 · parse שזורק בתוך route <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>parse</code> זורק <code>ZodError</code> על קלט לא תקין. ב־route סינכרוני, Express תופס את השגיאה ומעביר ל־error handler.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי error handler משלך — ה־handler המובנה של Express, שמחזיר 500 ו־HTML (P15-E45).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import express from "express";
+import { z } from "zod";
+
+const schema = z.object({ qty: z.number().int().min(1) });
+
+function build(withHandler: boolean) {
+  const app = express();
+  app.use(express.json());
+  app.post("/cart", (req, res) =&gt; {
+    const { qty } = schema.parse(req.body);
+    res.json({ qty });
+  });
+  if (withHandler) {
+    app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) =&gt; {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: { code: "VALIDATION_ERROR", details: err.issues.map((i) =&gt; i.path.join(".")) } });
+        return;
+      }
+      res.status(500).json({ error: { code: "INTERNAL" } });
+    });
+  }
+  return app;
+}
+
+const a = build(false).listen(0);
+const b = build(true).listen(0);
+const post = (s: typeof a, body: unknown) =&gt;
+  fetch(`http://localhost:${(s.address() as { port: number }).port}/cart`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+setTimeout(async () =&gt; {
+  for (const [name, server] of [["a", a], ["b", b]] as const) {
+    const ok = await post(server, { qty: 2 });
+    const bad = await post(server, { qty: 0 });
+    const text = await bad.text();
+    console.log(name, ok.status, bad.status, bad.headers.get("content-type"), text.startsWith("{") ? text : "(דף HTML)");
+  }
+  a.close();
+  b.close();
+}, 50);</code></pre>
+<pre class="terminal">a 200 500 text/html; charset=utf-8 (דף HTML)
+b 200 400 application/json; charset=utf-8 {"error":{"code":"VALIDATION_ERROR","details":["qty"]}}</pre>
+<p>ב־<code>a</code>, קלט לא תקין של הלקוח הפך ל־500 — "השרת שבור" — ועוד בדף HTML. ב־<code>b</code>, אותו <code>parse</code> עובד יפה, כי error handler אחד מתרגם כל <code>ZodError</code> ל־400. שתי הדרכים לגיטימיות: <code>safeParse</code> ותשובה ב־route (כמו בשיעור), או <code>parse</code> + תרגום מרכזי (כמו P15-E54). מה שלא בסדר — <code>parse</code> בלי תרגום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק עם קלט תקין — ההבדל בין <code>a</code> ל־<code>b</code> נראה רק כשהקלט שבור.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E11">
     <h3>P15-E11 · סכמת מוצר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -336,64 +595,215 @@ export function createApp() {
 
 </div></details>
   </div>
-<div class="ex typed" id="P15-E27">
-    <h3>P15-E27 · סכמת הרשמה עם regex 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+<div class="ex typed" id="P15-E76">
+    <h3>P15-E76 · סכמת טופס יצירת קשר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>username: <code class="long">z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_]{2,15}$/, "...")</code>. האות הראשונה היא <code>[a-z]</code>, ואחריה עוד 2–15 תווים — כלומר 3–16 בסך הכול.</p>
-<p>password: אפשר לשרשר כמה <code>.regex()</code>, כל אחד עם הודעה משלו: <code>.regex(/[A-Z]/, "...")</code> ו־<code>.regex(/\d/, "...")</code>. כאן אין <code>^</code> ו־<code>$</code>: מספיק שהתו מופיע <em>איפשהו</em>.</p>
+<p><code class="mid">phone: z.string().regex(/^\d{9,10}$/).optional()</code> — ‏<code>^</code> ו־<code>$</code> חובה (P15-E80).</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>phone בשלושה שלבים: <code class="mid">.transform((s) =&gt; s.replace(/[\s-]/g, ""))</code> (מנקים) ← <code class="mid">.pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "..."))</code> (בודקים את המחרוזת הנקייה) ← <code class="mid">.transform((s) =&gt; s.replace(/^\+972/, "0"))</code> (מאחדים צורה). ‏<code>pipe</code> מעביר את התוצאה של ה־transform לסכמה נוספת.</p>
+<p>הסדר בשרשרת חשוב: <code class="mid">z.string().trim().min(2).max(50)</code> — trim לפני min.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P15-E27: סכמת הרשמה עם regex
+<pre><code class="lang-ts">// P15-E76: סכמת טופס יצירת קשר
 import { z } from "zod";
 
-export const signupSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z][a-z0-9_]{2,15}$/, "שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"),
-  phone: z
-    .string()
-    .transform((s) =&gt; s.replace(/[\s-]/g, ""))
-    .pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "טלפון נייד ישראלי: 05XXXXXXXX"))
-    .transform((s) =&gt; s.replace(/^\+972/, "0")),
-  password: z
-    .string()
-    .min(8, "סיסמה: לפחות 8 תווים")
-    .regex(/[A-Z]/, "סיסמה: לפחות אות גדולה אחת")
-    .regex(/\d/, "סיסמה: לפחות ספרה אחת"),
+export const contactSchema = z.object({
+  name: z.string().trim().min(2).max(50),
+  email: z.email().transform((e) =&gt; e.toLowerCase()),
+  phone: z.string().regex(/^\d{9,10}$/).optional(),
+  topic: z.enum(["general", "billing", "support"]).default("general"),
+  message: z.string().trim().min(10).max(1000),
 });
 
-export type Signup = z.infer&lt;typeof signupSchema&gt;;
+export type Contact = z.infer&lt;typeof contactSchema&gt;;
 
-console.log(signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" }));
-const bad = signupSchema.safeParse({ username: "8dana", phone: "03-1234567", password: "secret" });
-if (!bad.success) {
-  for (const issue of bad.error.issues) console.log(issue.path.join("."), "—", issue.message);
-}</code></pre>
-<pre class="terminal">{ username: 'dana_88', phone: '0501234567', password: 'Secret123' }
-username — שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות
-phone — טלפון נייד ישראלי: 05XXXXXXXX
-password — סיסמה: לפחות 8 תווים
-password — סיסמה: לפחות אות גדולה אחת
-password — סיסמה: לפחות ספרה אחת</pre>
-<p>שני סוגים של regex כאן. ב־username ובטלפון יש <code>^...$</code>: <strong>כל</strong> המחרוזת חייבת להתאים. בסיסמה אין: שואלים רק אם יש <em>לפחות</em> תו אחד כזה. ‏<code>/[A-Z]/</code> בלי עוגנים הוא "יש אות גדולה איפשהו".</p>
-<p>בטלפון הסדר חשוב: קודם מנקים, אחר כך בודקים, ובסוף מאחדים לצורה אחת. כך במסד נשמר רק <code>0501234567</code>, ולא ארבע כתיבות שונות של אותו מספר. אחרת חיפוש לפי טלפון לא ימצא את המשתמש.</p>
-<p>בסיסמה Zod ממשיך לבדוק גם אחרי שבדיקה נכשלה, ולכן <code>"secret"</code> מקבל שלוש הודעות. המשתמש רואה את כל מה שחסר בבת אחת.</p>
+const ok = contactSchema.safeParse({ name: " דנה ", email: "Dana@Example.COM", message: "  שלום, יש לי שאלה  " });
+console.log(JSON.stringify(ok.data));
+const bad = contactSchema.safeParse({ name: "ד", email: "x", phone: "050-1234567", topic: "sales", message: "קצר" });
+console.log(bad.error?.issues.map((i) =&gt; i.path.join(".")).join(", "));</code></pre>
+<pre class="terminal">{"name":"דנה","email":"dana@example.com","topic":"general","message":"שלום, יש לי שאלה"}
+name, email, phone, topic, message</pre>
+<p>סכמה אחת נותנת שלושה דברים: בדיקה, ניקוי (trim, אותיות קטנות, ברירת מחדל) וטיפוס (<code>Contact</code>) — בלי לכתוב <code>interface</code> נפרד שעלול לא להתאים. ‏<code>transform</code> בא <strong>אחרי</strong> <code>z.email()</code>: קודם בודקים שזו כתובת, ואז משנים.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>.regex(/[a-z0-9_]{3,16}/)</code> בלי <code>^</code> ו־<code>$</code> — ‏<code>"dana!!!"</code> עובר, כי <code>"dana"</code> נמצא בתוכה.</li><li><code>.toLowerCase()</code> אחרי <code>.regex()</code> — ‏<code>"Dana"</code> נכשל לפני שהומר.</li><li><code>/^(+972|0)5\d{8}$/</code> — ‏<code>+</code> הוא תו מיוחד ב־regex ("פעם אחת או יותר"). צריך <code>\+</code>.</li><li><code>s.replace("-", "")</code> עם מחרוזת — מחליף רק את המקף הראשון. ב־regex עם <code>g</code> מוחלפים כולם.</li></ul>
+<ul><li><code>regex(/\d{9,10}/)</code> בלי עוגנים — <code>"tel:0501234567;x"</code> עובר, כי יש בו 10 ספרות רצופות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E77">
+    <h3>P15-E77 · שגיאות לפי שדה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">for (const issue of error.issues) { const key = issue.path.join(".") || "_root"; (fields[key] ??= []).push(issue.message); }</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סיסמה קצרה ובלי ספרה נותנת <strong>שתי</strong> הודעות — Zod בודק את כל השרשרת (גם אחרי ש־<code>min</code> נכשל).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E77: שגיאות לפי שדה
+import express from "express";
+import { z } from "zod";
+
+export function toFieldErrors(error: z.ZodError): Record&lt;string, string[]&gt; {
+  const fields: Record&lt;string, string[]&gt; = {};
+  for (const issue of error.issues) {
+    const key = issue.path.join(".") || "_root";
+    (fields[key] ??= []).push(issue.message);
+  }
+  return fields;
+}
+
+export const signupSchema = z.object({
+  email: z.email("אימייל לא תקין"),
+  password: z.string().min(8, "לפחות 8 תווים").regex(/\d/, "חייבת ספרה"),
+  tags: z.array(z.string().min(1, "תגית ריקה")).default([]),
+});
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.post("/signup", (req, res) =&gt; {
+    const result = signupSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", fields: toFieldErrors(result.error) } });
+      return;
+    }
+    const { email, tags } = result.data;
+    res.status(201).json({ email, tags });
+  });
+  return app;
+}
+
+const r = signupSchema.safeParse({ email: "dana", password: "abc", tags: ["ok", "", ""] });
+if (!r.success) console.log(JSON.stringify(toFieldErrors(r.error)));
+console.log(JSON.stringify(toFieldErrors(signupSchema.safeParse("x").error!)));</code></pre>
+<pre class="terminal">{"email":["אימייל לא תקין"],"password":["לפחות 8 תווים","חייבת ספרה"],"tags.1":["תגית ריקה"],"tags.2":["תגית ריקה"]}
+{"_root":["Invalid input: expected object, received string"]}</pre>
+<p>מבנה "לפי שדה" נוח לטופס: <code>fields.password</code> הוא בדיוק מה שמציגים מתחת לשדה הסיסמה. ‏<code>??=</code> ("אם עוד אין — צור") חוסך את ה־<code>if</code>. ושים לב לתשובה המוצלחת: היא בונה אובייקט מפורש — הסיסמה לא חוזרת ללקוח, גם לא בטעות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר <code>result.data</code> כמו שהוא ב־201 — הסיסמה יוצאת בתשובה (וביומנים של כל proxy בדרך).</li><li>מפתח לפי <code>issue.path[0]</code> בלבד — שתי התגיות הריקות (<code>tags.1</code>, ‏<code>tags.2</code>) מתמזגות, והטופס לא יודע איזו.</li></ul>
 
 
 </div></details>
   </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P15-E78">
+    <h3>P15-E78 · safeParse ו־narrowing <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לפני שבודקים <code>success</code>, ‏<code>data</code> יכול להיות <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>if (!r.success) return;</code> — מה TypeScript יודע על <code>r</code> בשורות שאחריו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// כך (בקירוב) מוגדרת התוצאה של schema.safeParse ב־Zod:
+type SafeParseResult&lt;T&gt; =
+  | { success: true; data: T; error?: never }
+  | { success: false; error: { issues: { path: string[]; message: string }[] }; data?: never };
+declare function safeParse(body: unknown): SafeParseResult&lt;{ qty: number }&gt;;
+
+function handle(body: unknown) {
+  const r = safeParse(body);
+  const a = r.data.qty;
+  if (r.success) {
+    const b = r.data.qty * 2;
+    const c = r.error.issues;
+  } else {
+    const d = r.error.issues.length;
+  }
+  if (!r.success) return;
+  const e: number = r.data.qty;
+}</code></pre>
+<pre class="terminal">snippet.ts(9,13): error TS18048: 'r.data' is possibly 'undefined'.
+snippet.ts(12,15): error TS18048: 'r.error' is possibly 'undefined'.</pre>
+<p>שתי שגיאות — <code>a</code> (עוד לא בדקנו) ו־<code>c</code> (בענף ההצלחה אין <code>error</code>). <code>b</code>, ‏<code>d</code> ו־<code>e</code> עוברים: TypeScript "מצמצם" את <code>r</code> לפי <code>success</code>. התבנית <code class="mid">if (!r.success) { ...400...; return; }</code> ואחריה עבודה עם <code>r.data</code> היא בדיוק מה שה־middleware בשיעור עושה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>r.data!.qty</code> כדי "להשתיק" — בזמן ריצה, קלט לא תקין יקרוס ב־TypeError במקום 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E79">
+    <h3>P15-E79 · coerce.number והמרות של JavaScript <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Number("")</code> הוא 0, ‏<code>Number(" 12 ")</code> הוא 12, ‏<code>Number("12px")</code> הוא <code>NaN</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Zod 4 פוסל <code>NaN</code> וגם <code>Infinity</code> ב־<code>z.number()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const plain = z.coerce.number();
+const safe = z.coerce.number().positive().max(100000);
+
+for (const v of ["", " 12 ", "1e2", "0x10", "12px", "abc", "Infinity", "-5"]) {
+  const show = (r: { success: boolean; data?: number }) =&gt; (r.success ? String(r.data) : "✘");
+  console.log(JSON.stringify(v).padEnd(11), show(plain.safeParse(v)), show(safe.safeParse(v)));
+}</code></pre>
+<pre class="terminal">""          0 ✘
+" 12 "      12 12
+"1e2"       100 100
+"0x10"      16 16
+"12px"      ✘ ✘
+"abc"       ✘ ✘
+"Infinity"  ✘ ✘
+"-5"        -5 ✘</pre>
+<p>בלי גבולות, ‏<code>""</code> הופך ל־0 ו־<code>"0x10"</code> ל־16 — שניהם "תקינים". עם <code>positive()</code> ו־<code>max</code>, ה־0 נפסל. ‏<code>coerce</code> מקבל את כל מה ש־<code>Number</code> מקבל, ולכן תמיד מוסיפים לו גבולות שמתאימים לשדה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>z.coerce.number()</code> לבד לפרמטר שבו 0 הוא ערך משמעותי (מחיר מקסימלי, כמות) — <code>?maxPrice=</code> ריק יחזיר רק מוצרים בחינם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P15-E80">
+    <h3>P15-E80 · regex בסכמה — עם עוגנים ובלי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>regex(...)</code> בודק אם יש <strong>התאמה איפשהו</strong> במחרוזת — בדיוק כמו <code>re.test(s)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"050-12345678"</code> מכיל <code>"050-1234567"</code> בתוכו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const loose = z.string().regex(/05\d-?\d{7}/);
+const strict = z.string().regex(/^05\d-?\d{7}$/);
+
+for (const phone of ["050-1234567", "0501234567", "x050-1234567y", "050-12345678", "+972-50-1234567"]) {
+  console.log(phone.padEnd(16), loose.safeParse(phone).success, strict.safeParse(phone).success);
+}</code></pre>
+<pre class="terminal">050-1234567      true true
+0501234567       true true
+x050-1234567y    true false
+050-12345678     true false
++972-50-1234567  false false</pre>
+<p>בלי עוגנים, כל מחרוזת שמכילה טלפון עוברת — כולל ספרה עודפת בסוף או זבל מסביב. עם <code>^...$</code> — רק טלפון בדיוק. ‏<code>+972-50-...</code> נכשל בשתיהן: אם רוצים לתמוך בו, מוסיפים אפשרות, או מנרמלים (<code>transform</code>) לפני הבדיקה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את ה־regex רק עם דוגמאות טובות — "עובד". תמיד גם עם דוגמה שיש בה תוספת לפני ואחרי.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E24">
     <h3>P15-E24 · אתגר: API לספרייה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -637,6 +1047,63 @@ export function createApp() {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לשמור את התשובה רק בסוף, בלי מצב "running" — שתי בקשות שמגיעות באותו רגע ייצרו שתי הזמנות, בדיוק המצב שרצינו למנוע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P15-E27">
+    <h3>P15-E27 · סכמת הרשמה עם regex 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>username: <code class="long">z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_]{2,15}$/, "...")</code>. האות הראשונה היא <code>[a-z]</code>, ואחריה עוד 2–15 תווים — כלומר 3–16 בסך הכול.</p>
+<p>password: אפשר לשרשר כמה <code>.regex()</code>, כל אחד עם הודעה משלו: <code>.regex(/[A-Z]/, "...")</code> ו־<code>.regex(/\d/, "...")</code>. כאן אין <code>^</code> ו־<code>$</code>: מספיק שהתו מופיע <em>איפשהו</em>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>phone בשלושה שלבים: <code class="mid">.transform((s) =&gt; s.replace(/[\s-]/g, ""))</code> (מנקים) ← <code class="mid">.pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "..."))</code> (בודקים את המחרוזת הנקייה) ← <code class="mid">.transform((s) =&gt; s.replace(/^\+972/, "0"))</code> (מאחדים צורה). ‏<code>pipe</code> מעביר את התוצאה של ה־transform לסכמה נוספת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E27: סכמת הרשמה עם regex
+import { z } from "zod";
+
+export const signupSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z][a-z0-9_]{2,15}$/, "שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות"),
+  phone: z
+    .string()
+    .transform((s) =&gt; s.replace(/[\s-]/g, ""))
+    .pipe(z.string().regex(/^(\+972|0)5\d{8}$/, "טלפון נייד ישראלי: 05XXXXXXXX"))
+    .transform((s) =&gt; s.replace(/^\+972/, "0")),
+  password: z
+    .string()
+    .min(8, "סיסמה: לפחות 8 תווים")
+    .regex(/[A-Z]/, "סיסמה: לפחות אות גדולה אחת")
+    .regex(/\d/, "סיסמה: לפחות ספרה אחת"),
+});
+
+export type Signup = z.infer&lt;typeof signupSchema&gt;;
+
+console.log(signupSchema.parse({ username: " Dana_88 ", phone: "+972 50-123-4567", password: "Secret123" }));
+const bad = signupSchema.safeParse({ username: "8dana", phone: "03-1234567", password: "secret" });
+if (!bad.success) {
+  for (const issue of bad.error.issues) console.log(issue.path.join("."), "—", issue.message);
+}</code></pre>
+<pre class="terminal">{ username: 'dana_88', phone: '0501234567', password: 'Secret123' }
+username — שם משתמש: 3–16 תווים — אותיות באנגלית, ספרות ו־_, ומתחיל באות
+phone — טלפון נייד ישראלי: 05XXXXXXXX
+password — סיסמה: לפחות 8 תווים
+password — סיסמה: לפחות אות גדולה אחת
+password — סיסמה: לפחות ספרה אחת</pre>
+<p>שני סוגים של regex כאן. ב־username ובטלפון יש <code>^...$</code>: <strong>כל</strong> המחרוזת חייבת להתאים. בסיסמה אין: שואלים רק אם יש <em>לפחות</em> תו אחד כזה. ‏<code>/[A-Z]/</code> בלי עוגנים הוא "יש אות גדולה איפשהו".</p>
+<p>בטלפון הסדר חשוב: קודם מנקים, אחר כך בודקים, ובסוף מאחדים לצורה אחת. כך במסד נשמר רק <code>0501234567</code>, ולא ארבע כתיבות שונות של אותו מספר. אחרת חיפוש לפי טלפון לא ימצא את המשתמש.</p>
+<p>בסיסמה Zod ממשיך לבדוק גם אחרי שבדיקה נכשלה, ולכן <code>"secret"</code> מקבל שלוש הודעות. המשתמש רואה את כל מה שחסר בבת אחת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>.regex(/[a-z0-9_]{3,16}/)</code> בלי <code>^</code> ו־<code>$</code> — ‏<code>"dana!!!"</code> עובר, כי <code>"dana"</code> נמצא בתוכה.</li><li><code>.toLowerCase()</code> אחרי <code>.regex()</code> — ‏<code>"Dana"</code> נכשל לפני שהומר.</li><li><code>/^(+972|0)5\d{8}$/</code> — ‏<code>+</code> הוא תו מיוחד ב־regex ("פעם אחת או יותר"). צריך <code>\+</code>.</li><li><code>s.replace("-", "")</code> עם מחרוזת — מחליף רק את המקף הראשון. ב־regex עם <code>g</code> מוחלפים כולם.</li></ul>
 
 
 </div></details>
