@@ -35,6 +35,231 @@
 
 </div></details>
   </div>
+<div class="ex" id="P12-E55">
+    <h3>P12-E55 · implements — מה חסר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>implements</code> בודק שהמחלקה מקיימת את <strong>כל</strong> החוזה — שמות, פרמטרים וטיפוסי החזרה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מתודה <strong>נוספת</strong>, שלא בחוזה — האם זה מפריע?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Product = { id: number; name: string };
+
+interface ProductRepository {
+  findById(id: number): Promise&lt;Product | null&gt;;
+  save(product: Product): Promise&lt;void&gt;;
+}
+
+class RepoA implements ProductRepository {
+  async findById(id: number): Promise&lt;Product | null&gt; {
+    return null;
+  }
+}
+
+class RepoB implements ProductRepository {
+  findById(id: number): Product | null {
+    return null;
+  }
+  async save(product: Product): Promise&lt;void&gt; {}
+}
+
+class RepoC implements ProductRepository {
+  async findById(id: number): Promise&lt;Product | null&gt; {
+    return null;
+  }
+  async save(product: Product): Promise&lt;void&gt; {}
+  async count(): Promise&lt;number&gt; {
+    return 0;
+  }
+}</code></pre>
+<pre class="terminal">snippet.ts(8,7): error TS2420: Class 'RepoA' incorrectly implements interface 'ProductRepository'.
+  Property 'save' is missing in type 'RepoA' but required in type 'ProductRepository'.
+snippet.ts(15,3): error TS2416: Property 'findById' in type 'RepoB' is not assignable to the same property in base type 'ProductRepository'.
+  Type '(id: number) =&gt; Product | null' is not assignable to type '(id: number) =&gt; Promise&lt;Product | null&gt;'.
+    Type 'Product | null' is not assignable to type 'Promise&lt;Product | null&gt;'.
+      Type 'null' is not assignable to type 'Promise&lt;Product | null&gt;'.</pre>
+<p><code>RepoA</code> שכחה את <code>save</code>. ‏<code>RepoB</code> מחזירה מוצר <strong>סינכרונית</strong> — אבל ה־service יעשה <code>await</code> ויצפה ל־Promise; החוזה אומר "אסינכרוני", כי מסד אמיתי יהיה כזה. ‏<code>RepoC</code> תקינה: מותר להוסיף מתודות — החוזה הוא מינימום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לוותר על <code>implements</code> "כי זה עובד גם בלעדיו". בלעדיו השגיאה תופיע רק במקום שבו מעבירים את ה־repository ל־service — רחוק מהבאג.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E56">
+    <h3>P12-E56 · למה repository מחזיר עותק? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Map שומר <strong>הפניה</strong> לאובייקט (פרק 7). מי עוד מחזיק את אותה הפניה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>LeakyRepo</code> יש שתי "דליפות": בשמירה ובשליפה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Product = { id: number; name: string; price: number };
+
+class LeakyRepo {
+  #items = new Map&lt;number, Product&gt;();
+  async save(p: Product): Promise&lt;void&gt; {
+    this.#items.set(p.id, p);
+  }
+  async findById(id: number): Promise&lt;Product | null&gt; {
+    return this.#items.get(id) ?? null;
+  }
+}
+
+class SafeRepo {
+  #items = new Map&lt;number, Product&gt;();
+  async save(p: Product): Promise&lt;void&gt; {
+    this.#items.set(p.id, { ...p });
+  }
+  async findById(id: number): Promise&lt;Product | null&gt; {
+    const p = this.#items.get(id);
+    return p ? { ...p } : null;
+  }
+}
+
+async function demo(repo: LeakyRepo | SafeRepo, label: string) {
+  const pen = { id: 1, name: "עט", price: 5 };
+  await repo.save(pen);
+  pen.price = 999;
+  const found = await repo.findById(1);
+  if (found) found.name = "שונה בטעות";
+  console.log(label, await repo.findById(1));
+}
+
+demo(new LeakyRepo(), "leaky:").then(() =&gt; demo(new SafeRepo(), "safe:"));</code></pre>
+<pre class="terminal">leaky: { id: 1, name: 'שונה בטעות', price: 999 }
+safe: { id: 1, name: 'עט', price: 5 }</pre>
+<p>ב־<code>LeakyRepo</code> ה"מסד" השתנה פעמיים בלי שאף אחד קרא ל־<code>save</code>. עם PostgreSQL זה לא יכול לקרות — כל שליפה מחזירה אובייקט חדש. repository בזיכרון שלא מעתיק מתנהג <strong>אחרת</strong> מהאמיתי, ובדיקות שעוברות עליו יכולות להסתיר באגים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק רק ב־<code>findById</code> — האובייקט שהועבר ל־<code>save</code> עדיין משותף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E57">
+    <h3>P12-E57 · מי יוצר את התלות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־A, ה־service "בוחר" לבד את המסד — ואי אפשר לבחור בשבילו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סעיף 3 בשיעור: <code class="long">const service = new OrderService(new InMemoryProductRepository());</code> — מי כתב את השורה הזו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>A:</strong> צריך מסד PostgreSQL אמיתי עם נתונים — והבדיקה תיגע במסד הייצור (הכתובת כתובה בקוד!). <strong>B:</strong> מעבירים repository מזויף עם 3 הזמנות, ובודקים את הסכום — בלי מסד בכלל.</li><li><strong>A:</strong> 12 קבצים. <strong>B:</strong> מקום אחד — הקוד שמרכיב את האפליקציה.</li><li>קוד "ההרכבה" בכניסה לאפליקציה (קובץ ה־main / ה־server): יוצר את ה־repositories, מעביר אותם ל־services, ואת ה־services ל־routes. ב־NestJS המסגרת עושה את זה בשבילך (פרק 20; ראה גם P12-E25).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־DI "מסבך" — הוא מזיז את ה־<code>new</code> למקום אחד, ומשחרר את כל השאר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E58">
+    <h3>P12-E58 · T extends { id: number } <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>extends { id: number }</code> — תנאי על <code>T</code>: חייב להיות לו <code>id</code> מספרי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>find</code> מחזירה <code>T | undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">class InMemoryRepository&lt;T extends { id: number }&gt; {
+  #items = new Map&lt;number, T&gt;();
+  save(item: T): void {
+    this.#items.set(item.id, item);
+  }
+  find(id: number): T | undefined {
+    return this.#items.get(id);
+  }
+}
+
+type Product = { id: number; name: string };
+type Tag = { slug: string };
+type Order = { id: string; total: number };
+
+const products = new InMemoryRepository&lt;Product&gt;();
+const tags = new InMemoryRepository&lt;Tag&gt;();
+const orders = new InMemoryRepository&lt;Order&gt;();
+
+products.save({ id: 1, name: "עט" });
+products.save({ id: 2 });
+const p = products.find(1);
+console.log(p.name);</code></pre>
+<pre class="terminal">snippet.ts(16,37): error TS2344: Type 'Tag' does not satisfy the constraint '{ id: number; }'.
+  Property 'id' is missing in type 'Tag' but required in type '{ id: number; }'.
+snippet.ts(17,39): error TS2344: Type 'Order' does not satisfy the constraint '{ id: number; }'.
+  Types of property 'id' are incompatible.
+    Type 'string' is not assignable to type 'number'.
+snippet.ts(20,15): error TS2345: Argument of type '{ id: number; }' is not assignable to parameter of type 'Product'.
+  Property 'name' is missing in type '{ id: number; }' but required in type 'Product'.
+snippet.ts(22,13): error TS18048: 'p' is possibly 'undefined'.</pre>
+<p>ה־constraint פוסל את <code>Tag</code> (אין <code>id</code>) ואת <code>Order</code> (<code>id</code> מחרוזת) — כי בתוך המחלקה כתוב <code class="mid">this.#items.set(item.id, ...)</code> עם מפתח מספרי. ומרגע שבחרת <code>T = Product</code>, כל מתודה יודעת את זה: <code>save</code> דורשת <code>name</code>, ו־<code>find</code> מחזירה <code>Product | undefined</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב <code class="mid">class InMemoryRepository&lt;T&gt;</code> בלי תנאי — ואז <code>item.id</code> בתוך המחלקה לא מתקמפל ("Property 'id' does not exist on type 'T'").</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E59">
+    <h3>P12-E59 · service ששכח await <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הטיפוס של <code>product</code> בלי <code>await</code>? ולאילו שורות זה מפריע?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם TypeScript יתפוס גם את ה־<code>save</code> בלי <code>await</code>? ואת ההשוואה ל־<code>null</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Product = { id: number; price: number; stock: number };
+interface ProductRepository {
+  findById(id: number): Promise&lt;Product | null&gt;;
+  save(p: Product): Promise&lt;void&gt;;
+}
+
+class OrderService {
+  #products: ProductRepository;
+  constructor(products: ProductRepository) {
+    this.#products = products;
+  }
+
+  async placeOrder(id: number, qty: number): Promise&lt;number&gt; {
+    const product = this.#products.findById(id);
+    if (product === null) throw new Error("לא נמצא");
+    if (product.stock &lt; qty) throw new Error("אין מספיק");
+    this.#products.save({ ...product, stock: product.stock - qty });
+    return product.price * qty;
+  }
+}</code></pre>
+<pre class="terminal">snippet.ts(16,17): error TS2339: Property 'stock' does not exist on type 'Promise&lt;Product | null&gt;'.
+snippet.ts(17,25): error TS2345: Argument of type '{ stock: number; then&lt;TResult1 = Product | null, TResult2 = never&gt;(onfulfilled?: ((value: Product | null) =&gt; TResult1 | PromiseLike&lt;TResult1&gt;) | null | undefined, onrejected?: ((reason: any) =&gt; TResult2 | PromiseLike&lt;...&gt;) | ... 1 more ... | undefined): Promise&lt;...&gt;; catch&lt;TResult = never&gt;(onrejected?: ((reason: any...' is not assignable to parameter of type 'Product'.
+  Type '{ stock: number; then&lt;TResult1 = Product | null, TResult2 = never&gt;(onfulfilled?: ((value: Product | null) =&gt; TResult1 | PromiseLike&lt;TResult1&gt;) | null | undefined, onrejected?: ((reason: any) =&gt; TResult2 | PromiseLike&lt;...&gt;) | ... 1 more ... | undefined): Promise&lt;...&gt;; catch&lt;TResult = never&gt;(onrejected?: ((reason: any...' is missing the following properties from type 'Product': id, price
+snippet.ts(17,54): error TS2339: Property 'stock' does not exist on type 'Promise&lt;Product | null&gt;'.
+snippet.ts(18,20): error TS2339: Property 'price' does not exist on type 'Promise&lt;Product | null&gt;'.</pre>
+<p>החוזה (<code>Promise&lt;Product | null&gt;</code>) הוא מה שתופס את "שכחתי await" הראשון: ל־Promise אין <code>stock</code> ואין <code>price</code>. שים לב שדווקא <code>product === null</code> <strong>לא</strong> נפסל (TypeScript תמיד מרשה השוואה ל־<code>null</code>) — למרות שבזמן ריצה היא תמיד <code>false</code>, ו"לא נמצא" לא היה נזרק לעולם. אבל ה־<code>save</code> בלי <code>await</code> — <strong>לא</strong> נתפס (אחרי התיקון של השורה הראשונה): קריאה ל־Promise בלי לחכות היא קוד חוקי. התוצאה: ההזמנה "מצליחה" לפני שהמלאי עודכן, ושגיאה בשמירה לא מגיעה לאף אחד. (ESLint עם <code>no-floating-promises</code> תופס גם את זה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתפק בכך שהקוד מתקמפל — <code>await</code> חסר לפני פעולת כתיבה הוא באג שקט.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P12-E11">
     <h3>P12-E11 · repository גנרי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -425,6 +650,319 @@ console.log(await new PricingService(repo).priceWithVat(1));</code></pre>
 
 </div></details>
   </div>
+<div class="ex typed" id="P12-E60">
+    <h3>P12-E60 · שעון מוזרק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">export interface Clock { now(): number; }</code> ו־<code class="long">export class FakeClock implements Clock { #t: number; constructor(start = 0) { this.#t = start; } ... }</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>isExpired</code> מקבלת <code>Clock</code> — לא אכפת לה אם זה אמיתי או מזויף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E60: שעון מוזרק
+export interface Clock {
+  now(): number;
+}
+
+export class SystemClock implements Clock {
+  now(): number {
+    return Date.now();
+  }
+}
+
+export class FakeClock implements Clock {
+  #t: number;
+  constructor(start = 0) {
+    this.#t = start;
+  }
+  now(): number {
+    return this.#t;
+  }
+  advance(ms: number): void {
+    if (ms &lt; 0) throw new RangeError("אי אפשר לחזור בזמן");
+    this.#t += ms;
+  }
+}
+
+export function isExpired(expiresAt: number, clock: Clock): boolean {
+  return clock.now() &gt;= expiresAt;
+}
+
+const clock = new FakeClock(1000);
+console.log(isExpired(5000, clock));
+clock.advance(4000);
+console.log(isExpired(5000, clock), isExpired(Date.now() + 60_000, new SystemClock()));</code></pre>
+<pre class="terminal">false
+true false</pre>
+<p>עם <code>FakeClock</code> בודקים "מה קורה אחרי שעה" בלי לחכות שעה — מזיזים את השעון. זה אותו רעיון כמו <code>now</code> המוזרק ב־P12-E14 (rate limiter), רק עם חוזה מפורש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Date.now()</code> בתוך <code>isExpired</code> — ואז אי אפשר לבדוק אותה בלי לחכות באמת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E61">
+    <h3>P12-E61 · repository למשתמשים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמו <code>InMemoryProductRepository</code> בשיעור: <code class="mid">#items = new Map&lt;number, User&gt;()</code>, ו־<code>{ ...u }</code> בכל כניסה ויציאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>findByEmail</code>: <code class="mid">const key = email.trim().toLowerCase();</code> ולולאה על <code>this.#items.values()</code> עם השוואה של <code>u.email.toLowerCase()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E61: repository למשתמשים
+export type User = { id: number; email: string; name: string };
+
+export interface UserRepository {
+  findById(id: number): Promise&lt;User | null&gt;;
+  findByEmail(email: string): Promise&lt;User | null&gt;;
+  save(user: User): Promise&lt;void&gt;;
+  delete(id: number): Promise&lt;boolean&gt;;
+}
+
+export class InMemoryUserRepository implements UserRepository {
+  #items = new Map&lt;number, User&gt;();
+
+  async findById(id: number): Promise&lt;User | null&gt; {
+    const u = this.#items.get(id);
+    return u ? { ...u } : null;
+  }
+
+  async findByEmail(email: string): Promise&lt;User | null&gt; {
+    const key = email.trim().toLowerCase();
+    for (const u of this.#items.values()) {
+      if (u.email.trim().toLowerCase() === key) return { ...u };
+    }
+    return null;
+  }
+
+  async save(user: User): Promise&lt;void&gt; {
+    this.#items.set(user.id, { ...user });
+  }
+
+  async delete(id: number): Promise&lt;boolean&gt; {
+    return this.#items.delete(id);
+  }
+}
+
+async function demo() {
+  const repo = new InMemoryUserRepository();
+  await repo.save({ id: 1, email: "Dana@Mail.com", name: "דנה" });
+  console.log(await repo.findByEmail("  dana@mail.COM "));
+  console.log(await repo.delete(1), await repo.delete(1), await repo.findById(1));
+}
+demo();</code></pre>
+<pre class="terminal">{ id: 1, email: 'Dana@Mail.com', name: 'דנה' }
+true false null</pre>
+<p><code>Map.delete</code> כבר מחזיר <code>true</code>/<code>false</code> — בדיוק מה שהחוזה מבקש. וכל המתודות <code>async</code> גם בלי שום המתנה: כך ה־service שמשתמש ב־repository הזה יעבוד בלי שינוי עם repository של מסד אמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>findByEmail</code> שמשווה בדיוק — <code>Dana@Mail.com</code> ו־<code>dana@mail.com</code> הופכים לשני משתמשים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E62">
+    <h3>P12-E62 · שירות קופונים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני שדות פרטיים: <code>#coupons</code> ו־<code>#now</code>. ב־<code>apply</code>: <code class="long">const c = await this.#coupons.find(code.trim().toUpperCase());</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אל תשנה את האובייקט שקיבלת — שמור עותק: <code class="long">await this.#coupons.save({ ...c, usesLeft: c.usesLeft - 1 });</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E62: שירות קופונים
+export type Coupon = { code: string; percent: number; expiresAt: number; usesLeft: number; minTotal: number };
+
+export interface CouponRepository {
+  find(code: string): Promise&lt;Coupon | null&gt;;
+  save(c: Coupon): Promise&lt;void&gt;;
+}
+
+export class CouponError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = new.target.name;
+  }
+}
+
+export class CouponService {
+  #coupons: CouponRepository;
+  #now: () =&gt; number;
+
+  constructor(coupons: CouponRepository, now: () =&gt; number) {
+    this.#coupons = coupons;
+    this.#now = now;
+  }
+
+  async apply(code: string, total: number): Promise&lt;number&gt; {
+    const c = await this.#coupons.find(code.trim().toUpperCase());
+    if (c === null) throw new CouponError("קופון לא קיים");
+    if (this.#now() &gt;= c.expiresAt) throw new CouponError("הקופון פג תוקף");
+    if (c.usesLeft &lt;= 0) throw new CouponError("הקופון נוצל");
+    if (total &lt; c.minTotal) throw new CouponError(`מינימום הזמנה: ${c.minTotal}`);
+    await this.#coupons.save({ ...c, usesLeft: c.usesLeft - 1 });
+    return Math.round(total * (1 - c.percent / 100) * 100) / 100;
+  }
+}
+
+const store = new Map&lt;string, Coupon&gt;([["SALE10", { code: "SALE10", percent: 10, expiresAt: 5000, usesLeft: 1, minTotal: 50 }]]);
+const repo: CouponRepository = {
+  async find(code) {
+    const c = store.get(code);
+    return c ? { ...c } : null;
+  },
+  async save(c) {
+    store.set(c.code, { ...c });
+  },
+};
+let t = 1000;
+const service = new CouponService(repo, () =&gt; t);
+async function demo() {
+  console.log(await service.apply(" sale10 ", 199.9));
+  for (const [code, total] of [["SALE10", 100], ["NOPE", 100]] as const) {
+    try {
+      await service.apply(code, total);
+    } catch (err) {
+      console.log(String(err));
+    }
+  }
+}
+demo();</code></pre>
+<pre class="terminal">179.91
+CouponError: הקופון נוצל
+CouponError: קופון לא קיים</pre>
+<p>ה־service לא יודע איפה הקופונים שמורים, וגם לא "מה השעה" — את שניהם הוא מקבל. בהדגמה ה־repository הוא אובייקט פשוט שמקיים את ה־interface (לא חייבים מחלקה), והשעון הוא פונקציה שמחזירה <code>t</code>. בבדיקה אפשר לקבוע את הזמן לכל ערך שרוצים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור קודם ואז לבדוק מינימום — קופון "נוצל" על הזמנה שנדחתה.</li><li><code>c.usesLeft--</code> על האובייקט שחזר מה־repository, בלי <code>save</code> — ב־repository אמיתי זה לא משנה כלום.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P12-E63">
+    <h3>P12-E63 · service ברצף או במקביל <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>A: ארבע שליפות, אחת אחרי השנייה. B: כולן יחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>filter((u) =&gt; u !== null)</code> — ב־TypeScript החדש הוא גם מצמצם את הטיפוס, ולכן <code>u.name</code> מותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type User = { id: number; name: string };
+const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+const repo = {
+  async findById(id: number): Promise&lt;User | null&gt; {
+    await sleep(30);
+    return id &lt;= 3 ? { id, name: `user-${id}` } : null;
+  },
+};
+const round = (t: number) =&gt; Math.round((Date.now() - t) / 30) * 30;
+
+async function namesA(ids: number[]): Promise&lt;string[]&gt; {
+  const names: string[] = [];
+  for (const id of ids) {
+    const u = await repo.findById(id);
+    if (u) names.push(u.name);
+  }
+  return names;
+}
+
+async function namesB(ids: number[]): Promise&lt;string[]&gt; {
+  const users = await Promise.all(ids.map((id) =&gt; repo.findById(id)));
+  return users.filter((u) =&gt; u !== null).map((u) =&gt; u.name);
+}
+
+async function main() {
+  let t = Date.now();
+  console.log(await namesA([1, 2, 3, 4]), round(t));
+  t = Date.now();
+  console.log(await namesB([1, 2, 3, 4]), round(t));
+}
+main();</code></pre>
+<pre class="terminal">[ 'user-1', 'user-2', 'user-3' ] 120
+[ 'user-1', 'user-2', 'user-3' ] 30</pre>
+<p>אותה תוצאה, פי ארבעה מהר. ועדיין, 4 שליפות נפרדות הן 4 נסיעות למסד — repository טוב יציע <code>findByIds(ids)</code> שעושה שאילתה אחת (P12-E28). זו בעיית "N+1" שתפגוש בפרק 17.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>Promise.all</code> ולקבל מערך של Promises (P10-E71).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E64">
+    <h3>P12-E64 · פרויקט 1 בשכבות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>repository — "איך שומרים". service — "מה החוקים". ממשק — "מאיפה מגיעה הבקשה ולאן הולכת התשובה".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־service לא צריך לדעת שיש <code>process.argv</code> או <code>console.log</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>ממשק (CLI):</strong> 1, 5.</li><li><strong>service:</strong> 3, 4 — <code class="mid">addExpense(input: NewExpense): Promise&lt;Expense&gt;</code>, ‏<code class="mid">totalsByCategory(): Promise&lt;Map&lt;string, number&gt;&gt;</code>.</li><li><strong>repository:</strong> 2, 6 — <code class="mid">findAll(): Promise&lt;Expense[]&gt;</code>, ‏<code class="mid">save(e: Expense): Promise&lt;void&gt;</code> (מימוש: <code>JsonFileExpenseRepository</code>).</li></ul>
+<p>מעבר ל־HTTP: כותבים שכבת ממשק חדשה (routes שקוראים ל־<code>addExpense</code> ומחזירים JSON). ה־service וה־repository <strong>לא משתנים</strong>. ובהמשך — מחליפים את <code>JsonFileExpenseRepository</code> ב־<code>PostgresExpenseRepository</code> (פרק 16), ושוב — ה־service לא משתנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר <code>console.log</code> בתוך ה־service ("הוצאה נוספה!") — בשרת אין מסך, ויש לקוח שמחכה לתשובה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E65">
+    <h3>P12-E65 · repository מזויף לבדיקת שגיאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הוא צריך: מוצרים התחלתיים, רשימה של כל הקריאות ל־<code>save</code>, ואפשרות "להיכשל ב־save".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מקרה 2: לבדוק לא רק את השגיאה, אלא גם ש־<code>saved.length === 0</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function fakeRepo(products: Product[], { failOnSave = false } = {}) {
+  const saved: Product[] = [];
+  const repo: ProductRepository = {
+    async findById(id) {
+      const p = products.find((x) =&gt; x.id === id);
+      return p ? { ...p } : null;
+    },
+    async findAll() {
+      return products.map((p) =&gt; ({ ...p }));
+    },
+    async save(p) {
+      if (failOnSave) throw new Error("החיבור למסד נפל");
+      saved.push({ ...p });
+    },
+  };
+  return { repo, saved };
+}</code></pre>
+<ol><li><code class="mid">new OrderService(fakeRepo([]).repo).placeOrder(7, 1)</code> ← נדחה עם <code>NotFoundError</code>.</li><li>מוצר עם <code>stock: 1</code>, הזמנה של 5 ← <code>ValidationError</code>, וגם <code>saved</code> ריק.</li><li><code class="mid">fakeRepo([pen], { failOnSave: true })</code> ← נדחה עם <code>"החיבור למסד נפל"</code> (ולא, למשל, עם <code>NotFoundError</code> או בשקט).</li></ol>
+<p>ה־<code>saved</code> הוא "מצלמה" על מה שה־service ניסה לעשות — כך בודקים גם תוצאות לוואי, לא רק ערך החזרה. בפרק 22 תכתוב בדיוק בדיקות כאלה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק "נזרקה שגיאה" בלי לבדוק את <strong>הסוג</strong> שלה — בדיקה שעוברת גם כשהקוד קורס מסיבה אחרת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P12-E28">
     <h3>P12-E28 · דוח הלקוחות הגדולים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -498,7 +1036,136 @@ console.log(await new ReportService(orders, users).topCustomers(5));</code></pre
 
 </div></details>
   </div>
+<div class="ex" id="P12-E66">
+    <h3>P12-E66 · הכנסות לפי חודש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם ממלאים Map עם 12 מפתחות ו־0: <code><code class="mid">${year}-${String(m).padStart(2, "0")}</code></code>. כך גם חודש בלי הזמנות מופיע.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החודש של הזמנה: <code>o.createdAt.slice(0, 7)</code>. אם הוא לא ב־Map (שנה אחרת) — מדלגים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E66: הכנסות לפי חודש
+export type Order = { id: number; total: number; status: "paid" | "refunded" | "pending"; createdAt: string };
+
+export interface OrderRepository {
+  findAll(): Promise&lt;Order[]&gt;;
+}
+
+export class StatsService {
+  #orders: OrderRepository;
+
+  constructor(orders: OrderRepository) {
+    this.#orders = orders;
+  }
+
+  async revenueByMonth(year: number): Promise&lt;Map&lt;string, number&gt;&gt; {
+    const months = new Map&lt;string, number&gt;();
+    for (let m = 1; m &lt;= 12; m++) months.set(`${year}-${String(m).padStart(2, "0")}`, 0);
+    for (const o of await this.#orders.findAll()) {
+      const key = o.createdAt.slice(0, 7);
+      const current = months.get(key);
+      if (current === undefined || o.status === "pending") continue;
+      const sign = o.status === "paid" ? 1 : -1;
+      months.set(key, Math.round((current + sign * o.total) * 100) / 100);
+    }
+    return months;
+  }
+}
+
+const repo: OrderRepository = {
+  async findAll() {
+    return [
+      { id: 1, total: 100.1, status: "paid", createdAt: "2026-01-05T10:00:00Z" },
+      { id: 2, total: 50.2, status: "paid", createdAt: "2026-01-20T10:00:00Z" },
+      { id: 3, total: 30, status: "refunded", createdAt: "2026-03-01T10:00:00Z" },
+      { id: 4, total: 999, status: "pending", createdAt: "2026-03-02T10:00:00Z" },
+      { id: 5, total: 70, status: "paid", createdAt: "2025-12-31T10:00:00Z" },
+    ];
+  },
+};
+new StatsService(repo).revenueByMonth(2026).then((m) =&gt; console.log([...m].slice(0, 3)));</code></pre>
+<pre class="terminal">[ [ '2026-01', 150.3 ], [ '2026-02', 0 ], [ '2026-03', -30 ] ]</pre>
+<p>מילוי מראש של 12 החודשים פותר שתי בעיות: חודש בלי מכירות מופיע עם 0 (ולא "נעלם" מהגרף), והסדר תמיד ינואר ← דצמבר. וההזמנה מ־2025 לא נספרת, כי המפתח שלה לא ב־Map.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">new Date(o.createdAt).getMonth()</code> — לפי אזור הזמן המקומי, הזמנה מ־<code>31.12 23:30Z</code> יכולה "לעבור" לינואר. כשהפורמט ידוע, <code>slice</code> בטוח יותר.</li><li><code>0.1 + 0.2</code> — בלי עיגול, סכומים מקבלים זנב של שברים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E67">
+    <h3>P12-E67 · חיפוש מוצרים עם עמודים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שרשרת: <code class="long">(await this.#repo.findAll()).filter(...).filter(...).sort(...)</code>, ואז <code>total = list.length</code> ו־<code class="mid">list.slice((page - 1) * pageSize, page * pageSize)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לברירות מחדל: <code class="mid">const { text = "", page = 1, pageSize = 10 } = q;</code>. ל־min/max: <code class="mid">q.minPrice === undefined || p.price &gt;= q.minPrice</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E67: חיפוש מוצרים עם עמודים
+export type Product = { id: number; name: string; price: number };
+
+export interface ProductRepository {
+  findAll(): Promise&lt;Product[]&gt;;
+}
+
+type Query = { text?: string; minPrice?: number; maxPrice?: number; page?: number; pageSize?: number };
+
+export class SearchService {
+  #repo: ProductRepository;
+
+  constructor(repo: ProductRepository) {
+    this.#repo = repo;
+  }
+
+  async search(q: Query): Promise&lt;{ items: Product[]; total: number }&gt; {
+    const { page = 1, pageSize = 10 } = q;
+    const text = (q.text ?? "").trim().toLowerCase();
+    const list = (await this.#repo.findAll())
+      .filter((p) =&gt; text === "" || p.name.toLowerCase().includes(text))
+      .filter((p) =&gt; q.minPrice === undefined || p.price &gt;= q.minPrice)
+      .filter((p) =&gt; q.maxPrice === undefined || p.price &lt;= q.maxPrice)
+      .sort((a, b) =&gt; a.price - b.price || a.name.localeCompare(b.name));
+    return { items: list.slice((page - 1) * pageSize, page * pageSize), total: list.length };
+  }
+}
+
+const repo: ProductRepository = {
+  async findAll() {
+    return [
+      { id: 1, name: "Pen", price: 5 },
+      { id: 2, name: "Pencil", price: 3 },
+      { id: 3, name: "Notebook", price: 12 },
+      { id: 4, name: "Fountain pen", price: 120 },
+    ];
+  },
+};
+const service = new SearchService(repo);
+service.search({ text: " PEN", maxPrice: 100 }).then((r) =&gt; console.log(r));
+service.search({ page: 2, pageSize: 3 }).then((r) =&gt; console.log(r.items.map((p) =&gt; p.name), r.total));</code></pre>
+<pre class="terminal">{
+  items: [
+    { id: 2, name: 'Pencil', price: 3 },
+    { id: 1, name: 'Pen', price: 5 }
+  ],
+  total: 2
+}
+[ 'Fountain pen' ] 4</pre>
+<p><code>total</code> מחושב <strong>לפני</strong> החיתוך לעמוד — אחרת הממשק לא יודע כמה עמודים יש. וב־<code>filter</code> הראשון, "טקסט ריק — הכול" הוא חלק מהתנאי, ולא <code>if</code> נפרד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (q.minPrice)</code> — מחיר מינימום 0 "נעלם" (P11-E60).</li><li>למיין את המערך שה־repository החזיר בלי לחשוב — כאן זה בסדר רק כי <code>filter</code> כבר יצר מערך חדש.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-boundary.html"><small>הבא</small>שיעור 4 — גישור: טיפוסים מול בדיקה בזמן ריצה</a></div>
 </main>
 </body>

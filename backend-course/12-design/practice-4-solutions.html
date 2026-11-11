@@ -34,6 +34,147 @@
 
 </div></details>
   </div>
+<div class="ex" id="P12-E68">
+    <h3>P12-E68 · שדה שלא תכננת — mass assignment <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>spread מעתיק את <strong>כל</strong> השדות שיש באובייקט בזמן ריצה — לא רק את אלה שבטיפוס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>JSON.parse</code> מחזיר <code>any</code> — ולכן ההשמה ל־<code>ProfileUpdate</code> "האמינה" בלי לבדוק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type User = { id: number; name: string; role: "user" | "admin" };
+type ProfileUpdate = { name: string };
+
+function updateProfile(user: User, body: ProfileUpdate): User {
+  return { ...user, ...body };
+}
+
+const dana: User = { id: 7, name: "דנה", role: "user" };
+const body: ProfileUpdate = JSON.parse('{"name": "דנה כהן", "role": "admin", "id": 1}');
+console.log(updateProfile(dana, body));
+
+function safeUpdate(user: User, body: ProfileUpdate): User {
+  return { ...user, name: body.name };
+}
+console.log(safeUpdate(dana, body));</code></pre>
+<pre class="terminal">{ id: 1, name: 'דנה כהן', role: 'admin' }
+{ id: 7, name: 'דנה כהן', role: 'user' }</pre>
+<p>משתמש רגיל הפך לאדמין, וגם החליף את המזהה שלו — בבקשה אחת של "עדכון שם". זה בדיוק ה־mass assignment מהשיעור. התיקון: לקחת <strong>במפורש</strong> רק את השדות המותרים (<code>safeUpdate</code>), ובגבול — parse שמחזיר אובייקט חדש בלי שדות מיותרים (P12-E23).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על הטיפוס <code>ProfileUpdate</code> שיסנן שדות. טיפוסים לא קיימים בזמן ריצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E69">
+    <h3>P12-E69 · validate או parse? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"parse, don't validate": התוצאה של parse היא <strong>ערך חדש</strong> עם הטיפוס הנכון — לא <code>true</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בגרסה הראשונה, אותו <code>body</code> בדיוק (עם כל מה שיש בו) ממשיך הלאה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־<code>as</code> מבטיח ש"אם הבדיקה עברה — זה <code>CreateOrderDto</code>". אבל אין שום קשר בין הבדיקה לטיפוס: אם <code>isValidOrder</code> תשכח שדה, TypeScript לא ידע. ב־parse, הטיפוס של הערך שחוזר נבנה מתוך הבדיקות עצמן (<code>return { productId, qty }</code>) — אי אפשר "לשכוח".</li><li>בגרסה הראשונה — <code>body</code> כולו, כולל <code>isAdmin</code>. בגרסת parse — רק <code>productId</code> ו־<code>qty</code>.</li><li>רק ב־parse: הוא מחזיר ערך, ולכן יכול להחזיר אותו מנורמל. פונקציה שמחזירה <code>boolean</code> לא יכולה "לתקן" את הקלט.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב <code>isValid</code> ואחריו <code>as</code> — זה type guard בלי התחייבות, עם כל הסכנות של P11-E71.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E70">
+    <h3>P12-E70 · אחרי as Record&lt;string, unknown&gt; <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחרי ה־<code>as</code>, מה הטיפוס של כל שדה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ומה הטיפוס של <code>productId</code> באובייקט שחוזר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">function parse(input: unknown) {
+  if (typeof input !== "object" || input === null) throw new Error("לא אובייקט");
+  const { productId, qty, note } = input as Record&lt;string, unknown&gt;;
+  const double = qty * 2;
+  const upper = note.toUpperCase();
+  if (typeof qty === "number" &amp;&amp; typeof note === "string") {
+    return { productId, qty: qty * 2, note: note.toUpperCase() };
+  }
+  throw new Error("שדות לא תקינים");
+}</code></pre>
+<pre class="terminal">snippet.ts(4,18): error TS18046: 'qty' is of type 'unknown'.
+snippet.ts(5,17): error TS18046: 'note' is of type 'unknown'.</pre>
+<p>ה־<code>as</code> כאן "בטוח", כי הוא לא מבטיח כלום על השדות: כל אחד מהם <code>unknown</code>, וכל שימוש דורש בדיקה. אבל שים לב לשורה שעברה: <code>productId</code> לא נבדק — והוא חוזר בתוצאה כ־<code>unknown</code>. מי שיקבל את התוצאה יראה את זה ב־TypeScript, אבל רק אם יסתכל. ב־parse טוב, <strong>כל</strong> שדה בתוצאה נבדק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>input as CreateOrderDto</code> במקום <code>Record&lt;string, unknown&gt;</code> — ואז אף שדה לא נבדק ו־TypeScript שותק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E71">
+    <h3>P12-E71 · איפה הגבול? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השאלה: האם הקוד <strong>שלך</strong> יצר את הנתון — או שהוא הגיע מבחוץ, ממישהו שאתה לא שולט בו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מסד הנתונים שלך: את הסכמה אתה הגדרת. אבל מה אם מישהו שינה אותה ידנית? (נחזור לזה בפרק 19.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>כניסה.</strong> כל אחד יכול לשלוח כל דבר.</li><li><strong>כניסה.</strong> ותמיד מחרוזות (או חסר) — P12-E19.</li><li><strong>כניסה.</strong> מישהו כתב אותו ידנית בשרת. בודקים פעם אחת בהפעלה (פרק 13).</li><li><strong>בדרך כלל בפנים</strong> — הסכמה שלך מגדירה אותה, ו־ORM (פרק 19) נותן טיפוסים. אבל טיפוסים מ־SQL "ידני" כדאי למפות בזהירות (P12-E18).</li><li><strong>כניסה.</strong> ה־API שלהם יכול להשתנות בלי להודיע לך.</li><li><strong>בפנים.</strong> TypeScript בודק את זה בזמן כתיבה.</li><li><strong>כניסה.</strong> כמו P12-E52.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "בכל מקום ליתר ביטחון" — הקוד מתמלא בבדיקות כפולות, ואף אחד לא יודע איפה הבדיקה האמיתית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E72">
+    <h3>P12-E72 · מחרוזות מה־URL הופכות למספרים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Number</code> קפדנית (כל המחרוזת חייבת להיות מספר — אבל רווחים בקצוות מותרים, ו־<code>""</code> הוא 0). ‏<code>parseInt</code> קוראת מההתחלה ועוצרת בתו הראשון שאינו ספרה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Number("0x10")</code> מבין הקסדצימלי. ו־<code>parseInt("1e3", 10)</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const inputs = ["12", " 12 ", "", "12abc", "1e3", "-0", "0x10", "3.7"];
+for (const s of inputs) {
+  console.log(JSON.stringify(s).padEnd(8), Number(s), parseInt(s, 10), Number.isInteger(Number(s)));
+}</code></pre>
+<pre class="terminal">"12"     12 12 true
+" 12 "   12 12 true
+""       0 NaN true
+"12abc"  NaN 12 false
+"1e3"    1000 1 true
+"-0"     -0 -0 true
+"0x10"   16 0 true
+"3.7"    3.7 3 false</pre>
+<p>שתי מלכודות לכל פונקציה: <code>Number("")</code> הוא 0 (פרמטר ריק הופך ל"עמוד 0"), ו־<code>parseInt("12abc")</code> "מצליח" עם 12. לכן parse של פרמטר מספרי בודק את הטקסט עצמו — למשל <code>/^\d+$/</code> לשלם חיובי — לפני ההמרה. זה מה שתעשה ב־P12-E73.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number(query.page) || 1</code> — "abc" הופך ל־1 בשקט, במקום שגיאה ברורה ללקוח.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P12-E12">
     <h3>P12-E12 · parse ל־DTO 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -253,7 +394,353 @@ console.log(updateProfile({ id: 1, name: "a", bio: "", role: "user" }, { name: "
 
 </div></details>
   </div>
+<div class="ex typed" id="P12-E73">
+    <h3>P12-E73 · מזהה מהבקשה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני מקרים: <code>typeof input === "number"</code> ← <code class="mid">Number.isInteger(input) &amp;&amp; input &gt; 0</code>. ‏<code>typeof input === "string"</code> ← <code>/^\d+$/.test(input.trim())</code> ואז <code>Number(...)</code> ו־<code>&gt; 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"0" ו־"000" עוברים את ה־regex, אבל הם לא חיוביים — לכן בודקים גם את המספר אחרי ההמרה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E73: מזהה מהבקשה
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = new.target.name;
+    this.field = field;
+  }
+}
+
+export function parseId(input: unknown, field = "id"): number {
+  let n = NaN;
+  if (typeof input === "number") n = input;
+  else if (typeof input === "string" &amp;&amp; /^\d+$/.test(input.trim())) n = Number(input.trim());
+  if (!Number.isSafeInteger(n) || n &lt;= 0) {
+    throw new ValidationError(field, `${field} חייב להיות מספר שלם חיובי`);
+  }
+  return n;
+}
+
+for (const input of [7, " 42 ", "12abc", 0, "", 3.5]) {
+  try {
+    console.log(parseId(input));
+  } catch (err) {
+    if (err instanceof ValidationError) console.log(err.field, "←", err.message);
+  }
+}</code></pre>
+<pre class="terminal">7
+42
+id ← id חייב להיות מספר שלם חיובי
+id ← id חייב להיות מספר שלם חיובי
+id ← id חייב להיות מספר שלם חיובי
+id ← id חייב להיות מספר שלם חיובי</pre>
+<p>שני "שערים" לשני סוגי קלט, ובסוף בדיקה אחת משותפת. <code>Number.isSafeInteger</code> פוסל גם <code>NaN</code>, גם שברים, וגם מספרים ענקיים מדי (<code>"99999999999999999999"</code>) שבהם JavaScript כבר מאבד דיוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>parseInt(input)</code> — <code>"12abc"</code> עובר כ־12.</li><li><code>Number(input) &gt; 0</code> בלבד — <code>true</code> הוא 1 (‏<code>Number(true)</code>), ו־<code>"1e3"</code> הוא 1000.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E74">
+    <h3>P12-E74 · עדכון חלקי (PATCH) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם: <code class="long">for (const key of Object.keys(input)) if (!["name", "price", "tags"].includes(key)) throw ...</code>. אחר כך — כל שדה בנפרד, רק <code>if ("price" in input)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי ספרות אחרי הנקודה: <code>price * 100</code> צריך להיות (כמעט) שלם. זהירות: <code>19.9 * 100</code> הוא <code>1989.9999999999998</code> (פרק 2) — לכן משווים עם סובלנות: <code class="mid">Math.abs(Math.round(p * 100) - p * 100) &lt;= 1e-9</code>. כפילויות ב־tags: <code class="mid">new Set(normalized).size !== normalized.length</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E74: עדכון חלקי (PATCH)
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = new.target.name;
+    this.field = field;
+  }
+}
+
+export type ProductPatch = { name?: string; price?: number; tags?: string[] };
+
+const ALLOWED = ["name", "price", "tags"];
+
+export function parseProductPatch(input: unknown): ProductPatch {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new ValidationError("body", "גוף הבקשה חייב להיות אובייקט");
+  }
+  const keys = Object.keys(input);
+  for (const key of keys) {
+    if (!ALLOWED.includes(key)) throw new ValidationError(key, `שדה לא מוכר: ${key}`);
+  }
+  if (keys.length === 0) throw new ValidationError("body", "אין מה לעדכן");
+
+  const patch: ProductPatch = {};
+  if ("name" in input) {
+    if (typeof input.name !== "string" || input.name.trim() === "") throw new ValidationError("name", "name לא תקין");
+    patch.name = input.name.trim();
+  }
+  if ("price" in input) {
+    const p = input.price;
+    if (typeof p !== "number" || !Number.isFinite(p) || p &lt;= 0 || Math.abs(Math.round(p * 100) - p * 100) &gt; 1e-9) {
+      throw new ValidationError("price", "price לא תקין");
+    }
+    patch.price = p;
+  }
+  if ("tags" in input) {
+    const t = input.tags;
+    if (!Array.isArray(t) || !t.every((x) =&gt; typeof x === "string" &amp;&amp; x.trim() !== "")) {
+      throw new ValidationError("tags", "tags לא תקין");
+    }
+    const tags = t.map((x: string) =&gt; x.trim().toLowerCase());
+    if (new Set(tags).size !== tags.length) throw new ValidationError("tags", "tags לא תקין");
+    patch.tags = tags;
+  }
+  return patch;
+}
+
+console.log(parseProductPatch({ price: 19.9 }));
+console.log(parseProductPatch({ name: "  עט כחול ", tags: ["New", " sale"] }));
+for (const bad of [{}, { price: 1.999 }, { tags: ["a", "A"] }, { name: "x", stock: 5 }]) {
+  try {
+    parseProductPatch(bad);
+  } catch (err) {
+    if (err instanceof ValidationError) console.log(err.field, "←", err.message);
+  }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>ההבדל מ־POST: כל שדה אופציונלי, אבל <strong>אם</strong> נשלח — הוא חייב להיות תקין. ושדה לא מוכר נדחה (ולא "מתעלמים ממנו"): לקוח ששלח <code>stock</code> כנראה חושב שהוא מעדכן מלאי — עדיף שיקבל שגיאה ברורה מאשר "200 OK" שלא עשה כלום. ה־<code>t.map((x: string) =&gt; ...)</code>: אחרי <code>Array.isArray</code> על <code>unknown</code> המערך הוא <code>any[]</code>, ולכן כותבים את הטיפוס במפורש — אחרי שה־<code>every</code> כבר בדק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Math.round(p * 100) === p * 100</code> — נראה נכון, אבל פוסל את <code>19.9</code> בגלל שגיאת עיגול של שברים.</li><li><code>if (input.price)</code> במקום <code>"price" in input</code> — מחיר <code>0</code> "לא נשלח", ועובר בלי שגיאה.</li><li>להחזיר <code class="mid">{ name: undefined, price: 19.9, tags: undefined }</code> — ‏<code>{ ...product, ...patch }</code> ימחק את השם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E75">
+    <h3>P12-E75 · סינון מוצרים מה־URL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר פנימית <code class="mid">price(field: string): number | undefined</code> שעובדת על <code>query[field]</code> — חוסכת לכתוב את אותה בדיקה פעמיים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כדי לא להכניס <code>minPrice: undefined</code> לתוצאה: <code class="mid">if (min !== undefined) result.minPrice = min;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E75: סינון מוצרים מה־URL
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = new.target.name;
+    this.field = field;
+  }
+}
+
+type Filters = { minPrice?: number; maxPrice?: number; tags: string[]; inStock: boolean };
+
+export function parseFilters(query: Record&lt;string, string | undefined&gt;): Filters {
+  const price = (field: string): number | undefined =&gt; {
+    const raw = (query[field] ?? "").trim();
+    if (raw === "") return undefined;
+    if (!/^\d+(\.\d+)?$/.test(raw)) throw new ValidationError(field, `${field} לא תקין`);
+    return Number(raw);
+  };
+  const min = price("minPrice");
+  const max = price("maxPrice");
+  if (min !== undefined &amp;&amp; max !== undefined &amp;&amp; min &gt; max) {
+    throw new ValidationError("minPrice", "minPrice גדול מ־maxPrice");
+  }
+
+  const tags: string[] = [];
+  for (const t of (query.tags ?? "").split(",")) {
+    const tag = t.trim().toLowerCase();
+    if (tag !== "" &amp;&amp; !tags.includes(tag)) tags.push(tag);
+  }
+
+  const rawStock = query.inStock;
+  if (rawStock !== undefined &amp;&amp; rawStock !== "true" &amp;&amp; rawStock !== "false") {
+    throw new ValidationError("inStock", "inStock לא תקין");
+  }
+
+  const result: Filters = { tags, inStock: rawStock === "true" };
+  if (min !== undefined) result.minPrice = min;
+  if (max !== undefined) result.maxPrice = max;
+  return result;
+}
+
+console.log(parseFilters({ minPrice: "10", tags: "a, B,,c,a", inStock: "true" }));
+console.log(parseFilters({}));
+try {
+  parseFilters({ minPrice: "50", maxPrice: "10" });
+} catch (err) {
+  console.log(String(err));
+}</code></pre>
+<pre class="terminal">{ tags: [ 'a', 'b', 'c' ], inStock: true, minPrice: 10 }
+{ tags: [], inStock: false }
+ValidationError: minPrice גדול מ־maxPrice</pre>
+<p>שים לב איך התוצאה "נקייה": אין שדות עם <code>undefined</code>, <code>tags</code> תמיד מערך, ו־<code>inStock</code> תמיד בוליאני. הקוד שמשתמש בה (repository, שאילתת SQL) לא צריך לבדוק שום דבר מחדש — זה הרעיון של "בודקים פעם אחת, בכניסה".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Boolean(query.inStock)</code> — גם <code>"false"</code> הופך ל־<code>true</code> (מחרוזת לא ריקה).</li><li><code>Number(raw)</code> בלי regex — <code>"1e3"</code> ו־<code>"0x10"</code> עוברים (P12-E72).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E76">
+    <h3>P12-E76 · פריטי הזמנה עם נתיב בשגיאה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאה עם אינדקס, ו־<code>const path = <code>items[${i}]</code></code>. פונקציית עזר: <code class="long">const int = (v: unknown, max: number) =&gt; typeof v === "number" &amp;&amp; Number.isInteger(v) &amp;&amp; v &gt; 0 &amp;&amp; v &lt;= max;</code></p>
+<p>למיזוג: <code>Map&lt;number, number&gt;</code> מ־productId לסכום — Map שומר על סדר ההכנסה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בסוף: <code class="mid">[...totals].map(([productId, qty]) =&gt; ({ productId, qty }))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E76: פריטי הזמנה עם נתיב בשגיאה
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = new.target.name;
+    this.field = field;
+  }
+}
+
+const isInt = (v: unknown, max: number): v is number =&gt; typeof v === "number" &amp;&amp; Number.isInteger(v) &amp;&amp; v &gt; 0 &amp;&amp; v &lt;= max;
+
+export function parseItems(input: unknown): { productId: number; qty: number }[] {
+  if (!Array.isArray(input) || input.length &lt; 1 || input.length &gt; 50) {
+    throw new ValidationError("items", "items חייב להיות מערך של 1–50 פריטים");
+  }
+  const totals = new Map&lt;number, number&gt;();
+  input.forEach((item: unknown, i: number) =&gt; {
+    const path = `items[${i}]`;
+    if (typeof item !== "object" || item === null || Array.isArray(item)) throw new ValidationError(path, `${path} לא תקין`);
+    const productId = "productId" in item ? item.productId : undefined;
+    const qty = "qty" in item ? item.qty : undefined;
+    if (!isInt(productId, Number.MAX_SAFE_INTEGER)) throw new ValidationError(`${path}.productId`, `${path}.productId לא תקין`);
+    if (!isInt(qty, 100)) throw new ValidationError(`${path}.qty`, `${path}.qty לא תקין`);
+    const sum = (totals.get(productId) ?? 0) + qty;
+    if (sum &gt; 100) throw new ValidationError("items", `יותר מ־100 יחידות של מוצר ${productId}`);
+    totals.set(productId, sum);
+  });
+  return [...totals].map(([productId, qty]) =&gt; ({ productId, qty }));
+}
+
+console.log(parseItems([{ productId: 7, qty: 2 }, { productId: 3, qty: 1 }, { productId: 7, qty: 5 }]));
+for (const bad of [[], [{ productId: 1, qty: 1 }, { productId: 2, qty: 0 }], [{ productId: 1, qty: 60 }, { productId: 1, qty: 50 }]]) {
+  try {
+    parseItems(bad);
+  } catch (err) {
+    if (err instanceof ValidationError) console.log(err.field, "←", err.message);
+  }
+}</code></pre>
+<pre class="terminal">[ { productId: 7, qty: 7 }, { productId: 3, qty: 1 } ]
+items ← items חייב להיות מערך של 1–50 פריטים
+items[1].qty ← items[1].qty לא תקין
+items ← יותר מ־100 יחידות של מוצר 1</pre>
+<p>נתיב כמו <code>items[1].qty</code> מאפשר לממשק לסמן בדיוק את השדה הבעייתי — זה הפורמט שתראה ב־Zod (פרק 15) וב־P11-E25. ה־type guard הקטן <code>isInt</code> (‏<code>v is number</code>) מאפשר להשתמש ב־<code>productId</code> כמספר אחרי הבדיקה, בלי <code>as</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למזג לפני שבודקים כל פריט — פריט לא תקין "נבלע" בסכום.</li><li>לבדוק רק את ה־qty של כל פריט בנפרד — 60 + 50 של אותו מוצר עוברים.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P12-E77">
+    <h3>P12-E77 · תאריך שחזר מ־JSON <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה <code>JSON.stringify</code> עושה עם <code>Date</code>? (רמז: מחרוזת בפורמט ISO.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם <code>JSON.parse</code> יודע שהמחרוזת הזו "הייתה" תאריך?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">type Order = { id: number; createdAt: Date };
+
+const order: Order = { id: 1, createdAt: new Date("2026-03-15T10:00:00Z") };
+const text = JSON.stringify(order);
+const back: Order = JSON.parse(text);
+
+console.log(text);
+console.log(typeof back.createdAt, back.createdAt instanceof Date);
+try {
+  console.log(back.createdAt.getUTCFullYear());
+} catch (err) {
+  console.log("קרס:", (err as Error).message);
+}
+const fixed: Order = { ...back, createdAt: new Date(back.createdAt) };
+console.log(fixed.createdAt.getUTCFullYear());</code></pre>
+<pre class="terminal">{"id":1,"createdAt":"2026-03-15T10:00:00.000Z"}
+string false
+קרס: back.createdAt.getUTCFullYear is not a function
+2026</pre>
+<p>הטיפוס אומר <code>Date</code>, אבל בזמן ריצה זו מחרוזת — ומתודות של תאריך לא קיימות עליה. JSON מכיר רק מחרוזות, מספרים, בוליאנים, <code>null</code>, מערכים ואובייקטים. כל דבר אחר (תאריך, Map, מחלקה) צריך "לבנות מחדש" ב־parse.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיר <code>createdAt: Date</code> ב־DTO שמגיע ברשת. נכון יותר: <code>createdAt: string</code> ב־DTO, והמרה ל־<code>Date</code> במיפוי (P12-E18).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E78">
+    <h3>P12-E78 · parse שזורק או מחזיר Result? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>גרסה א זורקת בשגיאה הראשונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בגרסה א, מי שכח <code>try/catch</code> — מי תופס? (בפרק 15: ה־error handler של Express.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>א:</strong> רק את השגיאה הראשונה; מתקן, שולח, מקבל את השנייה... <strong>ב:</strong> את שלוש השגיאות בבת אחת — חוויה הרבה יותר טובה בטופס.</li><li><strong>א:</strong> <code class="long">try { dto = parseSignup(body) } catch (e) { if (e instanceof ValidationError) return res.status(400).json(...) ; throw e }</code>. <strong>ב:</strong> <code class="long">const r = parseSignup(body); if (!r.ok) return res.status(400).json({ errors: r.error });</code></li><li>באף אחת זה לא "שקט": ב־<strong>ב</strong> TypeScript לא ייתן לגשת ל־<code>r.value</code> בלי לבדוק <code>ok</code>. ב־<strong>א</strong> אפשר לשכוח את ה־try — ואז השגיאה מטפסת ל־error handler הכללי; אם הוא מכיר את <code>ValidationError</code> (כמו <code>handle</code> בשיעור 2) — עדיין 400. זו הסיבה שבשרתים אמיתיים הרבה פעמים בוחרים ב־throw + handler מרכזי אחד (פרק 15), ובטפסים — ב־Result עם כל השגיאות. Zod נותן את שתיהן: <code>parse</code> (זורק) ו־<code>safeParse</code> (Result).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לערבב: parse שגם זורק וגם מחזיר <code>{ ok: false }</code> — מי שמשתמש בו צריך לטפל בשתי הדרכים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E79">
+    <h3>P12-E79 · API חיצוני שהשתנה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>s.status</code> בתשובה החדשה — <code>undefined</code>. האם <code>undefined === "delivered"</code> זורק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגבול הוא <code>getStatus</code> — המקום שבו הנתונים נכנסים למערכת שלך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>שום שגיאה.</strong> <code>s.status</code> הוא <code>undefined</code>, ההשוואה <code>false</code>, ואף לקוח לא מקבל אימייל — לנצח, בשקט. תגלה את זה כשיתחילו להגיע תלונות.</li><li>בתוך <code>getStatus</code>, מיד אחרי <code>res.json()</code>: <code class="mid">return parseShipmentStatus(await res.json())</code> — עם <code>unknown</code>, ובדיקה של כל שדה (P11-E77 / P12-E74). כשהצורה השתנתה — זורק שגיאה ברורה.</li><li>שגיאה ברורה מופיעה בלוגים ובניטור (פרק 24) באותו יום, עם הסבר מדויק. "שום דבר לא קורה" הוא הבאג הכי יקר — אף אחד לא יודע שהוא קיים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה API של חברה גדולה, הוא לא ישתנה". הוא ישתנה — בגרסה חדשה, בתקלה, או בשדה שהיה תמיד מחרוזת ופתאום <code>null</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P12-E24">
     <h3>P12-E24 · אתגר: ארנק והעברות idempotent 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -406,6 +893,116 @@ try {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>בלי זיהוי מעגל — <code>resolve("A")</code> נכנס לרקורסיה אינסופית: <code class="mid">RangeError: Maximum call stack size exceeded</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P12-E80">
+    <h3>P12-E80 · הרשמה מקצה לקצה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>parseSignup</code> — אותו מבנה כמו P12-E74: בדיקת אובייקט, ואז שדה אחר שדה עם <code class="mid">"email" in input &amp;&amp; typeof input.email === "string"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>signup</code>: <code class="long">const dto = parseSignup(input); if (await this.#users.findByEmail(dto.email)) throw new ConflictError(...); const u = await this.#users.insert({ email: dto.email, name: dto.name, passwordHash: this.#hash(dto.password) }); return { id: u.id, email: u.email, name: u.name };</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E80: הרשמה מקצה לקצה
+export class ValidationError extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) {
+    super(message);
+    this.name = new.target.name;
+    this.field = field;
+  }
+}
+
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = new.target.name;
+  }
+}
+
+type SignupDto = { email: string; name: string; password: string };
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+export function parseSignup(input: unknown): SignupDto {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) throw new ValidationError("body", "body לא תקין");
+  const email = "email" in input &amp;&amp; typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  if (!EMAIL.test(email)) throw new ValidationError("email", "email לא תקין");
+  const name = "name" in input &amp;&amp; typeof input.name === "string" ? input.name.trim() : "";
+  if (name === "") throw new ValidationError("name", "name לא תקין");
+  const password = "password" in input &amp;&amp; typeof input.password === "string" ? input.password : "";
+  if (password.length &lt; 8) throw new ValidationError("password", "password לא תקין");
+  return { email, name, password };
+}
+
+export type User = { id: number; email: string; name: string; passwordHash: string };
+
+export interface UserRepository {
+  findByEmail(email: string): Promise&lt;User | null&gt;;
+  insert(u: Omit&lt;User, "id"&gt;): Promise&lt;User&gt;;
+}
+
+export class SignupService {
+  #users: UserRepository;
+  #hash: (password: string) =&gt; string;
+
+  constructor(users: UserRepository, hash: (password: string) =&gt; string) {
+    this.#users = users;
+    this.#hash = hash;
+  }
+
+  async signup(input: unknown): Promise&lt;{ id: number; email: string; name: string }&gt; {
+    const dto = parseSignup(input);
+    if (await this.#users.findByEmail(dto.email)) throw new ConflictError("האימייל כבר רשום");
+    const u = await this.#users.insert({ email: dto.email, name: dto.name, passwordHash: this.#hash(dto.password) });
+    return { id: u.id, email: u.email, name: u.name };
+  }
+}
+
+const rows: User[] = [];
+const repo: UserRepository = {
+  async findByEmail(email) {
+    return rows.find((u) =&gt; u.email === email) ?? null;
+  },
+  async insert(u) {
+    const user = { ...u, id: rows.length + 1 };
+    rows.push(user);
+    return { ...user };
+  },
+};
+const service = new SignupService(repo, (p) =&gt; `hash(${p.length})`);
+async function demo() {
+  console.log(await service.signup({ email: " Dana@Mail.com ", name: "דנה", password: "12345678", isAdmin: true }));
+  for (const body of [{ email: "dana@mail.com", name: "x", password: "abcdefgh" }, { email: "a@b", name: "x", password: "abcdefgh" }]) {
+    try {
+      await service.signup(body);
+    } catch (err) {
+      console.log(String(err));
+    }
+  }
+  console.log(rows);
+}
+demo();</code></pre>
+<pre class="terminal">{ id: 1, email: 'dana@mail.com', name: 'דנה' }
+ConflictError: האימייל כבר רשום
+ValidationError: email לא תקין
+[
+  {
+    email: 'dana@mail.com',
+    name: 'דנה',
+    passwordHash: 'hash(8)',
+    id: 1
+  }
+]</pre>
+<p>שלוש שכבות, וכל אחת עושה דבר אחד: <code>parseSignup</code> מסננת את העולם (ה־<code>isAdmin</code> לא עבר), ה־service אוכף חוק עסקי ("אימייל ייחודי") ומחליט מה נשמר, וה־repository רק שומר. ה־hash מוזרק — בבדיקה הוא פונקציה פשוטה, בפרק 21 — bcrypt. והתשובה לא מכילה <code>passwordHash</code> — לעולם לא מחזירים אותו ללקוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק כפילות לפני הנרמול — <code>Dana@Mail.com</code> ו־<code>dana@mail.com</code> נרשמים פעמיים.</li><li><code>return u</code> מה־service — ה־hash דולף לתשובת ה־HTTP.</li><li>לשמור את <code>password</code> עצמו — גם בבדיקות, כדאי לראות ש־<code>insert</code> קיבל hash ולא את הסיסמה.</li></ul>
 
 
 </div></details>
