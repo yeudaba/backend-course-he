@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **1931** | **1226** | **1459** |
+| **42** | **196** | **2151** | **1322** | **1531** |
 
 ## מה שונה כאן
 
@@ -206,9 +206,9 @@
 | [פרויקט 2](backend-course/15p-project-tasks/index.html) | API לניהול משימות — שלב א׳: בזיכרון | 6 | — | 5 | ✔ |
 | [יחידה 15.5](backend-course/15w-web-bridge/index.html) | גישור: HTML, CSS ו־fetch | 4 | 80 | 41 | ✔ |
 | [פרק 16](backend-course/16-sql/index.html) | SQL מהיסוד | 4 | 80 | 44 | ✔ |
-| [פרק 17](backend-course/17-relations/index.html) | קשרים ושאילתות | 4 | 28 | 23 | ✔ |
-| [פרק 18](backend-course/18-consistency/index.html) | עקביות וביצועים | 4 | 28 | 23 | ✔ |
-| [פרק 19](backend-course/19-prisma/index.html) | Prisma ו־migrations | 4 | 28 | 24 | ✔ |
+| [פרק 17](backend-course/17-relations/index.html) | קשרים ושאילתות | 4 | 80 | 44 | ✔ |
+| [פרק 18](backend-course/18-consistency/index.html) | עקביות וביצועים | 4 | 81 | 45 | ✔ |
+| [פרק 19](backend-course/19-prisma/index.html) | Prisma ו־migrations | 4 | 88 | 53 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -270,7 +270,7 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 28 | 24 | ✔ |
+| [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 83 | 48 | ✔ |
 | [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 28 | 25 | ✔ |
 | [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 28 | 24 | ✔ |
 | [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 28 | 24 | ✔ |
