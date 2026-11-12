@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.3</a> ‹ תרגול שיעור 4</div>
   <h1>✍️ תרגול שיעור 4 — Helm ו־GitOps עם Argo CD</h1>
-  <p class="subtitle">יחידה 26.3 · 3 שאלות · 1 הבנה · 2 קוד · ⏱ כ־80 דק׳</p>
+  <p class="subtitle">יחידה 26.3 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־340 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,7 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 4: Helm ו־GitOps עם Argo CD</h2>
-  <p class="subtitle">3 שאלות · 1 הבנה · 2 קוד · ⏱ כ־80 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־250 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P26.3-E05">
     <h3>P26.3-E05 · Helm ו־GitOps: מה יוצא, ומי עושה מה</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
@@ -43,6 +43,52 @@ resources: {}
 <p><strong>ב.</strong> סדר את השלבים של שינוי קוד עד שהוא בפרודקשן, וכתוב ליד כל אחד מי עושה אותו — מפתח, Jenkins או Argo CD: (1) Argo CD רואה שינוי ב־repo התצורה; (2) push ל־main; (3) build ו־push של image עם tag של ה־commit; (4) בדיקות; (5) commit ל־repo התצורה שמשנה את ה־tag; (6) rolling update ב־cluster; (7) pull request ו־review.</p>
 
   </div>
+<div class="ex" id="P26.3-E68">
+    <h3>P26.3-E68 · מה יוצא ממיזוג ה־values?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>Helm ממזג את <code>values.yaml</code> ואז את <code>values-prod.yaml</code> (הימני מנצח, שדה־שדה). מה הערך הסופי של כל שדה?</p>
+<pre><code class="lang-yaml"># values.yaml                         # values-prod.yaml
+replicas: 1                           replicas: 3
+image:                                image:
+  repository: ghcr.io/x/coffee          tag: "1.5.0"
+  tag: ""
+env:                                  env:
+  - { name: LOG_LEVEL, value: info }    - { name: LOG_LEVEL, value: warn }
+  - { name: PORT, value: "3000" }
+resources:                            resources:
+  requests: { cpu: 100m, memory: 128Mi }  requests: { cpu: 250m }
+nodeSelector: { disk: ssd }           nodeSelector: null</code></pre>
+<ol><li><code>image.repository</code> ו־<code>image.tag</code>.</li><li><code>env</code> — כמה משתנים, ומה איבד את מקומו?</li><li><code>resources.requests</code>.</li><li><code>nodeSelector</code>.</li></ol>
+
+  </div>
+<div class="ex" id="P26.3-E69">
+    <h3>P26.3-E69 · ‏Synced, ‏Healthy — ומה ביניהם</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>לכל מצב — מה Argo CD מראה (Sync: ‏Synced/OutOfSync; ‏Health: ‏Healthy/Progressing/Degraded/Missing), ולמה?</p>
+<ol><li>ה־CI עשה commit עם tag חדש, ו־Argo CD עוד לא סנכרן (בלי automated sync).</li><li>סונכרן, ה־rollout באמצע: 2 pods חדשים מתוך 3.</li><li>סונכרן, אבל ה־image החדש קורס — ה־rollout תקוע כבר 10 דקות.</li><li>מישהו הריץ <code>kubectl scale --replicas=5</code> ידנית (בלי selfHeal).</li><li>נוסף ל־Git קובץ של Service חדש, וסונכרן — אבל ה־Deployment באותו commit נמחק בטעות.</li></ol>
+
+  </div>
+<div class="ex" id="P26.3-E70">
+    <h3>P26.3-E70 · ‏prune ו־selfHeal</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>Application עם <code class="mid">automated: { prune: true, selfHeal: true }</code>. מה קורה בכל מקרה, ואחרי כמה זמן בערך?</p>
+<ol><li>ב־2 בלילה, בזמן תקלה, מהנדס מריץ <code>kubectl set image … :1.4.1</code> כדי לחזור לגרסה קודמת.</li><li>מישהו מחק מ־Git את <code>hpa.yaml</code>.</li><li>מישהו יצר ידנית ConfigMap בשם <code>debug-flags</code> באותו namespace.</li><li>‏HPA מגדיל ל־8 עותקים, וב־values כתוב <code>replicas: 3</code>.</li></ol>
+
+  </div>
+<div class="ex" id="P26.3-E71">
+    <h3>P26.3-E71 · ‏push או pull — מי מחזיק את המפתח?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>שתי דרכים ל־deploy: (א) ה־CI מריץ בסוף <code>helm upgrade</code> מול ה־cluster. (ב) ה־CI עושה commit ל־repo התצורה, ו־Argo CD בתוך ה־cluster מושך.</p>
+<ol><li>לאיזה סוד צריך ה־CI בכל אחת, ומה הנזק אם הוא דולף?</li><li>"מה רץ עכשיו בפרודקשן?" — איך עונים בכל אחת?</li><li>ה־cluster נמחק ונבנה מחדש. כמה עבודה להחזיר את כל השירותים בכל אחת?</li><li>מתי (א) עדיין הגיונית?</li></ol>
+
+  </div>
+<div class="ex" id="P26.3-E72">
+    <h3>P26.3-E72 · מה הולך לאיזה repo?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>לכל שינוי — repo הקוד (<code>coffee-shop</code>) או repo התצורה (<code>coffee-deploy</code>)? ומה כל commit יגרום?</p>
+<ol><li>תיקון באג ב־<code>orders.service.ts</code>.</li><li>‏<code>replicas: 3</code> ← ‏<code>5</code> בפרודקשן לקראת מבצע.</li><li>‏probe חדש ב־template של ה־Deployment.</li><li>שדרוג Node ב־Dockerfile.</li><li>tag חדש של ה־image ב־<code>values-prod.yaml</code>.</li><li>‏<code>Jenkinsfile</code>.</li></ol>
+
+  </div>
 <div class="ex" id="P26.3-E15">
     <h3>P26.3-E15 · Application של Argo CD 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
@@ -56,7 +102,138 @@ resources: {}
 <ul><li>מעדכנת כל <code>image</code> של אותו repository ב־<code>containers</code> וב־<code>initContainers</code> של Deployment, Job, CronJob (וכל מה שיש לו <code>spec.template.spec</code>) — גם אם היה עם tag אחר או digest (<code>@sha256:…</code>).</li><li>לא נוגעת ב־repository אחר — גם לא כזה שמתחיל באותו שם — ולא ב־ConfigMap.</li><li>שומרת על ההערות, הסדר והמרכאות: ה־diff הוא רק השורות של ה־image.</li><li>tag לא תקין (תווים מותרים: אותיות, ספרות, <code>. _ -</code>, עד 128) או repository שלא נמצא ← שגיאה. אותו tag פעמיים ← 0 שינויים, אותו טקסט.</li></ul>
 
   </div>
+<div class="ex" id="P26.3-E73">
+    <h3>P26.3-E73 · ‏mergeValues כמו של Helm 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>בקובץ <code class="mid">26c-cloud/starter/P26.3-E73.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function mergeValues(...layers: Record&lt;string, unknown&gt;[]): Record&lt;string, unknown&gt;</code></pre>
+<ul><li>השכבות לפי הסדר — כל שכבה גוברת על הקודמות.</li><li>אובייקט רגיל ← מתמזג לעומק עם אובייקט שכבר שם. מערכים, מחרוזות, מספרים ← מחליפים לגמרי.</li><li><code>null</code> ← מוחק את המפתח.</li><li>לא משנים אף שכבה (מחזירים אובייקט חדש), ואין שיתוף הפניות בין התוצאה לשכבות.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E73</pre>
 
+  </div>
+<div class="ex" id="P26.3-E74">
+    <h3>P26.3-E74 · ‏helm template קטן 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>בקובץ <code class="mid">26c-cloud/starter/P26.3-E74.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function renderTemplate(tpl: string, ctx: { Values: Record&lt;string, unknown&gt;; Release: { Name: string }; Chart: { AppVersion: string } }): string</code></pre>
+<ul><li>כל <code>{{ … }}</code> (רווחים בפנים אופציונליים) מוחלף בערך. נתיב כמו <code>.Values.image.tag</code> או <code>.Release.Name</code> נקרא מ־<code>ctx</code>. אין ערך ← מחרוזת ריקה.</li><li><code>{{ X | default Y }}</code> — אם X "ריק" (‏<code>undefined</code>, ‏<code>null</code>, ‏<code>""</code>, ‏0, ‏<code>false</code>) ← Y. ‏Y הוא מחרוזת במירכאות כפולות, מספר, או נתיב.</li><li><code>{{ X | quote }}</code> — הערך במירכאות כפולות (<code>JSON.stringify</code> של המחרוזת).</li><li>הערך הוא אובייקט או מערך ← <code>Error</code> (צריך <code>toYaml</code>, שלא נממש כאן).</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E74</pre>
+
+  </div>
+<div class="ex" id="P26.3-E75">
+    <h3>P26.3-E75 · ‏values-prod.yaml — רק ההבדלים 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>זה ה־<code>values.yaml</code> של ה־chart:</p>
+<pre><code class="lang-yaml">replicas: 1
+image:
+  repository: ghcr.io/noa-cohen/coffee-shop
+  tag: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+ingress:
+  enabled: false
+  host: ""
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+logLevel: info</code></pre>
+<p>בקובץ <code class="mid">26c-cloud/starter/P26.3-E75.yaml</code> (יש בו רק הערה) כתוב את <code>values-prod.yaml</code>: 3 עותקים, tag <code>"1.5.0"</code>, requests של <code>250m</code> ו־<code>256Mi</code> ו־limit של זיכרון <code>512Mi</code>, ‏ingress פעיל ל־<code>api.coffee.example</code>, ו־autoscaling פעיל בין 3 ל־10. ‏<code>logLevel</code> ו־<code>image.repository</code> — כמו בבסיס.</p>
+<p><strong>רק מה ששונה</strong>: הבודק ממזג את הבסיס עם הקובץ שלך ובודק את התוצאה — וגם שאין בקובץ שלך אף ערך שזהה לבסיס.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E75</pre>
+
+  </div>
+<div class="ex" id="P26.3-E76">
+    <h3>P26.3-E76 · הסטטוס של Application 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>בקובץ <code class="mid">26c-cloud/starter/P26.3-E76.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">type Res = { kind: string; name: string; spec: unknown; status?: any };
+export function appStatus(desired: Res[], live: Res[]): { sync: "Synced" | "OutOfSync"; health: "Healthy" | "Progressing" | "Degraded" | "Missing"; outOfSync: string[] }</code></pre>
+<ul><li>מזהה: <code>Kind/name</code>. ‏<code>outOfSync</code> (ממוין): כל משאב ב־desired שחסר ב־live או שה־<code>spec</code> שלו שונה, וכל משאב ב־live שלא ב־desired. סדר המפתחות באובייקט לא משנה. ‏<code>sync</code> — ‏<code>Synced</code> אם הרשימה ריקה.</li><li><code>health</code>, לפי עדיפות: משאב מ־desired חסר ב־live ← <code>Missing</code>. ‏Deployment שב־<code>status.conditions</code> שלו יש <code class="mid">reason: "ProgressDeadlineExceeded"</code> ← <code>Degraded</code>. ‏Deployment ש־<code>updatedReplicas</code> או <code>availableReplicas</code> שלו קטן מ־<code>spec.replicas</code> ← <code>Progressing</code>. אחרת <code>Healthy</code>.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E76</pre>
+
+  </div>
+<div class="ex" id="P26.3-E77">
+    <h3>P26.3-E77 · ‏checksum ל־ConfigMap: שינוי הגדרות ← rollout 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>ConfigMap שהשתנה לא מפעיל מחדש pods (‏E62). הטריק מהשיעור: annotation עם hash של ההגדרות בתוך ה־template. בקובץ <code class="mid">26c-cloud/starter/P26.3-E77.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function configChecksum(data: Record&lt;string, string&gt;): string
+export function withConfigChecksum&lt;T extends object&gt;(deployment: T, data: Record&lt;string, string&gt;): T</code></pre>
+<ul><li><code>configChecksum</code> — ‏sha256 (‏hex) של השורות <code>key=value\n</code>, לפי סדר המפתחות הממוין. סדר הכנסה שונה ← אותו hash.</li><li><code>withConfigChecksum</code> — עותק של ה־Deployment עם <code class="mid">spec.template.metadata.annotations["checksum/config"]</code>. יוצר <code>metadata</code>/<code>annotations</code> אם חסרים, שומר annotations אחרים, ולא משנה את המקור.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E77</pre>
+
+  </div>
+<div class="ex" id="P26.3-E78">
+    <h3>P26.3-E78 · ‏sync waves: מה קודם? 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>Argo CD מחיל משאבים לפי "גלים": ה־annotation <code class="mid">argocd.argoproj.io/sync-wave</code> (מחרוזת של מספר, גם שלילי; ברירת מחדל 0). בקובץ <code class="mid">26c-cloud/starter/P26.3-E78.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function syncWaves(objs: { kind: string; metadata: { name: string; annotations?: Record&lt;string, string&gt; } }[]): string[][]</code></pre>
+<ul><li>מחזירה קבוצות של <code>Kind/name</code>, מהגל הנמוך לגבוה.</li><li>בתוך גל: לפי סוג — <code>Namespace</code>, ‏<code>ConfigMap</code>, ‏<code>Secret</code>, ‏<code>ServiceAccount</code>, ‏<code>Service</code>, ‏<code>Deployment</code>, ‏<code>Job</code>, ‏<code>CronJob</code>, ‏<code>Ingress</code>, וכל סוג אחר בסוף. אותו סוג — לפי שם.</li><li>annotation שאינו מספר שלם ← <code>Error</code> עם שם המשאב.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E78</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־90 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P26.3-E79">
+    <h3>P26.3-E79 · מ־"deploy ל־Render" ל־GitOps</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 25, שיעור 4</span></div>
+<p>ב־workflow של פרק 25, הצעד האחרון קרא ל־deploy hook של Render עם סוד מ־<code>secrets.RENDER_DEPLOY_HOOK</code>. (1) זה push או pull? (2) כתוב בשלוש שורות מה הצעד האחרון יעשה במודל של השיעור. (3) ‏rollback: איך עשית אותו ב־Render, ואיך עכשיו? (4) ה־workflow ירוק — האם זה אומר שהגרסה החדשה רצה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ה־CI/CD של פרק 25 — והשיעור: GitOps.</p>
+
+  </div>
+<div class="ex" id="P26.3-E80">
+    <h3>P26.3-E80 · ‏rollback: ‏revert, לא reset</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 9, שיעור 4</span></div>
+<p>ב־repo התצורה, ה־commit האחרון (<code>a1b2</code>) העלה גרסה שבורה לפרודקשן. שני חברי צוות מציעים: (א) <code>git revert a1b2</code> ו־push. (ב) <code>git reset --hard HEAD~1</code> ו־<code>git push --force</code>.</p>
+<ol><li>מה ההיסטוריה אחרי כל אחד?</li><li>מה Argo CD עושה בכל אחד?</li><li>למה (ב) מסוכן במיוחד ב־repo הזה?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>revert</code>, ‏<code>reset</code> ו־<code>push --force</code> מפרק 9 — והשיעור: rollback ב־GitOps.</p>
+
+  </div>
+<div class="ex" id="P26.3-E81">
+    <h3>P26.3-E81 · מה מותר לשים ב־values?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 4</span></div>
+<p>ב־<code>values-prod.yaml</code> (ב־Git) מישהו כתב:</p>
+<pre><code class="lang-yaml">env:
+  LOG_LEVEL: warn
+  DATABASE_URL: postgresql://coffee:S3cr3t!@prod-db.internal:5432/coffee
+  JWT_SECRET: 8f2c…
+  FEATURE_NEW_CHECKOUT: "true"</code></pre>
+<ol><li>מה מהשורות בסדר, ומה לא? למה?</li><li>איפה הסודות צריכים לגור, ואיך ה־pod מקבל אותם (פרק 24, ‏E12)?</li><li>‏<code>FEATURE_NEW_CHECKOUT</code> השתנה ל־<code>"false"</code> ב־Git. מתי זה מגיע לאפליקציה?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> הגדרות מ־env וסודות מפרק 24 — והשיעור: values ב־Git.</p>
+
+  </div>
+<div class="ex" id="P26.3-E82">
+    <h3>P26.3-E82 · ‏tag ל־image מ־git 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: פרק 9, שיעור 4</span></div>
+<p>הקשר בין שני ה־repos הוא שורה אחת: ה־tag. בקובץ <code class="mid">26c-cloud/starter/P26.3-E82.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function imageTag(ref: string, sha: string): string</code></pre>
+<ul><li>‏<code>sha</code> — בדיוק 40 תווי hex קטנים, אחרת <code>Error</code>.</li><li><code>refs/tags/v1.5.0</code> ← <code>1.5.0</code>. tag חייב להיות <code>v</code> וגרסה X.Y.Z (אפשר עם סיומת כמו <code>-rc.1</code>); אחרת <code>Error</code>.</li><li><code>refs/heads/&lt;branch&gt;</code> ← השם המנורמל, מקף, ו־7 התווים הראשונים של ה־sha: אותיות קטנות; כל תו שאינו <code>a-z 0-9 . -</code> ← מקף; רצף מקפים ← אחד; בלי מקפים בהתחלה ובסוף; עד 40 תווים (לפני ה־sha). ‏<code>feature/Login_Page</code> ← <code>feature-login-page-a1b2c3d</code>.</li><li>כל ref אחר ← <code>Error</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ענפים, tags ו־SHA מפרק 9, וה־CI מפרק 25 — והשיעור: ה־tag שמחבר את repo הקוד ל־repo התצורה.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E82</pre>
+
+  </div>
+<div class="ex" id="P26.3-E83">
+    <h3>P26.3-E83 · בדיקת values עם zod לפני deploy 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 15, שיעור 4</span></div>
+<p>טעות ב־values מגיעה לפרודקשן בשקט: <code>tag: latest</code>, ‏<code>replicas: 0</code>, ‏host עם רווח. בקובץ <code class="mid">26c-cloud/starter/P26.3-E83.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function validateValues(values: unknown): { path: string; message: string }[]</code></pre>
+<ul><li>‏<code>replicas</code> — שלם 1–20. ‏<code>image.repository</code> — מחרוזת לא ריקה. ‏<code>image.tag</code> — מחרוזת לא ריקה, ולא <code>latest</code>.</li><li><code>resources.requests.cpu</code>, ‏<code>resources.requests.memory</code> ו־<code>resources.limits.memory</code> — מחרוזות לא ריקות.</li><li>אם <code>ingress.enabled</code> — ‏<code>ingress.host</code> הוא שם מארח: חלקים של <code>a-z 0-9 -</code> מופרדים בנקודות, לפחות שני חלקים.</li><li>אם <code>autoscaling.enabled</code> — ‏<code>minReplicas</code> לפחות 2, ולא גדול מ־<code>maxReplicas</code>.</li><li>מחזירה את <em>כל</em> הבעיות; ‏<code>path</code> — הנתיב עם נקודות (<code>image.tag</code>). תקין ← <code>[]</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏zod ו־<code>superRefine</code> מפרק 15 — והשיעור: values שעוברים ל־Helm.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E83</pre>
+
+  </div>
+<div class="ex" id="P26.3-E84">
+    <h3>P26.3-E84 · לחכות ל־Synced ו־Healthy 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 10, שיעור 4</span></div>
+<p>‏E79: "ה־CI ירוק" לא אומר שהגרסה רצה. צעד שמחכה ל־Argo: בקובץ <code class="mid">26c-cloud/starter/P26.3-E84.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function waitForSync(getStatus: () =&gt; Promise&lt;{ sync: string; health: string }&gt;, opts: { timeoutMs: number; intervalMs: number; sleep?: (ms: number) =&gt; Promise&lt;void&gt;; now?: () =&gt; number }): Promise&lt;{ sync: string; health: string }&gt;</code></pre>
+<ul><li>שואלת את <code>getStatus</code> שוב ושוב, עם <code>intervalMs</code> בין שאלות.</li><li><code>Synced</code> ו־<code>Healthy</code> ← מחזירה את הסטטוס.</li><li><code>Degraded</code> ← ‏<code>Error("DEGRADED")</code> מיד — אין טעם לחכות.</li><li>שגיאה מ־<code>getStatus</code> (רשת) — לא עוצרת: ממשיכים לנסות.</li><li>עבר <code>timeoutMs</code> מההתחלה ← <code>Error("TIMEOUT")</code>. ‏<code>sleep</code> ו־<code>now</code> — ברירת מחדל: ‏<code>setTimeout</code> ו־<code>Date.now</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> לולאה עם <code>await</code> ו־<code>setTimeout</code> מפרק 10 — והשיעור: מצבי Sync ו־Health.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.3-E84</pre>
+
+  </div>
 <div class="pager"><a href="lesson-04-helm-gitops.html"><small>חזרה לשיעור</small>שיעור 4 — Helm ו־GitOps עם Argo CD</a><a href="lesson-05-jenkins.html"><small>הבא</small>שיעור 5 — Jenkins, והדרך המלאה מ־commit ל־cluster</a></div>
 </main>
 </body>

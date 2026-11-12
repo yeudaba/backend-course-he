@@ -38,6 +38,106 @@ image: "ghcr.io/noa-cohen/coffee-shop:1.5.0"</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P26.3-E68">
+    <h3>P26.3-E68 · מה יוצא ממיזוג ה־values? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אובייקטים מתמזגים לעומק; כל השאר (כולל מערכים) — מוחלף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>null</code> ב־values של Helm מוחק את המפתח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>ghcr.io/x/coffee</code> (מהבסיס) ו־<code>"1.5.0"</code> (מ־prod) — מיזוג לעומק.</li><li>משתנה אחד: <code>LOG_LEVEL=warn</code>. מערך מוחלף כולו — <code>PORT</code> נעלם בפרודקשן. לכן ב־charts נוהגים לשים env כמפה (<code>env: { LOG_LEVEL: warn }</code>), ולהפוך לרשימה ב־template.</li><li><code class="mid">{ cpu: 250m, memory: 128Mi }</code> — ‏memory נשאר מהבסיס.</li><li>נמחק — אין <code>nodeSelector</code> בכלל (‏E73 עושה בדיוק את זה).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק את <code>values.yaml</code> כולו ל־<code>values-prod.yaml</code> ולשנות — ואז תיקון בבסיס לא מגיע לפרודקשן (‏E75).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E69">
+    <h3>P26.3-E69 · ‏Synced, ‏Healthy — ומה ביניהם <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Sync = "האם ה־cluster כמו Git". Health = "האם מה שרץ עובד".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני הצירים עצמאיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>OutOfSync, ‏Healthy — הגרסה הקודמת עובדת, פשוט לא מה שב־Git.</li><li>Synced, ‏Progressing.</li><li>Synced, ‏Degraded (אחרי <code>progressDeadlineSeconds</code>, ברירת מחדל 10 דקות). ה־YAML הוא מה שביקשת; זה פשוט לא עובד. התיקון — ב־Git (revert).</li><li>OutOfSync (‏5 ≠ 3), ‏Healthy. עם selfHeal — Argo היה מחזיר ל־3.</li><li>Synced (עם prune — ה־Deployment נמחק גם מה־cluster), ‏Health: ה־Service בלי pods. ‏Argo עשה בדיוק מה שביקשו ממנו — מכאן חשיבות ה־review ב־repo התצורה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Synced = הכול טוב" — Synced אומר רק שה־cluster תואם ל־Git.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E70">
+    <h3>P26.3-E70 · ‏prune ו־selfHeal <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>selfHeal מחזיר כל שינוי <em>במשאב שמנוהל</em>. prune מוחק משאב <em>מנוהל</em> שנעלם מ־Git.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איך Argo יודע שמשאב "שלו"?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>תוך דקות, selfHeal מחזיר את ה־image ל־מה שב־Git — ה־rollback הידני "נעלם". ב־GitOps גם תיקון בלילה הוא <code>git revert</code>.</li><li>prune מוחק את ה־HPA מה־cluster, וה־Deployment חוזר ל־replicas מ־Git.</li><li>כלום — הוא לא מנוהל על ידי ה־Application (אין עליו את הסימון של Argo), אז prune לא נוגע בו.</li><li>מלחמה: Argo מחזיר ל־3, ה־HPA ל־8… הפתרון: כשיש HPA, לא כותבים <code>replicas</code> ב־Deployment (או אומרים ל־Argo להתעלם מהשדה).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשבית selfHeal "כי הוא מפריע" — זה בדיוק מה שמונע drift.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E71">
+    <h3>P26.3-E71 · ‏push או pull — מי מחזיק את המפתח? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏kubeconfig מול הרשאת כתיבה ל־repo.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Git הוא המקור — ב־(ב).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) גישה ל־cluster (kubeconfig או role) — דליפה = שליטה ב־cluster. (ב) הרשאת כתיבה ל־repo התצורה — דליפה = commit, שנראה ב־Git, ואפשר לחסום עם branch protection ו־review.</li><li>(א) לשאול את ה־cluster (<code>helm list</code>, ‏<code>kubectl</code>) — ולקוות שאף אחד לא שינה ידנית. (ב) ה־main של repo התצורה.</li><li>(א) להריץ מחדש את ה־pipeline של כל שירות. (ב) להתקין Argo CD ולהצביע על ה־repo — הוא מסנכרן הכול.</li><li>צוות קטן, cluster אחד, בלי צורך ב־drift detection — ו־Jenkins/GitHub Actions כבר קיימים. הרבה מקומות עובדים כך (שיעור 5).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ב־GitOps אין סודות" — יש: ל־Argo CD יש גישה ל־cluster ול־repo. ההבדל — הם בתוך ה־cluster, לא ב־CI.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E72">
+    <h3>P26.3-E72 · מה הולך לאיזה repo? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה בונה image, ומה משנה cluster?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>repo התצורה: charts, values, Applications.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>קוד ← בדיקות, image חדש, ובסוף ה־CI מעדכן tag ב־staging (ב־repo התצורה).</li><li>תצורה ← Argo מסנכרן, בלי build.</li><li>תצורה (ה־chart) ← rollout בכל הסביבות שמשתמשות ב־chart.</li><li>קוד ← image חדש, כמו 1.</li><li>תצורה — בדרך כלל ה־CI עושה את זה, ולפרודקשן — ב־pull request עם אישור.</li><li>קוד — ה־pipeline הוא חלק מהקוד שהוא בונה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את ה־values בתוך repo הקוד — כל שינוי replicas בונה image.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.3-E15">
     <h3>P26.3-E15 · Application של Argo CD 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -146,7 +246,473 @@ export function bumpImageTag(text: string, repository: string, tag: string): { t
 </div></details>
     
   </div>
+<div class="ex" id="P26.3-E73">
+    <h3>P26.3-E73 · ‏mergeValues כמו של Helm 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"אובייקט רגיל": <code class="mid">v !== null &amp;&amp; typeof v === "object" &amp;&amp; !Array.isArray(v)</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פונקציה רקורסיבית <code>mergeTwo(base, over)</code>, ו־<code class="mid">layers.reduce(mergeTwo, {})</code>. ‏<code>structuredClone</code> לערכים שמוחלפים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E73: mergeValues כמו של Helm
+type Obj = Record&lt;string, unknown&gt;;
+const isObj = (v: unknown): v is Obj =&gt; v !== null &amp;&amp; typeof v === "object" &amp;&amp; !Array.isArray(v);
+
+function mergeTwo(base: Obj, over: Obj): Obj {
+  const out: Obj = structuredClone(base);
+  for (const [k, v] of Object.entries(over)) {
+    if (v === null) delete out[k];
+    else if (isObj(v) &amp;&amp; isObj(out[k])) out[k] = mergeTwo(out[k] as Obj, v);
+    else out[k] = structuredClone(v);
+  }
+  return out;
+}
+
+export function mergeValues(...layers: Obj[]): Obj {
+  return layers.reduce(mergeTwo, {});
+}</code></pre>
+<p>זה כל הסוד של <code>-f values-prod.yaml</code>: קובץ קטן עם ההבדלים בלבד. ה־<code>null</code> הוא הדרך היחידה "להוריד" משהו שהבסיס הגדיר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>{ ...base, ...over }</code> — מיזוג רדוד: <code>image: { tag }</code> מוחק את <code>image.repository</code>.</li><li>למזג מערכים איבר־איבר — Helm לא עושה את זה, והתוצאה תהיה שונה ממה שיוצא בפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E74">
+    <h3>P26.3-E74 · ‏helm template קטן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">tpl.replace(/\{\{\s*(.*?)\s*\}\}/g, (_, expr) =&gt; …)</code>, ובפנים <code class="mid">expr.split("|").map((s) =&gt; s.trim())</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>נתיב — מורידים את הנקודה הראשונה, ויורדים שלב־שלב:</p>
+<pre><code class="lang-ts">".Values.image.tag".slice(1).split(".").reduce((o, k) =&gt; o?.[k], ctx)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E74: helm template קטן
+type Ctx = { Values: Record&lt;string, unknown&gt;; Release: { Name: string }; Chart: { AppVersion: string } };
+
+function lookup(path: string, ctx: Ctx): unknown {
+  return path.slice(1).split(".").reduce&lt;unknown&gt;((o, k) =&gt; (o == null ? undefined : (o as Record&lt;string, unknown&gt;)[k]), ctx);
+}
+
+function literal(token: string, ctx: Ctx): unknown {
+  if (token.startsWith('"')) return JSON.parse(token);
+  if (token.startsWith(".")) return lookup(token, ctx);
+  return Number(token);
+}
+
+const empty = (v: unknown) =&gt; v === undefined || v === null || v === "" || v === 0 || v === false;
+
+export function renderTemplate(tpl: string, ctx: Ctx): string {
+  return tpl.replace(/\{\{\s*(.*?)\s*\}\}/g, (_, expr: string) =&gt; {
+    const [first, ...pipes] = expr.split("|").map((s) =&gt; s.trim());
+    let v = lookup(first, ctx);
+    let quote = false;
+    for (const p of pipes) {
+      if (p.startsWith("default ")) {
+        if (empty(v)) v = literal(p.slice("default ".length).trim(), ctx);
+      } else if (p === "quote") quote = true;
+      else throw new Error(`פונקציה לא מוכרת: ${p}`);
+    }
+    if (v !== null &amp;&amp; typeof v === "object") throw new Error(`${first} הוא אובייקט — צריך toYaml`);
+    const s = v == null ? "" : String(v);
+    return quote ? JSON.stringify(s) : s;
+  });
+}</code></pre>
+<p>‏Helm אמיתי הוא Go templates עם עשרות פונקציות (<code>toYaml</code>, ‏<code>include</code>, ‏<code>if</code>…), אבל הליבה היא זו: נתיב בתוך מבנה, וצינור של פונקציות. השורה מהשיעור — עכשיו אתה יודע בדיוק מה יוצא ממנה:</p>
+<pre><code class="lang-yaml">image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>v ?? Y</code> במקום בדיקת "ריק" — ‏<code>""</code> (כמו <code>tag: ""</code> בבסיס) לא נחשב חסר, וה־image יוצא <code>coffee-shop:</code>.</li><li>regex חמדן (<code>.*</code> בלי <code>?</code>) — שני ביטויים באותה שורה נבלעים לאחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E75">
+    <h3>P26.3-E75 · ‏values-prod.yaml — רק ההבדלים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>image:</code> עם <code>tag</code> בלבד — המיזוג משאיר את <code>repository</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>tag: "1.5.0"</code> במירכאות — בלעדיהן YAML עלול לקרוא גרסה כמו <code>1.10</code> כמספר (<code>1.1</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E75: values-prod.yaml — רק ההבדלים
+replicas: 3
+image:
+  tag: "1.5.0"
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+ingress:
+  enabled: true
+  host: api.coffee.example
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10</code></pre>
+<p>הקובץ הזה הוא "מה מיוחד בפרודקשן" — וזה בדיוק מה שמישהו רוצה לראות ב־review. ‏<code>logLevel</code> לא כאן: אם הבסיס ישתנה ל־<code>warn</code>, גם הפרודקשן יקבל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק את כל הבסיס ולשנות — ואז <code>repository</code> חדש בבסיס לא מגיע לפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E76">
+    <h3>P26.3-E76 · הסטטוס של Application 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>השוואה בלי תלות בסדר מפתחות: פונקציה <code>canon(v)</code> שמחזירה JSON עם מפתחות ממוינים (רקורסיבית).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ערכים חסרים ב־status (‏<code>undefined</code>) הם 0: ‏<code class="mid">(s.updatedReplicas ?? 0) &lt; replicas</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E76: הסטטוס של Application
+type Res = { kind: string; name: string; spec: unknown; status?: any };
+
+function canon(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canon).join(",")}]`;
+  if (v !== null &amp;&amp; typeof v === "object") {
+    return `{${Object.keys(v).sort().map((k) =&gt; `${JSON.stringify(k)}:${canon((v as Record&lt;string, unknown&gt;)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+const id = (r: Res) =&gt; `${r.kind}/${r.name}`;
+
+export function appStatus(desired: Res[], live: Res[]) {
+  const liveById = new Map(live.map((r) =&gt; [id(r), r]));
+  const wanted = new Set(desired.map(id));
+  const outOfSync: string[] = [];
+  let missing = false;
+  for (const d of desired) {
+    const l = liveById.get(id(d));
+    if (!l) missing = true;
+    if (!l || canon(l.spec) !== canon(d.spec)) outOfSync.push(id(d));
+  }
+  for (const l of live) if (!wanted.has(id(l))) outOfSync.push(id(l));
+
+  let health: "Healthy" | "Progressing" | "Degraded" | "Missing" = "Healthy";
+  if (missing) health = "Missing";
+  else {
+    for (const d of desired.filter((r) =&gt; r.kind === "Deployment")) {
+      const l = liveById.get(id(d))!;
+      const s = l.status ?? {};
+      const replicas = (l.spec as { replicas?: number })?.replicas ?? 1;
+      if ((s.conditions ?? []).some((c: { reason?: string }) =&gt; c.reason === "ProgressDeadlineExceeded")) {
+        health = "Degraded";
+        break;
+      }
+      if ((s.updatedReplicas ?? 0) &lt; replicas || (s.availableReplicas ?? 0) &lt; replicas) health = "Progressing";
+    }
+  }
+  return { sync: outOfSync.length ? ("OutOfSync" as const) : ("Synced" as const), health, outOfSync: outOfSync.sort() };
+}</code></pre>
+<p>שני צירים עצמאיים, בדיוק כמו בממשק של Argo CD: ‏sync משווה Git ל־cluster, ו־health מסתכל על ה־status שה־controllers כותבים. (Argo האמיתי יודע לחשב health לעשרות סוגי משאבים, ומשווה רק שדות שאתה כתבת — לא כאלה ש־Kubernetes מוסיף.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">JSON.stringify(a) === JSON.stringify(b)</code> — אותו spec בסדר מפתחות אחר נחשב שונה.</li><li>להחזיר <code>Progressing</code> לפני שבודקים <code>Degraded</code> בכל ה־Deployments — Degraded חשוב יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E77">
+    <h3>P26.3-E77 · ‏checksum ל־ConfigMap: שינוי הגדרות ← rollout 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">createHash("sha256").update(text).digest("hex")</code> מ־<code>node:crypto</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">const copy = structuredClone(deployment)</code>, ואז <code class="mid">copy.spec.template.metadata ??= {}</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E77: checksum ל־ConfigMap — שינוי הגדרות ← rollout
+import { createHash } from "node:crypto";
+
+export function configChecksum(data: Record&lt;string, string&gt;) {
+  const text = Object.keys(data).sort().map((k) =&gt; `${k}=${data[k]}\n`).join("");
+  return createHash("sha256").update(text).digest("hex");
+}
+
+export function withConfigChecksum&lt;T extends object&gt;(deployment: T, data: Record&lt;string, string&gt;): T {
+  const copy = structuredClone(deployment) as any;
+  copy.spec.template.metadata ??= {};
+  copy.spec.template.metadata.annotations ??= {};
+  copy.spec.template.metadata.annotations["checksum/config"] = configChecksum(data);
+  return copy;
+}</code></pre>
+<p>ההגדרות השתנו ← ה־hash השתנה ← ה־template השתנה ← ReplicaSet חדש ו־rolling update. ההגדרות לא השתנו ← אותו hash ← אין rollout מיותר. בגלל זה הסדר הממוין: אותן הגדרות חייבות לתת אותו hash.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את ה־annotation ב־<code>metadata</code> של ה־Deployment עצמו, לא של ה־template — שום pod לא מתחלף.</li><li>hash של <code>JSON.stringify(data)</code> — סדר מפתחות אחר נותן hash אחר, ו־rollout בלי סיבה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E78">
+    <h3>P26.3-E78 · ‏sync waves: מה קודם? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>Map&lt;number, obj[]&gt;</code>, ואז מיון המפתחות כמספרים — <code>(a, b) =&gt; a - b</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר סוגים: <code>KINDS.indexOf(kind)</code>, ו־<code>-1</code> ← ‏<code>KINDS.length</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E78: sync waves — מה קודם?
+type Obj = { kind: string; metadata: { name: string; annotations?: Record&lt;string, string&gt; } };
+
+const KINDS = ["Namespace", "ConfigMap", "Secret", "ServiceAccount", "Service", "Deployment", "Job", "CronJob", "Ingress"];
+const rank = (k: string) =&gt; (KINDS.includes(k) ? KINDS.indexOf(k) : KINDS.length);
+
+export function syncWaves(objs: Obj[]): string[][] {
+  const waves = new Map&lt;number, Obj[]&gt;();
+  for (const o of objs) {
+    const raw = o.metadata.annotations?.["argocd.argoproj.io/sync-wave"] ?? "0";
+    if (!/^-?\d+$/.test(raw.trim())) throw new Error(`sync-wave לא תקין ב־${o.kind}/${o.metadata.name}: ${raw}`);
+    const w = Number(raw);
+    waves.set(w, [...(waves.get(w) ?? []), o]);
+  }
+  return [...waves.keys()]
+    .sort((a, b) =&gt; a - b)
+    .map((w) =&gt;
+      waves
+        .get(w)!
+        .sort((a, b) =&gt; rank(a.kind) - rank(b.kind) || (a.metadata.name &lt; b.metadata.name ? -1 : a.metadata.name &gt; b.metadata.name ? 1 : 0))
+        .map((o) =&gt; `${o.kind}/${o.metadata.name}`),
+    );
+}</code></pre>
+<p>השימוש הקלאסי: ה־Job של ה־migrations בגל <code>-1</code>, וה־Deployment בגל 0 — כך הקוד החדש לא עולה לפני שהמסד מוכן (‏E24). ‏Argo מחכה שכל גל יהיה Healthy לפני הבא — ו־Job "בריא" רק כשהוא הסתיים בהצלחה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מיון מפתחות ה־Map בלי פונקציית השוואה — ‏<code>[-1, 10, 2]</code> ממוינים כמחרוזות.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.3-E79">
+    <h3>P26.3-E79 · מ־"deploy ל־Render" ל־GitOps <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי פונה למי?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־GitOps ה־CI מסיים לפני שה־cluster בכלל התחיל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>push — ה־CI פונה לפלטפורמה ואומר "deploy".</li><li>clone של <code>coffee-deploy</code>; שינוי ה־tag ב־<code>values-staging.yaml</code> ל־SHA של ה־commit (‏E25); ‏commit ו־push.</li><li>Render: כפתור "rollback" בממשק (או deploy של commit קודם). עכשיו: <code>git revert</code> של ה־commit ב־repo התצורה, ו־Argo מסנכרן.</li><li>לא. ה־workflow נגמר כשה־commit נדחף. אם ה־rollout נכשל — רואים את זה ב־Argo (Degraded), לא ב־CI. לכן מתחברים להתראות של Argo (Slack), או מוסיפים צעד שמחכה ל־Synced+Healthy (‏E84).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ירוק ב־CI = בפרודקשן" — בדיוק המקום שבו תקלות מתחבאות ב־GitOps.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E80">
+    <h3>P26.3-E80 · ‏rollback: ‏revert, לא reset <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>revert מוסיף commit; reset מוחק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי עוד כותב ל־repo התצורה, ובאיזה תדירות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) ‏<code>a1b2</code> נשאר, ועוד commit שמבטל אותו — כתוב מי, מתי ולמה. (ב) <code>a1b2</code> נעלם מ־main.</li><li>בשניהם — מסנכרן לתוכן החדש ומחזיר את הגרסה הקודמת. ל־Argo אכפת רק מה יש ב־main.</li><li>ה־CI של כל השירותים כותב ל־repo הזה כל הזמן. ‏<code>push --force</code> יכול למחוק commits של שירותים אחרים שנכנסו בינתיים — ולהחזיר אותם לגרסאות ישנות בפרודקשן. וגם: ההיסטוריה של "מה קרה בפרודקשן" נמחקת. ב־repo כזה main מוגן מ־force push.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נתקן ידנית ב־cluster ואחר כך ב־Git" — selfHeal מחזיר את התיקון הידני (‏E70).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E81">
+    <h3>P26.3-E81 · מה מותר לשים ב־values? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>repo התצורה נקרא על ידי הרבה אנשים וכלים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>env נקרא כשהתהליך עולה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>LOG_LEVEL</code> ו־<code>FEATURE_NEW_CHECKOUT</code> — בסדר, הגדרות. ‏<code>DATABASE_URL</code> עם סיסמה ו־<code>JWT_SECRET</code> — סודות ב־Git: כל מי שיש לו גישה ל־repo (וכל fork, גיבוי ולוג של CI) רואה אותם, לתמיד.</li><li>ב־Secret של Kubernetes שנוצר מחוץ ל־Git — מ־AWS Secrets Manager (עם כלי כמו External Secrets) או מוצפן (Sealed Secrets). ה־values מכילים רק את <em>שם</em> ה־Secret, וה־pod טוען אותו כ־env או כקובץ (<code>_FILE</code>).</li><li>Argo מסנכרן את ה־ConfigMap — אבל pods קיימים לא קוראים env מחדש. עם checksum ב־template (‏E77) — מיד יש rollout. בלעדיו — רק ב־deploy הבא.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ה־repo פרטי" — פרטי לכמה מאות אנשים וכלים, וכל אחד מהם יכול לדלוף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E82">
+    <h3>P26.3-E82 · ‏tag ל־image מ־git 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">/^refs\/tags\/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$/</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>נרמול: <code>toLowerCase()</code>, ‏<code class="mid">replace(/[^a-z0-9.-]+/g, "-")</code>, ‏<code>replace(/-+/g, "-")</code>, ‏<code>replace(/^-|-$/g, "")</code>, ‏<code>slice(0, 40)</code> — ושוב להוריד מקף בסוף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E82: tag ל־image מ־git
+export function imageTag(ref: string, sha: string): string {
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("sha לא תקין");
+  const tag = /^refs\/tags\/(.+)$/.exec(ref);
+  if (tag) {
+    const m = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$/.exec(tag[1]);
+    if (!m) throw new Error(`tag לא בפורמט vX.Y.Z: ${tag[1]}`);
+    return m[1];
+  }
+  const branch = /^refs\/heads\/(.+)$/.exec(ref);
+  if (!branch) throw new Error(`ref לא נתמך: ${ref}`);
+  const clean = branch[1]
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40)
+    .replace(/-$/, "");
+  return `${clean}-${sha.slice(0, 7)}`;
+}</code></pre>
+<p>tag של image הוא מחרוזת עם חוקים (אותיות, ספרות, ‏<code>_ . -</code>, עד 128 תווים) — שם של ענף כמו <code>feature/Login_Page</code> לא עובר. וה־SHA בסוף הוא מה שהופך כל image לניתן לזיהוי: מהפרודקשן אפשר לחזור בדיוק ל־commit שנבנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>tag <code>latest</code> או רק שם ענף (<code>main</code>) — שני builds מאותו ענף דורסים זה את זה, ואי אפשר לדעת מה רץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E83">
+    <h3>P26.3-E83 · בדיקת values עם zod לפני deploy 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>schema בסיסי עם <code>z.object</code> לכל חלק, ואז <code class="mid">.superRefine((v, ctx) =&gt; …)</code> לתנאים שתלויים בשדה אחר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך <code>superRefine</code>, ובסוף — מ־issues לתוצאה:</p>
+<pre><code class="lang-ts">ctx.addIssue({ code: "custom", path: ["ingress", "host"], message: "…" });
+// …
+r.error.issues.map((i) =&gt; ({ path: i.path.join("."), message: i.message }))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E83: בדיקת values עם zod לפני deploy
+import { z } from "zod";
+
+const nonEmpty = z.string().min(1);
+const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+const schema = z
+  .object({
+    replicas: z.number().int().min(1).max(20),
+    image: z.object({ repository: nonEmpty, tag: nonEmpty.refine((t) =&gt; t !== "latest", "לא latest — גרסה קבועה") }),
+    resources: z.object({
+      requests: z.object({ cpu: nonEmpty, memory: nonEmpty }),
+      limits: z.object({ memory: nonEmpty }),
+    }),
+    ingress: z.object({ enabled: z.boolean(), host: z.string().optional() }).optional(),
+    autoscaling: z.object({ enabled: z.boolean(), minReplicas: z.number().int().optional(), maxReplicas: z.number().int().optional() }).optional(),
+  })
+  .superRefine((v, ctx) =&gt; {
+    if (v.ingress?.enabled &amp;&amp; !HOST.test(v.ingress.host ?? "")) {
+      ctx.addIssue({ code: "custom", path: ["ingress", "host"], message: "שם מארח לא תקין" });
+    }
+    const a = v.autoscaling;
+    if (a?.enabled) {
+      if ((a.minReplicas ?? 0) &lt; 2) ctx.addIssue({ code: "custom", path: ["autoscaling", "minReplicas"], message: "לפחות 2" });
+      if ((a.minReplicas ?? 0) &gt; (a.maxReplicas ?? 0)) ctx.addIssue({ code: "custom", path: ["autoscaling", "maxReplicas"], message: "קטן מ־minReplicas" });
+    }
+  });
+
+export function validateValues(values: unknown) {
+  const r = schema.safeParse(values);
+  return r.success ? [] : r.error.issues.map((i) =&gt; ({ path: i.path.join("."), message: i.message }));
+}</code></pre>
+<p>את זה מריצים ב־CI של repo התצורה, על כל pull request — לפני ש־Argo בכלל רואה את השינוי. (ל־Helm יש גם <code>values.schema.json</code>, שבודק את אותו דבר ב־<code>helm template</code>.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את התנאים התלויים בתוך ה־<code>z.object</code> של ingress — אז שגיאה בשדה אחר עוצרת את הבדיקה לפני שהיא מגיעה אליהם (<code>superRefine</code> רץ רק אם הבסיס עבר).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E84">
+    <h3>P26.3-E84 · לחכות ל־Synced ו־Healthy 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const start = now();
+for (;;) {
+  // …
+  if (now() - start &gt;= timeoutMs) throw …;
+  await sleep(intervalMs);
+}</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">try { s = await getStatus(); } catch { s = null; }</code> — ושגיאה של "Degraded" זורקים <em>מחוץ</em> ל־try.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E84: לחכות ל־Synced ו־Healthy
+type Status = { sync: string; health: string };
+type Opts = { timeoutMs: number; intervalMs: number; sleep?: (ms: number) =&gt; Promise&lt;void&gt;; now?: () =&gt; number };
+
+export async function waitForSync(getStatus: () =&gt; Promise&lt;Status&gt;, { timeoutMs, intervalMs, sleep = (ms) =&gt; new Promise((r) =&gt; setTimeout(r, ms)), now = Date.now }: Opts) {
+  const start = now();
+  for (;;) {
+    let s: Status | null = null;
+    try {
+      s = await getStatus();
+    } catch {
+      // תקלה רגעית ב־API — ממשיכים לנסות
+    }
+    if (s?.health === "Degraded") throw new Error("DEGRADED");
+    if (s?.sync === "Synced" &amp;&amp; s.health === "Healthy") return s;
+    if (now() - start &gt;= timeoutMs) throw new Error("TIMEOUT");
+    await sleep(intervalMs);
+  }
+}</code></pre>
+<p>בפועל, הפקודה הזו עושה בדיוק את זה:</p>
+<pre class="terminal"><span class="prompt">% </span>argocd app wait coffee-api-staging --health --sync --timeout 300</pre>
+<p>ו־pipeline שמריץ אותו אחרי ה־commit נכשל אם הגרסה לא עלתה. ההחלטה "Degraded ← לעצור מיד" חוסכת עשר דקות של המתנה ל־timeout.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק timeout לפני הקריאה הראשונה — עם <code>timeoutMs: 0</code> לא נבדק אפילו פעם אחת.</li><li>לזרוק על שגיאת רשת ראשונה — Argo מתעדכן, ה־API מגמגם שנייה, וה־pipeline נכשל בלי סיבה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-jenkins.html"><small>הבא</small>שיעור 5 — Jenkins, והדרך המלאה מ־commit ל־cluster</a></div>
 </main>
 </body>

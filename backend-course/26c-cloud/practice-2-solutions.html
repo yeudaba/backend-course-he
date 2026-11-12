@@ -74,6 +74,87 @@ console.log("3.", top.Contents!.map((o) =&gt; o.Key), top.CommonPrefixes!.map((p
 </div></details>
     
   </div>
+<div class="ex" id="P26.3-E48">
+    <h3>P26.3-E48 · ‏bucket או אובייקט? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פעולה על אובייקט ← ARN עם <code>/key</code>. פעולה על ה־bucket עצמו (כולל לרשום מה יש בו) ← בלי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>s3:*</code> לא עוזר אם ה־Resource לא מתאים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אובייקט (<code>coffee-uploads/*</code>, או מדויק יותר <code>coffee-uploads/uploads/*</code>).</li><li>ה־bucket — ‏<code>ListBucket</code> היא פעולה על ה־bucket, וה־prefix מוגבל עם <code>Condition</code> על <code>s3:prefix</code> (‏E08).</li><li>אובייקט.</li><li>אובייקט.</li><li>ה־bucket.</li></ol>
+<p>עם <code>Resource</code> של ה־bucket בלבד: רק 2 ו־5. כל פעולה על אובייקט — <code>AccessDenied</code>, למרות ה־<code>s3:*</code>. זו בדיוק התקלה של E21.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן עם <code>"Resource": "*"</code> — עובד, ונותן גם את כל ה־buckets האחרים בחשבון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E49">
+    <h3>P26.3-E49 · מאיפה ה־SDK לקח את ה־credentials? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שרשרת: משתני סביבה ← קובץ ← הזהות של הסביבה. הראשון שנמצא — מנצח.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אין "ננסה את הבא אם זה נכשל".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הפרופיל — ההרשאות שלך.</li><li>משתני הסביבה מנצחים — וכל קריאה נכשלת (<code>InvalidAccessKeyId</code>), למרות שהפרופיל תקין. ה־SDK לא עובר לבא בתור.</li><li>ה־role — credentials זמניים שמתחדשים לבד, בלי סוד בשום קובץ.</li><li>משתני הסביבה מנצחים את ה־role: השירות רץ עם ההרשאות של <em>האדם</em> (כנראה רחבות מדי), עם מפתח שלא פג, ש־<code>kubectl get secret</code> חושף. ואם האדם עוזב — השירות נופל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"להוסיף מפתח רק בינתיים" — "בינתיים" בענן נמשך שנים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E50">
+    <h3>P26.3-E50 · כתובת חתומה — מה יקרה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>החתימה כוללת bucket, ‏key, ‏Content-Type ותפוגה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>יצירת הכתובת לא פונה ל־AWS בכלל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>200 — הקובץ ב־S3.</li><li>403 — ה־Content-Type חלק מהחתימה.</li><li>403 — פג תוקף.</li><li>403 — ה־key חלק מהחתימה. לכן המשתמש לא יכול לכתוב לתיקייה של משתמש אחר.</li><li>200 בשתיהן — הכתובת תקפה עד שפגה, והשנייה <em>דורסת</em> את הראשונה. אם זה בעיה — key ייחודי לכל העלאה (ה־UUID), ובדיקה בצד השרת.</li><li>היצירה מצליחה (חתימה מקומית), וההעלאה מקבלת 403. הכתובת לא יכולה יותר ממה שהשרת יכול.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על הכתובת לגבול הגודל — ‏<code>ContentLength</code> בחתימה עוזר, אבל ההחלטה "עד 5MB" צריכה להיבדק בשרת לפני החתימה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E51">
+    <h3>P26.3-E51 · אין תיקיות, אין עדכון חלקי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מפתח הוא מחרוזת אחת; לוכסן הוא סתם תו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אובייקט נכתב תמיד שלם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כלום (או רק אובייקט ריק בשם הזה, אם יצרו כזה בקונסולה). "תיקייה" היא prefix — מוחקים כל מפתח שמתחיל בו (‏E19).</li><li>אין rename: ‏<code>CopyObject</code> ל־<code>b.pdf</code>, ואז <code>DeleteObject</code> של <code>a.pdf</code> (‏E52). שתי פעולות — לא אטומי.</li><li>כותבים את כל 20MB מחדש. עדיף: אובייקט לכל מוצר (<code>products/7.json</code>), או — אם צריך עדכונים קטנים ותכופים — מסד, לא S3.</li><li>לפחות 1000. ‏<code>IsTruncated: true</code> ו־<code>NextContinuationToken</code> אומרים שיש עוד (‏E19).</li><li>S3 סופר בתים: כל אות עברית היא 2 בתים ב־UTF-8, אז 3 אותיות הן 6 בתים — 3 יותר.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>.length</code> של מחרוזת ל־<code>ContentLength</code> — עם עברית ההעלאה נחתכת או נכשלת. ‏<code>Buffer.byteLength(s)</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.3-E06">
     <h3>P26.3-E06 · JSON ב־S3 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -399,6 +480,101 @@ export async function loadReport(s3: S3Client, bucket: string, date: string): Pr
 </div></details>
     
   </div>
+<div class="ex" id="P26.3-E52">
+    <h3>P26.3-E52 · ‏rename ב־S3: העתקה ומחיקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>CopySource</code> הוא <code>bucket/key</code>, והוא חלק מ־URL — ולכן ה־key מקודד: <code><code class="mid">${bucket}/${encodeURIComponent(from)}</code></code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מפתח שלא קיים: ‏<code>err.name === "NoSuchKey"</code>. לא כל 404 — גם bucket שלא קיים מחזיר 404 (<code>NoSuchBucket</code>), וזה באג שצריך לראות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E52: rename ב־S3 — העתקה ומחיקה
+import { S3Client, CopyObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+
+export async function moveObject(s3: S3Client, bucket: string, from: string, to: string) {
+  if (from === to) return true;
+  try {
+    await s3.send(new CopyObjectCommand({ Bucket: bucket, Key: to, CopySource: `${bucket}/${encodeURIComponent(from)}` }));
+  } catch (err) {
+    if ((err as { name?: string }).name === "NoSuchKey") return false; // רק "אין מקור". NoSuchBucket — באג, שיעלה
+    throw err;
+  }
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: from }));
+  return true;
+}</code></pre>
+<p>בין ה־Copy ל־Delete יש רגע שבו הקובץ קיים בשני המקומות, ואם התהליך קורס שם — נשאר עותק. זה בסדר: "שני עותקים" עדיף על "אף אחד". (ההפך — קודם למחוק — היה מסוכן.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>CopySource: <code>${bucket}/${from}</code></code> — עובד עד הקובץ הראשון עם רווח או עברית.</li><li>לקרוא את כל הקובץ (<code>GetObject</code>) ולכתוב אותו מחדש — עובר דרך השרת שלך, ומאבד את ה־metadata.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.3-E53">
+    <h3>P26.3-E53 · ‏least privilege — גם במסד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי צריך <code>CREATE TABLE</code>? ומי רק <code>SELECT</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הנזק של באג תלוי בהרשאות של מי שמריץ אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כנראה <code>postgres</code> — superuser, שיכול הכול, כולל <code>DROP DATABASE</code>.</li><li>‏API: ‏<code class="mid">SELECT, INSERT, UPDATE, DELETE</code> על הטבלאות שלו, בלי DDL. ‏migrations: בעלים של ה־schema (<code>CREATE</code>/<code>ALTER</code>), ורץ רק ב־Job של ה־deploy. דוחות: <code>SELECT</code> בלבד, ואולי רק על views.</li><li>superuser: ‏<code>DROP TABLE</code>, קריאת קבצים מהשרת. ‏API: לקרוא ולשנות את כל הטבלאות שלו — רע, אבל בלי למחוק את המבנה. דוחות: לקרוא — דליפת מידע, בלי שינוי.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אנחנו משתמשים ב־ORM, אז אין injection" — ‏<code>$queryRawUnsafe</code> אחד מספיק. ההרשאות הן קו ההגנה השני.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E54">
+    <h3>P26.3-E54 · העלאה דרך Express או ישירות ל־S3? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>500MB בבת אחת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי העלאה ישירה, השרת יכול לקרוא את הקובץ מ־S3.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א׳: עד 500MB עוברים דרך השרת (בזיכרון או בדיסק זמני), ופעמיים ברשת (נכנס, ויוצא ל־S3). ב׳: כמעט כלום — בקשה קטנה לחתימה; הקבצים הולכים ישר ל־S3.</li><li>א׳ — הבתים עוברים דרכך, אפשר לבדוק את תחילת הקובץ (<code>%PDF</code>) לפני ששומרים. ב׳ — בודקים אחרי: אירוע של S3 (או קריאה מהלקוח "סיימתי") מפעיל בדיקה שקוראת את תחילת הקובץ, ומוחקת או מסמנת כלא תקין.</li><li>‏<code class="mid">express.json({ limit: "100kb" })</code> — ברירת מחדל, מגן מגופים ענקיים. העלאת קבצים דרך השרת צריכה גבול משלה; בדרך ב׳ הגבול נאכף בחתימה (<code>ContentLength</code>) ובבדיקה לפני החתימה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעלות דרך השרת "כי ככה יותר פשוט" עם <code>limit: "50mb"</code> — כל לקוח יכול לתפוס 50MB של זיכרון בבקשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E55">
+    <h3>P26.3-E55 · קבצים ב־PostgreSQL (‏bytea) או ב־S3? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מסד יקר לכל GB; S3 זול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה הקשר בין השורה במסד לבין האובייקט ב־S3?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הגיבויים גדלים (וגם השחזור — שעות במקום דקות); כל <code>SELECT *</code> מושך מגה־בתים; ה־cache של המסד מתמלא בקבצים במקום באינדקסים. והמסד הוא המשאב הכי יקר וקשה להגדיל במערכת.</li><li>ה־<code>key</code> ב־S3, הגודל, ה־Content-Type, מי העלה ומתי, וסטטוס (<code>pending</code>/<code>ready</code>). המסד יודע <em>על</em> הקובץ; S3 מחזיק אותו.</li><li>קבצים קטנים ומעטים (חתימה של כמה KB, תמונת פרופיל קטנה) שחייבים להיות בטרנזקציה אחת עם השורה. או מערכת קטנה שלא שווה לה שירות נוסף.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור ב־S3 ולהשאיר במסד רק URL ציבורי — ה־bucket נהיה ציבורי. שומרים key, ונותנים כתובת חתומה כשצריך (‏E56).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P26.3-E27">
     <h3>P26.3-E27 · חשבון S3 לפי מדרגות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -467,7 +643,89 @@ total      $  121.60</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P26.3-E56">
+    <h3>P26.3-E56 · קבלה רק לבעלים: כתובת חתומה להורדה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>getSignedUrl</code> מ־<code class="mid">@aws-sdk/s3-request-presigner</code>:</p>
+<pre><code class="lang-ts">getSignedUrl(s3, new GetObjectCommand({ Bucket, Key, ResponseContentDisposition }), { expiresIn: 60 })</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏HeadObject על מפתח שלא קיים זורק שגיאה עם <code class="mid">$metadata.httpStatusCode === 404</code> (השם הוא <code>NotFound</code>, לא <code>NoSuchKey</code> — ל־HEAD אין גוף).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E56: קבלה רק לבעלים — כתובת חתומה להורדה
+import { S3Client, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+type Req = { userId: number; orderId: number; ownerOf: (orderId: number) =&gt; Promise&lt;number | null&gt; };
+
+export async function receiptLink(s3: S3Client, bucket: string, { userId, orderId, ownerOf }: Req): Promise&lt;{ status: 200; url: string } | { status: 404 }&gt; {
+  if ((await ownerOf(orderId)) !== userId) return { status: 404 };
+  const Key = `receipts/${orderId}.pdf`;
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key }));
+  } catch (err) {
+    if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return { status: 404 };
+    throw err;
+  }
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: bucket, Key, ResponseContentDisposition: `attachment; filename="receipt-${orderId}.pdf"` }),
+    { expiresIn: 60 },
+  );
+  return { status: 200, url };
+}</code></pre>
+<p>ההרשאה נבדקת <em>אצלך</em>, לפני החתימה — S3 לא יודע מי הלקוח. הכתובת היא "כרטיס כניסה" לקובץ אחד, לדקה אחת. ‏<code>ResponseContentDisposition</code> נכנס לחתימה, כך שהלקוח לא יכול לשנות אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק בעלות <em>אחרי</em> שיצרת את הכתובת "כי זה זול" — אם שכחת את ה־<code>return</code>, הכתובת דלפה.</li><li>תפוגה של שבוע "כדי שהקישור במייל יעבוד" — שולחים במייל קישור לאתר, שיוצר כתובת חדשה בכל לחיצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E57">
+    <h3>P26.3-E57 · ייצוא CSV ל־S3 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const cell = (v: unknown) =&gt; { const s = v == null ? "" : v instanceof Date ? v.toISOString() : String(v); return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s; };</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>Buffer.byteLength(body)</code> — לא <code>body.length</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E57: ייצוא CSV ל־S3
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+function cell(v: unknown) {
+  const s = v == null ? "" : v instanceof Date ? v.toISOString() : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+}
+
+export function toCsv(rows: Record&lt;string, unknown&gt;[]) {
+  if (rows.length === 0) return "";
+  const cols = Object.keys(rows[0]);
+  const lines = [cols.map(cell).join(","), ...rows.map((r) =&gt; cols.map((c) =&gt; cell(r[c])).join(","))];
+  return lines.join("\r\n") + "\r\n";
+}
+
+export async function exportCsv(s3: S3Client, bucket: string, key: string, rows: Record&lt;string, unknown&gt;[]) {
+  const body = "﻿" + toCsv(rows);
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: "text/csv; charset=utf-8" }));
+  return { rows: rows.length, bytes: Buffer.byteLength(body) };
+}</code></pre>
+<p>ה־BOM הוא שלושה בתים (<code>EF BB BF</code>) שאומרים "זה UTF-8". בלעדיהם, Excel בחלונות פותח את הקובץ בקידוד אחר, והעברית יוצאת ג'יבריש. ו־CSV הוא אחד המקומות שבהם "פשוט <code>join(",")</code>" נשבר בשורה הראשונה עם פסיק בשם של לקוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף <em>כל</em> ערך במירכאות בלי להכפיל מירכאות פנימיות — <code>"קפה "טוב""</code> נשבר.</li><li>להחזיר <code>body.length</code> כ־bytes — עם עברית (וה־BOM) המספר קטן מהגודל האמיתי.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-kubernetes.html"><small>הבא</small>שיעור 3 — Kubernetes: Pods, Deployments ו־Services</a></div>
 </main>
 </body>

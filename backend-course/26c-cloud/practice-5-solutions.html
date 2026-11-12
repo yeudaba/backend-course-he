@@ -14,6 +14,127 @@
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26c-cloud/solutions/</code>.</p></div>
   <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26.3-E85">
+    <h3>P26.3-E85 · ‏controller, ‏agent ו־Multibranch <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־controller מחזיק את כל הסודות ואת ההיסטוריה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"pipeline as code" — הקובץ בתוך ה־repo.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־controller: הממשק, התזמון, ההיסטוריה, ה־Credentials. ה־agents: מריצים את ה־steps. build על ה־controller — קוד של כל ענף רץ ליד כל הסודות של כל הפרויקטים, ו־build כבד מאט את ה־Jenkins כולו.</li><li>כל build מתחיל מקונטיינר נקי, עם גרסה מדויקת של Node שכתובה בקובץ. בלי "אצלי עובד" בגלל משהו שנשאר מ־build קודם, ושני פרויקטים עם גרסאות שונות לא מתנגשים.</li><li>יוצר job לענף/PR ומריץ את ה־Jenkinsfile <em>מהענף</em>. לכן שינוי ב־pipeline נבדק ב־PR לפני שהוא נכנס ל־main — וגם לכן <code>when { branch 'main' }</code> חשוב: PR לא יכול לדחוף image (‏E90).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ה־Jenkinsfile מוגדר בממשק של Jenkins" — זה ה־"Pipeline script" הישן; ‏pipeline as code הוא קובץ ב־repo.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E86">
+    <h3>P26.3-E86 · מ־GitHub Actions ל־Jenkins <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>טבלת ההשוואה בשיעור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏checkout — ב־Multibranch הוא קורה לבד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>container: node:24-alpine</code> ← ‏<code class="mid">agent { docker { image 'node:24-alpine' } }</code>.</li><li><code>timeout-minutes: 15</code> ← ‏<code class="mid">options { timeout(time: 15, unit: 'MINUTES') }</code>.</li><li><code>actions/checkout</code> ← לא צריך (Multibranch עושה checkout), או <code>checkout scm</code>.</li><li>‏<code>run: npm ci</code> ו־<code>npm test</code> ← ‏<code class="mid">stage('Install') { steps { sh 'npm ci' } }</code> וכן הלאה.</li><li><code>if: github.ref == …main</code> ← ‏<code>when { branch 'main' }</code> בתוך stage.</li><li><code>secrets.GHCR_TOKEN</code> ← ‏<code>withCredentials</code> עם <code class="mid">string(credentialsId: 'ghcr-token', variable: 'TOKEN')</code>, ו־<code>sh 'echo $TOKEN | …'</code> במרכאות בודדות.</li><li><code>if: failure()</code> ← ‏<code class="mid">post { failure { echo 'CI failed' } }</code>.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתרגם <code>"$TOKEN"</code> ל־<code>sh "echo ${TOKEN} | …"</code> — ב־Groovy זו בדיוק ה־interpolation של הסוד (‏E87).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E87">
+    <h3>P26.3-E87 · מה מגיע ל־shell? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מרכאות כפולות ב־Groovy ← Groovy מציב לפני ה־shell.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מרכאות בודדות ← הטקסט עובר כמו שהוא, וה־shell קורא את משתנה הסביבה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code class="mid">curl -H "Authorization: token $TOKEN" …</code> — ה־shell מציב. הטוקן לא בטקסט של הפקודה. בטוח.</li><li>‏<code class="mid">curl -H 'Authorization: token ghp_abc123' …</code> — הטוקן בתוך הפקודה: נראה ב־<code>ps</code> על ה־agent, ו־Jenkins מזהיר "insecure interpolation".</li><li>‏<code>echo building main</code> — בסדר: שם ענף הוא לא סוד. (ובכל זאת — שם ענף מגיע ממשתמש; מרכאות בודדות בטוחות יותר גם מפני הזרקה.)</li><li>‏<code>echo building $BRANCH_NAME</code> — ה־shell מציב. בטוח.</li><li>גרוע פעמיים: הטוקן בטקסט, <em>וגם</em> כארגומנט <code>-p</code> — גלוי ב־<code>ps</code> לכל תהליך במכונה. ‏<code>--password-stdin</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Jenkins מסתיר סודות בלוג, אז זה בסדר" — ההסתרה היא בלוג בלבד, לא ב־<code>ps</code>, ולא בקבצים שהפקודה כותבת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E88">
+    <h3>P26.3-E88 · איפה זה נשבר, ומה רואים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל שלב — מערכת אחרת: Jenkins, ‏registry, ‏Git, ‏Argo, ‏Kubernetes.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>pod חדש שלא Ready — לא מקבל תנועה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>Jenkins — אדום, ה־image לא נבנה. הלקוחות: כלום. איפה: הלוג של ה־build ודוח הבדיקות.</li><li>Jenkins — אדום ב־Push. לקוחות: כלום. איפה: הלוג (‏<code>denied</code>/<code>unauthorized</code>) ← לחדש את ה־Credential.</li><li>Jenkins — אדום ב־Update config. ה־image קיים ב־registry, אבל לא בפרודקשן. איפה: הלוג; התיקון: ‏<code>git pull --rebase</code> וניסיון חוזר בתוך הצעד.</li><li>Argo: ‏Synced, ‏Progressing ← Degraded. לקוחות: כלום — ה־rollout נתקע, הישנים עונים (‏E60). איפה: Argo ← ה־pod ← ‏<code>logs --previous</code>.</li><li>אותו דבר: Running 0/1, ה־rollout תקוע, הלקוחות לא מרגישים. איפה: Events של ה־probe, ולוג העלייה. התיקון: המשתנה ב־values (או Secret) — commit ל־repo התצורה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש ב־Jenkins למה הפרודקשן לא התעדכן כשה־build ירוק — מאותו רגע זה Argo ו־Kubernetes.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E89">
+    <h3>P26.3-E89 · איזה post רץ? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>always</code> — תמיד. ‏<code>cleanup</code> — תמיד, ואחרון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>stage שדולג בגלל <code>when</code> הוא לא כישלון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>always, ‏success, ‏cleanup.</li><li>always, ‏failure, ‏cleanup — וה־stages שאחרי הבדיקות לא רצים.</li><li>always, ‏success, ‏cleanup — דילוג הוא לא כישלון.</li><li>always, ‏cleanup (ו־<code>aborted</code> אם הוגדר). לא success ולא failure.</li></ol>
+<p>‏junit ב־<code>always</code> — כי דוח הבדיקות חשוב <em>בדיוק</em> כשהן נכשלות: Jenkins מראה איזו בדיקה ולמה. ב־success הוא היה מופיע רק כשאין מה לראות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>deleteDir()</code> ב־<code>always</code> לפני <code>junit</code> — הדוח נמחק לפני שנקרא. לכן cleanup הוא נפרד, ורץ אחרון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E90">
+    <h3>P26.3-E90 · ‏when { branch 'main' } ו־tag של image <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Multibranch מריץ את ה־Jenkinsfile של כל ענף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה רץ בפרודקשן עכשיו? ומה עושה rollback?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־PR דוחף image ל־registry עם הרשאות של main — קוד שאף אחד לא עשה לו review נבנה ונדחף, ואולי אף מחליף tag שבשימוש. (ועם repo ציבורי — PR מ־fork הוא קוד של זר שרץ עם הסודות שלך.)</li><li>(א) אי אפשר לדעת איזו גרסה רצה. (ב) ‏rollback "ל־latest הקודם" לא קיים — הוא נדרס. (ג) ‏Kubernetes לא מזהה שינוי ב־template (אותה מחרוזת) ← אין rollout, ו־nodes שונים מריצים גרסאות שונות לפי מתי משכו.</li><li>‏<code>GIT_COMMIT</code>: מצביע בדיוק על הקוד, יציב בין builds ובין מערכות CI. ‏<code>BUILD_NUMBER</code> מתאפס כשה־job נוצר מחדש, ולא אומר מה הקוד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף גם <code>latest</code> לנוחות" — אפשר, כל עוד שום manifest לא משתמש בו.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.3-E16">
     <h3>P26.3-E16 · Jenkinsfile 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -335,7 +456,435 @@ spec:
 
 </div></details>
   </div>
+<div class="ex" id="P26.3-E91">
+    <h3>P26.3-E91 · ‏Jenkinsfile שמעדכן את repo התצורה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שינוי ה־tag בשורה אחת של shell:</p>
+<pre><code class="lang-bash">sed -i "s/^\(\s*tag:\).*/\1 \"$GIT_COMMIT\"/" charts/coffee-api/values-staging.yaml</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>sh '''…'''</code> (שלוש מרכאות בודדות) — כמה שורות של shell, בלי interpolation של Groovy.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-groovy">// P26.3-E91: Jenkinsfile שמעדכן את repo התצורה
+pipeline {
+  agent { docker { image 'node:24-alpine' } }
+  environment {
+    IMAGE = 'ghcr.io/noa-cohen/coffee-shop'
+  }
+  stages {
+    stage('Test') {
+      steps {
+        sh 'npm ci'
+        sh 'npm test'
+      }
+    }
+    stage('Push image') {
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: 'REG_USER', passwordVariable: 'REG_TOKEN')]) {
+          sh 'echo $REG_TOKEN | docker login ghcr.io -u $REG_USER --password-stdin'
+          sh 'docker build -t $IMAGE:$GIT_COMMIT . &amp;&amp; docker push $IMAGE:$GIT_COMMIT'
+        }
+      }
+    }
+    stage('Update config') {
+      when { branch 'main' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'config-repo', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+          sh '''
+            git clone https://$GIT_USER:$GIT_TOKEN@github.com/noa-cohen/coffee-deploy.git deploy
+            cd deploy
+            sed -i "s/^\\(\\s*tag:\\).*/\\1 \\"$GIT_COMMIT\\"/" charts/coffee-api/values-staging.yaml
+            git -c user.name=jenkins -c user.email=ci@coffee.example commit -am "staging: coffee-api $GIT_COMMIT"
+            git push origin main
+          '''
+        }
+      }
+    }
+  }
+  post {
+    failure { echo 'Build failed' }
+  }
+}</code></pre>
+<p>שים לב מה <em>אין</em> כאן: שום הרשאה ל־cluster. הסוד היחיד שקשור לפרודקשן הוא הרשאת כתיבה ל־repo התצורה — ושם יש היסטוריה, review והגנות ענפים. (ב־<code>sed</code> בתוך <code>'''</code> של Groovy צריך להכפיל את ה־backslash.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">sh "git clone https://${GIT_USER}:${GIT_TOKEN}@…"</code> — הטוקן בטקסט של הפקודה.</li><li>לשכוח <code>when</code> ב־Update config — כל PR מעדכן את staging לגרסה שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E92">
+    <h3>P26.3-E92 · למצוא סודות במרכאות כפולות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סורק תו־תו עם "מצב": קוד, מחרוזת בודדת, מחרוזת כפולה, משולשת בודדת, משולשת כפולה, הערה. ‏<code>\n</code> מעלה את מספר השורה בכל מצב.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בכל מחרוזת כפולה שנסגרה (עם השורה שבה התחילה) — ‏regex על התוכן:</p>
+<pre><code class="lang-ts">new RegExp(`\\$(?:\\{(?:env\\.)?${v}\\}|${v}(?![A-Za-z0-9_]))`, "g")</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E92: למצוא סודות במרכאות כפולות
+export function findInterpolatedSecrets(text: string, secretVars: string[]) {
+  const out: { line: number; variable: string; at: number }[] = [];
+  const check = (body: string, startLine: number, startAt: number) =&gt; {
+    for (const v of secretVars) {
+      const re = new RegExp(`\\$(?:\\{(?:env\\.)?${v}\\}|${v}(?![A-Za-z0-9_]))`, "g");
+      for (const m of body.matchAll(re)) {
+        const before = body.slice(0, m.index);
+        out.push({ line: startLine + (before.match(/\n/g)?.length ?? 0), variable: v, at: startAt + m.index! });
+      }
+    }
+  };
+  let i = 0;
+  let line = 1;
+  while (i &lt; text.length) {
+    if (text.startsWith("//", i)) {
+      while (i &lt; text.length &amp;&amp; text[i] !== "\n") i++;
+      continue;
+    }
+    const quote = ['"""', "'''", '"', "'"].find((q) =&gt; text.startsWith(q, i));
+    if (!quote) {
+      if (text[i] === "\n") line++;
+      i++;
+      continue;
+    }
+    const startLine = line;
+    const start = i + quote.length;
+    let j = start;
+    while (j &lt; text.length &amp;&amp; !text.startsWith(quote, j)) {
+      if (text[j] === "\\") j++;
+      else if (text[j] === "\n") line++;
+      j++;
+    }
+    if (quote.startsWith('"')) check(text.slice(start, j), startLine, start);
+    i = j + quote.length;
+  }
+  return out.sort((a, b) =&gt; a.at - b.at).map(({ line, variable }) =&gt; ({ line, variable }));
+}</code></pre>
+<p>זה (בערך) מה שהאזהרה "insecure interpolation of sensitive variables" של Jenkins בודקת — אבל ב־review, לפני שהסוד כבר רץ. אפשר להריץ אותו ב־CI של ה־repo, על ה־Jenkinsfile עצמו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>regex אחד על כל הקובץ (<code>/"[^"]*\$TOKEN/</code>) — נופל על מרכאות בודדות שמכילות <code>"</code>, על מחרוזות משולשות, ועל הערות.</li><li>לבדוק <code>"""</code> אחרי <code>"</code> — כל משולשת נקראת כמחרוזת ריקה ואחריה עוד אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E93">
+    <h3>P26.3-E93 · לקרוא דוח JUnit 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">/&lt;testcase\b([^&gt;]*?)(?:\/&gt;|&gt;([\s\S]*?)&lt;\/testcase&gt;)/g</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מאפיין: <code>/\bname="([^"]*)"/</code>. ‏<code>&amp;amp;</code> מפענחים <em>אחרון</em> — אחרת <code>&amp;amp;lt;</code> הופך ל־<code>&lt;</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E93: לקרוא דוח JUnit
+const decode = (s: string) =&gt; s.replace(/&amp;lt;/g, "&lt;").replace(/&amp;gt;/g, "&gt;").replace(/&amp;quot;/g, '"').replace(/&amp;apos;/g, "'").replace(/&amp;amp;/g, "&amp;");
+const attr = (attrs: string, name: string) =&gt; decode(new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? "");
+
+export function junitSummary(xml: string) {
+  const r = { tests: 0, failures: 0, errors: 0, skipped: 0, failed: [] as string[] };
+  for (const m of xml.matchAll(/&lt;testcase\b([^&gt;]*?)(?:\/&gt;|&gt;([\s\S]*?)&lt;\/testcase&gt;)/g)) {
+    const [, attrs, body = ""] = m;
+    r.tests++;
+    const failure = /&lt;failure\b/.test(body);
+    const error = /&lt;error\b/.test(body);
+    if (failure) r.failures++;
+    if (error) r.errors++;
+    if (/&lt;skipped\b/.test(body)) r.skipped++;
+    if (failure || error) r.failed.push(`${attr(attrs, "classname")} › ${attr(attrs, "name")}`);
+  }
+  return r;
+}</code></pre>
+<p>failure מול error: failure — ‏assert שנכשל ("ציפיתי 3, קיבלתי 2"); error — הבדיקה עצמה זרקה (‏<code>TypeError</code>, ‏timeout). שניהם אדום, אבל הראשון הוא באג בקוד והשני לעתים קרובות באג בבדיקה או בסביבה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>regex <code>&lt;testcase[^/]*/&gt;</code> — ‏<code>/</code> בתוך שם (<code>POST /orders</code>) שובר אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E94">
+    <h3>P26.3-E94 · סימולציה של declarative pipeline 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>משתנה <code>result</code> שמתחיל ב־<code>"SUCCESS"</code>, ודגל "נכשלנו".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר post, ואחר כך <code>ORDER.filter(…)</code>:</p>
+<pre><code class="lang-ts">const ORDER = ["always", "failure", "success", "unstable", "unsuccessful", "cleanup"];</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E94: סימולציה של declarative pipeline
+type Stage = { name: string; when?: boolean; fails?: boolean; unstable?: boolean };
+type Result = "SUCCESS" | "UNSTABLE" | "FAILURE";
+
+const ORDER = ["always", "failure", "success", "unstable", "unsuccessful", "cleanup"];
+
+export function pipelineResult(stages: Stage[], post: string[]) {
+  for (const p of post) if (!ORDER.includes(p)) throw new Error(`תנאי post לא מוכר: ${p}`);
+  const ran: string[] = [];
+  const skipped: string[] = [];
+  let result: Result = "SUCCESS";
+  for (const s of stages) {
+    if (result === "FAILURE" || s.when === false) {
+      skipped.push(s.name);
+      continue;
+    }
+    ran.push(s.name);
+    if (s.fails) result = "FAILURE";
+    else if (s.unstable) result = "UNSTABLE";
+  }
+  const runs: Record&lt;string, boolean&gt; = {
+    always: true,
+    failure: result === "FAILURE",
+    success: result === "SUCCESS",
+    unstable: result === "UNSTABLE",
+    unsuccessful: result !== "SUCCESS",
+    cleanup: true,
+  };
+  return { ran, skipped, result, post: ORDER.filter((p) =&gt; post.includes(p) &amp;&amp; runs[p]) };
+}</code></pre>
+<p>UNSTABLE הוא הצהוב של Jenkins: ה־build עבר, אבל משהו לא בסדר — בדרך כלל בדיקות שנכשלו כש־<code>junit</code> מסמן אותן, או כיסוי קוד מתחת לסף. ה־pipeline ממשיך, אבל <code>success</code> לא רץ — ולכן deploy שמחובר ל־success לא קורה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמן UNSTABLE אחרי FAILURE — UNSTABLE לא "משפר" כישלון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E95">
+    <h3>P26.3-E95 · להסתיר סודות בלוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">log.split(secret).join("****")</code> — בלי regex בכלל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">[...secrets].filter(Boolean).sort((a, b) =&gt; b.length - a.length)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E95: להסתיר סודות בלוג
+export function maskSecrets(log: string, secrets: string[]) {
+  return [...secrets]
+    .filter((s) =&gt; s.length &gt; 0)
+    .sort((a, b) =&gt; b.length - a.length)
+    .reduce((text, s) =&gt; text.split(s).join("****"), log);
+}</code></pre>
+<p>וזו גם המגבלה: Jenkins מסתיר את <em>המחרוזת המדויקת</em>. אותו סוד ב־base64, ב־URL encoding, או שורה שנחתכה באמצע — עובר גלוי. לכן לא מדפיסים סודות בכלל, גם "כדי לדבג".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">log.replace(secret, "****")</code> — רק ההופעה הראשונה.</li><li><code>new RegExp(secret, "g")</code> — סוד עם <code>+</code> או <code>.</code> לא מוסתר (או מסתיר דברים אחרים).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.3-E96">
+    <h3>P26.3-E96 · סודות ב־CI: ‏GitHub, ‏Jenkins והענן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי צריך את הסוד — ה־build, או האפליקציה שרצה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>OIDC.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) ו־(ג) — ב־CI (Jenkins Credentials או GitHub Secrets), כי ה־build צריך אותם. (ב) ו־(ד) — ב־Secrets Manager / Secret של Kubernetes; ה־pod טוען אותם בזמן ריצה.</li><li>ה־CI מריץ קוד של כל ענף ו־PR, ותלויות של npm. כל אחד מהם יכול להדפיס או לשלוח משתני סביבה. סוד שה־CI לא צריך — לא נותנים לו. ועם GitOps, ה־CI לא צריך שום סוד של הפרודקשן.</li><li>OIDC: ה־CI מקבל טוקן חתום ("אני workflow של repo X, ענף main"), ומחליף אותו ב־credentials זמניים של role ב־AWS (או ב־GitHub/registry). אין סוד קבוע שיכול לדלוף.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים את כל הסודות ב־CI ונעביר אותם ל־deploy" — זה מודל ה־push, וכל דליפה מה־CI היא דליפה של הפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E97">
+    <h3>P26.3-E97 · בדיקה שנכשלת לפעמים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>זמן, סדר, משאב משותף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה הצוות לומד מבדיקה שאדומה "סתם"?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) תלות בזמן אמיתי (‏<code>Date.now()</code>, ‏<code>setTimeout</code> עם מרווח צר) — שעון מוזרק. (ב) נתונים משותפים בין בדיקות (אותו מסד, אותו מפתח ב־Redis) והסדר משתנה — sandbox לכל בדיקה. (ג) ‏<code>await</code> חסר — הבדיקה מסיימת לפני שהפעולה הסתיימה.</li><li>הצוות מתרגל להתעלם מאדום. ביום שבו הבדיקה נכשלת בגלל באג אמיתי — לוחצים Rebuild, וזה עובר לפרודקשן.</li><li>Jenkins שומר את היסטוריית התוצאות לכל בדיקה — רואים שהיא "מהבהבת" לאורך builds. עד התיקון: לסמן אותה במפורש (skip עם הפניה ל־issue), לא להשאיר אותה אדומה־לפעמים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל timeout עד שזה "עובר" — מסתיר את המרוץ, ומאט את כל ה־pipeline.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E98">
+    <h3>P26.3-E98 · ‏PR, ‏review והגנה על main <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"required status checks".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>staging אוטומטי, production — באישור.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אין push ישיר ל־main; חובת PR עם review אחד לפחות; חובת בדיקות ירוקות של Jenkins (status check) לפני merge; אין force push. אחרת — קוד שלא נבדק בדרך אוטומטית ל־staging.</li><li>CODEOWNERS / review חובה על התיקייה של production, מאנשים מורשים. ה־CI יכול לפתוח PR עם ה־tag החדש — אדם מאשר.</li><li>על PR: התקנה, lint, בדיקות, אולי build של image (בלי push) — תוצאה ירוקה/אדומה ל־PR. לא: push ל־registry ועדכון repo התצורה (‏<code>when { branch 'main' }</code>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתת ל־bot של ה־CI לעקוף את ה־branch protection של repo התצורה גם ל־production — כל דליפה של ה־token היא deploy לפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E99">
+    <h3>P26.3-E99 · אותו צעד ב־GitHub Actions 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>checkout של repo אחר: <code>uses: actions/checkout@v4</code> עם <code class="mid">with: { repository: noa-cohen/coffee-deploy, token: … }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>docker/login-action@v3</code> עם <code>registry: ghcr.io</code>, ‏<code class="mid">username: ${{ github.actor }}</code>, ‏<code class="mid">password: ${{ secrets.GITHUB_TOKEN }}</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P26.3-E99: אותו צעד ב־GitHub Actions
+name: deploy
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          docker build -t ghcr.io/noa-cohen/coffee-shop:${{ github.sha }} .
+          docker push ghcr.io/noa-cohen/coffee-shop:${{ github.sha }}
+
+  update-config:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: noa-cohen/coffee-deploy
+          token: ${{ secrets.CONFIG_REPO_TOKEN }}
+      - run: |
+          sed -i "s/^\(\s*tag:\).*/\1 \"${{ github.sha }}\"/" charts/coffee-api/values-staging.yaml
+          git -c user.name=ci -c user.email=ci@coffee.example commit -am "staging: coffee-api ${{ github.sha }}"
+          git push</code></pre>
+<p>‏<code>GITHUB_TOKEN</code> מספיק ל־registry של אותו חשבון (עם <code>packages: write</code>), אבל לא לכתיבה ל־repo <em>אחר</em> — לשם צריך token נפרד, עם הרשאה רק ל־<code>coffee-deploy</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>GITHUB_TOKEN</code> ל־checkout של repo התצורה — אין לו הרשאה לשם.</li><li>‏<code>permissions: write-all</code> "כדי שיעבוד" — כל צעד, כולל actions של צד שלישי, מקבל הכול.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E100">
+    <h3>P26.3-E100 · הגרסה הבאה מתוך ה־commits 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">/^(\w+)(?:\([^)]*\))?(!)?:/</code> על השורה הראשונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>דרגה: 3 = major, 2 = minor, 1 = patch, 0 = כלום — ו־<code>Math.max</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E100: הגרסה הבאה מתוך ה־commits
+export function nextVersion(current: string, commits: string[]): string | null {
+  const v = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
+  if (!v) throw new Error(`גרסה לא תקינה: ${current}`);
+  let [major, minor, patch] = v.slice(1).map(Number);
+  let level = 0;
+  for (const c of commits) {
+    const [first, ...rest] = c.split("\n");
+    const m = /^(\w+)(?:\([^)]*\))?(!)?:/.exec(first);
+    if (!m) continue;
+    if (m[2] || rest.some((l) =&gt; l.startsWith("BREAKING CHANGE:"))) level = Math.max(level, 3);
+    else if (m[1] === "feat") level = Math.max(level, 2);
+    else if (m[1] === "fix" || m[1] === "perf") level = Math.max(level, 1);
+  }
+  if (level === 0) return null;
+  if (level === 3) [major, minor, patch] = [major + 1, 0, 0];
+  else if (level === 2) [minor, patch] = [minor + 1, 0];
+  else patch++;
+  return `${major}.${minor}.${patch}`;
+}</code></pre>
+<p>כך עובדים כלים כמו semantic-release: ההודעה שכתבת ב־commit (פרק 9) היא מה שמחליט אם זו גרסת תיקון או גרסה ששוברת לקוחות. בגלל זה כדאי להקפיד על הפורמט כבר מהיום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעלות patch על כל commit — <code>docs: typo</code> מוציא גרסה חדשה.</li><li><code>startsWith("feat")</code> — ‏<code>feature: …</code> או <code>feat-flag cleanup</code> נספרים כ־feat.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E101">
+    <h3>P26.3-E101 · מה לבנות לפי הקבצים שהשתנו 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>new Set</code>, ואז <code>[...set].sort()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר הבדיקות חשוב: קודם "לא משפיע" (‏<code>web/README.md</code> הוא md), ורק אז התיקיות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E101: מה לבנות לפי הקבצים שהשתנו
+type Target = "api" | "web" | "chart" | "ci";
+
+export function changedTargets(files: string[]): Target[] {
+  const out = new Set&lt;Target&gt;();
+  for (const f of files) {
+    if (f.endsWith(".md") || f.startsWith("docs/")) continue;
+    if (f.startsWith("web/")) out.add("web");
+    else if (f.startsWith("charts/")) out.add("chart");
+    else if (f === "Jenkinsfile" || f.startsWith(".github/")) out.add("ci");
+    else out.add("api");
+  }
+  return [...out].sort();
+}</code></pre>
+<p>ב־Jenkins זה <code class="mid">when { changeset 'web/**' }</code>, וב־GitHub Actions — ‏<code>on.push.paths</code>. ברירת המחדל "לא מוכר ← api" חשובה: קובץ חדש שאף אחד לא חשב עליו צריך לגרום ל־build מיותר, לא לפספס build הכרחי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ברירת מחדל "לא מוכר ← כלום" — מישהו מוסיף <code>tsconfig.json</code> חדש, וה־image הישן נשאר בפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>
