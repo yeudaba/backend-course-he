@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **2368** | **1419** | **1543** |
+| **42** | **196** | **2672** | **1555** | **1594** |
 
 ## מה שונה כאן
 
@@ -274,11 +274,11 @@
 | [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 100 | 57 | ✔ |
 | [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 101 | 57 | ✔ |
 | [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 100 | 56 | ✔ |
-| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 33 | 29 | ✔ |
-| [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 28 | 25 | ✔ |
+| [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 120 | 68 | ✔ |
+| [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 101 | 58 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
-| [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 28 | 23 | ✔ |
-| [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 28 | 23 | ✔ |
+| [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 100 | 55 | ✔ |
+| [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 100 | 55 | ✔ |
 | [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 33 | 28 | ✔ |
 | [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 28 | 23 | ✔ |
 | [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 28 | 23 | ✔ |
