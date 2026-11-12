@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ תרגול שיעור 3</div>
   <h1>✍️ תרגול שיעור 3 — מצב משותף: הגבלת קצב, מנעולים ו־Lua</h1>
-  <p class="subtitle">פרק 26 · 8 שאלות · 0 הבנה · 8 קוד · ⏱ כ־200 דק׳</p>
+  <p class="subtitle">פרק 26 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־355 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,90 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 3: מצב משותף: הגבלת קצב, מנעולים ו־Lua</h2>
-  <p class="subtitle">8 שאלות · 0 הבנה · 8 קוד · ⏱ כ־200 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־250 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P26-E59">
+    <h3>P26-E59 · איזה קוד בטוח עם שלושה שרתים?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>כל קטע רץ בשלושה שרתים במקביל, מול אותו Redis. איזה בטוח, ואיזה מאבד או מכפיל? תקן את השבורים בפקודה אחת (או סקריפט).</p>
+<pre><code class="lang-ts">// 1
+const n = Number(await redis.get("stock"));
+if (n &gt; 0) await redis.set("stock", n - 1);
+
+// 2
+await redis.hincrby("views", id, 1);
+
+// 3
+if (!(await redis.exists("lock"))) await redis.set("lock", token, "PX", 5000);
+
+// 4
+await redis.multi().incr(key).expire(key, 60, "NX").exec();
+
+// 5
+const list = JSON.parse((await redis.get("cart")) ?? "[]");
+list.push(item);
+await redis.set("cart", JSON.stringify(list));</code></pre>
+
+  </div>
+<div class="ex" id="P26-E60">
+    <h3>P26-E60 · כמה עוברות בגבול החלון?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>מגבלה: 10 בקשות בדקה ללקוח. לקוח שולח 10 בקשות ב־12:00:59.5, ועוד 10 ב־12:01:00.2.</p>
+<ol><li>כמה עוברות עם fixed window (חלון לכל דקה עגולה, כמו E09)?</li><li>כמה עוברות עם חלון נע של 60 שניות (sorted set, כמו E15)?</li><li>באותו fixed window, אבל עם <code>EXPIRE key 60</code> <em>בלי</em> <code>NX</code> — לקוח ששולח בקשה כל 5 שניות, ונחסם אחרי 10. מתי הוא משתחרר?</li><li>כמה פקודות Redis עולה כל בקשה בכל אחת מהשיטות, ובכמה זיכרון לכל לקוח?</li></ol>
+
+  </div>
+<div class="ex" id="P26-E61">
+    <h3>P26-E61 · המנעול של A, ה־DEL של B</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>מנעול עם <code>PX 10000</code>. ציר זמן: t=0 — ‏A לוקח. t=10 — המנעול פג. t=11 — ‏B לוקח. t=12 — ‏A מסיים ו"משחרר". t=13 — ‏C מנסה לקחת.</p>
+<ol><li>מה קורה ב־t=12 ו־t=13 כשהשחרור הוא <code>DEL lock</code>?</li><li>ואם השחרור הוא <code>GET</code> (בודק token) ואז <code>DEL</code> — שתי פקודות מ־Node?</li><li>ועם סקריפט <code>RELEASE</code> מהשיעור?</li><li>גם בגרסה 3: מה עדיין שבור בין t=11 ל־t=12, ולמה זה אומר שמנעול Redis לא מתאים ל"אסור שזה יקרה פעמיים"?</li></ol>
+
+  </div>
+<div class="ex" id="P26-E62">
+    <h3>P26-E62 · מה Lua מחזיר ל־Node</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>נחש מה יודפס, ואז הרץ:</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e62:" });
+console.log(await r.eval("return 3.7", 0));
+console.log(await r.eval("return {1, 2, 'three', 4.5}", 0));
+console.log(await r.eval("return redis.call('GET', KEYS[1])", 1, "missing"));
+console.log(await r.eval("return KEYS[1]", 1, "seats"));
+console.log(await r.eval("return tonumber(ARGV[1]) + 1", 0, "41"));
+await r.quit();</code></pre>
+<p>(1) מה קרה ל־3.7 ול־4.5? (2) איך היית מחזיר מ־Lua מספר עשרוני בלי לאבד אותו? (3) למה <code>KEYS[1]</code> חזר עם קידומת, ומה המשמעות לסקריפט שכותב שם מפתח בתוך הקוד שלו?</p>
+
+  </div>
+<div class="ex" id="P26-E63">
+    <h3>P26-E63 · ‏pub/sub: מי שמע?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>נחש, ואז הרץ:</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const pub = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const sub = pub.duplicate();
+console.log("before:", await pub.publish("e63:news", "first"));
+await sub.subscribe("e63:news");
+const got: string[] = [];
+sub.on("message", (channel, msg) =&gt; got.push(`${channel} ${msg}`));
+console.log("after:", await pub.publish("e63:news", "second"));
+await new Promise((r) =&gt; setTimeout(r, 50));
+console.log("got:", got);
+try {
+  await sub.get("x");
+} catch (e) {
+  console.log((e as Error).message);
+}
+await sub.quit();
+await pub.quit();</code></pre>
+<p>(1) מה המספר ש־<code>publish</code> מחזיר? (2) מה קרה ל־<code>"first"</code>? (3) למה <code>sub.get</code> נכשל, ומה עושים בקוד אמיתי? (4) מה זה אומר על שימוש ב־pub/sub לשליחת מייל אישור?</p>
+
+  </div>
+<div class="ex" id="P26-E64">
+    <h3>P26-E64 · ‏MULTI, ‏pipeline או Lua?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>לכל משימה — מה מתאים: פקודה אחת, ‏<code>MULTI</code>, ‏pipeline (כמה פקודות בהלוך־חזור אחד, בלי הבטחה שלא ייכנסו פקודות אחרות באמצע), או Lua?</p>
+<ol><li>לקרוא 50 מפתחות cache שונים לדף אחד.</li><li>להגדיל מונה של היום ולקבוע לו תוקף.</li><li>"קח 2 כרטיסים אם נשארו לפחות 2".</li><li>להעביר 10 נקודות מחשבון A לחשבון B, רק אם ב־A יש מספיק.</li><li>לסמן "המשתמש צפה" (set) ולהגדיל את מונה הצפיות — רק אם זו הצפייה הראשונה שלו.</li></ol>
+
+  </div>
 <div class="ex" id="P26-E09">
     <h3>P26-E09 · הגבלת קצב משותפת 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
@@ -65,17 +148,75 @@
 <p>בקובץ <code>P26-E25.ts</code>: <code class="mid">take(redis, key, { capacity, refillPerSecond, now, cost })</code> ← <code class="mid">{ allowed, remaining, retryAfterSeconds }</code> — ה־token bucket מפרק 24 (E17), אבל ב־Redis ו<strong>אטומי</strong>: סקריפט Lua אחד קורא את המצב (hash עם <code>tokens</code> ו־<code>ts</code>), ממלא לפי הזמן, מחליט, כותב, ומגדיר תוקף. הבודק: 50 בקשות במקביל משלושה שרתים — בדיוק <code>capacity</code> עוברות.</p>
 
   </div>
+<div class="ex" id="P26-E65">
+    <h3>P26-E65 · לייק פעם אחת, עם Lua 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E65.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function like(redis: Redis, postId: number, userId: number): Promise&lt;number&gt;
+export async function unlike(redis: Redis, postId: number, userId: number): Promise&lt;number&gt;
+export async function likeCount(redis: Redis, postId: number): Promise&lt;number&gt;</code></pre>
+<ul><li>מי עשה לייק — set ב־<code>likes:&lt;postId&gt;</code>. המונה — string ב־<code>likes:&lt;postId&gt;:count</code>.</li><li><code>like</code> — סקריפט Lua אחד: אם המשתמש נוסף לקבוצה — מגדיל את המונה ומחזיר את הערך החדש. כבר היה ← ‏<code>-1</code>, והמונה לא זז.</li><li><code>unlike</code> — אותו דבר הפוך: הוסר ← מקטין ומחזיר; לא היה ← ‏<code>-1</code>.</li><li><code>likeCount</code> ← מספר; אין ← 0. הבודק שולח לייקים ו־unlike־ים במקביל משני שרתים, ובודק שהמונה תמיד שווה לגודל הקבוצה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E65</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־105 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P26-E66">
+    <h3>P26-E66 · ‏Redis נפל: לחסום הכול או לפתוח הכול?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 3</span></div>
+<p>הגבלת הקצב עברה מ־<code>Map</code> (פרק 24) ל־Redis. עכשיו Redis לא זמין, ו־<code>hit()</code> זורק. שתי אפשרויות: <strong>fail-open</strong> (מעבירים את הבקשה בלי הגבלה) או <strong>fail-closed</strong> (מחזירים 429/503). מה תבחר לכל אחד, ולמה?</p>
+<ol><li>הגבלה כללית של 100 בקשות בדקה על כל ה־API.</li><li>הגבלת ניסיונות התחברות: 5 בדקה למשתמש.</li><li>הגבלה על שליחת SMS עם קוד אימות (כל SMS עולה כסף).</li></ol>
+<p>ואיזו אפשרות שלישית יש, שמשלבת את פרק 24?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> הגבלת הקצב בזיכרון מפרק 24 — והשיעור: המונה המשותף ב־Redis, ומה קורה כשהוא לא שם.</p>
+
+  </div>
+<div class="ex" id="P26-E67">
+    <h3>P26-E67 · מנעול Redis או המסד?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 3</span></div>
+<p>לכל מקרה — מנעול Redis (<code>SET NX PX</code>), או כלי של PostgreSQL מפרק 18 (<code>UNIQUE</code>, ‏<code>UPDATE … WHERE</code>, ‏<code>SELECT … FOR UPDATE</code>)? נמק במשפט.</p>
+<ol><li>שלא יימכרו יותר כרטיסים מהקיים.</li><li>שהדוח הלילי (5 דקות של חישוב) לא ירוץ בשלושה שרתים.</li><li>שלא יהיו שני משתמשים עם אותו אימייל.</li><li>שרק שרת אחד ירענן את ה־cache של הקטלוג אחרי שפג.</li><li>שתשלום לא יחויב פעמיים על אותה הזמנה.</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> טרנזקציות, <code>UNIQUE</code> ו־<code>FOR UPDATE</code> מפרק 18 — והשיעור: מנעול מבוזר, ומה הוא לא מבטיח.</p>
+
+  </div>
+<div class="ex" id="P26-E68">
+    <h3>P26-E68 · מ־allowed: false לתשובת HTTP</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 3</span></div>
+<p>‏<code>hit()</code> (‏E09) החזיר <code class="mid">{ allowed: false, remaining: 0, resetSeconds: 17 }</code>. (1) איזה סטטוס מחזירים, ואילו headers (פרק 24)? (2) למה <code>Retry-After</code> חשוב ללקוח שהוא סקריפט, ולא לדפדפן? (3) לקוח שמקבל 429 ומנסה שוב מיד, שוב ושוב — מה זה עושה למונה ב־fixed window, ומה בחלון נע שבו גם נדחות נספרות? (4) מה לא כדאי לשים בגוף ההודעה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏429 ו־<code>Retry-After</code> מפרק 24 — והשיעור: המונה המשותף שמחליט.</p>
+
+  </div>
 <div class="ex typed" id="P26-E33">
     <h3>P26-E33 · TypedEmitter: אירועים עם טיפוסים 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
 <p><strong>🔁 חזרה על generics ו־<code>keyof</code> (פרק 11), ‏<code>class</code> עם שדות פרטיים (פרק 12), ‏<code>Map</code> ו־<code>Set</code> (פרק 7) ו־closures (פרק 5)</strong>. pub/sub (שיעור 3) מעביר אירועים בין שרתים, ובתוך שרת אחד מעבירים אותם עם emitter. ‏<code>EventEmitter</code> של Node מקבל כל שם וכל payload. אם טעית באות אחת בשם האירוע, אף אחד לא מאזין, ואף אחד לא יודע. כתוב וייצא <code class="mid">class TypedEmitter&lt;Events extends Record&lt;string, unknown&gt;&gt;</code>:</p>
 <ul><li><code>on(event, listener)</code> — רושם, ומחזיר פונקציה שמבטלת את הרישום. אותה פונקציה פעמיים לאותו אירוע — נרשמת פעם אחת.</li><li><code>off(event, listener)</code>. ‏<code>once(event, listener)</code> — נקרא פעם אחת ואז מתבטל. גם הוא מחזיר פונקציית ביטול.</li><li><code class="mid">emit(event, payload): number</code> — קורא לכל המאזינים לפי סדר הרישום, ומחזיר כמה נקראו. מאזין שמבטל את עצמו באמצע (<code>once</code>) לא גורם לדלג על אחרים.</li><li><code class="mid">listenerCount(event): number</code>.</li><li>טיפוסים: ‏<code class="mid">new TypedEmitter&lt;{ "order.paid": { orderId: number } }&gt;()</code>. ‏<code class="mid">emit("order.cancelled", ...)</code>, או payload שלא מתאים, הם שגיאת קומפילציה, ובמאזין <code>e.orderId</code> הוא <code>number</code>. הבודק בודק את זה.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏generics ו־<code>keyof</code> מפרק 11 ומחלקה עם שדות פרטיים מפרק 12 — והשיעור: אירועים בתוך שרת אחד, לפני שהם יוצאים ל־pub/sub.</p>
 <p>📄 כותבים בקובץ <code class="mid">26-redis/starter/P26-E33.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 <pre class="terminal"><span class="prompt">% </span>node 26-redis/starter/P26-E33.ts
 <span class="prompt">% </span>npm run check P26-E33</pre>
 
   </div>
+<div class="ex" id="P26-E69">
+    <h3>P26-E69 · ‏middleware של הגבלת קצב, משותף לשני שרתים 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 3</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E69.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function rateLimit(redis: Redis, opts: { limit: number; windowSeconds: number; keyOf?: (req: express.Request) =&gt; string; now?: () =&gt; number }): express.RequestHandler</code></pre>
+<ul><li>fixed window ב־Redis: מפתח <code>rl:&lt;keyOf(req)&gt;:&lt;window&gt;</code>, כש־<code class="mid">window = Math.floor(now() / 1000 / windowSeconds)</code>. ‏<code>INCR</code> ו־<code>EXPIRE … NX</code> ב־<code>MULTI</code> אחד. ברירות מחדל: <code>keyOf = (req) =&gt; req.ip</code>, ‏<code>now = Date.now</code>.</li><li>בכל תשובה: <code>X-RateLimit-Limit</code> ו־<code>X-RateLimit-Remaining</code> (לא פחות מ־0).</li><li>מעל המגבלה ← ‏<code>429 { error }</code> עם <code>Retry-After</code>: שניות שלמות עד סוף החלון (עיגול למעלה). אחרת — <code>next()</code>.</li></ul>
+<p>הבודק מרים <em>שני</em> שרתי Express עם אותו Redis ושולח לסירוגין — המגבלה משותפת.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏middleware, ‏429 ו־<code>Retry-After</code> מפרקים 15 ו־24 — והשיעור: מונה אחד לכל השרתים.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E69</pre>
 
+  </div>
+<div class="ex" id="P26-E70">
+    <h3>P26-E70 · מנעול שמחכה בתור 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 10, שיעור 3</span></div>
+<p>E12 מחזיר <code>null</code> מיד כשהמנעול תפוס. לפעמים רוצים לחכות קצת. בקובץ <code class="mid">26-redis/starter/P26-E70.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function withLockRetry&lt;T&gt;(redis: Redis, name: string, ttlMs: number, fn: () =&gt; Promise&lt;T&gt;, opts?: { retries?: number; delayMs?: number }): Promise&lt;T&gt;</code></pre>
+<ul><li>לוקח מנעול <code>lock:&lt;name&gt;</code> עם token אקראי (<code>SET NX PX</code>). תפוס ← מחכה <code>delayMs</code> (ברירת מחדל 50) ומנסה שוב, עד <code>retries</code> ניסיונות חוזרים (ברירת מחדל 10). עדיין תפוס ← <code>Error("LOCKED")</code>.</li><li>הצליח ← מריץ את <code>fn</code> ומחזיר את התוצאה שלו. בסוף — תמיד, גם אם <code>fn</code> זרק — משחרר עם סקריפט Lua שמוחק רק אם ה־token עדיין שלו.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>sleep</code> עם Promise ו־<code>try/finally</code> מפרקים 8 ו־10 — והשיעור: מנעול מבוזר עם token.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E70</pre>
+
+  </div>
 <div class="pager"><a href="lesson-03-shared.html"><small>חזרה לשיעור</small>שיעור 3 — מצב משותף: הגבלת קצב, מנעולים ו־Lua</a><a href="lesson-04-queues.html"><small>הבא</small>שיעור 4 — תורים ועבודות ברקע עם BullMQ</a></div>
 </main>
 </body>

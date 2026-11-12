@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ תרגול שיעור 1</div>
   <h1>✍️ תרגול שיעור 1 — Redis: מבני נתונים בזיכרון</h1>
-  <p class="subtitle">פרק 26 · 9 שאלות · 3 הבנה · 6 קוד · ⏱ כ־170 דק׳</p>
+  <p class="subtitle">פרק 26 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־315 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,7 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 1: Redis: מבני נתונים בזיכרון</h2>
-  <p class="subtitle">9 שאלות · 3 הבנה · 6 קוד · ⏱ כ־170 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־230 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P26-E01">
     <h3>P26-E01 · Redis או PostgreSQL?</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
@@ -52,6 +52,46 @@ console.log(await r.zrevrange("z", 0, 1), await r.zscore("z", "dana"));
 console.log(await r.set("x", "1", "NX"), await r.set("x", "2", "NX"), await r.get("x"));
 await r.del("n", "s", "l", "z", "x");
 await r.quit();</code></pre>
+
+  </div>
+<div class="ex" id="P26-E34">
+    <h3>P26-E34 · ‏SET מוחק את התוקף?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
+<p>נחש מה יודפס בכל שורה, ואז הרץ:</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e34:" });
+await r.set("code", "4821", "EX", 300);
+console.log(await r.ttl("code"));
+await r.set("code", "9999");
+console.log(await r.ttl("code"));
+await r.set("hits", "0", "EX", 300);
+await r.incr("hits");
+console.log((await r.ttl("hits")) &gt; 0, await r.ttl("nothing"), await r.expire("nothing", 60));
+await r.del("code", "hits");
+await r.quit();</code></pre>
+<p>ומה המשמעות לקוד שמעדכן קוד אימות (OTP) ששלחת ב־SMS: "המשתמש ביקש קוד חדש — נכתוב את הקוד החדש באותו מפתח"?</p>
+
+  </div>
+<div class="ex" id="P26-E35">
+    <h3>P26-E35 · ‏MULTI עם פקודה שנכשלה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
+<p>בשיעור נאמר ש־<code>MULTI</code> "לא טרנזקציה כמו ב־SQL". נחש, ואז הרץ:</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e35:" });
+await r.del("count", "name");
+await r.set("name", "dana");
+const res = await r.multi().incr("count").incr("name").incr("count").exec();
+console.log(JSON.stringify(res!.map(([err, value]) =&gt; (err ? err.message : value))));
+console.log(await r.get("count"), await r.get("name"));
+await r.del("count", "name");
+await r.quit();</code></pre>
+<p>(1) כמה מהפקודות בוצעו? (2) מה היה קורה ב־PostgreSQL עם <code>BEGIN</code>, שלושה <code>UPDATE</code>, שהשני שבהם נכשל, ו־<code>COMMIT</code>? (3) מה חייב לעשות קוד שמשתמש ב־<code>exec()</code>?</p>
+
+  </div>
+<div class="ex" id="P26-E36">
+    <h3>P26-E36 · ‏KEYS, ‏keyPrefix ו־Redis ריק</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
+<ol><li>מפתח צוות כתב endpoint לניהול: "מחק את כל ה־cache של מוצרים" עם <code class="mid">redis.keys("shop:cache:products:*")</code> ואז <code>del</code>. בפיתוח זה לקח 2ms. מה יקרה בפרודקשן עם שני מיליון מפתחות, ולמה זה משפיע גם על בקשות שלא קשורות ל־cache?</li><li>שתי אפליקציות (החנות ומערכת הדוחות) על אותו Redis, ושתיהן שומרות <code>user:7</code>. מה יקרה, ואיך <code>keyPrefix</code> פותר?</li><li>Redis עלה מחדש בלי גיבוי לדיסק — הכול ריק. עבור כל אחד: cache של קטלוג, מונה הגבלת קצב, sessions של משתמשים — מה המשתמש ירגיש?</li></ol>
 
   </div>
 <div class="ex" id="P26-E06">
@@ -94,7 +134,87 @@ await r.quit();</code></pre>
 <pre class="terminal"><span class="prompt">% </span>npm run check P26-E31</pre>
 
   </div>
+<div class="ex" id="P26-E37">
+    <h3>P26-E37 · עגלת קניות ב־hash 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
+<p>עגלה היא בדיוק hash: שדה לכל מוצר, ערך = כמות. בקובץ <code class="mid">26-redis/starter/P26-E37.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function addToCart(redis: Redis, userId: number, productId: number, qty: number): Promise&lt;number&gt;
+export async function getCart(redis: Redis, userId: number): Promise&lt;Record&lt;string, number&gt;&gt;
+export async function clearCart(redis: Redis, userId: number): Promise&lt;boolean&gt;</code></pre>
+<ul><li>המפתח: <code>cart:&lt;userId&gt;</code>. ‏<code>addToCart</code> מוסיף <code>qty</code> (גם שלילי — הורדה) ומחזיר את הכמות החדשה. הגיעה ל־0 או פחות ← השדה נמחק, ומוחזר 0.</li><li>כל הוספה מחדשת תוקף של 7 ימים לכל העגלה.</li><li><code>getCart</code> ← ‏<code>{ "3": 2, "8": 1 }</code> — כמויות כמספרים. עגלה ריקה ← <code>{}</code>.</li><li><code>clearCart</code> ← <code>true</code> אם הייתה עגלה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E37</pre>
 
+  </div>
+<div class="ex" id="P26-E38">
+    <h3>P26-E38 · סקר: הצבעה אחת למשתמש 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 1</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E38.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function vote(redis: Redis, pollId: string, userId: number, option: string): Promise&lt;boolean&gt;
+export async function results(redis: Redis, pollId: string): Promise&lt;{ option: string; votes: number }[]&gt;</code></pre>
+<ul><li>מי כבר הצביע — set ב־<code>poll:&lt;pollId&gt;:voters</code>. הספירה — hash ב־<code>poll:&lt;pollId&gt;:results</code>.</li><li><code>vote</code> ← <code>true</code> אם ההצבעה נספרה, <code>false</code> אם המשתמש כבר הצביע (גם לאפשרות אחרת). גם 20 קריאות במקביל של אותו משתמש, משני שרתים — נספרת אחת.</li><li><code>results</code> — מהכי הרבה קולות לפחות; בשוויון — לפי שם האפשרות (א״ב). אין הצבעות ← <code>[]</code>.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E38</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־85 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P26-E39">
+    <h3>P26-E39 · ‏Map בזיכרון מול Redis</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 1</span></div>
+<p>בפרק 24 שמרת מונים של הגבלת קצב ב־<code>Map</code> בזיכרון התהליך. (1) השרת רץ בשלושה עותקים מאחורי load balancer, והמגבלה 100 בדקה. כמה בקשות בדקה לקוח יכול לשלוח בפועל? (2) מה קורה למונים ב־deploy (התהליך מתחלף)? (3) ‏<code>Map</code> מהיר יותר מ־Redis (בלי רשת). תן שתי דוגמאות שבהן <code>Map</code> בתהליך הוא עדיין הבחירה הנכונה.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>Map</code> והגבלת הקצב מפרק 24 — והשיעור: Redis כזיכרון שכל השרתים חולקים.</p>
+
+  </div>
+<div class="ex" id="P26-E40">
+    <h3>P26-E40 · מה חוזר מ־JSON</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 7, שיעור 1</span></div>
+<p>ב־Redis כל ערך הוא מחרוזת, ולכן אובייקט נשמר כ־JSON. נחש מה ייצא, ואז הרץ:</p>
+<pre><code class="lang-ts">const order = { id: 7, at: new Date("2026-11-08T07:58:46Z"), tags: new Set(["gift"]), note: undefined, total: 59.8, items: new Map([["latte", 2]]) };
+const back = JSON.parse(JSON.stringify(order));
+console.log(back);
+console.log(typeof back.at, "note" in back, back.at.getFullYear?.());</code></pre>
+<p>אילו מהשדות "נשברו" בדרך ל־cache וחזרה? ומה יקרה לקוד שעושה <code>order.at.getTime()</code> על תוצאה שהגיעה מ־HIT, כשב־MISS זה עבד?</p>
+
+  </div>
+<div class="ex" id="P26-E41">
+    <h3>P26-E41 · הכי נמכרים: SQL או sorted set?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 16, שיעור 1</span></div>
+<p>"10 המוצרים הנמכרים ביותר החודש" בדף הבית. אפשרות א׳: שאילתת <code class="mid">GROUP BY product_id ORDER BY SUM(qty) DESC LIMIT 10</code> (פרק 16) בכל טעינה. אפשרות ב׳: ‏<code>ZINCRBY</code> בכל הזמנה, ו־<code>ZREVRANGE 0 9</code> בכל טעינה.</p>
+<ol><li>מה מקור האמת בכל אחת?</li><li>הזמנה בוטלה. מה צריך לעשות בכל אחת?</li><li>Redis התאפס. איך משחזרים את אפשרות ב׳?</li><li>באיזה מצב היית מתחיל באפשרות א׳ (ולמה זה לגיטימי)?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>GROUP BY</code> ו־<code>SUM</code> מפרק 16 — והשיעור: sorted set כדירוג מוכן.</p>
+
+  </div>
+<div class="ex" id="P26-E42">
+    <h3>P26-E42 · לבנות דירוג מחדש משורות SQL 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: פרק 16, שיעור 1</span></div>
+<p>Redis התאפס, וצריך לבנות מחדש את "הכי נמכרים" מתוצאה של שאילתת <code>GROUP BY</code> (כמו ש־<code>pg</code> מחזיר אותה: <code>SUM</code> של <code>bigint</code> מגיע כ<strong>מחרוזת</strong>). בקובץ <code class="mid">26-redis/starter/P26-E42.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function rebuildBestsellers(redis: Redis, key: string, rows: { product_id: number; qty: string | number }[]): Promise&lt;number&gt;
+export async function topBestsellers(redis: Redis, key: string, n: number): Promise&lt;{ productId: number; qty: number }[]&gt;</code></pre>
+<ul><li><code>rebuildBestsellers</code> מחליף את כל התוכן הקודם של <code>key</code> (מוצר שכבר לא בשורות — לא נשאר), עם תוקף של יום. ב־<code>MULTI</code> אחד, כך שאף קורא לא רואה דירוג חצי בנוי. מחזיר כמה מוצרים נכנסו. בלי שורות ← המפתח לא קיים, ומוחזר 0.</li><li><code>topBestsellers</code> ← עד <code>n</code>, מהגבוה לנמוך, עם מספרים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> תוצאה של <code>GROUP BY</code> מפרק 16 (והמחרוזות של <code>bigint</code> מ־<code>pg</code>) — והשיעור: ‏<code>ZADD</code> בתוך <code>MULTI</code>.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E42</pre>
+
+  </div>
+<div class="ex" id="P26-E43">
+    <h3>P26-E43 · ‏Express: מונה צפיות ודירוג 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 15, שיעור 1</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E43.ts</code> (יש בו רק הערה) כתוב וייצא <code>viewsApp(redis)</code> שמחזירה אפליקציית Express:</p>
+<ul><li><code>POST /products/:id/view</code> ← ‏<code>200 { productId, views }</code>. מגדיל את המונה ב־hash <code>views</code> ואת הדירוג ב־sorted set <code>top</code>, ב־<code>MULTI</code> אחד.</li><li><code>GET /products/top?n=3</code> ← ‏<code>[{ productId, views }]</code> מהגבוה לנמוך. ‏<code>n</code> — ברירת מחדל 5, בין 1 ל־50.</li><li><code>id</code> שאינו שלם חיובי, או <code>n</code> לא תקין ← ‏<code>400 { error }</code>, ושום דבר לא נכתב.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> נתיבים ו־<code>req.params</code>/<code>req.query</code> מפרק 15 — והשיעור: hash ו־sorted set.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E43</pre>
+
+  </div>
+<div class="ex" id="P26-E44">
+    <h3>P26-E44 · פרופיל: Zod לפני HSET, וטיפוסים בחזרה 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 15, שיעור 1</span></div>
+<p>hash ב־Redis שומר רק מחרוזות. בקובץ <code class="mid">26-redis/starter/P26-E44.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function saveProfile(redis: Redis, userId: number, input: unknown): Promise&lt;Profile&gt;
+export async function loadProfile(redis: Redis, userId: number): Promise&lt;Profile | null&gt;
+// type Profile = { name: string; city: string; age: number; newsletter: boolean }</code></pre>
+<ul><li>בדיקה עם zod: <code>name</code> ו־<code>city</code> — מחרוזות לא ריקות אחרי trim; ‏<code>age</code> — שלם בין 13 ל־120; ‏<code>newsletter</code> — בוליאני, ברירת מחדל <code>false</code>. שדה אחר ← שגיאה.</li><li>לא תקין ← <code>Error("VALIDATION_ERROR")</code>, ושום דבר לא נכתב. תקין ← <code>HSET</code> ל־<code>profile:&lt;userId&gt;</code>, כש־<code>newsletter</code> נשמר כ־<code>"1"</code>/<code>"0"</code>. מחזירה את הנתונים אחרי הבדיקה.</li><li><code>loadProfile</code> ← אותו אובייקט בדיוק, עם <code>age</code> כמספר ו־<code>newsletter</code> כבוליאני. אין ← <code>null</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>z.strictObject</code> ו־<code>safeParse</code> מפרק 15 — והשיעור: hash שבו הכול מחרוזות.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E44</pre>
+
+  </div>
 <div class="pager"><a href="lesson-01-redis.html"><small>חזרה לשיעור</small>שיעור 1 — Redis: מבני נתונים בזיכרון</a><a href="lesson-02-cache.html"><small>הבא</small>שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</a></div>
 </main>
 </body>

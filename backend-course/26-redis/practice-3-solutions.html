@@ -14,6 +14,160 @@
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26-redis/solutions/</code>.</p></div>
   <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26-E59">
+    <h3>P26-E59 · איזה קוד בטוח עם שלושה שרתים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חפש את המבנה "קרא ← החלט ב־JS ← כתוב".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כל פקודה אחת של Redis אטומית. שתי פקודות — לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שבור — שני שרתים קוראים 1, שניהם כותבים 0, ונמכרו שתי יחידות. תיקון: סקריפט Lua כמו <code>TAKE</code> מהשיעור (או <code>DECR</code> ובדיקה שלא ירד מתחת ל־0 — ואז <code>INCR</code> חזרה).</li><li>בטוח — פקודה אחת.</li><li>שבור — שניהם רואים "אין", שניהם כותבים, ושניהם חושבים שהמנעול שלהם. תיקון: <code>SET lock token PX 5000 NX</code> — הבדיקה והכתיבה בפקודה אחת.</li><li>בטוח — ‏<code>MULTI</code> מריץ את שתיהן ברצף, ושתיהן לא תלויות בערך שנקרא.</li><li>שבור — פריט של שרת אחד נדרס. תיקון: list (<code>RPUSH cart item</code>) או hash (<code>HINCRBY</code>, ‏E37) — המבנה עצמו מאפשר עדכון בפקודה אחת.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נעטוף את 1 ב־<code>MULTI</code>" — אי אפשר: ההחלטה (<code>n &gt; 0</code>) צריכה את הערך שנקרא, ו־<code>MULTI</code> לא מחזיר ערכים עד הסוף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E60">
+    <h3>P26-E60 · כמה עוברות בגבול החלון? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־12:01:00 מתחיל מפתח חדש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי <code>NX</code> כל <code>INCR</code> מאריך את חיי המפתח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>20 — עשר בחלון של 12:00, ועשר בחלון החדש של 12:01, בתוך פחות משנייה.</li><li>10 — ב־12:01:00.2 החלון הנע עדיין מכיל את עשר הבקשות מלפני 0.7 שניות.</li><li>אף פעם, כל עוד הוא ממשיך: כל בקשה (גם נדחית) מאריכה את המפתח ל־60 שניות נוספות, והמונה לא מתאפס (E21).</li><li>fixed: ‏<code>INCR</code> + <code>EXPIRE</code> (ב־MULTI אחד), ומספר אחד בזיכרון. חלון נע: ‏<code>ZREMRANGEBYSCORE</code> + <code>ZCARD</code> + <code>ZADD</code> + <code>EXPIRE</code>, ורשומה לכל בקשה בחלון — עד <code>limit</code> לכל לקוח. בדרך כלל fixed מספיק; חלון נע כשהפרץ בגבול באמת מזיק (התחברות, SMS).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"חלון נע תמיד עדיף" — הוא יקר יותר, ומדויק יותר בדיוק במקרה שלעתים קרובות לא משנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E61">
+    <h3>P26-E61 · המנעול של A, ה־DEL של B <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>DEL</code> לא יודע של מי המנעול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בין <code>GET</code> ל־<code>DEL</code> המנעול יכול לפוג ולעבור יד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>t=12: ‏A מוחק את המנעול <em>של B</em>. t=13: ‏C לוקח — B ו־C עובדים במקביל.</li><li>כמעט תמיד בסדר — אבל אם המנעול פג ו־B לקח אותו בדיוק בין ה־<code>GET</code> (שראה את ה־token של A) ל־<code>DEL</code>, אותו באג. נדיר — ולכן הכי קשה למצוא.</li><li>תקין: הסקריפט בודק ומוחק בפקודה אחת. ב־t=12 ה־token לא של A ← מחזיר 0, ו־B ממשיך להחזיק.</li><li>בין 11 ל־12, A ו־B עובדים במקביל — A לא יודע שהמנעול שלו פג (GC, רשת איטית). מנעול עם תוקף מבטיח "כמעט תמיד אחד", לא "תמיד אחד". מה שחייב להיות נכון — המסד אוכף (<code>UNIQUE</code>, ‏<code>WHERE stock &gt;= qty</code>, ‏<code>FOR UPDATE</code>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נגדיל את ה־TTL לשעה" — שרת שקרס מחזיק את המנעול שעה, והבעיה רק נדירה יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E62">
+    <h3>P26-E62 · מה Lua מחזיר ל־Node <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Redis ממיר מספר של Lua ל־integer בתשובה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>GET</code> על מפתח שלא קיים מחזיר ל־Lua את <code>false</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e62:" });
+console.log(await r.eval("return 3.7", 0));
+console.log(await r.eval("return {1, 2, 'three', 4.5}", 0));
+console.log(await r.eval("return redis.call('GET', KEYS[1])", 1, "missing"));
+console.log(await r.eval("return KEYS[1]", 1, "seats"));
+console.log(await r.eval("return tonumber(ARGV[1]) + 1", 0, "41"));
+await r.quit();</code></pre>
+<pre class="terminal">3
+[ 1, 2, 'three', 4 ]
+null
+e62:seats
+42</pre>
+<ol><li>נחתכו לשלם (3 ו־4) — Redis הופך מספר של Lua ל־integer. ב־token bucket (‏E25) זה מאבד חלקי טוקנים בשקט.</li><li>מחזירים מחרוזת: <code>return tostring(x)</code>, ו־<code>Number(...)</code> ב־Node.</li><li>ioredis הוסיף את ה־<code>keyPrefix</code> לכל מה שהועבר כ־KEYS. מפתח שכתוב בתוך הסקריפט (<code>redis.call('GET', 'seats')</code>) לא מקבל קידומת — הסקריפט ניגש למפתח של מישהו אחר. לכן כל מפתח עובר ב־KEYS.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר <code>nil</code> באמצע טבלה — Lua חותך את המערך בנקודה הזו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E63">
+    <h3>P26-E63 · ‏pub/sub: מי שמע? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>PUBLISH</code> מחזיר כמה מנויים קיבלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אין שמירה: מי שלא היה מנוי ברגע ה־publish — פספס.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const pub = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const sub = pub.duplicate();
+console.log("before:", await pub.publish("e63:news", "first"));
+await sub.subscribe("e63:news");
+const got: string[] = [];
+sub.on("message", (channel, msg) =&gt; got.push(`${channel} ${msg}`));
+console.log("after:", await pub.publish("e63:news", "second"));
+await new Promise((r) =&gt; setTimeout(r, 50));
+console.log("got:", got);
+try {
+  await sub.get("x");
+} catch (e) {
+  console.log((e as Error).message);
+}
+await sub.quit();
+await pub.quit();</code></pre>
+<pre class="terminal">before: 0
+after: 1
+got: [ 'e63:news second' ]
+Connection in subscriber mode, only subscriber commands may be used</pre>
+<ol><li>כמה מנויים קיבלו את ההודעה ברגע הזה: 0 ואז 1.</li><li>נעלם. אף אחד לא היה מנוי, ו־Redis לא שומר.</li><li>חיבור במצב subscribe מקבל רק פקודות של מנויים. מחזיקים שני חיבורים: אחד לפקודות, ואחד (<code>duplicate()</code>) למנויים — כמו ב־E19 וב־E30.</li><li>לא מתאים: worker שהיה למטה ברגע ה־publish — המייל לא יישלח לעולם, ואף אחד לא יידע. למה שחייב לקרות — תור (שיעור 4).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיק מ־<code>publish</code> שהחזיר 1 ש"ההודעה טופלה" — היא <em>נמסרה</em> למנוי; אם הוא קרס באמצע הטיפול, היא אבדה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E64">
+    <h3>P26-E64 · ‏MULTI, ‏pipeline או Lua? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האם יש החלטה שתלויה בערך שנקרא?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם אין החלטה — האם חשוב שאף אחד לא ייכנס באמצע?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>pipeline (או <code>MGET</code>) — קריאות עצמאיות, רק לחסוך הלוך־חזור.</li><li><code>MULTI</code> — שתי כתיבות שצריכות לקרות יחד, בלי החלטה באמצע (E09).</li><li>Lua — "אם… אז" על ערך שנקרא (<code>TAKE</code> מהשיעור).</li><li>Lua. ובמערכת אמיתית — <strong>לא Redis בכלל</strong>: נקודות שוות כסף, מקור האמת במסד, טרנזקציה.</li><li>Lua (E65), או <code>SADD</code> ואז <code>INCR</code> רק אם החזיר 1 — שתי פקודות, אבל ההחלטה כבר נעשתה באטומיות על ידי <code>SADD</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־Lua לכל דבר — סקריפט ארוך עוצר את כל Redis בזמן שהוא רץ.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26-E09">
     <h3>P26-E09 · הגבלת קצב משותפת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -296,6 +450,110 @@ export async function take(redis: Redis, key: string, { capacity, refillPerSecon
 
 </div></details>
   </div>
+<div class="ex" id="P26-E65">
+    <h3>P26-E65 · לייק פעם אחת, עם Lua 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">redis.eval(script, 2, setKey, countKey, userId)</code> — שני מפתחות ב־KEYS, ה־userId ב־<code>ARGV[1]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-lua">if redis.call("SADD", KEYS[1], ARGV[1]) == 1 then return redis.call("INCR", KEYS[2]) end
+return -1</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E65: לייק פעם אחת, עם Lua
+import type { Redis } from "ioredis";
+
+const LIKE = `if redis.call("SADD", KEYS[1], ARGV[1]) == 1 then return redis.call("INCR", KEYS[2]) end
+return -1`;
+const UNLIKE = `if redis.call("SREM", KEYS[1], ARGV[1]) == 1 then return redis.call("DECR", KEYS[2]) end
+return -1`;
+
+const keys = (postId: number) =&gt; [`likes:${postId}`, `likes:${postId}:count`];
+
+export async function like(redis: Redis, postId: number, userId: number) {
+  return Number(await redis.eval(LIKE, 2, ...keys(postId), String(userId)));
+}
+
+export async function unlike(redis: Redis, postId: number, userId: number) {
+  return Number(await redis.eval(UNLIKE, 2, ...keys(postId), String(userId)));
+}
+
+export async function likeCount(redis: Redis, postId: number) {
+  return Number((await redis.get(`likes:${postId}:count`)) ?? 0);
+}</code></pre>
+<p>למה מונה נפרד ולא <code>SCARD</code>? בפוסט עם מיליון לייקים שניהם O(1) — אבל המונה הוא string שאפשר לקרוא ב־<code>MGET</code> לעשרים פוסטים בפקודה אחת. המחיר: שני מבנים שחייבים להסכים — ובדיוק לזה Lua.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SADD</code> ואז <code>INCR</code> בלי לבדוק את מה ש־<code>SADD</code> החזיר — לייק כפול מגדיל.</li><li>לכתוב את שמות המפתחות בתוך הסקריפט — ה־<code>keyPrefix</code> לא חל עליהם (‏E62).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26-E66">
+    <h3>P26-E66 · ‏Redis נפל: לחסום הכול או לפתוח הכול? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה גרוע יותר בכל מקרה: משתמשים אמיתיים חסומים, או תוקף לא מוגבל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־<code>Map</code> לא נעלם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>fail-open — הגבלה כללית היא הגנה מעומס, והאתר צריך לעבוד גם כש־Redis למטה.</li><li>תלוי, ונוטה ל־fail-closed (או fallback, ראה למטה) — בלי הגבלה, דקות של Redis למטה הן חלון לניחוש סיסמאות.</li><li>fail-closed — כל SMS עולה כסף, ותוקף יכול לשרוף אלפי שקלים בדקות.</li></ol>
+<p>האפשרות השלישית: fallback ל־<code>Map</code> בזיכרון (פרק 24). המגבלה נעשית "פי מספר השרתים", אבל עדיין יש מגבלה. ובכל מקרה — מדד והתראה על "Redis לא זמין", לא רק <code>catch</code> שקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא להחליט — ואז ה־<code>await</code> שזרק מחזיר 500 על <em>כל</em> בקשה: fail-closed בלי שהתכוונת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E67">
+    <h3>P26-E67 · מנעול Redis או המסד? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה אם המנעול "דולף" ופעמיים זה כן קורה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"לחסוך עבודה כפולה" מול "אסור שזה יקרה פעמיים".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>המסד: <code>UPDATE</code> עם התנאי בתוכו (<code>WHERE … AND stock &gt;= $1</code>). מכירת־יתר היא נזק אמיתי.</li><li>Redis — אם ירוץ פעמיים בטעות, בזבזנו חישוב. (ואם הדוח שולח מיילים — גם הם צריכים להיות idempotent.)</li><li>המסד: <code>UNIQUE (email)</code>. רק המסד רואה את כל הכתיבות.</li><li>Redis — בדיוק "לחסוך עבודה כפולה" (E13).</li><li>המסד (מפתח ייחודי על התשלום, או <code class="mid">UPDATE … WHERE status = 'pending'</code>) — ועוד Idempotency-Key לספק התשלומים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים מנעול Redis וגם נוותר על ה־UNIQUE" — המנעול הוא אופטימיזציה, ה־UNIQUE הוא הנכונות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E68">
+    <h3>P26-E68 · מ־allowed: false לתשובת HTTP <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>X-RateLimit-Limit</code>, ‏<code>X-RateLimit-Remaining</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־E15 נדחות <em>לא</em> נספרות — למה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>429 Too Many Requests</code>, עם <code>Retry-After: 17</code>, ובדרך כלל גם <code>X-RateLimit-Limit</code> ו־<code>X-RateLimit-Remaining: 0</code>.</li><li>סקריפט טוב קורא אותו ומחכה בדיוק כמה שצריך, במקום לנחש (או להפציץ). דפדפן לא עושה איתו כלום.</li><li>fixed window: המונה עולה, אבל זה לא משנה — הוא מתאפס בסוף החלון. חלון נע שסופר גם נדחות: לקוח שמנסה כל שנייה <em>אף פעם</em> לא יוצא, כי החלון שלו תמיד מלא — לכן ב־E15 נדחות לא נכנסות.</li><li>פרטים פנימיים: המפתח ב־Redis, ה־IP של לקוחות אחרים, "המגבלה של מנהלים היא 1000". מספיק <code class="mid">{ error: "יותר מדי בקשות" }</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 403 — זה "אסור לך", לא "חכה". לקוחות אוטומטיים מפסיקים לנסות.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P26-E33">
     <h3>P26-E33 · TypedEmitter: אירועים עם טיפוסים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -379,7 +637,95 @@ console.log(bus.emit("order.paid", { orderId: 18, totalCents: 100 }), bus.listen
 
 </div></details>
   </div>
+<div class="ex" id="P26-E69">
+    <h3>P26-E69 · ‏middleware של הגבלת קצב, משותף לשני שרתים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סוף החלון במילישניות: <code class="mid">(window + 1) * windowSeconds * 1000</code>. ‏<code class="mid">Retry-After = Math.ceil((end - now()) / 1000)</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const r = await redis.multi().incr(key).expire(key, windowSeconds, "NX").exec();
+const count = Number(r![0][1]);</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E69: middleware של הגבלת קצב, משותף לשני שרתים
+import type express from "express";
+import type { Redis } from "ioredis";
+
+type Opts = { limit: number; windowSeconds: number; keyOf?: (req: express.Request) =&gt; string; now?: () =&gt; number };
+
+export function rateLimit(redis: Redis, { limit, windowSeconds, keyOf = (req) =&gt; req.ip ?? "unknown", now = Date.now }: Opts): express.RequestHandler {
+  return async (req, res, next) =&gt; {
+    const t = now();
+    const window = Math.floor(t / 1000 / windowSeconds);
+    const key = `rl:${keyOf(req)}:${window}`;
+    const r = await redis.multi().incr(key).expire(key, windowSeconds, "NX").exec();
+    const count = Number(r![0][1]);
+    res.set("X-RateLimit-Limit", String(limit));
+    res.set("X-RateLimit-Remaining", String(Math.max(0, limit - count)));
+    if (count &gt; limit) {
+      const end = (window + 1) * windowSeconds * 1000;
+      res.set("Retry-After", String(Math.ceil((end - t) / 1000)));
+      return res.status(429).json({ error: "יותר מדי בקשות" });
+    }
+    next();
+  };
+}</code></pre>
+<p>‏<code>now</code> כפרמטר הוא אותו "שעון מוזרק" מפרק 24: בבדיקה הזמן קבוע, ואין סיכוי שהבדיקה תיפול כי עברה בדיוק בגבול של דקה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Retry-After</code> = ‏<code>windowSeconds</code> קבוע — לקוח שנחסם שנייה לפני סוף החלון מחכה דקה שלמה.</li><li><code>Math.floor</code> ב־Retry-After — יוצא 0 בשנייה האחרונה, והלקוח מנסה מיד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E70">
+    <h3>P26-E70 · מנעול שמחכה בתור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+for (let attempt = 0; attempt &lt;= retries; attempt++) { … }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>RELEASE</code> מהשיעור:</p>
+<pre><code class="lang-lua">if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E70: מנעול שמחכה בתור
+import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
+
+const RELEASE = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`;
+const sleep = (ms: number) =&gt; new Promise((r) =&gt; setTimeout(r, ms));
+
+export async function withLockRetry&lt;T&gt;(redis: Redis, name: string, ttlMs: number, fn: () =&gt; Promise&lt;T&gt;, opts: { retries?: number; delayMs?: number } = {}): Promise&lt;T&gt; {
+  const { retries = 10, delayMs = 50 } = opts;
+  const key = `lock:${name}`;
+  const token = randomUUID();
+  for (let attempt = 0; attempt &lt;= retries; attempt++) {
+    if ((await redis.set(key, token, "PX", ttlMs, "NX")) === "OK") {
+      try {
+        return await fn();
+      } finally {
+        await redis.eval(RELEASE, 1, key, token);
+      }
+    }
+    if (attempt &lt; retries) await sleep(delayMs);
+  }
+  throw new Error("LOCKED");
+}</code></pre>
+<p>‏<code>return await fn()</code> בתוך <code>try</code>, ולא <code>return fn()</code>: בלי <code>await</code> ה־<code>finally</code> רץ מיד — לפני ש־<code>fn</code> סיים — והמנעול משתחרר באמצע העבודה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return fn()</code> בלי <code>await</code> — המנעול משתחרר לפני שהעבודה נגמרת, והבודק רואה שתי עבודות במקביל.</li><li>לולאה בלי <code>sleep</code> — מאות פקודות בשנייה ל־Redis מכל מחכה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-queues.html"><small>הבא</small>שיעור 4 — תורים ועבודות ברקע עם BullMQ</a></div>
 </main>
 </body>

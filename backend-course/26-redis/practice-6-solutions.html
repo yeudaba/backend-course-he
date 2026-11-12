@@ -40,6 +40,107 @@
 
 </div></details>
   </div>
+<div class="ex" id="P26-E106">
+    <h3>P26-E106 · מה הדפדפן רואה בזרם הזה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שורה ריקה מסיימת הודעה. שורה שמתחילה בנקודתיים — הערה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הודעה בלי <code>data</code> — לא מפעילה אירוע. ‏<code>data</code> בכמה שורות — מתחבר עם <code>\n</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>: connected</code> — הערה, כלום.</li><li><code>retry: 5000</code> — אין אירוע; הדפדפן יחכה 5 שניות לפני התחברות מחדש.</li><li>אירוע <code>status</code>, ‏data <code>{"status":"received"}</code>, ‏<code>lastEventId</code> ‏<code>"1"</code>.</li><li>אירוע <code>message</code> (אין <code>event</code>), ‏data <code>"שורה ראשונה\nשורה שנייה"</code>. ‏<code>lastEventId</code> נשאר <code>"1"</code> (ב־EventSource ה־id האחרון נשמר עד שמגיע חדש).</li><li><code>: ping</code> — heartbeat, כלום.</li><li><strong>שום דבר — עדיין.</strong> להודעה האחרונה אין שורה ריקה בסוף, אז היא לא הסתיימה. אם החיבור ייפול עכשיו — היא אבדה.</li></ol>
+<p>נפל ← אחרי 5 שניות, ‏<code>EventSource</code> מתחבר מחדש עם <code>Last-Event-ID: 1</code>, ושרת טוב (‏E28) שולח שוב את 2.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>\n\n</code> בסוף כל הודעה בשרת — הדפדפן מחכה, והאירוע מגיע רק עם ההודעה <em>הבאה</em>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E107">
+    <h3>P26-E107 · ‏101, ‏Upgrade ו־token בכתובת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>101 Switching Protocols</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי עוד רואה את הכתובת המלאה של בקשה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>101 Switching Protocols</code>: מאותו רגע זה לא HTTP — שני הצדדים שולחים frames על אותו חיבור TCP, שנשאר פתוח.</li><li>ה־API של <code>WebSocket</code> בדפדפן פשוט לא מאפשר headers. האפשרויות: cookie של session (נשלח לבד), או token קצר־מועד בכתובת.</li><li>הכתובת המלאה נכתבת ללוגים של proxies, load balancers ושרתים, ולפעמים להיסטוריה. JWT של שעה בלוג = מי שקורא את הלוג יכול להתחזות שעה. token של 30 שניות לחיבור אחד — חסר ערך אחרי שנוצל.</li><li>חיבור פתוח הוא משאב (זיכרון, socket). אם מאמתים אחרי — כל אחד יכול לפתוח אלפי חיבורים ולא לשלוח כלום. ב־<code>upgrade</code> מחזירים <code>401</code> והחיבור לא נפתח בכלל (‏E29).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על <code>from</code> שהלקוח שולח בהודעה — מי ששלח נקבע לפי החיבור (ה־token), לא לפי מה שכתוב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E108">
+    <h3>P26-E108 · כל כמה זמן heartbeat? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏heartbeat צריך להגיע <em>לפני</em> ה־timeout, עם מרווח לעיכובים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדיקה כל 30 שניות: "קיבלתי pong מאז ה־ping הקודם?".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>90 — החיבור נסגר אחרי 60 שניות, והלקוח מתחבר מחדש כל דקה. ‏59 — עובד על הנייר, אבל עיכוב של שנייה (GC, רשת) וזה נסגר. סביר: 15–30 שניות.</li><li>הבדיקה הבאה (עד 30 שניות אחרי t=0) שולחת ping ומסמנת "מחכה". הבדיקה שאחריה, עוד 30 שניות, רואה שלא היה pong ← terminate. כלומר בין 30 ל־60 שניות.</li><li>כתיבה לחיבור מת נכשלת בסוף — TCP מגלה שאין מי שיקבל, ו־<code>req.on("close")</code> נקרא. ה־ping של SSE הוא בעיקר כדי לשמור את החיבור חי בפני proxies, והגילוי בא כתופעת לוואי של הכתיבה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>heartbeat כל שנייה "ליתר ביטחון" — עם 50,000 לקוחות, 50,000 כתיבות בשנייה בשביל כלום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E109">
+    <h3>P26-E109 · הלשונית השביעית <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>דפדפנים מגבילים ל־6 חיבורי HTTP/1.1 לכל דומיין.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־HTTP/2 כל הבקשות לאותו דומיין עוברות על חיבור אחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>השביעית נתקעת — אין חיבור פנוי. וגם כל בקשה אחרת לאותו דומיין (תמונה, ‏<code>fetch</code>, דף) מחכה: ששת החיבורים תפוסים לנצח ב־SSE.</li><li>HTTP/2 מעביר את כל הבקשות על חיבור TCP אחד (multiplexing), וההגבלה היא ~100 זרמים. שבע לשוניות — בלי בעיה. ה־reverse proxy מפרק 25 נותן HTTP/2.</li><li>(א) לשונית אחת מחזיקה את ה־SSE ומעבירה עדכונים לאחרות (<code>BroadcastChannel</code> / SharedWorker). (ב) לסגור את ה־<code>EventSource</code> כשהלשונית מוסתרת (<code>visibilitychange</code>), ולפתוח כשחוזרים. וגם: SSE מתת־דומיין נפרד (<code>events.shop.com</code>) — מגבלה נפרדת.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לפתוח WebSocket במקום" — עוקף את המגבלה, אבל מוותר על כל מה ש־SSE נותן חינם (התחברות מחדש, Last-Event-ID).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E110">
+    <h3>P26-E110 · ‏fan-out: פעמיים, או אף פעם <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏A מנוי לערוץ בעצמו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>pub/sub לא שומר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>את האירוע פעמיים: פעם מהשליחה המקומית, ופעם כשההודעה חוזרת מ־Redis ל־A (גם הוא מנוי). לכן ב־E30 לא שולחים מקומית — רק <code>publish</code>.</li><li>כלום — ה־publish נכשל (או הגיע לאפס מנויים). הסטטוס במסד נכון, רק העדכון החי אבד. מה עושים: הדף טוען את הסטטוס מה־API כשהוא מתחבר (ומתחבר מחדש), כך שכל פספוס מתוקן בהתחברות הבאה; ולמה שאסור לפספס — תור.</li><li>לא. pub/sub הוא רק "מה קורה עכשיו". מה שפספסו — מ־Last-Event-ID מול מאגר אירועים (‏E28, ובין שרתים — ‏E120), או פשוט טעינה מחדש של המצב מה־API.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־pub/sub כמקור האמת של הסטטוס — הוא רק הודעה ש"משהו השתנה".</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26-E27">
     <h3>P26-E27 · הודעת SSE 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -238,7 +339,371 @@ export async function createRelay({ pub, sub, channel }: { pub: Redis; sub: Redi
 
 </div></details>
   </div>
+<div class="ex" id="P26-E111">
+    <h3>P26-E111 · לפרק זרם SSE 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>text.split(/\r\n|\r|\n/)</code>. משתנים להודעה הנוכחית: <code>event</code>, ‏<code>id</code>, ומערך <code>data</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">const i = line.indexOf(":")</code>; ‏<code class="mid">let value = i === -1 ? "" : line.slice(i + 1)</code>; ‏<code class="mid">if (value.startsWith(" ")) value = value.slice(1)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E111: לפרק זרם SSE
+type Event = { event: string; data: string; id?: string };
+
+export function parseSSE(text: string): Event[] {
+  const out: Event[] = [];
+  let data: string[] = [];
+  let event = "";
+  let id: string | undefined;
+  const lines = text.split(/\r\n|\r|\n/);
+  lines.pop(); // מה שאחרי ירידת השורה האחרונה — שורה שעוד לא הסתיימה (או ריק)
+  for (const line of lines) {
+    if (line === "") {
+      if (data.length) out.push({ event: event || "message", data: data.join("\n"), ...(id !== undefined ? { id } : {}) });
+      data = [];
+      event = "";
+      id = undefined;
+      continue;
+    }
+    if (line.startsWith(":")) continue;
+    const i = line.indexOf(":");
+    const field = i === -1 ? line : line.slice(0, i);
+    let value = i === -1 ? "" : line.slice(i + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (field === "data") data.push(value);
+    else if (field === "event") event = value;
+    else if (field === "id") id = value;
+  }
+  return out;
+}</code></pre>
+<p>‏<code>lines.pop()</code>: האיבר האחרון של <code>split</code> הוא מה שבא אחרי ירידת השורה האחרונה — ריק, או שורה שעוד לא הגיעה עד סופה. בלי ה־<code>pop</code>, טקסט שמסתיים ב־<code>data: x\n</code> (שורה אחת, בלי שורה ריקה) היה נראה כמו הודעה גמורה. זה בדיוק מה שהדפדפן עושה: הודעה שלא הסתיימה לא נמסרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>value.trim()</code> — מוחק רווחים שהם חלק מה־data (‏<code>data:   x</code> הוא <code>"  x"</code>).</li><li><code>line.split(":")</code> — ‏<code>data: {"a":1}</code> נחתך בנקודתיים שבתוך ה־JSON.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E112">
+    <h3>P26-E112 · ‏SSE עם heartbeat וניקוי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>res.writeHead(200, { … })</code>, ואז <code class="mid">res.write(": connected\n\n")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">req.on("close", () =&gt; { clearInterval(timer); count--; })</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E112: SSE עם heartbeat וניקוי
+import type express from "express";
+
+export function sseWithHeartbeat({ intervalMs }: { intervalMs: number }) {
+  let count = 0;
+  const handler: express.RequestHandler = (req, res) =&gt; {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" });
+    res.write(": connected\n\n");
+    count++;
+    const timer = setInterval(() =&gt; res.write(": ping\n\n"), intervalMs);
+    req.on("close", () =&gt; {
+      clearInterval(timer);
+      count--;
+    });
+  };
+  return { handler, active: () =&gt; count };
+}</code></pre>
+<p>‏<code>: connected</code> בהתחלה לא רק "נחמד": חלק מה־proxies לא מעבירים את ה־headers ללקוח עד שמגיע הבייט הראשון של הגוף, ו־<code>fetch</code> מחכה להם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>clearInterval</code> — כל לקוח שעזב משאיר timer שכותב לחיבור סגור, לנצח.</li><li>‏<code>res.on("finish")</code> במקום <code>req.on("close")</code> — ‏<code>finish</code> לא נקרא כשהלקוח מתנתק באמצע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E113">
+    <h3>P26-E113 · ‏heartbeat ל־WebSocket: ‏ping, ‏pong, ‏terminate 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איפה לשמור "חי"? ‏<code class="mid">const alive = new WeakMap&lt;WebSocket, boolean&gt;()</code> — כשהחיבור נעלם, גם הרשומה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">wss.on("connection", (ws) =&gt; { alive.set(ws, true); ws.on("pong", () =&gt; alive.set(ws, true)); });</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E113: heartbeat ל־WebSocket — ping, pong, terminate
+import type { WebSocket, WebSocketServer } from "ws";
+
+export function attachHeartbeat(wss: WebSocketServer, intervalMs: number) {
+  const alive = new WeakMap&lt;WebSocket, boolean&gt;();
+  wss.on("connection", (ws) =&gt; {
+    alive.set(ws, true);
+    ws.on("pong", () =&gt; alive.set(ws, true));
+  });
+  const timer = setInterval(() =&gt; {
+    for (const ws of wss.clients) {
+      if (!alive.get(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.set(ws, false);
+      ws.ping();
+    }
+  }, intervalMs);
+  return () =&gt; clearInterval(timer);
+}</code></pre>
+<p>‏<code>terminate()</code> ולא <code>close()</code>: ‏<code>close</code> שולח frame של סגירה ומחכה לתשובה — מלקוח מת היא לא תגיע. ‏<code>terminate</code> הורס את ה־socket מיד, ו־<code>ws.on("close")</code> של השרת נקרא (כדי לנקות חדרים, מנויים וכו׳).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "חי" <em>אחרי</em> ששולחים ping באותו סיבוב — אף אחד לא מספיק לענות, וכולם מנותקים.</li><li>לשכוח להחזיר פונקציית עצירה — בבדיקות ובכיבוי מסודר ה־interval משאיר את התהליך חי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E114">
+    <h3>P26-E114 · ‏SSE של הזמנה — רק לבעלים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const listener = (e) =&gt; { if (e.orderId === orderId) res.write(…); };
+bus.on("status", listener);
+req.on("close", () =&gt; bus.off("status", listener));</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>Number(req.params.id)</code> — ובדיקת בעלות עם <code>!==</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E114: SSE של הזמנה — רק לבעלים
+import type { EventEmitter } from "node:events";
+import type express from "express";
+
+type Deps = { authenticate(req: express.Request): number | null; ownerOf(orderId: number): Promise&lt;number | null&gt;; bus: EventEmitter };
+
+export function orderEvents({ authenticate, ownerOf, bus }: Deps): express.RequestHandler {
+  return async (req, res) =&gt; {
+    const userId = authenticate(req);
+    if (userId === null) return void res.status(401).json({ error: "נדרשת התחברות" });
+    const orderId = Number(req.params.id);
+    const owner = Number.isInteger(orderId) ? await ownerOf(orderId) : null;
+    if (owner === null || owner !== userId) return void res.status(404).json({ error: "הזמנה לא נמצאה" });
+
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.write(": connected\n\n");
+    const listener = (e: { orderId: number; status: string }) =&gt; {
+      if (e.orderId === orderId) res.write(`event: status\ndata: ${JSON.stringify(e)}\n\n`);
+    };
+    bus.on("status", listener);
+    req.on("close", () =&gt; bus.off("status", listener));
+  };
+}</code></pre>
+<p>אותה בדיקת בעלות כמו ב־<code>GET /orders/:id</code> — ‏SSE הוא עוד endpoint, ויש לו אותן הרשאות. וה־<code>bus.off</code>: אלף לקוחות שהתחברו ועזבו בלי ניקוי = אלף מאזינים שכותבים לחיבורים סגורים (ו־Node מזהיר: <code class="mid">MaxListenersExceededWarning</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק ש"מחובר" — כל לקוח רואה את הסטטוס של כל הזמנה.</li><li>לשלוח את כל האירועים ולסנן בדפדפן — מידע של אחרים עובר ברשת.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26-E115">
+    <h3>P26-E115 · ‏SIGTERM וחיבורי SSE פתוחים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>close</code> מחכה שכל הבקשות יסתיימו. בקשת SSE לא מסתיימת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>EventSource</code> מתחבר מחדש לבד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הוא מפסיק לקבל חיבורים חדשים ומחכה — לנצח. אחרי 10 שניות מגיע SIGKILL, והכול נחתך באמצע (כולל בקשות רגילות וכתיבות למסד).</li><li>ב־SIGTERM: (א) <code>server.close()</code> — לא לקבל חדשים. (ב) לעבור על כל חיבורי ה־SSE ולסיים אותם (<code>res.end()</code>), אולי אחרי הודעת <code>retry</code> קצרה. (ג) לחכות לבקשות הרגילות. (ד) לסגור Redis, ‏pub/sub ומסד.</li><li>החיבור נסגר, ו־<code>EventSource</code> מתחבר מחדש (אחרי <code>retry</code>) — לשרת אחר מאחורי ה־load balancer — עם <code>Last-Event-ID</code>. מה שפורסם ברגע המעבר — Last-Event-ID מול מאגר משותף (‏E120) מכסה; בלעדיו — נטען מחדש מה־API.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעלות את ה־timeout ל־SIGKILL לדקה "כדי לתת לחיבורים להיסגר" — הם לא ייסגרו לבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E116">
+    <h3>P26-E116 · ‏EventSource ו־JWT <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏cookie, ‏token בכתובת, ו־<code>fetch</code> עם קריאה ידנית של הזרם.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האימות קורה פעם אחת — בפתיחה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) cookie (‏<code>HttpOnly</code>) — נשלח לבד, ‏<code>withCredentials: true</code> אם בדומיין אחר; חיסרון: צריך הגנת CSRF ו־CORS נכון. (ב) token קצר־מועד בכתובת (<code>POST /events/token</code> ← ‏<code>?token=</code>) — פשוט; חיסרון: עוד endpoint, והכתובת בלוגים. (ג) ‏<code>fetch</code> עם header וקריאת הזרם ידנית (כמו בדוגמה בשיעור) — האימות הרגיל; חיסרון: אין התחברות מחדש אוטומטית ו־Last-Event-ID — צריך לכתוב לבד.</li><li>האימות נעשה רק בפתיחה, אז החיבור ממשיך גם אחרי שה־JWT פג — וגם אחרי שהמשתמש נחסם. פתרון: השרת סוגר חיבורים כשהתוקף של הטוקן שלהם עובר (טיימר לכל חיבור), והלקוח מתחבר מחדש עם טוקן חדש.</li><li>CORS: ‏<code class="mid">Access-Control-Allow-Credentials: true</code> ו־origin מפורש (לא <code>*</code>). CSRF: ‏SSE הוא GET שרק קורא — סיכון נמוך יותר, אבל ה־cookie הוא אותו cookie שמאמת גם POST.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את ה־JWT הרגיל ב־<code>?token=</code> — שעה של התחזות לכל מי שקורא לוגים (‏E107).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E117">
+    <h3>P26-E117 · ‏sticky sessions או pub/sub? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי גורם לאירוע, ומי מחכה לו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"תמיד לאותו שרת" — כל עוד הוא קיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שבקשות של אותו לקוח מגיעות לאותו תהליך — שימושי כשיש מצב בזיכרון של חיבור אחד (למשל ההתחברות מחדש של WebSocket לאותו שרת).</li><li>האירוע קורה בבקשה של <em>המנהל</em>, שמגיעה לשרת שלו. דנה "דבוקה" לשרת אחר. משהו צריך להעביר את האירוע בין השרתים — pub/sub.</li><li>הם מתחברים מחדש לשרת אחר ("הדבק" נשבר), וכל מה שהיה בזיכרון של השרת הקודם אבד. עם pub/sub ומאגר משותף — אין מה לאבד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשלח את האירוע מה־API של המנהל ישירות לשרת של דנה" — צריך לדעת איפה כל לקוח מחובר, ולתחזק את זה. pub/sub עושה את זה בלי לדעת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E118">
+    <h3>P26-E118 · ‏SSE בשני שרתים: ‏POST ב־A, אירוע ב־B 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const clients = new Set&lt;express.Response&gt;()</code>. ב־GET: ‏<code>clients.add(res)</code>, ו־<code class="mid">req.on("close", () =&gt; clients.delete(res))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">await sub.subscribe(channel);
+sub.on("message", (ch, msg) =&gt; {
+  if (ch === channel) for (const c of clients) c.write(`data: ${msg}\n\n`);
+});</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E118: SSE בשני שרתים — POST ב־A, אירוע ב־B
+import express from "express";
+import type { Redis } from "ioredis";
+
+export async function createLiveApp({ pub, sub, channel }: { pub: Redis; sub: Redis; channel: string }) {
+  const clients = new Set&lt;express.Response&gt;();
+  await sub.subscribe(channel);
+  const onMessage = (ch: string, msg: string) =&gt; {
+    if (ch !== channel) return;
+    for (const c of clients) c.write(`data: ${msg}\n\n`);
+  };
+  sub.on("message", onMessage);
+
+  const app = express();
+  app.use(express.json());
+  app.get("/events", (req, res) =&gt; {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.write(": connected\n\n");
+    clients.add(res);
+    req.on("close", () =&gt; clients.delete(res));
+  });
+  app.post("/events", async (req, res) =&gt; {
+    await pub.publish(channel, JSON.stringify(req.body));
+    res.status(202).end();
+  });
+
+  return {
+    app,
+    async close() {
+      sub.off("message", onMessage);
+      await sub.unsubscribe(channel);
+    },
+  };
+}</code></pre>
+<p>זה E30 ו־E28 יחד, בתוך אפליקציה: ה־HTTP הוא הכניסה (POST) והיציאה (SSE), ו־Redis הוא החוט שמחבר בין השרתים. בפרויקט אמיתי ה־POST הוא לא endpoint ציבורי — הוא השירות שמשנה סטטוס (‏<code>OrdersService.ship</code>) שמפרסם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>sub.subscribe</code> בתוך ה־GET — מנוי לכל לקוח, וכל הודעה נכתבת לכל לקוח כמספר הלקוחות.</li><li>לשלוח מקומית <em>וגם</em> לפרסם — הלקוחות של A מקבלים כל הודעה פעמיים (‏E110).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E119">
+    <h3>P26-E119 · הודעות WebSocket עם zod 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">z.discriminatedUnion("type", [z.strictObject({ type: z.literal("join"), room: … }), …])</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>JSON.parse(String(raw))</code> בתוך <code>try</code>. ואז <code>safeParse</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E119: הודעות WebSocket עם zod
+import { z } from "zod";
+
+const schema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("join"), room: z.string().regex(/^[a-z0-9-]{1,30}$/) }),
+  z.strictObject({ type: z.literal("say"), text: z.string().trim().min(1).max(500) }),
+  z.strictObject({ type: z.literal("typing") }),
+]);
+export type ClientMessage = z.infer&lt;typeof schema&gt;;
+
+export function parseClientMessage(raw: string | Buffer): { ok: true; msg: ClientMessage } | { ok: false; error: string } {
+  let data: unknown;
+  try {
+    data = JSON.parse(String(raw));
+  } catch {
+    return { ok: false, error: "JSON לא תקין" };
+  }
+  const r = schema.safeParse(data);
+  if (!r.success) return { ok: false, error: r.error.issues[0]?.message ?? "הודעה לא תקינה" };
+  return { ok: true, msg: r.data };
+}</code></pre>
+<p>‏<code>strictObject</code> הוא ההגנה מ־E107: הודעה עם <code>from: "admin"</code> נדחית, במקום להיבלע בשקט — והשרת ממילא קובע את <code>from</code> לפי החיבור. ו־<code>max(500)</code>: בלעדיו, הודעה של 10MB נשלחת לכל מי שבחדר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>JSON.parse(raw)</code> על Buffer בלי <code>String</code> — עובד ב־Node (‏Buffer מומר), אבל TypeScript מתלונן, וקל לשכוח במקום אחר.</li><li><code>z.object</code> — שדות נוספים נמחקים בשקט, והקוד אחר כך אולי קורא את <code>raw</code> המקורי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E120">
+    <h3>P26-E120 · ‏Last-Event-ID בין שרתים: מאגר ב־Redis 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>LTRIM key -max -1</code> — משאיר את <code>max</code> האחרונים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני workers יכולים לקבל id 7 ו־8, אבל לדחוף את 8 לפני 7. לכן <code>eventsAfter</code> ממיין.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E120: Last-Event-ID בין שרתים — מאגר ב־Redis
+import type { Redis } from "ioredis";
+
+export async function appendEvent(redis: Redis, stream: string, event: string, data: unknown, max = 100) {
+  const id = await redis.incr(`sse:${stream}:seq`);
+  const log = `sse:${stream}:log`;
+  await redis.multi().rpush(log, JSON.stringify({ id, event, data })).ltrim(log, -max, -1).exec();
+  return id;
+}
+
+export async function eventsAfter(redis: Redis, stream: string, lastId: number) {
+  const all = (await redis.lrange(`sse:${stream}:log`, 0, -1)).map((x) =&gt; JSON.parse(x) as { id: number; event: string; data: unknown });
+  return all.filter((e) =&gt; e.id &gt; lastId).sort((a, b) =&gt; a.id - b.id);
+}</code></pre>
+<p>id מ־<code>INCR</code> ולא מונה בזיכרון — כך <code>Last-Event-ID: 42</code> אומר אותו דבר בכל שרת. (ל־Redis יש גם מבנה שנבנה בדיוק לזה — Streams, ‏<code>XADD</code>/<code>XRANGE</code> — עם ids עולים וחיתוך מובנים. כאן בנינו אותו משני הכלים שכבר מכירים.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>LTRIM key 0 max-1</code> — משאיר את הראשונים (הישנים), ומוחק כל אירוע חדש.</li><li>לסמוך על הסדר ב־list בלי מיון — במקביל, ה־id וסדר ה־RPUSH לא תמיד אותו דבר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-6.html"><small>חזרה</small>תרגול שיעור 6</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>

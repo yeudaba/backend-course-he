@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ תרגול שיעור 2</div>
   <h1>✍️ תרגול שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</h1>
-  <p class="subtitle">פרק 26 · 6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־105 דק׳</p>
+  <p class="subtitle">פרק 26 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־300 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,12 +21,54 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 2: מטמון: cache-aside, ביטול ו־stampede</h2>
-  <p class="subtitle">6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־105 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־205 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P26-E03">
     <h3>P26-E03 · מלכודות של cache</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
 <p>לכל תרחיש — מה הבעיה, ואיך פותרים:</p>
 <ol><li>מנהל עדכן מחיר, ולקוחות רואים את הישן עוד שעה.</li><li>ה־TTL של רשימת דף הבית נגמר ב־20:00:00, ובאותה שנייה 800 בקשות הגיעו — והמסד קרס.</li><li>מחפשים מוצר שלא קיים; כל חיפוש כזה מגיע למסד, ובוט שולח מיליון כאלה.</li><li>שמרנו ב־cache את <code>GET /orders</code> — ולקוח אחד ראה את ההזמנות של לקוח אחר.</li><li>Redis נפל. כל האתר מחזיר 500.</li></ol>
+
+  </div>
+<div class="ex" id="P26-E45">
+    <h3>P26-E45 · אותו מפתח או לא?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>הקוד בונה מפתח cache כך: <code><code class="mid">products:${JSON.stringify(req.query)}</code></code>. לכל זוג בקשות — האם הן מקבלות אותו מפתח? והאם <em>צריכות</em> לקבל אותו?</p>
+<ol><li><code>?q=latte&amp;page=2</code> ו־<code>?page=2&amp;q=latte</code></li><li><code>?q=latte</code> ו־<code>?q=latte&amp;page=1</code> (ברירת המחדל של page היא 1)</li><li><code>?q=latte</code> ו־<code>?q=Latte</code> (החיפוש לא תלוי באותיות גדולות)</li><li><code>GET /orders</code> של דנה ו־<code>GET /orders</code> של יוסי</li><li><code class="mid">?q=latte&amp;utm_source=facebook</code> ו־<code>?q=latte</code></li></ol>
+<p>ומה הפתרון הכללי שמכסה את כולם?</p>
+
+  </div>
+<div class="ex" id="P26-E46">
+    <h3>P26-E46 · כמה זמן מותר להיות ישן?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>לכל אחד — האם לשים ב־cache, ואם כן, TTL בערך (שניות / דקות / שעות) ולמה:</p>
+<ol><li>רשימת הקטגוריות בתפריט (משתנה פעם בחודש)</li><li>שער הדולר שמוצג ליד המחיר (ספק חיצוני, מתעדכן כל דקה, ועולה כסף לכל קריאה)</li><li>המלאי שמוצג בדף מוצר ("נשארו 3")</li><li>המלאי שנבדק בזמן ביצוע הזמנה</li><li>ההרשאות של משתמש (<code>role</code>) שנבדקות בכל בקשה</li><li>דף "אודות"</li></ol>
+
+  </div>
+<div class="ex" id="P26-E47">
+    <h3>P26-E47 · ‏0, ‏"" ו־[] — פגיעה או החטאה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>מה ש־<code>GET</code> החזיר מ־Redis עובר <code>JSON.parse</code>. נחש מה יודפס, ואז הרץ:</p>
+<pre><code class="lang-ts">const fromRedis = ["0", '""', "[]", "false", "null", null]; // null — אין מפתח
+for (const hit of fromRedis) {
+  const value = hit === null ? undefined : JSON.parse(hit);
+  console.log(String(hit).padEnd(5), value ? "HIT " : "MISS", value !== undefined ? "HIT " : "MISS");
+}</code></pre>
+<p>(1) אילו מהן <code>if (value)</code> מסווג בטעות כהחטאה? (2) מה יקרה בפועל לבקשה "כמה פריטים בעגלה?" כשהתשובה 0? (3) ומה המשמעות של המחרוזת <code>"null"</code> שנשמרה ב־Redis?</p>
+
+  </div>
+<div class="ex" id="P26-E48">
+    <h3>P26-E48 · מחיר ישן תחת גרסה חדשה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>הסבר בציר זמן איך זה קורה, עם cache בגרסאות (<code>v:products</code>):</p>
+<ol><li>t=0: בקשה A — ‏MISS, מתחילה לטעון מהמסד (שאילתה של 80ms).</li><li>t=10: מנהל משנה מחיר: <code>UPDATE</code>, ואז <code>INCR v:products</code> (‏3 ← 4).</li><li>t=80: ‏A מסיימת וכותבת ל־cache.</li></ol>
+<p>(1) איזה מחיר יש ב־cache, ובאיזו גרסה, אם A קראה את הגרסה <em>לפני</em> הטעינה? ואם היא קוראת את הגרסה מחדש רגע לפני הכתיבה? (2) למה ה־TTL הוא מה שבסוף מתקן את המקרה הגרוע? (3) מה מזה נוגע להזמנות?</p>
+
+  </div>
+<div class="ex" id="P26-E49">
+    <h3>P26-E49 · מתי cache לא שווה את זה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>לכל מקרה — להוסיף cache? ואם לא, מה כן?</p>
+<ol><li><code>GET /products/:id</code> לוקח 2ms, ונקרא 5 פעמים בדקה.</li><li><code class="mid">GET /reports/sales?from=…&amp;to=…</code> לוקח 4 שניות, ונקרא פעם ביום, בכל פעם עם טווח אחר.</li><li><code>GET /products?q=…</code> לוקח 80ms בגלל <code>ILIKE '%…%'</code>, ונקרא 50 פעמים בשנייה עם כמה עשרות חיפושים נפוצים.</li><li><code>GET /orders/:id</code> לוקח 300ms, ו־<code>EXPLAIN</code> מראה <code>Seq Scan on order_items</code>.</li></ol>
 
   </div>
 <div class="ex" id="P26-E07">
@@ -53,17 +95,109 @@
 <p><code>cachedSearch</code> ב־<code>P26-E20.ts</code>: עמוד 2 מחזיר את עמוד 1, מחירים ישנים נשארים "לתמיד", וחיפוש בלי תוצאות פוגע במסד בכל פעם. מצא ותקן.</p>
 
   </div>
+<div class="ex" id="P26-E50">
+    <h3>P26-E50 · מפתח cache יציב 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E50.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function cacheKey(group: string, params: Record&lt;string, string | number | boolean | string[] | null | undefined&gt;): string</code></pre>
+<ul><li>התוצאה: <code>group</code>, נקודתיים, ו־JSON של הפרמטרים עם <strong>מפתחות ממוינים</strong>.</li><li>ערך <code>undefined</code> או <code>null</code>, ומחרוזת שריקה אחרי trim — לא נכנסים. מחרוזות — אחרי trim.</li><li>מערך — עותק ממוין (לא משנים את המקור). מערך ריק — לא נכנס.</li></ul>
+<p>דוגמה:</p>
+<pre><code class="lang-ts">cacheKey("products", { q: " V60 ", page: 1, tags: ["b", "a"], sort: undefined })
+// ← products:{"page":1,"q":"V60","tags":["a","b"]}</code></pre>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E50</pre>
+
+  </div>
+<div class="ex" id="P26-E51">
+    <h3>P26-E51 · ‏cache-aside עם TTL אקראי 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>כדי שמפתחות שנוצרו יחד לא יפוגו יחד (stampede), מוסיפים "רעש" ל־TTL. בקובץ <code class="mid">26-redis/starter/P26-E51.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function getOrSetJitter&lt;T&gt;(redis: Redis, key: string, ttl: number, load: () =&gt; Promise&lt;T&gt;, random: () =&gt; number = Math.random): Promise&lt;T&gt;</code></pre>
+<ul><li>cache-aside רגיל: יש ← מחזירים (בלי <code>load</code>); אין ← <code>load()</code>, שומרים כ־JSON, ומחזירים.</li><li>ה־TTL בפועל: <code class="mid">ttl + Math.floor(random() * ttl * 0.2)</code> — בין <code>ttl</code> ל־20% יותר.</li><li><code>load</code> זרק ← השגיאה עולה, ושום דבר לא נשמר.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E51</pre>
+
+  </div>
+<div class="ex" id="P26-E52">
+    <h3>P26-E52 · גם "אין" נשמר: negative caching 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>בוט מבקש מיליון מוצרים שלא קיימים — כל בקשה היא MISS, וכולן מגיעות למסד (‏E03). בקובץ <code class="mid">26-redis/starter/P26-E52.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function findProduct&lt;T&gt;(redis: Redis, id: number, loadFromDb: (id: number) =&gt; Promise&lt;T | null&gt;, opts?: { ttl?: number; missTtl?: number }): Promise&lt;T | null&gt;</code></pre>
+<ul><li>המפתח: <code>product:&lt;id&gt;</code>. ‏<code>ttl</code> — ברירת מחדל 300, ‏<code>missTtl</code> — ברירת מחדל 30.</li><li>המסד החזיר מוצר ← שומרים JSON עם <code>ttl</code>. המסד החזיר <code>null</code> ← שומרים את המחרוזת <code>__none__</code> עם <code>missTtl</code>, ומחזירים <code>null</code>.</li><li>מצאנו <code>__none__</code> ב־Redis ← <code>null</code>, בלי ללכת למסד.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E52</pre>
+
+  </div>
+<div class="ex" id="P26-E53">
+    <h3>P26-E53 · רענון מוקדם ברקע 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>"רענון מוקדם": כשמפתח עומד לפוג, מחזירים את הערך הקיים <em>מיד</em>, וטוענים חדש ברקע. כך אף משתמש לא מחכה ל־MISS. בקובץ <code class="mid">26-redis/starter/P26-E53.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function getWithEarlyRefresh&lt;T&gt;(redis: Redis, key: string, ttl: number, load: () =&gt; Promise&lt;T&gt;, refreshBelow: number): Promise&lt;T&gt;</code></pre>
+<ul><li>אין ערך ← ‏<code>load()</code>, שמירה עם <code>ttl</code>, החזרה (כמו cache-aside רגיל).</li><li>יש ערך, וה־TTL שנשאר <strong>קטן מ־</strong><code>refreshBelow</code> ← מחזירים את הערך הקיים מיד, ומתחילים רענון ברקע: <code>load()</code> ושמירה עם <code>ttl</code> מלא.</li><li>רק רענון אחד בכל רגע, גם עם 20 קריאות במקביל משני שרתים: מנעול <code>&lt;key&gt;:refresh</code> עם <code>SET NX EX 10</code>, שנמחק בסוף הרענון.</li><li>רענון שנכשל — לא מפיל כלום (אין unhandled rejection), והערך הישן נשאר.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E53</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־95 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P26-E54">
+    <h3>P26-E54 · ‏80ms — אינדקס או cache?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 2</span></div>
+<p>‏<code>GET /orders?customerId=7</code> לוקח 80ms. חבר צוות מציע cache של 60 שניות. לפני שמסכימים: (1) איזו פקודה מפרק 18 מריצים קודם, ומה מחפשים בפלט? (2) נניח שחסר אינדקס על <code>orders(customer_id)</code>. מה עדיף על cache, ולמה? (3) תן שתי סיבות שבגללן cache דווקא <em>לא</em> מתאים ל־endpoint הזה בכלל.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>EXPLAIN ANALYZE</code> ואינדקסים מפרק 18 — והשיעור: מתי cache שווה את המחיר.</p>
+
+  </div>
+<div class="ex" id="P26-E55">
+    <h3>P26-E55 · ‏cache ל־GET /orders עם JWT</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 21, שיעור 2</span></div>
+<p>middleware של cache שומר תשובות לפי <code>req.originalUrl</code>, ומחובר <em>לפני</em> ה־guard של JWT (פרק 21). (1) מה קורה כשדנה (עם טוקן) ואז אורח (בלי טוקן) מבקשים <code>GET /orders</code>? (2) מזיזים את ה־cache אחרי ה־guard, אבל המפתח עדיין ה־URL. מה עכשיו? (3) מה שלושת הכללים לכתוב middleware כזה בלי דליפה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏guards ו־JWT מפרק 21 — והשיעור: מפתח cache חייב לכלול את כל מה שמשפיע על התשובה.</p>
+
+  </div>
+<div class="ex" id="P26-E56">
+    <h3>P26-E56 · מה Prisma מחזיר, ומה JSON שומר</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 19, שיעור 2</span></div>
+<p>שמים ב־cache תוצאה של Prisma (פרק 19). נחש, ואז הרץ:</p>
+<pre><code class="lang-ts">const row = { id: 7n, createdAt: new Date("2026-11-08T07:58:46Z"), price: 2990 };
+try {
+  console.log(JSON.stringify(row));
+} catch (e) {
+  console.log((e as Error).constructor.name, (e as Error).message);
+}
+const fixed = JSON.stringify(row, (k, v) =&gt; (typeof v === "bigint" ? Number(v) : v));
+console.log(fixed);
+console.log(typeof JSON.parse(fixed).createdAt);</code></pre>
+<p>(1) למה <code>BigInt</code> בכלל מגיע מ־Prisma? (2) מה יקרה ל־endpoint עם cache-aside שמחזיר שורה כזו? (3) מה ההבדל בין הפתרון עם ה־replacer לבין להחליט ש"מה שנכנס ל־cache הוא DTO" (פרק 20)?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> הטיפוסים ש־Prisma מחזיר (פרק 19) ו־DTO (פרק 20) — והשיעור: מה שנשמר ב־cache הוא JSON בלבד.</p>
+
+  </div>
 <div class="ex typed" id="P26-E32">
     <h3>P26-E32 · לקרוא את INFO של Redis 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
 <p><strong>🔁 חזרה על <code>split</code> עם regex, ‏<code>indexOf</code>/<code>slice</code> (‏P14-E26), ‏<code>Object.entries</code>/<code>fromEntries</code> (‏P07-E26) ו־<code>?.</code>/<code>??</code></strong>. כדי לדעת אם ה־cache עובד, מסתכלים על <code>INFO</code>: כמה פגיעות (<code>keyspace_hits</code>) וכמה החטאות (<code>keyspace_misses</code>). ‏<code>redis.info()</code> מחזיר טקסט: מקטעים שמתחילים ב־<code># Server</code>, ובכל שורה <code>key:value</code>, עם <code>\r\n</code> בסוף. כתוב וייצא:</p>
 <ul><li><code>parseInfo(text)</code> ← <code class="long">{ server: { redis_version: "8.2.1", ... }, stats: { ... }, ... }</code>. שם המקטע באותיות קטנות. הערך — הכול אחרי הנקודתיים <em>הראשונות</em>, כמחרוזת. שורות ריקות מדלגים.</li><li><code>parseKeyspace(info)</code> — מתוך <code>info.keyspace</code>: ‏<code class="mid">"db0" : "keys=1204,expires=980,..."</code> ← <code class="mid">{ db0: { keys: 1204, expires: 980, ... } }</code>, כמספרים. בלי מקטע <code>keyspace</code> (מסד ריק) ← <code>{}</code>.</li><li><code>hitRatio(info)</code> ← <code>hits / (hits + misses)</code>, מעוגל לשלוש ספרות אחרי הנקודה. אין נתונים (שניהם 0, או אין מקטע <code>stats</code>) ← <code>null</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> פירוק טקסט עם <code>split</code> ו־<code>Object.fromEntries</code> מפרקים 2 ו־7 — והשיעור: איך יודעים אם ה־cache באמת עובד (hits מול misses).</p>
 <p>📄 כותבים בקובץ <code class="mid">26-redis/starter/P26-E32.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 <pre class="terminal"><span class="prompt">% </span>node 26-redis/starter/P26-E32.ts
 <span class="prompt">% </span>npm run check P26-E32</pre>
 
   </div>
+<div class="ex" id="P26-E57">
+    <h3>P26-E57 · ‏middleware של cache ל־Express 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 15, שיעור 2</span></div>
+<p>בקובץ <code class="mid">26-redis/starter/P26-E57.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function cacheMiddleware(redis: Redis, ttl: number): express.RequestHandler</code></pre>
+<ul><li>רק <code>GET</code>. בקשה עם header <code>Authorization</code> — לא נוגעים ב־cache בכלל: <code>X-Cache: BYPASS</code>, וממשיכים.</li><li>המפתח: <code>page:</code> ואחריו <code>req.originalUrl</code>.</li><li>HIT ← ‏<code>X-Cache: HIT</code>, ‏<code class="mid">Content-Type: application/json</code>, והגוף השמור — בלי להריץ את ה־route.</li><li>MISS ← ‏<code>X-Cache: MISS</code>, וממשיכים. כשה־route קורא ל־<code>res.json(body)</code> עם סטטוס 200 — שומרים את ה־JSON עם <code>ttl</code>. סטטוס אחר — לא שומרים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> middleware ו־<code>next()</code> מפרק 15 — והשיעור: cache-aside, הפעם סביב route שלם.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E57</pre>
 
+  </div>
+<div class="ex" id="P26-E58">
+    <h3>P26-E58 · ‏HIT ו־MISS מחזירים אותו דבר — גם תאריכים 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 2</span></div>
+<p>הבאג מ־E40: ב־MISS יש <code>Date</code>, ב־HIT — מחרוזת. בקובץ <code class="mid">26-redis/starter/P26-E58.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function getOrSetDates&lt;T&gt;(redis: Redis, key: string, ttl: number, load: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt;</code></pre>
+<ul><li>cache-aside רגיל, אבל ב־HIT, כל מחרוזת שהיא בדיוק בפורמט של <code>toISOString()</code> (‏<code>2026-11-08T07:58:46.000Z</code>) — בכל עומק, גם בתוך מערכים — חוזרת כ־<code>Date</code>.</li><li>מחרוזות אחרות נשארות מחרוזות — גם <code>"2026-11-08"</code> (תאריך בלי שעה, פרק 24).</li><li>הבודק משווה את מה שחזר ב־MISS לבין מה שחזר ב־HIT עם <code>deepEqual</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>toISOString</code> ורגע ב־UTC מפרק 24, ו־<code>JSON.parse</code> עם reviver — והשיעור: cache שלא משנה טיפוסים.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26-E58</pre>
+
+  </div>
 <div class="pager"><a href="lesson-02-cache.html"><small>חזרה לשיעור</small>שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</a><a href="lesson-03-shared.html"><small>הבא</small>שיעור 3 — מצב משותף: הגבלת קצב, מנעולים ו־Lua</a></div>
 </main>
 </body>

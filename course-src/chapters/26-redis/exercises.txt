@@ -1110,10 +1110,13 @@ logout everywhere: 2
 <ul><li><code>Math.random().toString(36)</code> כמזהה — אפשר לנחש. מזהה session הוא סיסמה זמנית.</li><li><code>HSET</code> ואז <code>EXPIRE</code> בלי <code>MULTI</code> — אם השרת נופל ביניהם, נשאר session בלי תוקף, לנצח.</li><li><code>if (!hash)</code> — ‏<code>{}</code> הוא truthy, ו־session שלא קיים חוזר כ־<code>{ userId: NaN }</code>.</li><li>לקבוע לרשימה <code>EXPIRE</code> רגיל בכל יצירה — session קצר מקצר את הרשימה של כולם.</li></ul>
 
 @@ P26-E32 | 2 | לקרוא את INFO של Redis 🤖 | 20 | שיעור 2
+@lesson 2
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על <code>split</code> עם regex, ‏<code>indexOf</code>/<code>slice</code> (‏P14-E26), ‏<code>Object.entries</code>/<code>fromEntries</code> (‏P07-E26) ו־<code>?.</code>/<code>??</code></strong>. כדי לדעת אם ה־cache עובד, מסתכלים על <code>INFO</code>: כמה פגיעות (<code>keyspace_hits</code>) וכמה החטאות (<code>keyspace_misses</code>). ‏<code>redis.info()</code> מחזיר טקסט: מקטעים שמתחילים ב־<code># Server</code>, ובכל שורה <code>key:value</code>, עם <code>\r\n</code> בסוף. כתוב וייצא:</p>
 <ul><li><code>parseInfo(text)</code> ← <code>{ server: { redis_version: "8.2.1", ... }, stats: { ... }, ... }</code>. שם המקטע באותיות קטנות. הערך — הכול אחרי הנקודתיים <em>הראשונות</em>, כמחרוזת. שורות ריקות מדלגים.</li><li><code>parseKeyspace(info)</code> — מתוך <code>info.keyspace</code>: ‏<code>"db0" : "keys=1204,expires=980,..."</code> ← <code>{ db0: { keys: 1204, expires: 980, ... } }</code>, כמספרים. בלי מקטע <code>keyspace</code> (מסד ריק) ← <code>{}</code>.</li><li><code>hitRatio(info)</code> ← <code>hits / (hits + misses)</code>, מעוגל לשלוש ספרות אחרי הנקודה. אין נתונים (שניהם 0, או אין מקטע <code>stats</code>) ← <code>null</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> פירוק טקסט עם <code>split</code> ו־<code>Object.fromEntries</code> מפרקים 2 ו־7 — והשיעור: איך יודעים אם ה־cache באמת עובד (hits מול misses).</p>
 <p>📄 כותבים בקובץ <code>26-redis/starter/P26-E32.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 ```term
 % node 26-redis/starter/P26-E32.ts
@@ -1204,10 +1207,13 @@ console.log(hitRatio(info), hitRatio(parseInfo("# Stats\r\nkeyspace_hits:0\r\nke
 <ul><li><code>split("\n")</code> — ‏<code>\r</code> נשאר בסוף כל ערך.</li><li><code>line.split(":")</code> — ערך עם נקודתיים נחתך.</li><li>חלוקה באפס — שרת שעלה עכשיו מחזיר <code>NaN</code>, וגרף שמצייר <code>NaN</code> נשבר.</li><li>להשאיר את המספרים כמחרוזות ב־<code>parseKeyspace</code> — ‏<code>"1204" &gt; "980"</code> הוא <code>false</code>.</li></ul>
 
 @@ P26-E33 | 3 | TypedEmitter: אירועים עם טיפוסים 🤖 | 25 | שיעור 3
+@lesson 3
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על generics ו־<code>keyof</code> (פרק 11), ‏<code>class</code> עם שדות פרטיים (פרק 12), ‏<code>Map</code> ו־<code>Set</code> (פרק 7) ו־closures (פרק 5)</strong>. pub/sub (שיעור 3) מעביר אירועים בין שרתים, ובתוך שרת אחד מעבירים אותם עם emitter. ‏<code>EventEmitter</code> של Node מקבל כל שם וכל payload. אם טעית באות אחת בשם האירוע, אף אחד לא מאזין, ואף אחד לא יודע. כתוב וייצא <code>class TypedEmitter&lt;Events extends Record&lt;string, unknown&gt;&gt;</code>:</p>
 <ul><li><code>on(event, listener)</code> — רושם, ומחזיר פונקציה שמבטלת את הרישום. אותה פונקציה פעמיים לאותו אירוע — נרשמת פעם אחת.</li><li><code>off(event, listener)</code>. ‏<code>once(event, listener)</code> — נקרא פעם אחת ואז מתבטל. גם הוא מחזיר פונקציית ביטול.</li><li><code>emit(event, payload): number</code> — קורא לכל המאזינים לפי סדר הרישום, ומחזיר כמה נקראו. מאזין שמבטל את עצמו באמצע (<code>once</code>) לא גורם לדלג על אחרים.</li><li><code>listenerCount(event): number</code>.</li><li>טיפוסים: ‏<code>new TypedEmitter&lt;{ "order.paid": { orderId: number } }&gt;()</code>. ‏<code>emit("order.cancelled", ...)</code>, או payload שלא מתאים, הם שגיאת קומפילציה, ובמאזין <code>e.orderId</code> הוא <code>number</code>. הבודק בודק את זה.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏generics ו־<code>keyof</code> מפרק 11 ומחלקה עם שדות פרטיים מפרק 12 — והשיעור: אירועים בתוך שרת אחד, לפני שהם יוצאים ל־pub/sub.</p>
 <p>📄 כותבים בקובץ <code>26-redis/starter/P26-E33.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 ```term
 % node 26-redis/starter/P26-E33.ts
@@ -1288,3 +1294,2830 @@ console.log(bus.emit("order.paid", { orderId: 18, totalCents: 100 }), bus.listen
 <p>‏<code>on</code> שמחזיר פונקציית ביטול נוח במיוחד בקוד שנרשם לזמן מוגבל, כמו חיבור SSE (שיעור 6): נרשמים כשהלקוח מתחבר, וקוראים ל־<code>stop()</code> ב־<code>req.on("close")</code>. בלי זה, כל חיבור שנסגר משאיר מאזין, והזיכרון גדל.</p>
 @mistakes
 <ul><li>מערך במקום <code>Set</code> — אותו מאזין נרשם פעמיים ונקרא פעמיים.</li><li>לעבור על ה־<code>Set</code> עצמו כש־<code>once</code> מוחק באמצע — מאזין שנרשם אחריו עלול לא להיקרא.</li><li><code>emit(event: string, payload: unknown)</code> — עובד, אבל בלי שום בדיקה של TypeScript, כמו <code>EventEmitter</code>.</li><li>ב־<code>once</code>, לקרוא ל־<code>listener</code> לפני <code>off</code> — אם המאזין עצמו קורא ל־<code>emit</code> לאותו אירוע, הוא נקרא שוב.</li></ul>
+
+@@ P26-E34 | 2 | ‏SET מוחק את התוקף? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>נחש מה יודפס בכל שורה, ואז הרץ:</p>
+```ts
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e34:" });
+await r.set("code", "4821", "EX", 300);
+console.log(await r.ttl("code"));
+await r.set("code", "9999");
+console.log(await r.ttl("code"));
+await r.set("hits", "0", "EX", 300);
+await r.incr("hits");
+console.log((await r.ttl("hits")) > 0, await r.ttl("nothing"), await r.expire("nothing", 60));
+await r.del("code", "hits");
+await r.quit();
+```
+<p>ומה המשמעות לקוד שמעדכן קוד אימות (OTP) ששלחת ב־SMS: "המשתמש ביקש קוד חדש — נכתוב את הקוד החדש באותו מפתח"?</p>
+@hint1
+<p>‏<code>SET</code> בלי <code>EX</code> כותב מפתח "חדש" — עם כל מה שהיה לו קודם?</p>
+@hint2
+<p>‏<code>INCR</code> משנה את הערך, לא את המפתח.</p>
+@solution
+```ts run
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e34:" });
+await r.set("code", "4821", "EX", 300);
+console.log(await r.ttl("code"));
+await r.set("code", "9999");
+console.log(await r.ttl("code"));
+await r.set("hits", "0", "EX", 300);
+await r.incr("hits");
+console.log((await r.ttl("hits")) > 0, await r.ttl("nothing"), await r.expire("nothing", 60));
+await r.del("code", "hits");
+await r.quit();
+```
+```out
+300
+-1
+true -2 0
+```
+<p>‏<code>SET</code> מחליף את המפתח כולו — גם את התוקף. אחרי <code>SET code 9999</code> בלי <code>EX</code>, ה־TTL הוא −1: הקוד החדש חי לנצח. ‏<code>INCR</code> רק משנה את הערך, והתוקף נשאר. ‏<code>TTL</code> על מפתח שלא קיים — ‏−2, ו־<code>EXPIRE</code> עליו מחזיר 0 (לא נוצר כלום).</p>
+<p>ב־OTP: כל כתיבה של קוד חדש חייבת לכלול <code>EX</code> מחדש (<code>SET otp:&lt;user&gt; 9999 EX 300</code>). אחרת קוד אימות אחד נשאר תקף לתמיד — חור אבטחה.</p>
+@mistakes
+<ul><li>"ה־TTL שייך למפתח, אז הוא נשאר" — הוא נשאר רק בפקודות שמשנות ערך (<code>INCR</code>, <code>HSET</code>, <code>LPUSH</code>). ‏<code>SET</code> מחליף.</li></ul>
+
+@@ P26-E35 | 2 | ‏MULTI עם פקודה שנכשלה | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>בשיעור נאמר ש־<code>MULTI</code> "לא טרנזקציה כמו ב־SQL". נחש, ואז הרץ:</p>
+```ts
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e35:" });
+await r.del("count", "name");
+await r.set("name", "dana");
+const res = await r.multi().incr("count").incr("name").incr("count").exec();
+console.log(JSON.stringify(res!.map(([err, value]) => (err ? err.message : value))));
+console.log(await r.get("count"), await r.get("name"));
+await r.del("count", "name");
+await r.quit();
+```
+<p>(1) כמה מהפקודות בוצעו? (2) מה היה קורה ב־PostgreSQL עם <code>BEGIN</code>, שלושה <code>UPDATE</code>, שהשני שבהם נכשל, ו־<code>COMMIT</code>? (3) מה חייב לעשות קוד שמשתמש ב־<code>exec()</code>?</p>
+@hint1
+<p>‏<code>INCR</code> על <code>"dana"</code> — מה Redis אומר כשהערך לא מספר?</p>
+@hint2
+<p>‏<code>exec()</code> לא זורק בגלל פקודה אחת שנכשלה — הוא מחזיר <code>[err, value]</code> לכל פקודה.</p>
+@solution
+```ts run
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e35:" });
+await r.del("count", "name");
+await r.set("name", "dana");
+const res = await r.multi().incr("count").incr("name").incr("count").exec();
+console.log(JSON.stringify(res!.map(([err, value]) => (err ? err.message : value))));
+console.log(await r.get("count"), await r.get("name"));
+await r.del("count", "name");
+await r.quit();
+```
+```out
+[1,"ERR value is not an integer or out of range",2]
+2 dana
+```
+<ol><li>שתיים מתוך שלוש: הראשונה והשלישית. השנייה נכשלה בזמן הריצה, והשאר <em>בוצעו בכל זאת</em>.</li><li>ב־PostgreSQL השגיאה מבטלת את הטרנזקציה, ו־<code>COMMIT</code> הופך ל־<code>ROLLBACK</code>: אף שינוי לא נשמר (פרק 18).</li><li>לעבור על התוצאות ולבדוק את <code>err</code> של כל פקודה. ‏<code>MULTI</code> מבטיח רק שאף פקודה של לקוח אחר לא תיכנס באמצע — לא "הכול או כלום".</li></ol>
+@mistakes
+<ul><li>לקרוא רק <code>res[0][1]</code> ולהניח שהכול עבר.</li><li>לחשוב ש־<code>exec()</code> יזרוק — הוא זורק רק כשה־MULTI כולו נדחה (למשל פקודה עם שם לא קיים, שנדחית עוד לפני הריצה).</li></ul>
+
+@@ P26-E36 | 1 | ‏KEYS, ‏keyPrefix ו־Redis ריק | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<ol><li>מפתח צוות כתב endpoint לניהול: "מחק את כל ה־cache של מוצרים" עם <code>redis.keys("shop:cache:products:*")</code> ואז <code>del</code>. בפיתוח זה לקח 2ms. מה יקרה בפרודקשן עם שני מיליון מפתחות, ולמה זה משפיע גם על בקשות שלא קשורות ל־cache?</li><li>שתי אפליקציות (החנות ומערכת הדוחות) על אותו Redis, ושתיהן שומרות <code>user:7</code>. מה יקרה, ואיך <code>keyPrefix</code> פותר?</li><li>Redis עלה מחדש בלי גיבוי לדיסק — הכול ריק. עבור כל אחד: cache של קטלוג, מונה הגבלת קצב, sessions של משתמשים — מה המשתמש ירגיש?</li></ol>
+@hint1
+<p>Redis מריץ פקודה אחת בכל רגע.</p>
+@hint2
+<p>"Redis לא מקור האמת" — מה מכל אלה אפשר לבנות מחדש?</p>
+@solution
+<ol><li>‏<code>KEYS</code> עובר על כל שני המיליון — שניות שלמות שבהן Redis לא עונה לאף אחד. כל בקשה בכל השרתים שמחכה ל־<code>GET</code> (cache, הגבלת קצב, sessions) נתקעת. במקום זה — לא לחפש מפתחות בכלל: גרסה לקבוצה (שיעור 2), ואם חייבים — <code>SCAN</code> בחלקים.</li><li>הן דורסות זו את זו: החנות כותבת hash, הדוחות כותבים JSON, ו־<code>HGETALL</code> נכשל עם <code>WRONGTYPE</code>. עם <code>keyPrefix: "shop:"</code> ו־<code>"reports:"</code> המפתחות בפועל שונים — והקוד של כל אחת לא משתנה.</li><li>קטלוג: הבקשות הראשונות איטיות יותר (MISS), ואז הכול חוזר — לא מורגש. הגבלת קצב: כולם מקבלים חלון חדש — בוט מקבל עוד כמה ניסיונות. sessions: כל המשתמשים מנותקים ונדרשים להתחבר שוב — מורגש, אבל אף נתון לא אבד. לכן sessions עם JWT או מקור אמת במסד הם החלטה ששוקלים.</li></ol>
+@mistakes
+<ul><li>"נשתמש ב־<code>FLUSHALL</code> לניקוי" — מוחק גם את הנתונים של האפליקציה השנייה, וגם את התור של BullMQ.</li></ul>
+
+@@ P26-E37 | 2 | עגלת קניות ב־hash 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>עגלה היא בדיוק hash: שדה לכל מוצר, ערך = כמות. בקובץ <code>26-redis/starter/P26-E37.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function addToCart(redis: Redis, userId: number, productId: number, qty: number): Promise<number>
+export async function getCart(redis: Redis, userId: number): Promise<Record<string, number>>
+export async function clearCart(redis: Redis, userId: number): Promise<boolean>
+```
+<ul><li>המפתח: <code>cart:&lt;userId&gt;</code>. ‏<code>addToCart</code> מוסיף <code>qty</code> (גם שלילי — הורדה) ומחזיר את הכמות החדשה. הגיעה ל־0 או פחות ← השדה נמחק, ומוחזר 0.</li><li>כל הוספה מחדשת תוקף של 7 ימים לכל העגלה.</li><li><code>getCart</code> ← ‏<code>{ "3": 2, "8": 1 }</code> — כמויות כמספרים. עגלה ריקה ← <code>{}</code>.</li><li><code>clearCart</code> ← <code>true</code> אם הייתה עגלה.</li></ul>
+```term
+% npm run check P26-E37
+```
+@hint1
+<p>‏<code>HINCRBY</code> מחזיר את הערך החדש — לפיו מחליטים אם <code>HDEL</code>.</p>
+@hint2
+<p>‏<code>HGETALL</code> מחזיר מחרוזות. ממירים כל ערך למספר:</p>
+```ts
+Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Number(v)]))
+```
+@solution
+```ts save=solutions/P26-E37.ts
+// P26-E37: עגלת קניות ב־hash
+import type { Redis } from "ioredis";
+
+const WEEK = 7 * 86400;
+const key = (userId: number) => `cart:${userId}`;
+
+export async function addToCart(redis: Redis, userId: number, productId: number, qty: number) {
+  const [[, n]] = (await redis.multi().hincrby(key(userId), String(productId), qty).expire(key(userId), WEEK).exec()) as [Error | null, number][];
+  if (n <= 0) {
+    await redis.hdel(key(userId), String(productId));
+    return 0;
+  }
+  return n;
+}
+
+export async function getCart(redis: Redis, userId: number) {
+  const h = await redis.hgetall(key(userId));
+  return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Number(v)]));
+}
+
+export async function clearCart(redis: Redis, userId: number) {
+  return (await redis.del(key(userId))) === 1;
+}
+```
+<p>‏<code>HINCRBY</code> אטומי — שתי לשוניות שמוסיפות במקביל לא מאבדות אף יחידה. ההחלטה "0 ← למחוק" נעשית אחרי, בפקודה נפרדת; כאן זה בסדר, כי <code>HDEL</code> על שדה שכבר 0 לא מזיק.</p>
+@mistakes
+<ul><li><code>HGET</code>, חישוב ב־JS ו־<code>HSET</code> — אותו מרוץ של "קרא, שנה, כתוב" משיעור 3.</li><li>להשאיר שדה עם <code>0</code> או <code>-1</code> — הדף יראה "מוצר בכמות 0" בעגלה.</li></ul>
+
+@@ P26-E38 | 2 | סקר: הצבעה אחת למשתמש 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E38.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function vote(redis: Redis, pollId: string, userId: number, option: string): Promise<boolean>
+export async function results(redis: Redis, pollId: string): Promise<{ option: string; votes: number }[]>
+```
+<ul><li>מי כבר הצביע — set ב־<code>poll:&lt;pollId&gt;:voters</code>. הספירה — hash ב־<code>poll:&lt;pollId&gt;:results</code>.</li><li><code>vote</code> ← <code>true</code> אם ההצבעה נספרה, <code>false</code> אם המשתמש כבר הצביע (גם לאפשרות אחרת). גם 20 קריאות במקביל של אותו משתמש, משני שרתים — נספרת אחת.</li><li><code>results</code> — מהכי הרבה קולות לפחות; בשוויון — לפי שם האפשרות (א״ב). אין הצבעות ← <code>[]</code>.</li></ul>
+```term
+% npm run check P26-E38
+```
+@hint1
+<p>‏<code>SADD</code> מחזיר 1 אם האיבר חדש, ו־0 אם כבר היה. זו פקודה אחת ואטומית — אין צורך ב־<code>SISMEMBER</code> לפני.</p>
+@hint2
+<p>מיון לפי שני קריטריונים:</p>
+```ts
+(a, b) => b.votes - a.votes || a.option.localeCompare(b.option)
+```
+@solution
+```ts save=solutions/P26-E38.ts
+// P26-E38: סקר — הצבעה אחת למשתמש
+import type { Redis } from "ioredis";
+
+export async function vote(redis: Redis, pollId: string, userId: number, option: string) {
+  const added = await redis.sadd(`poll:${pollId}:voters`, String(userId));
+  if (added === 0) return false;
+  await redis.hincrby(`poll:${pollId}:results`, option, 1);
+  return true;
+}
+
+export async function results(redis: Redis, pollId: string) {
+  const h = await redis.hgetall(`poll:${pollId}:results`);
+  return Object.entries(h)
+    .map(([option, v]) => ({ option, votes: Number(v) }))
+    .sort((a, b) => b.votes - a.votes || a.option.localeCompare(b.option));
+}
+```
+<p>‏<code>SADD</code> הוא "בדוק והוסף" בפקודה אחת. אם היינו כותבים <code>SISMEMBER</code> ואז <code>SADD</code>, שתי בקשות במקביל היו רואות "עוד לא הצביע", ושתיהן נספרות.</p>
+@mistakes
+<ul><li><code>if (await redis.sismember(...)) return false</code> ואז <code>sadd</code> — המרוץ שהבודק מנסה (20 במקביל).</li><li>למיין רק לפי קולות — סדר של שוויון משתנה בין הרצות.</li></ul>
+
+@@ P26-E39 | 2 | ‏Map בזיכרון מול Redis | 10 | פרק 24, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>בפרק 24 שמרת מונים של הגבלת קצב ב־<code>Map</code> בזיכרון התהליך. (1) השרת רץ בשלושה עותקים מאחורי load balancer, והמגבלה 100 בדקה. כמה בקשות בדקה לקוח יכול לשלוח בפועל? (2) מה קורה למונים ב־deploy (התהליך מתחלף)? (3) ‏<code>Map</code> מהיר יותר מ־Redis (בלי רשת). תן שתי דוגמאות שבהן <code>Map</code> בתהליך הוא עדיין הבחירה הנכונה.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>Map</code> והגבלת הקצב מפרק 24 — והשיעור: Redis כזיכרון שכל השרתים חולקים.</p>
+@hint1
+<p>כל עותק סופר לבד.</p>
+@hint2
+<p>מה לא משנה אם כל שרת יודע משהו קצת אחר?</p>
+@solution
+<ol><li>עד 300: כל עותק סופר רק את מה שהגיע אליו, וה־load balancer מפזר.</li><li>הם נמחקים — כל deploy פותח לכולם חלון חדש. ב־Redis הם שורדים deploy של האפליקציה.</li><li>(א) cache של נתונים שכמעט לא משתנים (רשימת מדינות, הגדרות) — כל שרת מחזיק עותק, ולא אכפת אם אחד מתעדכן שנייה אחרי השני. (ב) single-flight (שיעור 2) — ‏Promise אי אפשר לשמור ב־Redis. וגם: מונים שנועדו למדדים של תהליך אחד (כמה בקשות טיפל <em>השרת הזה</em>).</li></ol>
+@mistakes
+<ul><li>"נעשה sticky sessions ונשאר עם Map" — עדיין נמחק ב־deploy, ולקוח שעובר שרת מתחיל מאפס.</li></ul>
+
+@@ P26-E40 | 2 | מה חוזר מ־JSON | 10 | פרק 7, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>ב־Redis כל ערך הוא מחרוזת, ולכן אובייקט נשמר כ־JSON. נחש מה ייצא, ואז הרץ:</p>
+```ts
+const order = { id: 7, at: new Date("2026-11-08T07:58:46Z"), tags: new Set(["gift"]), note: undefined, total: 59.8, items: new Map([["latte", 2]]) };
+const back = JSON.parse(JSON.stringify(order));
+console.log(back);
+console.log(typeof back.at, "note" in back, back.at.getFullYear?.());
+```
+<p>אילו מהשדות "נשברו" בדרך ל־cache וחזרה? ומה יקרה לקוד שעושה <code>order.at.getTime()</code> על תוצאה שהגיעה מ־HIT, כשב־MISS זה עבד?</p>
+@hint1
+<p>ל־JSON יש רק: מחרוזת, מספר, בוליאני, null, מערך, אובייקט.</p>
+@hint2
+<p>‏<code>Date</code> הופך למחרוזת ISO (עם <code>toJSON</code>); ‏<code>Set</code> ו־<code>Map</code> — לאובייקט ריק.</p>
+@solution
+```ts run
+const order = { id: 7, at: new Date("2026-11-08T07:58:46Z"), tags: new Set(["gift"]), note: undefined, total: 59.8, items: new Map([["latte", 2]]) };
+const back = JSON.parse(JSON.stringify(order));
+console.log(back);
+console.log(typeof back.at, "note" in back, back.at.getFullYear?.());
+```
+```out
+{
+  id: 7,
+  at: '2026-11-08T07:58:46.000Z',
+  tags: {},
+  total: 59.8,
+  items: {}
+}
+string false undefined
+```
+<p>‏<code>at</code> חזר כמחרוזת, ‏<code>tags</code> ו־<code>items</code> חזרו כ־<code>{}</code> (המידע אבד!), ו־<code>note</code> נעלם. הבאג הקלאסי: ב־MISS הפונקציה מחזירה את מה שהמסד נתן (<code>Date</code>), וב־HIT — את מה ש־<code>JSON.parse</code> נתן (מחרוזת). ‏<code>order.at.getTime()</code> עובד בפעם הראשונה ונופל בשנייה — באג שמופיע רק "לפעמים". הפתרון: לשמור רק טיפוסי JSON (להמיר לפני השמירה), או להחזיר בשני המקרים את אותו דבר (E58).</p>
+@mistakes
+<ul><li>לבדוק רק את ה־MISS בפיתוח — ה־cache ריק, והבאג מופיע רק בפרודקשן.</li></ul>
+
+@@ P26-E41 | 2 | הכי נמכרים: SQL או sorted set? | 10 | פרק 16, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>"10 המוצרים הנמכרים ביותר החודש" בדף הבית. אפשרות א׳: שאילתת <code>GROUP BY product_id ORDER BY SUM(qty) DESC LIMIT 10</code> (פרק 16) בכל טעינה. אפשרות ב׳: ‏<code>ZINCRBY</code> בכל הזמנה, ו־<code>ZREVRANGE 0 9</code> בכל טעינה.</p>
+<ol><li>מה מקור האמת בכל אחת?</li><li>הזמנה בוטלה. מה צריך לעשות בכל אחת?</li><li>Redis התאפס. איך משחזרים את אפשרות ב׳?</li><li>באיזה מצב היית מתחיל באפשרות א׳ (ולמה זה לגיטימי)?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>GROUP BY</code> ו־<code>SUM</code> מפרק 16 — והשיעור: sorted set כדירוג מוכן.</p>
+@hint1
+<p>ב־ב׳ יש שני מקומות שצריכים להסכים.</p>
+@hint2
+<p>אותה שאילתה מא׳ יכולה לבנות את ב׳.</p>
+@solution
+<ol><li>בשתיהן — טבלת <code>order_items</code> ב־PostgreSQL. ב־ב׳ ה־sorted set הוא עותק מחושב.</li><li>א׳: כלום, השאילתה כבר לא סופרת אותה (אם מסננים לפי סטטוס). ב׳: ‏<code>ZINCRBY -qty</code> — ואם שכחת מקום אחד שמבטל, הדירוג סוטה לנצח.</li><li>מריצים את שאילתת א׳ פעם אחת וממלאים את ה־sorted set (‏<code>DEL</code> ו־<code>ZADD</code> — זה E42).</li><li>כשיש מעט הזמנות, או כשהשאילתה מהירה עם אינדקס. אפשר גם א׳ עם cache של 5 דקות — דירוג "הכי נמכרים" לא חייב להיות מדויק לשנייה.</li></ol>
+@mistakes
+<ul><li>לבחור ב׳ "כי Redis מהיר" בלי תוכנית לשחזור ולביטולים.</li></ul>
+
+@@ P26-E42 | 2 | לבנות דירוג מחדש משורות SQL 🤖 | 15 | פרק 16, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>Redis התאפס, וצריך לבנות מחדש את "הכי נמכרים" מתוצאה של שאילתת <code>GROUP BY</code> (כמו ש־<code>pg</code> מחזיר אותה: <code>SUM</code> של <code>bigint</code> מגיע כ<strong>מחרוזת</strong>). בקובץ <code>26-redis/starter/P26-E42.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function rebuildBestsellers(redis: Redis, key: string, rows: { product_id: number; qty: string | number }[]): Promise<number>
+export async function topBestsellers(redis: Redis, key: string, n: number): Promise<{ productId: number; qty: number }[]>
+```
+<ul><li><code>rebuildBestsellers</code> מחליף את כל התוכן הקודם של <code>key</code> (מוצר שכבר לא בשורות — לא נשאר), עם תוקף של יום. ב־<code>MULTI</code> אחד, כך שאף קורא לא רואה דירוג חצי בנוי. מחזיר כמה מוצרים נכנסו. בלי שורות ← המפתח לא קיים, ומוחזר 0.</li><li><code>topBestsellers</code> ← עד <code>n</code>, מהגבוה לנמוך, עם מספרים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> תוצאה של <code>GROUP BY</code> מפרק 16 (והמחרוזות של <code>bigint</code> מ־<code>pg</code>) — והשיעור: ‏<code>ZADD</code> בתוך <code>MULTI</code>.</p>
+```term
+% npm run check P26-E42
+```
+@hint1
+<p>‏<code>const m = redis.multi().del(key)</code>, ואז לכל שורה <code>m.zadd(key, Number(r.qty), String(r.product_id))</code>, ובסוף <code>expire</code> ו־<code>exec</code>.</p>
+@hint2
+<p>‏<code>EXPIRE</code> על מפתח שלא קיים לא יוצר אותו — אז גם בלי שורות אין צורך במקרה מיוחד.</p>
+@solution
+```ts save=solutions/P26-E42.ts
+// P26-E42: לבנות דירוג מחדש משורות SQL
+import type { Redis } from "ioredis";
+
+export async function rebuildBestsellers(redis: Redis, key: string, rows: { product_id: number; qty: string | number }[]) {
+  const m = redis.multi().del(key);
+  for (const r of rows) m.zadd(key, Number(r.qty), String(r.product_id));
+  await m.expire(key, 86400).exec();
+  return rows.length;
+}
+
+export async function topBestsellers(redis: Redis, key: string, n: number) {
+  const flat = await redis.zrevrange(key, 0, n - 1, "WITHSCORES");
+  const out: { productId: number; qty: number }[] = [];
+  for (let i = 0; i < flat.length; i += 2) out.push({ productId: Number(flat[i]), qty: Number(flat[i + 1]) });
+  return out;
+}
+```
+<p>‏<code>DEL</code> בתוך אותו <code>MULTI</code> חשוב: בלעדיו מוצר שהיה בדירוג הקודם ולא נמכר החודש נשאר. ובלי <code>MULTI</code>, קורא שמגיע בין ה־<code>DEL</code> ל־<code>ZADD</code> רואה דף בית בלי "הכי נמכרים".</p>
+@mistakes
+<ul><li><code>ZINCRBY</code> במקום <code>ZADD</code> — בנייה שנייה מכפילה את הכמויות.</li><li>להשאיר את <code>qty</code> כמחרוזת ב־<code>topBestsellers</code> — ‏<code>"12" &gt; "9"</code> הוא <code>false</code>.</li></ul>
+
+@@ P26-E43 | 2 | ‏Express: מונה צפיות ודירוג 🤖 | 20 | פרק 15, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E43.ts</code> (יש בו רק הערה) כתוב וייצא <code>viewsApp(redis)</code> שמחזירה אפליקציית Express:</p>
+<ul><li><code>POST /products/:id/view</code> ← ‏<code>200 { productId, views }</code>. מגדיל את המונה ב־hash <code>views</code> ואת הדירוג ב־sorted set <code>top</code>, ב־<code>MULTI</code> אחד.</li><li><code>GET /products/top?n=3</code> ← ‏<code>[{ productId, views }]</code> מהגבוה לנמוך. ‏<code>n</code> — ברירת מחדל 5, בין 1 ל־50.</li><li><code>id</code> שאינו שלם חיובי, או <code>n</code> לא תקין ← ‏<code>400 { error }</code>, ושום דבר לא נכתב.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> נתיבים ו־<code>req.params</code>/<code>req.query</code> מפרק 15 — והשיעור: hash ו־sorted set.</p>
+```term
+% npm run check P26-E43
+```
+@hint1
+<p>‏<code>/^[1-9]\d*$/.test(req.params.id)</code>. ושים לב לסדר הנתיבים: <code>/products/top</code> הוא GET, ו־<code>/products/:id/view</code> הוא POST — אין התנגשות.</p>
+@hint2
+<p>‏<code>exec()</code> ← ‏<code>[[null, 3], [null, "3"]]</code> — המונה הוא התוצאה הראשונה.</p>
+@solution
+```ts save=solutions/P26-E43.ts
+// P26-E43: Express — מונה צפיות ודירוג
+import express from "express";
+import type { Redis } from "ioredis";
+
+export function viewsApp(redis: Redis) {
+  const app = express();
+  app.post("/products/:id/view", async (req, res) => {
+    if (!/^[1-9]\d*$/.test(req.params.id)) return res.status(400).json({ error: "id לא תקין" });
+    const id = req.params.id;
+    const r = await redis.multi().hincrby("views", id, 1).zincrby("top", 1, id).exec();
+    res.json({ productId: Number(id), views: Number(r![0][1]) });
+  });
+  app.get("/products/top", async (req, res) => {
+    const raw = req.query.n ?? "5";
+    const n = Number(raw);
+    if (typeof raw !== "string" || !Number.isInteger(n) || n < 1 || n > 50) return res.status(400).json({ error: "n בין 1 ל־50" });
+    const flat = await redis.zrevrange("top", 0, n - 1, "WITHSCORES");
+    const out = [];
+    for (let i = 0; i < flat.length; i += 2) out.push({ productId: Number(flat[i]), views: Number(flat[i + 1]) });
+    res.json(out);
+  });
+  return app;
+}
+```
+<p>Express 5 מעביר שגיאות של handler אסינכרוני ל־error handler לבד — אם Redis לא זמין, הלקוח מקבל 500 ולא בקשה תלויה.</p>
+@mistakes
+<ul><li><code>Number("1.5")</code> או <code>Number("")</code> (‏0) כ־id — לכן regex.</li><li><code>?n=abc</code> ← ‏<code>NaN</code> ← ‏<code>zrevrange(top, 0, NaN)</code> — שגיאה מ־Redis במקום 400.</li></ul>
+
+@@ P26-E44 | 3 | פרופיל: Zod לפני HSET, וטיפוסים בחזרה 🤖 | 20 | פרק 15, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>hash ב־Redis שומר רק מחרוזות. בקובץ <code>26-redis/starter/P26-E44.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function saveProfile(redis: Redis, userId: number, input: unknown): Promise<Profile>
+export async function loadProfile(redis: Redis, userId: number): Promise<Profile | null>
+// type Profile = { name: string; city: string; age: number; newsletter: boolean }
+```
+<ul><li>בדיקה עם zod: <code>name</code> ו־<code>city</code> — מחרוזות לא ריקות אחרי trim; ‏<code>age</code> — שלם בין 13 ל־120; ‏<code>newsletter</code> — בוליאני, ברירת מחדל <code>false</code>. שדה אחר ← שגיאה.</li><li>לא תקין ← <code>Error("VALIDATION_ERROR")</code>, ושום דבר לא נכתב. תקין ← <code>HSET</code> ל־<code>profile:&lt;userId&gt;</code>, כש־<code>newsletter</code> נשמר כ־<code>"1"</code>/<code>"0"</code>. מחזירה את הנתונים אחרי הבדיקה.</li><li><code>loadProfile</code> ← אותו אובייקט בדיוק, עם <code>age</code> כמספר ו־<code>newsletter</code> כבוליאני. אין ← <code>null</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>z.strictObject</code> ו־<code>safeParse</code> מפרק 15 — והשיעור: hash שבו הכול מחרוזות.</p>
+```term
+% npm run check P26-E44
+```
+@hint1
+<p>‏<code>HGETALL</code> על מפתח שלא קיים ← <code>{}</code>. בודקים <code>Object.keys(h).length === 0</code>.</p>
+@hint2
+<p>‏<code>Boolean("0")</code> הוא <code>true</code>! משווים: <code>h.newsletter === "1"</code>.</p>
+@solution
+```ts save=solutions/P26-E44.ts
+// P26-E44: פרופיל — Zod לפני HSET, וטיפוסים בחזרה
+import type { Redis } from "ioredis";
+import { z } from "zod";
+
+const schema = z.strictObject({
+  name: z.string().trim().min(1),
+  city: z.string().trim().min(1),
+  age: z.number().int().min(13).max(120),
+  newsletter: z.boolean().default(false),
+});
+type Profile = z.infer<typeof schema>;
+
+export async function saveProfile(redis: Redis, userId: number, input: unknown): Promise<Profile> {
+  const r = schema.safeParse(input);
+  if (!r.success) throw new Error("VALIDATION_ERROR");
+  const p = r.data;
+  await redis.hset(`profile:${userId}`, { name: p.name, city: p.city, age: String(p.age), newsletter: p.newsletter ? "1" : "0" });
+  return p;
+}
+
+export async function loadProfile(redis: Redis, userId: number): Promise<Profile | null> {
+  const h = await redis.hgetall(`profile:${userId}`);
+  if (Object.keys(h).length === 0) return null;
+  return { name: h.name, city: h.city, age: Number(h.age), newsletter: h.newsletter === "1" };
+}
+```
+<p>הגבול בין "עולם עם טיפוסים" (הקוד) ל"עולם של מחרוזות" (Redis) עובר בשתי הפונקציות האלה בלבד. כל שאר הקוד מקבל <code>age: number</code> אמיתי.</p>
+@mistakes
+<ul><li><code>hset(key, p)</code> ישירות — ioredis ממיר <code>false</code> ל־<code>"false"</code>, ובחזרה <code>Boolean("false")</code> הוא <code>true</code>.</li><li>לשמור את <code>input</code> במקום <code>r.data</code> — בלי trim ובלי ברירת המחדל.</li></ul>
+
+@@ P26-E45 | 1 | אותו מפתח או לא? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>הקוד בונה מפתח cache כך: <code>`products:${JSON.stringify(req.query)}`</code>. לכל זוג בקשות — האם הן מקבלות אותו מפתח? והאם <em>צריכות</em> לקבל אותו?</p>
+<ol><li><code>?q=latte&amp;page=2</code> ו־<code>?page=2&amp;q=latte</code></li><li><code>?q=latte</code> ו־<code>?q=latte&amp;page=1</code> (ברירת המחדל של page היא 1)</li><li><code>?q=latte</code> ו־<code>?q=Latte</code> (החיפוש לא תלוי באותיות גדולות)</li><li><code>GET /orders</code> של דנה ו־<code>GET /orders</code> של יוסי</li><li><code>?q=latte&amp;utm_source=facebook</code> ו־<code>?q=latte</code></li></ol>
+<p>ומה הפתרון הכללי שמכסה את כולם?</p>
+@hint1
+<p>‏<code>req.query</code> שומר את הסדר שבו הפרמטרים הופיעו בכתובת.</p>
+@hint2
+<p>מה בפרויקט 3 בונה את המפתח — ה־query הגולמי, או ה־DTO אחרי ולידציה?</p>
+@solution
+<ol><li>מפתחות שונים, וצריכים להיות אותו מפתח — הסדר שונה. שני עותקים של אותה תשובה (בזבוז, ושני מקומות להתיישן).</li><li>שונים, צריכים להיות אותו — ברירת המחדל לא מופיעה בראשונה.</li><li>שונים, צריכים להיות אותו — אם החיפוש לא תלוי רישיות, נרמלים לפני (<code>toLowerCase</code>).</li><li><strong>אותו מפתח, ואסור!</strong> יוסי רואה את ההזמנות של דנה. מידע אישי — המשתמש במפתח, או לא ב־cache בכלל.</li><li>שונים, צריכים להיות אותו — פרמטר שלא משפיע על התשובה מפצל את ה־cache לאלפי עותקים.</li></ol>
+<p>הפתרון: לבנות את המפתח מהקלט <em>אחרי</em> ולידציה (zod/DTO): רק השדות שמשפיעים, עם ברירות מחדל, מנורמלים, בסדר קבוע — זה E50. ולמידע אישי — מזהה המשתמש בתוך המפתח.</p>
+@mistakes
+<ul><li>להשתמש ב־<code>req.originalUrl</code> כמפתח — כל אחת מחמש הבעיות.</li></ul>
+
+@@ P26-E46 | 1 | כמה זמן מותר להיות ישן? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>לכל אחד — האם לשים ב־cache, ואם כן, TTL בערך (שניות / דקות / שעות) ולמה:</p>
+<ol><li>רשימת הקטגוריות בתפריט (משתנה פעם בחודש)</li><li>שער הדולר שמוצג ליד המחיר (ספק חיצוני, מתעדכן כל דקה, ועולה כסף לכל קריאה)</li><li>המלאי שמוצג בדף מוצר ("נשארו 3")</li><li>המלאי שנבדק בזמן ביצוע הזמנה</li><li>ההרשאות של משתמש (<code>role</code>) שנבדקות בכל בקשה</li><li>דף "אודות"</li></ol>
+@hint1
+<p>שאלה אחת לכל שורה: מה הנזק אם התשובה ישנה ב־X זמן?</p>
+@hint2
+<p>"cache לתצוגה — כן; ל'מותר למכור?' — אף פעם".</p>
+@solution
+<ol><li>כן, שעות (עם ביטול כשמנהל משנה — וה־TTL כרשת ביטחון).</li><li>כן, 60 שניות בערך — חוסך כסף וזמן, ודקה של שער ישן לתצוגה זה בסדר.</li><li>כן, קצר (30–60 שניות) — "נשארו 3" כשנשארו 2 זה לא נזק; ההזמנה עצמה בודקת במסד.</li><li><strong>לא.</strong> זו החלטה — נבדקת במסד, בתוך הטרנזקציה (פרויקט 3, שלב 2).</li><li>בזהירות: TTL קצר מאוד (שניות), או בלי cache. מנהל שהוריד הרשאות מעובד שפוטר מצפה שזה יקרה מיד. ב־JWT (פרק 21) זה בדיוק אותה בעיה — ה־role "שמור" בטוקן עד שהוא פג.</li><li>כן, שעות — או בכלל קובץ סטטי עם <code>Cache-Control</code> (פרק 14), בלי Redis.</li></ol>
+@mistakes
+<ul><li>TTL אחד לכל המערכת — כל נתון עם "כמה ישן מותר" משלו.</li></ul>
+
+@@ P26-E47 | 2 | ‏0, ‏"" ו־[] — פגיעה או החטאה? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>מה ש־<code>GET</code> החזיר מ־Redis עובר <code>JSON.parse</code>. נחש מה יודפס, ואז הרץ:</p>
+```ts
+const fromRedis = ["0", '""', "[]", "false", "null", null]; // null — אין מפתח
+for (const hit of fromRedis) {
+  const value = hit === null ? undefined : JSON.parse(hit);
+  console.log(String(hit).padEnd(5), value ? "HIT " : "MISS", value !== undefined ? "HIT " : "MISS");
+}
+```
+<p>(1) אילו מהן <code>if (value)</code> מסווג בטעות כהחטאה? (2) מה יקרה בפועל לבקשה "כמה פריטים בעגלה?" כשהתשובה 0? (3) ומה המשמעות של המחרוזת <code>"null"</code> שנשמרה ב־Redis?</p>
+@hint1
+<p>‏<code>0</code>, ‏<code>""</code>, ‏<code>false</code> ו־<code>null</code> הם falsy. ‏<code>[]</code> לא.</p>
+@hint2
+<p>החטאה = ‏<code>load()</code> שוב.</p>
+@solution
+```ts run
+const fromRedis = ["0", '""', "[]", "false", "null", null]; // null — אין מפתח
+for (const hit of fromRedis) {
+  const value = hit === null ? undefined : JSON.parse(hit);
+  console.log(String(hit).padEnd(5), value ? "HIT " : "MISS", value !== undefined ? "HIT " : "MISS");
+}
+```
+```out
+0     MISS HIT
+""    MISS HIT
+[]    HIT  HIT
+false MISS HIT
+null  MISS HIT
+null  MISS MISS
+```
+<ol><li><code>0</code>, ‏<code>""</code>, ‏<code>false</code> ו־<code>null</code> — ארבע תשובות אמיתיות שנחשבות "אין".</li><li>כל בקשה הולכת למסד — ה־cache לא עובד בדיוק לערכים האלה, בלי שום שגיאה. רואים את זה רק במדדים (hit ratio, ‏E32).</li><li>מישהו שמר <code>JSON.stringify(null)</code>: "בדקנו, ואין". זו בחירה לגיטימית (negative caching, ‏E52) — אבל רק אם היא מכוונת, עם TTL קצר.</li></ol>
+@mistakes
+<ul><li><code>if (await redis.get(key))</code> — על המחרוזת זה כמעט תמיד נכון (רק <code>""</code> נופל); הבעיה מתחילה כשבודקים את הערך אחרי <code>parse</code>.</li></ul>
+
+@@ P26-E48 | 2 | מחיר ישן תחת גרסה חדשה | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>הסבר בציר זמן איך זה קורה, עם cache בגרסאות (<code>v:products</code>):</p>
+<ol><li>t=0: בקשה A — ‏MISS, מתחילה לטעון מהמסד (שאילתה של 80ms).</li><li>t=10: מנהל משנה מחיר: <code>UPDATE</code>, ואז <code>INCR v:products</code> (‏3 ← 4).</li><li>t=80: ‏A מסיימת וכותבת ל־cache.</li></ol>
+<p>(1) איזה מחיר יש ב־cache, ובאיזו גרסה, אם A קראה את הגרסה <em>לפני</em> הטעינה? ואם היא קוראת את הגרסה מחדש רגע לפני הכתיבה? (2) למה ה־TTL הוא מה שבסוף מתקן את המקרה הגרוע? (3) מה מזה נוגע להזמנות?</p>
+@hint1
+<p>ה־SELECT של A רץ לפני ה־UPDATE.</p>
+@hint2
+<p>גרסה 3 כבר לא נקראת על ידי אף אחד.</p>
+@solution
+<ol><li>A קראה את המחיר הישן (השאילתה התחילה לפני ה־UPDATE). אם היא כותבת למפתח עם הגרסה שקראה בהתחלה (3) — אין נזק: אף אחד לא קורא יותר את 3. אם היא קוראת מחדש את הגרסה לפני הכתיבה (4) — המחיר הישן נשמר תחת הגרסה <em>החדשה</em>, וכולם רואים אותו עד שה־TTL פג.</li><li>הביטול לא יכול לתפוס כתיבה שמגיעה אחריו. ה־TTL מבטיח שגם במקרה הזה המחיר הישן חי לכל היותר TTL שניות.</li><li>כלום — וזה בכוונה. ההזמנה קוראת מחיר ומלאי מהמסד בתוך הטרנזקציה, אף פעם לא מה־cache.</li></ol>
+@mistakes
+<ul><li>"נעלה TTL לשעה, כי יש ביטול" — ה־TTL הוא החסם העליון לכל באג ביטול. שעה = שעה של מחיר שגוי.</li></ul>
+
+@@ P26-E49 | 1 | מתי cache לא שווה את זה | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>לכל מקרה — להוסיף cache? ואם לא, מה כן?</p>
+<ol><li><code>GET /products/:id</code> לוקח 2ms, ונקרא 5 פעמים בדקה.</li><li><code>GET /reports/sales?from=…&amp;to=…</code> לוקח 4 שניות, ונקרא פעם ביום, בכל פעם עם טווח אחר.</li><li><code>GET /products?q=…</code> לוקח 80ms בגלל <code>ILIKE '%…%'</code>, ונקרא 50 פעמים בשנייה עם כמה עשרות חיפושים נפוצים.</li><li><code>GET /orders/:id</code> לוקח 300ms, ו־<code>EXPLAIN</code> מראה <code>Seq Scan on order_items</code>.</li></ol>
+@hint1
+<p>שלושת התנאים: יקר, חוזר, ומותר להיות ישן.</p>
+@hint2
+<p>"לפני cache — בדקתי שאין אינדקס חסר."</p>
+@solution
+<ol><li>לא. כבר מהיר ונדיר — cache רק מוסיף קוד ובאגים של ביטול.</li><li>לא. יקר, אבל לא חוזר — כל מפתח נקרא פעם אחת. אפשר לחשב מראש בלילה (טבלת סיכום), או להריץ בתור ולשלוח כשמוכן.</li><li>כן — יקר, חוזר, וחיפוש יכול להיות ישן בדקה. (ואפשר גם לבדוק אינדקס trigram, ‏<code>pg_trgm</code>.)</li><li>לא — קודם אינדקס על <code>order_items(order_id)</code> (פרק 18). cache היה מסתיר את הבעיה רק לבקשות חוזרות, וכל הזמנה חדשה עדיין איטית.</li></ol>
+@mistakes
+<ul><li>להוסיף cache לפני שמדדו — ה־cache הופך למקום שבו באגים מתחבאים ("למה רואים מחיר ישן?").</li></ul>
+
+@@ P26-E50 | 2 | מפתח cache יציב 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E50.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function cacheKey(group: string, params: Record<string, string | number | boolean | string[] | null | undefined>): string
+```
+<ul><li>התוצאה: <code>group</code>, נקודתיים, ו־JSON של הפרמטרים עם <strong>מפתחות ממוינים</strong>.</li><li>ערך <code>undefined</code> או <code>null</code>, ומחרוזת שריקה אחרי trim — לא נכנסים. מחרוזות — אחרי trim.</li><li>מערך — עותק ממוין (לא משנים את המקור). מערך ריק — לא נכנס.</li></ul>
+<p>דוגמה:</p>
+```ts
+cacheKey("products", { q: " V60 ", page: 1, tags: ["b", "a"], sort: undefined })
+// ← products:{"page":1,"q":"V60","tags":["a","b"]}
+```
+```term
+% npm run check P26-E50
+```
+@hint1
+<p>‏<code>Object.entries(params)</code>, סינון, מיפוי, ואז <code>.sort(([a], [b]) =&gt; (a &lt; b ? -1 : 1))</code> ו־<code>Object.fromEntries</code>.</p>
+@hint2
+<p>‏<code>JSON.stringify</code> שומר את סדר ההכנסה של המפתחות — לכן ממיינים <em>לפני</em> <code>fromEntries</code>. עותק ממוין: <code>[...v].sort()</code>.</p>
+@solution
+```ts save=solutions/P26-E50.ts
+// P26-E50: מפתח cache יציב
+type Value = string | number | boolean | string[] | null | undefined;
+
+export function cacheKey(group: string, params: Record<string, Value>): string {
+  const entries: [string, unknown][] = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue;
+    if (typeof v === "string") {
+      if (v.trim() === "") continue;
+      entries.push([k, v.trim()]);
+    } else if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      entries.push([k, [...v].sort()]);
+    } else entries.push([k, v]);
+  }
+  entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `${group}:${JSON.stringify(Object.fromEntries(entries))}`;
+}
+```
+<p>מפתח יציב = בקשות שאמורות לקבל אותה תשובה מקבלות אותו מפתח. כל הבדל מיותר (סדר, רווח, שדה ריק) הוא עוד עותק ב־cache, עוד MISS, ועוד מקום שבו נתון ישן יכול להתחבא.</p>
+@mistakes
+<ul><li><code>v.sort()</code> — ממיין את המערך של הקורא, במקום.</li><li><code>if (!v) continue</code> — מוחק גם <code>0</code> ו־<code>false</code>, שהם ערכים אמיתיים (<code>page: 0</code>, ‏<code>inStock: false</code>).</li></ul>
+
+@@ P26-E51 | 2 | ‏cache-aside עם TTL אקראי 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>כדי שמפתחות שנוצרו יחד לא יפוגו יחד (stampede), מוסיפים "רעש" ל־TTL. בקובץ <code>26-redis/starter/P26-E51.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function getOrSetJitter<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>, random: () => number = Math.random): Promise<T>
+```
+<ul><li>cache-aside רגיל: יש ← מחזירים (בלי <code>load</code>); אין ← <code>load()</code>, שומרים כ־JSON, ומחזירים.</li><li>ה־TTL בפועל: <code>ttl + Math.floor(random() * ttl * 0.2)</code> — בין <code>ttl</code> ל־20% יותר.</li><li><code>load</code> זרק ← השגיאה עולה, ושום דבר לא נשמר.</li></ul>
+```term
+% npm run check P26-E51
+```
+@hint1
+<p>‏<code>random</code> כפרמטר — כדי שהבודק יוכל להעביר <code>() =&gt; 0</code> ולדעת בדיוק מה ה־TTL.</p>
+@hint2
+<p>‏<code>hit !== null</code>, לא <code>if (hit)</code> (‏E47).</p>
+@solution
+```ts save=solutions/P26-E51.ts
+// P26-E51: cache-aside עם TTL אקראי
+import type { Redis } from "ioredis";
+
+export async function getOrSetJitter<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>, random: () => number = Math.random): Promise<T> {
+  const hit = await redis.get(key);
+  if (hit !== null) return JSON.parse(hit) as T;
+  const value = await load();
+  const realTtl = ttl + Math.floor(random() * ttl * 0.2);
+  await redis.set(key, JSON.stringify(value), "EX", realTtl);
+  return value;
+}
+```
+<p>1000 מפתחות שנוצרו אחרי deploy עם TTL של 60 — כולם פגים באותה שנייה. עם 60–72 הם מתפזרים על 12 שניות, והמסד מקבל את העומס בטפטוף.</p>
+@mistakes
+<ul><li><code>Math.random() * ttl</code> בלי <code>floor</code> — ‏<code>EX</code> חייב שלם, ו־Redis זורק.</li><li>רעש שגם מוריד (<code>ttl ± 20%</code>) — בסדר בפני עצמו, אבל אז TTL של 1 יכול לצאת 0.</li></ul>
+
+@@ P26-E52 | 2 | גם "אין" נשמר: negative caching 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בוט מבקש מיליון מוצרים שלא קיימים — כל בקשה היא MISS, וכולן מגיעות למסד (‏E03). בקובץ <code>26-redis/starter/P26-E52.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function findProduct<T>(redis: Redis, id: number, loadFromDb: (id: number) => Promise<T | null>, opts?: { ttl?: number; missTtl?: number }): Promise<T | null>
+```
+<ul><li>המפתח: <code>product:&lt;id&gt;</code>. ‏<code>ttl</code> — ברירת מחדל 300, ‏<code>missTtl</code> — ברירת מחדל 30.</li><li>המסד החזיר מוצר ← שומרים JSON עם <code>ttl</code>. המסד החזיר <code>null</code> ← שומרים את המחרוזת <code>__none__</code> עם <code>missTtl</code>, ומחזירים <code>null</code>.</li><li>מצאנו <code>__none__</code> ב־Redis ← <code>null</code>, בלי ללכת למסד.</li></ul>
+```term
+% npm run check P26-E52
+```
+@hint1
+<p>שלושה מצבים ל־<code>GET</code>: ‏<code>null</code> (אין מפתח), <code>"__none__"</code> (בדקנו ואין), וכל השאר (JSON).</p>
+@hint2
+<p>למה TTL קצר ל"אין"? כי מוצר שנוצר עכשיו צריך להופיע מהר.</p>
+@solution
+```ts save=solutions/P26-E52.ts
+// P26-E52: גם "אין" נשמר — negative caching
+import type { Redis } from "ioredis";
+
+const NONE = "__none__";
+
+export async function findProduct<T>(redis: Redis, id: number, loadFromDb: (id: number) => Promise<T | null>, opts: { ttl?: number; missTtl?: number } = {}): Promise<T | null> {
+  const { ttl = 300, missTtl = 30 } = opts;
+  const key = `product:${id}`;
+  const hit = await redis.get(key);
+  if (hit === NONE) return null;
+  if (hit !== null) return JSON.parse(hit) as T;
+  const value = await loadFromDb(id);
+  if (value === null) {
+    await redis.set(key, NONE, "EX", missTtl);
+    return null;
+  }
+  await redis.set(key, JSON.stringify(value), "EX", ttl);
+  return value;
+}
+```
+<p>מיליון בקשות ל־<code>id=999999</code> הופכות לבקשה אחת למסד כל 30 שניות. ומיליון <em>מזהים שונים</em>? כל אחד הוא MISS ראשון — שם צריך הגבלת קצב (שיעור 3), לא cache.</p>
+@mistakes
+<ul><li>לשמור "אין" עם אותו TTL של 5 דקות — מוצר חדש "לא קיים" 5 דקות אחרי שנוצר.</li><li>לשמור <code>JSON.stringify(null)</code> ואז <code>if (parsed)</code> — "אין" נראה כמו MISS, והמסד מקבל הכול שוב.</li></ul>
+
+@@ P26-E53 | 3 | רענון מוקדם ברקע 🤖 | 25 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>"רענון מוקדם": כשמפתח עומד לפוג, מחזירים את הערך הקיים <em>מיד</em>, וטוענים חדש ברקע. כך אף משתמש לא מחכה ל־MISS. בקובץ <code>26-redis/starter/P26-E53.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function getWithEarlyRefresh<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>, refreshBelow: number): Promise<T>
+```
+<ul><li>אין ערך ← ‏<code>load()</code>, שמירה עם <code>ttl</code>, החזרה (כמו cache-aside רגיל).</li><li>יש ערך, וה־TTL שנשאר <strong>קטן מ־</strong><code>refreshBelow</code> ← מחזירים את הערך הקיים מיד, ומתחילים רענון ברקע: <code>load()</code> ושמירה עם <code>ttl</code> מלא.</li><li>רק רענון אחד בכל רגע, גם עם 20 קריאות במקביל משני שרתים: מנעול <code>&lt;key&gt;:refresh</code> עם <code>SET NX EX 10</code>, שנמחק בסוף הרענון.</li><li>רענון שנכשל — לא מפיל כלום (אין unhandled rejection), והערך הישן נשאר.</li></ul>
+```term
+% npm run check P26-E53
+```
+@hint1
+<p>"ברקע" = מתחילים Promise ולא מחכים לו: <code>void refresh()</code>. בתוך <code>refresh</code> — ‏<code>try/catch/finally</code>.</p>
+@hint2
+<p>‏<code>const pttl = await redis.ttl(key)</code> אחרי ה־GET (או ב־MULTI יחד). ‏<code>await redis.set(lock, "1", "EX", 10, "NX")</code> מחזיר <code>"OK"</code> רק למי שתפס.</p>
+@solution
+```ts save=solutions/P26-E53.ts
+// P26-E53: רענון מוקדם ברקע
+import type { Redis } from "ioredis";
+
+export async function getWithEarlyRefresh<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>, refreshBelow: number): Promise<T> {
+  const res = await redis.multi().get(key).ttl(key).exec();
+  const hit = res![0][1] as string | null;
+  const left = res![1][1] as number;
+  if (hit === null) {
+    const value = await load();
+    await redis.set(key, JSON.stringify(value), "EX", ttl);
+    return value;
+  }
+  if (left >= 0 && left < refreshBelow) void refresh(redis, key, ttl, load);
+  return JSON.parse(hit) as T;
+}
+
+async function refresh<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>) {
+  const lock = `${key}:refresh`;
+  if ((await redis.set(lock, "1", "EX", 10, "NX")) !== "OK") return; // מישהו אחר כבר מרענן
+  try {
+    const value = await load();
+    await redis.set(key, JSON.stringify(value), "EX", ttl);
+  } catch {
+    // הערך הישן נשאר עד שיפוג; הבקשה הבאה תנסה שוב
+  } finally {
+    await redis.del(lock).catch(() => {});
+  }
+}
+```
+<p>‏<code>void</code> אומר "אני יודע שאני לא מחכה ל־Promise הזה". אבל Promise שאף אחד לא מחכה לו ונדחה — מפיל את התהליך ב־Node (unhandled rejection), ולכן ה־<code>catch</code> בתוך <code>refresh</code> הוא לא קישוט.</p>
+@mistakes
+<ul><li><code>await refresh(...)</code> — עכשיו המשתמש כן מחכה, וכל העניין נעלם.</li><li>בלי מנעול — 20 בקשות בשנייה האחרונה = 20 טעינות, בדיוק ה־stampede שניסינו למנוע.</li><li>‏TTL ‏−1 (בלי תוקף) נחשב "קטן מ־refreshBelow" — לבדוק <code>left &gt;= 0</code>.</li></ul>
+
+@@ P26-E54 | 2 | ‏80ms — אינדקס או cache? | 10 | פרק 18, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>‏<code>GET /orders?customerId=7</code> לוקח 80ms. חבר צוות מציע cache של 60 שניות. לפני שמסכימים: (1) איזו פקודה מפרק 18 מריצים קודם, ומה מחפשים בפלט? (2) נניח שחסר אינדקס על <code>orders(customer_id)</code>. מה עדיף על cache, ולמה? (3) תן שתי סיבות שבגללן cache דווקא <em>לא</em> מתאים ל־endpoint הזה בכלל.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>EXPLAIN ANALYZE</code> ואינדקסים מפרק 18 — והשיעור: מתי cache שווה את המחיר.</p>
+@hint1
+<p>‏<code>Seq Scan</code> מול <code>Index Scan</code>.</p>
+@hint2
+<p>של מי ההזמנות? ומה דנה מצפה לראות רגע אחרי שהזמינה?</p>
+@solution
+<ol><li><code>EXPLAIN ANALYZE</code> על השאילתה — מחפשים <code>Seq Scan on orders</code> עם הרבה שורות שסוננו (<code>Rows Removed by Filter</code>).</li><li>אינדקס: מתקן את <em>כל</em> הבקשות, גם הראשונה לכל לקוח, בלי נתונים ישנים ובלי קוד ביטול. cache מסתיר רק בקשות חוזרות.</li><li>(א) זה מידע אישי — המפתח חייב לכלול את המשתמש, וכל טעות בו היא דליפה. (ב) "ההזמנות שלי" חייב להתעדכן מיד אחרי הזמנה — דנה מזמינה ולא רואה את ההזמנה דקה שלמה. וגם: כל לקוח קורא את זה מעט, אז ה־hit ratio יהיה נמוך.</li></ol>
+@mistakes
+<ul><li>להוסיף cache "בינתיים" — הוא נשאר לתמיד, והאינדקס אף פעם לא נוסף.</li></ul>
+
+@@ P26-E55 | 2 | ‏cache ל־GET /orders עם JWT | 10 | פרק 21, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>middleware של cache שומר תשובות לפי <code>req.originalUrl</code>, ומחובר <em>לפני</em> ה־guard של JWT (פרק 21). (1) מה קורה כשדנה (עם טוקן) ואז אורח (בלי טוקן) מבקשים <code>GET /orders</code>? (2) מזיזים את ה־cache אחרי ה־guard, אבל המפתח עדיין ה־URL. מה עכשיו? (3) מה שלושת הכללים לכתוב middleware כזה בלי דליפה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏guards ו־JWT מפרק 21 — והשיעור: מפתח cache חייב לכלול את כל מה שמשפיע על התשובה.</p>
+@hint1
+<p>סדר ה־middleware קובע מי רץ קודם — ומי בכלל לא רץ.</p>
+@hint2
+<p>מה משפיע על התשובה של <code>/orders</code> מלבד ה־URL?</p>
+@solution
+<ol><li>דנה: MISS, ה־guard עובר, נשמרת התשובה שלה. האורח: HIT — ה־cache עונה לפני שה־guard בכלל רץ. אורח בלי טוקן קיבל את ההזמנות של דנה.</li><li>ה־guard עוצר את האורח, אבל יוסי (מחובר) מקבל HIT עם ההזמנות של דנה. אימות עבר, הרשאה — לא.</li><li>(א) ה־cache אחרי אימות. (ב) כל דבר שמשפיע על התשובה — כולל המשתמש — במפתח. (ג) עדיף: לא לשמור בכלל תשובות של משתמש מחובר (בקשה עם <code>Authorization</code> עוברת את ה־cache — כמו ב־E57), ולשמור רק תשובות ציבוריות.</li></ol>
+@mistakes
+<ul><li>"זה רק cache, ה־guard מגן" — ה־cache הוא מקור תשובות. מי שעונה מה־cache עוקף את כל מה שאחריו.</li></ul>
+
+@@ P26-E56 | 2 | מה Prisma מחזיר, ומה JSON שומר | 10 | פרק 19, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>שמים ב־cache תוצאה של Prisma (פרק 19). נחש, ואז הרץ:</p>
+```ts
+const row = { id: 7n, createdAt: new Date("2026-11-08T07:58:46Z"), price: 2990 };
+try {
+  console.log(JSON.stringify(row));
+} catch (e) {
+  console.log((e as Error).constructor.name, (e as Error).message);
+}
+const fixed = JSON.stringify(row, (k, v) => (typeof v === "bigint" ? Number(v) : v));
+console.log(fixed);
+console.log(typeof JSON.parse(fixed).createdAt);
+```
+<p>(1) למה <code>BigInt</code> בכלל מגיע מ־Prisma? (2) מה יקרה ל־endpoint עם cache-aside שמחזיר שורה כזו? (3) מה ההבדל בין הפתרון עם ה־replacer לבין להחליט ש"מה שנכנס ל־cache הוא DTO" (פרק 20)?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> הטיפוסים ש־Prisma מחזיר (פרק 19) ו־DTO (פרק 20) — והשיעור: מה שנשמר ב־cache הוא JSON בלבד.</p>
+@hint1
+<p>עמודת <code>BigInt</code>/<code>bigserial</code> בסכמה.</p>
+@hint2
+<p>‏<code>JSON.stringify</code> לא יודע מה לעשות עם <code>bigint</code>.</p>
+@solution
+```ts run
+const row = { id: 7n, createdAt: new Date("2026-11-08T07:58:46Z"), price: 2990 };
+try {
+  console.log(JSON.stringify(row));
+} catch (e) {
+  console.log((e as Error).constructor.name, (e as Error).message);
+}
+const fixed = JSON.stringify(row, (k, v) => (typeof v === "bigint" ? Number(v) : v));
+console.log(fixed);
+console.log(typeof JSON.parse(fixed).createdAt);
+```
+```out
+TypeError Do not know how to serialize a BigInt
+{"id":7,"createdAt":"2026-11-08T07:58:46.000Z","price":2990}
+string
+```
+<ol><li>עמודה מסוג <code>BigInt</code> בסכמה (או <code>bigserial</code>) — Prisma מחזיר <code>bigint</code> של JavaScript.</li><li>בכל MISS: ‏<code>JSON.stringify</code> זורק <code>TypeError</code> ← ‏500. ה־endpoint שבור לגמרי עם cache, ועובד בלעדיו.</li><li>ה־replacer מטפל בסימפטום אחד, ו־<code>createdAt</code> עדיין חוזר כמחרוזת. DTO ("מה שה־API מחזיר") הוא אובייקט שכבר בנוי מטיפוסי JSON: <code>id: number</code>, ‏<code>createdAt: string</code>. שומרים ב־cache את ה־DTO, וה־HIT וה־MISS מחזירים בדיוק אותו דבר.</li></ol>
+@mistakes
+<ul><li><code>BigInt.prototype.toJSON = ...</code> גלובלי — "מתקן" את כל האפליקציה בשקט, כולל מקומות שבהם <code>Number</code> מאבד דיוק.</li></ul>
+
+@@ P26-E57 | 3 | ‏middleware של cache ל־Express 🤖 | 25 | פרק 15, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E57.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function cacheMiddleware(redis: Redis, ttl: number): express.RequestHandler
+```
+<ul><li>רק <code>GET</code>. בקשה עם header <code>Authorization</code> — לא נוגעים ב־cache בכלל: <code>X-Cache: BYPASS</code>, וממשיכים.</li><li>המפתח: <code>page:</code> ואחריו <code>req.originalUrl</code>.</li><li>HIT ← ‏<code>X-Cache: HIT</code>, ‏<code>Content-Type: application/json</code>, והגוף השמור — בלי להריץ את ה־route.</li><li>MISS ← ‏<code>X-Cache: MISS</code>, וממשיכים. כשה־route קורא ל־<code>res.json(body)</code> עם סטטוס 200 — שומרים את ה־JSON עם <code>ttl</code>. סטטוס אחר — לא שומרים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> middleware ו־<code>next()</code> מפרק 15 — והשיעור: cache-aside, הפעם סביב route שלם.</p>
+```term
+% npm run check P26-E57
+```
+@hint1
+<p>"לתפוס" את מה שה־route שולח: שומרים את <code>res.json</code> המקורי, ומחליפים בפונקציה שקודם שומרת ואז קוראת למקורי:</p>
+```ts
+const original = res.json.bind(res);
+res.json = (body) => { /* שמירה אם 200 */ return original(body); };
+```
+@hint2
+<p>את ה־header צריך לקבוע <em>לפני</em> <code>next()</code> — אחרי שהתשובה נשלחה כבר אי אפשר.</p>
+@solution
+```ts save=solutions/P26-E57.ts
+// P26-E57: middleware של cache ל־Express
+import type express from "express";
+import type { Redis } from "ioredis";
+
+export function cacheMiddleware(redis: Redis, ttl: number): express.RequestHandler {
+  return async (req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (req.headers.authorization) {
+      res.set("X-Cache", "BYPASS");
+      return next();
+    }
+    const key = `page:${req.originalUrl}`;
+    const hit = await redis.get(key);
+    if (hit !== null) {
+      res.set("X-Cache", "HIT").type("application/json").send(hit);
+      return;
+    }
+    res.set("X-Cache", "MISS");
+    const original = res.json.bind(res);
+    res.json = (body: unknown) => {
+      if (res.statusCode === 200) void redis.set(key, JSON.stringify(body), "EX", ttl).catch(() => {});
+      return original(body);
+    };
+    next();
+  };
+}
+```
+<p>‏<code>BYPASS</code> לבקשות עם <code>Authorization</code> הוא ההגנה מ־E55: תשובה של משתמש מחובר לא נשמרת, ובקשה של משתמש מחובר לא מקבלת תשובה של מישהו אחר. ‏<code>.catch</code> על השמירה: אם Redis נפל, הלקוח עדיין מקבל את התשובה.</p>
+@mistakes
+<ul><li>לשמור כל תשובה — גם 404 ו־500 נכנסים, ו"המוצר לא נמצא" נשאר דקה אחרי שנוצר.</li><li><code>res.json(JSON.parse(hit))</code> ב־HIT — עובד, אבל מפענח ומקודד שוב בלי צורך.</li></ul>
+
+@@ P26-E58 | 3 | ‏HIT ו־MISS מחזירים אותו דבר — גם תאריכים 🤖 | 20 | פרק 24, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>הבאג מ־E40: ב־MISS יש <code>Date</code>, ב־HIT — מחרוזת. בקובץ <code>26-redis/starter/P26-E58.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function getOrSetDates<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>): Promise<T>
+```
+<ul><li>cache-aside רגיל, אבל ב־HIT, כל מחרוזת שהיא בדיוק בפורמט של <code>toISOString()</code> (‏<code>2026-11-08T07:58:46.000Z</code>) — בכל עומק, גם בתוך מערכים — חוזרת כ־<code>Date</code>.</li><li>מחרוזות אחרות נשארות מחרוזות — גם <code>"2026-11-08"</code> (תאריך בלי שעה, פרק 24).</li><li>הבודק משווה את מה שחזר ב־MISS לבין מה שחזר ב־HIT עם <code>deepEqual</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>toISOString</code> ורגע ב־UTC מפרק 24, ו־<code>JSON.parse</code> עם reviver — והשיעור: cache שלא משנה טיפוסים.</p>
+```term
+% npm run check P26-E58
+```
+@hint1
+<p>הפרמטר השני של <code>JSON.parse</code> הוא reviver: פונקציה <code>(key, value)</code> שנקראת לכל ערך, מבפנים החוצה, ומה שהיא מחזירה מחליף אותו.</p>
+@hint2
+```ts
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+```
+@solution
+```ts save=solutions/P26-E58.ts
+// P26-E58: HIT ו־MISS מחזירים אותו דבר — גם תאריכים
+import type { Redis } from "ioredis";
+
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const revive = (_key: string, value: unknown) => (typeof value === "string" && ISO.test(value) ? new Date(value) : value);
+
+export async function getOrSetDates<T>(redis: Redis, key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+  const hit = await redis.get(key);
+  if (hit !== null) return JSON.parse(hit, revive) as T;
+  const value = await load();
+  await redis.set(key, JSON.stringify(value), "EX", ttl);
+  return value;
+}
+```
+<p>זה עובד כי <code>JSON.stringify</code> של <code>Date</code> הוא תמיד <code>toISOString()</code> — הפורמט המדויק שה־regex מחפש. המחיר: מחרוזת רגילה שבמקרה נראית בדיוק כמו תאריך ISO תהפוך ל־<code>Date</code>. לכן הדרך החזקה יותר היא עדיין DTO עם טיפוסי JSON בלבד (E56).</p>
+@mistakes
+<ul><li><code>!isNaN(Date.parse(value))</code> במקום regex — ‏<code>"7"</code> ו־<code>"2026-11-08"</code> הופכים ל־Date.</li><li>לטפל רק בשדות ברמה העליונה — reviver עובר על כל העומקים לבד.</li></ul>
+
+@@ P26-E59 | 1 | איזה קוד בטוח עם שלושה שרתים? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>כל קטע רץ בשלושה שרתים במקביל, מול אותו Redis. איזה בטוח, ואיזה מאבד או מכפיל? תקן את השבורים בפקודה אחת (או סקריפט).</p>
+```ts
+// 1
+const n = Number(await redis.get("stock"));
+if (n > 0) await redis.set("stock", n - 1);
+
+// 2
+await redis.hincrby("views", id, 1);
+
+// 3
+if (!(await redis.exists("lock"))) await redis.set("lock", token, "PX", 5000);
+
+// 4
+await redis.multi().incr(key).expire(key, 60, "NX").exec();
+
+// 5
+const list = JSON.parse((await redis.get("cart")) ?? "[]");
+list.push(item);
+await redis.set("cart", JSON.stringify(list));
+```
+@hint1
+<p>חפש את המבנה "קרא ← החלט ב־JS ← כתוב".</p>
+@hint2
+<p>כל פקודה אחת של Redis אטומית. שתי פקודות — לא.</p>
+@solution
+<ol><li>שבור — שני שרתים קוראים 1, שניהם כותבים 0, ונמכרו שתי יחידות. תיקון: סקריפט Lua כמו <code>TAKE</code> מהשיעור (או <code>DECR</code> ובדיקה שלא ירד מתחת ל־0 — ואז <code>INCR</code> חזרה).</li><li>בטוח — פקודה אחת.</li><li>שבור — שניהם רואים "אין", שניהם כותבים, ושניהם חושבים שהמנעול שלהם. תיקון: <code>SET lock token PX 5000 NX</code> — הבדיקה והכתיבה בפקודה אחת.</li><li>בטוח — ‏<code>MULTI</code> מריץ את שתיהן ברצף, ושתיהן לא תלויות בערך שנקרא.</li><li>שבור — פריט של שרת אחד נדרס. תיקון: list (<code>RPUSH cart item</code>) או hash (<code>HINCRBY</code>, ‏E37) — המבנה עצמו מאפשר עדכון בפקודה אחת.</li></ol>
+@mistakes
+<ul><li>"נעטוף את 1 ב־<code>MULTI</code>" — אי אפשר: ההחלטה (<code>n &gt; 0</code>) צריכה את הערך שנקרא, ו־<code>MULTI</code> לא מחזיר ערכים עד הסוף.</li></ul>
+
+@@ P26-E60 | 2 | כמה עוברות בגבול החלון? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>מגבלה: 10 בקשות בדקה ללקוח. לקוח שולח 10 בקשות ב־12:00:59.5, ועוד 10 ב־12:01:00.2.</p>
+<ol><li>כמה עוברות עם fixed window (חלון לכל דקה עגולה, כמו E09)?</li><li>כמה עוברות עם חלון נע של 60 שניות (sorted set, כמו E15)?</li><li>באותו fixed window, אבל עם <code>EXPIRE key 60</code> <em>בלי</em> <code>NX</code> — לקוח ששולח בקשה כל 5 שניות, ונחסם אחרי 10. מתי הוא משתחרר?</li><li>כמה פקודות Redis עולה כל בקשה בכל אחת מהשיטות, ובכמה זיכרון לכל לקוח?</li></ol>
+@hint1
+<p>ב־12:01:00 מתחיל מפתח חדש.</p>
+@hint2
+<p>בלי <code>NX</code> כל <code>INCR</code> מאריך את חיי המפתח.</p>
+@solution
+<ol><li>20 — עשר בחלון של 12:00, ועשר בחלון החדש של 12:01, בתוך פחות משנייה.</li><li>10 — ב־12:01:00.2 החלון הנע עדיין מכיל את עשר הבקשות מלפני 0.7 שניות.</li><li>אף פעם, כל עוד הוא ממשיך: כל בקשה (גם נדחית) מאריכה את המפתח ל־60 שניות נוספות, והמונה לא מתאפס (E21).</li><li>fixed: ‏<code>INCR</code> + <code>EXPIRE</code> (ב־MULTI אחד), ומספר אחד בזיכרון. חלון נע: ‏<code>ZREMRANGEBYSCORE</code> + <code>ZCARD</code> + <code>ZADD</code> + <code>EXPIRE</code>, ורשומה לכל בקשה בחלון — עד <code>limit</code> לכל לקוח. בדרך כלל fixed מספיק; חלון נע כשהפרץ בגבול באמת מזיק (התחברות, SMS).</li></ol>
+@mistakes
+<ul><li>"חלון נע תמיד עדיף" — הוא יקר יותר, ומדויק יותר בדיוק במקרה שלעתים קרובות לא משנה.</li></ul>
+
+@@ P26-E61 | 2 | המנעול של A, ה־DEL של B | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>מנעול עם <code>PX 10000</code>. ציר זמן: t=0 — ‏A לוקח. t=10 — המנעול פג. t=11 — ‏B לוקח. t=12 — ‏A מסיים ו"משחרר". t=13 — ‏C מנסה לקחת.</p>
+<ol><li>מה קורה ב־t=12 ו־t=13 כשהשחרור הוא <code>DEL lock</code>?</li><li>ואם השחרור הוא <code>GET</code> (בודק token) ואז <code>DEL</code> — שתי פקודות מ־Node?</li><li>ועם סקריפט <code>RELEASE</code> מהשיעור?</li><li>גם בגרסה 3: מה עדיין שבור בין t=11 ל־t=12, ולמה זה אומר שמנעול Redis לא מתאים ל"אסור שזה יקרה פעמיים"?</li></ol>
+@hint1
+<p>‏<code>DEL</code> לא יודע של מי המנעול.</p>
+@hint2
+<p>בין <code>GET</code> ל־<code>DEL</code> המנעול יכול לפוג ולעבור יד.</p>
+@solution
+<ol><li>t=12: ‏A מוחק את המנעול <em>של B</em>. t=13: ‏C לוקח — B ו־C עובדים במקביל.</li><li>כמעט תמיד בסדר — אבל אם המנעול פג ו־B לקח אותו בדיוק בין ה־<code>GET</code> (שראה את ה־token של A) ל־<code>DEL</code>, אותו באג. נדיר — ולכן הכי קשה למצוא.</li><li>תקין: הסקריפט בודק ומוחק בפקודה אחת. ב־t=12 ה־token לא של A ← מחזיר 0, ו־B ממשיך להחזיק.</li><li>בין 11 ל־12, A ו־B עובדים במקביל — A לא יודע שהמנעול שלו פג (GC, רשת איטית). מנעול עם תוקף מבטיח "כמעט תמיד אחד", לא "תמיד אחד". מה שחייב להיות נכון — המסד אוכף (<code>UNIQUE</code>, ‏<code>WHERE stock &gt;= qty</code>, ‏<code>FOR UPDATE</code>).</li></ol>
+@mistakes
+<ul><li>"נגדיל את ה־TTL לשעה" — שרת שקרס מחזיק את המנעול שעה, והבעיה רק נדירה יותר.</li></ul>
+
+@@ P26-E62 | 2 | מה Lua מחזיר ל־Node | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>נחש מה יודפס, ואז הרץ:</p>
+```ts
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e62:" });
+console.log(await r.eval("return 3.7", 0));
+console.log(await r.eval("return {1, 2, 'three', 4.5}", 0));
+console.log(await r.eval("return redis.call('GET', KEYS[1])", 1, "missing"));
+console.log(await r.eval("return KEYS[1]", 1, "seats"));
+console.log(await r.eval("return tonumber(ARGV[1]) + 1", 0, "41"));
+await r.quit();
+```
+<p>(1) מה קרה ל־3.7 ול־4.5? (2) איך היית מחזיר מ־Lua מספר עשרוני בלי לאבד אותו? (3) למה <code>KEYS[1]</code> חזר עם קידומת, ומה המשמעות לסקריפט שכותב שם מפתח בתוך הקוד שלו?</p>
+@hint1
+<p>Redis ממיר מספר של Lua ל־integer בתשובה.</p>
+@hint2
+<p>‏<code>GET</code> על מפתח שלא קיים מחזיר ל־Lua את <code>false</code>.</p>
+@solution
+```ts run
+import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e62:" });
+console.log(await r.eval("return 3.7", 0));
+console.log(await r.eval("return {1, 2, 'three', 4.5}", 0));
+console.log(await r.eval("return redis.call('GET', KEYS[1])", 1, "missing"));
+console.log(await r.eval("return KEYS[1]", 1, "seats"));
+console.log(await r.eval("return tonumber(ARGV[1]) + 1", 0, "41"));
+await r.quit();
+```
+```out
+3
+[ 1, 2, 'three', 4 ]
+null
+e62:seats
+42
+```
+<ol><li>נחתכו לשלם (3 ו־4) — Redis הופך מספר של Lua ל־integer. ב־token bucket (‏E25) זה מאבד חלקי טוקנים בשקט.</li><li>מחזירים מחרוזת: <code>return tostring(x)</code>, ו־<code>Number(...)</code> ב־Node.</li><li>ioredis הוסיף את ה־<code>keyPrefix</code> לכל מה שהועבר כ־KEYS. מפתח שכתוב בתוך הסקריפט (<code>redis.call('GET', 'seats')</code>) לא מקבל קידומת — הסקריפט ניגש למפתח של מישהו אחר. לכן כל מפתח עובר ב־KEYS.</li></ol>
+@mistakes
+<ul><li>להחזיר <code>nil</code> באמצע טבלה — Lua חותך את המערך בנקודה הזו.</li></ul>
+
+@@ P26-E63 | 2 | ‏pub/sub: מי שמע? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>נחש, ואז הרץ:</p>
+```ts
+import { Redis } from "ioredis";
+const pub = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const sub = pub.duplicate();
+console.log("before:", await pub.publish("e63:news", "first"));
+await sub.subscribe("e63:news");
+const got: string[] = [];
+sub.on("message", (channel, msg) => got.push(`${channel} ${msg}`));
+console.log("after:", await pub.publish("e63:news", "second"));
+await new Promise((r) => setTimeout(r, 50));
+console.log("got:", got);
+try {
+  await sub.get("x");
+} catch (e) {
+  console.log((e as Error).message);
+}
+await sub.quit();
+await pub.quit();
+```
+<p>(1) מה המספר ש־<code>publish</code> מחזיר? (2) מה קרה ל־<code>"first"</code>? (3) למה <code>sub.get</code> נכשל, ומה עושים בקוד אמיתי? (4) מה זה אומר על שימוש ב־pub/sub לשליחת מייל אישור?</p>
+@hint1
+<p>‏<code>PUBLISH</code> מחזיר כמה מנויים קיבלו.</p>
+@hint2
+<p>אין שמירה: מי שלא היה מנוי ברגע ה־publish — פספס.</p>
+@solution
+```ts run
+import { Redis } from "ioredis";
+const pub = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const sub = pub.duplicate();
+console.log("before:", await pub.publish("e63:news", "first"));
+await sub.subscribe("e63:news");
+const got: string[] = [];
+sub.on("message", (channel, msg) => got.push(`${channel} ${msg}`));
+console.log("after:", await pub.publish("e63:news", "second"));
+await new Promise((r) => setTimeout(r, 50));
+console.log("got:", got);
+try {
+  await sub.get("x");
+} catch (e) {
+  console.log((e as Error).message);
+}
+await sub.quit();
+await pub.quit();
+```
+```out
+before: 0
+after: 1
+got: [ 'e63:news second' ]
+Connection in subscriber mode, only subscriber commands may be used
+```
+<ol><li>כמה מנויים קיבלו את ההודעה ברגע הזה: 0 ואז 1.</li><li>נעלם. אף אחד לא היה מנוי, ו־Redis לא שומר.</li><li>חיבור במצב subscribe מקבל רק פקודות של מנויים. מחזיקים שני חיבורים: אחד לפקודות, ואחד (<code>duplicate()</code>) למנויים — כמו ב־E19 וב־E30.</li><li>לא מתאים: worker שהיה למטה ברגע ה־publish — המייל לא יישלח לעולם, ואף אחד לא יידע. למה שחייב לקרות — תור (שיעור 4).</li></ol>
+@mistakes
+<ul><li>להסיק מ־<code>publish</code> שהחזיר 1 ש"ההודעה טופלה" — היא <em>נמסרה</em> למנוי; אם הוא קרס באמצע הטיפול, היא אבדה.</li></ul>
+
+@@ P26-E64 | 1 | ‏MULTI, ‏pipeline או Lua? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>לכל משימה — מה מתאים: פקודה אחת, ‏<code>MULTI</code>, ‏pipeline (כמה פקודות בהלוך־חזור אחד, בלי הבטחה שלא ייכנסו פקודות אחרות באמצע), או Lua?</p>
+<ol><li>לקרוא 50 מפתחות cache שונים לדף אחד.</li><li>להגדיל מונה של היום ולקבוע לו תוקף.</li><li>"קח 2 כרטיסים אם נשארו לפחות 2".</li><li>להעביר 10 נקודות מחשבון A לחשבון B, רק אם ב־A יש מספיק.</li><li>לסמן "המשתמש צפה" (set) ולהגדיל את מונה הצפיות — רק אם זו הצפייה הראשונה שלו.</li></ol>
+@hint1
+<p>האם יש החלטה שתלויה בערך שנקרא?</p>
+@hint2
+<p>אם אין החלטה — האם חשוב שאף אחד לא ייכנס באמצע?</p>
+@solution
+<ol><li>pipeline (או <code>MGET</code>) — קריאות עצמאיות, רק לחסוך הלוך־חזור.</li><li><code>MULTI</code> — שתי כתיבות שצריכות לקרות יחד, בלי החלטה באמצע (E09).</li><li>Lua — "אם… אז" על ערך שנקרא (<code>TAKE</code> מהשיעור).</li><li>Lua. ובמערכת אמיתית — <strong>לא Redis בכלל</strong>: נקודות שוות כסף, מקור האמת במסד, טרנזקציה.</li><li>Lua (E65), או <code>SADD</code> ואז <code>INCR</code> רק אם החזיר 1 — שתי פקודות, אבל ההחלטה כבר נעשתה באטומיות על ידי <code>SADD</code>.</li></ol>
+@mistakes
+<ul><li>להשתמש ב־Lua לכל דבר — סקריפט ארוך עוצר את כל Redis בזמן שהוא רץ.</li></ul>
+
+@@ P26-E65 | 2 | לייק פעם אחת, עם Lua 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E65.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function like(redis: Redis, postId: number, userId: number): Promise<number>
+export async function unlike(redis: Redis, postId: number, userId: number): Promise<number>
+export async function likeCount(redis: Redis, postId: number): Promise<number>
+```
+<ul><li>מי עשה לייק — set ב־<code>likes:&lt;postId&gt;</code>. המונה — string ב־<code>likes:&lt;postId&gt;:count</code>.</li><li><code>like</code> — סקריפט Lua אחד: אם המשתמש נוסף לקבוצה — מגדיל את המונה ומחזיר את הערך החדש. כבר היה ← ‏<code>-1</code>, והמונה לא זז.</li><li><code>unlike</code> — אותו דבר הפוך: הוסר ← מקטין ומחזיר; לא היה ← ‏<code>-1</code>.</li><li><code>likeCount</code> ← מספר; אין ← 0. הבודק שולח לייקים ו־unlike־ים במקביל משני שרתים, ובודק שהמונה תמיד שווה לגודל הקבוצה.</li></ul>
+```term
+% npm run check P26-E65
+```
+@hint1
+<p>‏<code>redis.eval(script, 2, setKey, countKey, userId)</code> — שני מפתחות ב־KEYS, ה־userId ב־<code>ARGV[1]</code>.</p>
+@hint2
+```lua
+if redis.call("SADD", KEYS[1], ARGV[1]) == 1 then return redis.call("INCR", KEYS[2]) end
+return -1
+```
+@solution
+```ts save=solutions/P26-E65.ts
+// P26-E65: לייק פעם אחת, עם Lua
+import type { Redis } from "ioredis";
+
+const LIKE = `if redis.call("SADD", KEYS[1], ARGV[1]) == 1 then return redis.call("INCR", KEYS[2]) end
+return -1`;
+const UNLIKE = `if redis.call("SREM", KEYS[1], ARGV[1]) == 1 then return redis.call("DECR", KEYS[2]) end
+return -1`;
+
+const keys = (postId: number) => [`likes:${postId}`, `likes:${postId}:count`];
+
+export async function like(redis: Redis, postId: number, userId: number) {
+  return Number(await redis.eval(LIKE, 2, ...keys(postId), String(userId)));
+}
+
+export async function unlike(redis: Redis, postId: number, userId: number) {
+  return Number(await redis.eval(UNLIKE, 2, ...keys(postId), String(userId)));
+}
+
+export async function likeCount(redis: Redis, postId: number) {
+  return Number((await redis.get(`likes:${postId}:count`)) ?? 0);
+}
+```
+<p>למה מונה נפרד ולא <code>SCARD</code>? בפוסט עם מיליון לייקים שניהם O(1) — אבל המונה הוא string שאפשר לקרוא ב־<code>MGET</code> לעשרים פוסטים בפקודה אחת. המחיר: שני מבנים שחייבים להסכים — ובדיוק לזה Lua.</p>
+@mistakes
+<ul><li><code>SADD</code> ואז <code>INCR</code> בלי לבדוק את מה ש־<code>SADD</code> החזיר — לייק כפול מגדיל.</li><li>לכתוב את שמות המפתחות בתוך הסקריפט — ה־<code>keyPrefix</code> לא חל עליהם (‏E62).</li></ul>
+
+@@ P26-E66 | 2 | ‏Redis נפל: לחסום הכול או לפתוח הכול? | 10 | פרק 24, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>הגבלת הקצב עברה מ־<code>Map</code> (פרק 24) ל־Redis. עכשיו Redis לא זמין, ו־<code>hit()</code> זורק. שתי אפשרויות: <strong>fail-open</strong> (מעבירים את הבקשה בלי הגבלה) או <strong>fail-closed</strong> (מחזירים 429/503). מה תבחר לכל אחד, ולמה?</p>
+<ol><li>הגבלה כללית של 100 בקשות בדקה על כל ה־API.</li><li>הגבלת ניסיונות התחברות: 5 בדקה למשתמש.</li><li>הגבלה על שליחת SMS עם קוד אימות (כל SMS עולה כסף).</li></ol>
+<p>ואיזו אפשרות שלישית יש, שמשלבת את פרק 24?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> הגבלת הקצב בזיכרון מפרק 24 — והשיעור: המונה המשותף ב־Redis, ומה קורה כשהוא לא שם.</p>
+@hint1
+<p>מה גרוע יותר בכל מקרה: משתמשים אמיתיים חסומים, או תוקף לא מוגבל?</p>
+@hint2
+<p>ה־<code>Map</code> לא נעלם.</p>
+@solution
+<ol><li>fail-open — הגבלה כללית היא הגנה מעומס, והאתר צריך לעבוד גם כש־Redis למטה.</li><li>תלוי, ונוטה ל־fail-closed (או fallback, ראה למטה) — בלי הגבלה, דקות של Redis למטה הן חלון לניחוש סיסמאות.</li><li>fail-closed — כל SMS עולה כסף, ותוקף יכול לשרוף אלפי שקלים בדקות.</li></ol>
+<p>האפשרות השלישית: fallback ל־<code>Map</code> בזיכרון (פרק 24). המגבלה נעשית "פי מספר השרתים", אבל עדיין יש מגבלה. ובכל מקרה — מדד והתראה על "Redis לא זמין", לא רק <code>catch</code> שקט.</p>
+@mistakes
+<ul><li>לא להחליט — ואז ה־<code>await</code> שזרק מחזיר 500 על <em>כל</em> בקשה: fail-closed בלי שהתכוונת.</li></ul>
+
+@@ P26-E67 | 2 | מנעול Redis או המסד? | 10 | פרק 18, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>לכל מקרה — מנעול Redis (<code>SET NX PX</code>), או כלי של PostgreSQL מפרק 18 (<code>UNIQUE</code>, ‏<code>UPDATE … WHERE</code>, ‏<code>SELECT … FOR UPDATE</code>)? נמק במשפט.</p>
+<ol><li>שלא יימכרו יותר כרטיסים מהקיים.</li><li>שהדוח הלילי (5 דקות של חישוב) לא ירוץ בשלושה שרתים.</li><li>שלא יהיו שני משתמשים עם אותו אימייל.</li><li>שרק שרת אחד ירענן את ה־cache של הקטלוג אחרי שפג.</li><li>שתשלום לא יחויב פעמיים על אותה הזמנה.</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> טרנזקציות, <code>UNIQUE</code> ו־<code>FOR UPDATE</code> מפרק 18 — והשיעור: מנעול מבוזר, ומה הוא לא מבטיח.</p>
+@hint1
+<p>מה קורה אם המנעול "דולף" ופעמיים זה כן קורה?</p>
+@hint2
+<p>"לחסוך עבודה כפולה" מול "אסור שזה יקרה פעמיים".</p>
+@solution
+<ol><li>המסד: <code>UPDATE</code> עם התנאי בתוכו (<code>WHERE … AND stock &gt;= $1</code>). מכירת־יתר היא נזק אמיתי.</li><li>Redis — אם ירוץ פעמיים בטעות, בזבזנו חישוב. (ואם הדוח שולח מיילים — גם הם צריכים להיות idempotent.)</li><li>המסד: <code>UNIQUE (email)</code>. רק המסד רואה את כל הכתיבות.</li><li>Redis — בדיוק "לחסוך עבודה כפולה" (E13).</li><li>המסד (מפתח ייחודי על התשלום, או <code>UPDATE … WHERE status = 'pending'</code>) — ועוד Idempotency-Key לספק התשלומים.</li></ol>
+@mistakes
+<ul><li>"נשים מנעול Redis וגם נוותר על ה־UNIQUE" — המנעול הוא אופטימיזציה, ה־UNIQUE הוא הנכונות.</li></ul>
+
+@@ P26-E68 | 2 | מ־allowed: false לתשובת HTTP | 10 | פרק 24, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>‏<code>hit()</code> (‏E09) החזיר <code>{ allowed: false, remaining: 0, resetSeconds: 17 }</code>. (1) איזה סטטוס מחזירים, ואילו headers (פרק 24)? (2) למה <code>Retry-After</code> חשוב ללקוח שהוא סקריפט, ולא לדפדפן? (3) לקוח שמקבל 429 ומנסה שוב מיד, שוב ושוב — מה זה עושה למונה ב־fixed window, ומה בחלון נע שבו גם נדחות נספרות? (4) מה לא כדאי לשים בגוף ההודעה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏429 ו־<code>Retry-After</code> מפרק 24 — והשיעור: המונה המשותף שמחליט.</p>
+@hint1
+<p>‏<code>X-RateLimit-Limit</code>, ‏<code>X-RateLimit-Remaining</code>.</p>
+@hint2
+<p>ב־E15 נדחות <em>לא</em> נספרות — למה?</p>
+@solution
+<ol><li><code>429 Too Many Requests</code>, עם <code>Retry-After: 17</code>, ובדרך כלל גם <code>X-RateLimit-Limit</code> ו־<code>X-RateLimit-Remaining: 0</code>.</li><li>סקריפט טוב קורא אותו ומחכה בדיוק כמה שצריך, במקום לנחש (או להפציץ). דפדפן לא עושה איתו כלום.</li><li>fixed window: המונה עולה, אבל זה לא משנה — הוא מתאפס בסוף החלון. חלון נע שסופר גם נדחות: לקוח שמנסה כל שנייה <em>אף פעם</em> לא יוצא, כי החלון שלו תמיד מלא — לכן ב־E15 נדחות לא נכנסות.</li><li>פרטים פנימיים: המפתח ב־Redis, ה־IP של לקוחות אחרים, "המגבלה של מנהלים היא 1000". מספיק <code>{ error: "יותר מדי בקשות" }</code>.</li></ol>
+@mistakes
+<ul><li>להחזיר 403 — זה "אסור לך", לא "חכה". לקוחות אוטומטיים מפסיקים לנסות.</li></ul>
+
+@@ P26-E69 | 3 | ‏middleware של הגבלת קצב, משותף לשני שרתים 🤖 | 25 | פרק 24, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E69.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function rateLimit(redis: Redis, opts: { limit: number; windowSeconds: number; keyOf?: (req: express.Request) => string; now?: () => number }): express.RequestHandler
+```
+<ul><li>fixed window ב־Redis: מפתח <code>rl:&lt;keyOf(req)&gt;:&lt;window&gt;</code>, כש־<code>window = Math.floor(now() / 1000 / windowSeconds)</code>. ‏<code>INCR</code> ו־<code>EXPIRE … NX</code> ב־<code>MULTI</code> אחד. ברירות מחדל: <code>keyOf = (req) =&gt; req.ip</code>, ‏<code>now = Date.now</code>.</li><li>בכל תשובה: <code>X-RateLimit-Limit</code> ו־<code>X-RateLimit-Remaining</code> (לא פחות מ־0).</li><li>מעל המגבלה ← ‏<code>429 { error }</code> עם <code>Retry-After</code>: שניות שלמות עד סוף החלון (עיגול למעלה). אחרת — <code>next()</code>.</li></ul>
+<p>הבודק מרים <em>שני</em> שרתי Express עם אותו Redis ושולח לסירוגין — המגבלה משותפת.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏middleware, ‏429 ו־<code>Retry-After</code> מפרקים 15 ו־24 — והשיעור: מונה אחד לכל השרתים.</p>
+```term
+% npm run check P26-E69
+```
+@hint1
+<p>סוף החלון במילישניות: <code>(window + 1) * windowSeconds * 1000</code>. ‏<code>Retry-After = Math.ceil((end - now()) / 1000)</code>.</p>
+@hint2
+```ts
+const r = await redis.multi().incr(key).expire(key, windowSeconds, "NX").exec();
+const count = Number(r![0][1]);
+```
+@solution
+```ts save=solutions/P26-E69.ts
+// P26-E69: middleware של הגבלת קצב, משותף לשני שרתים
+import type express from "express";
+import type { Redis } from "ioredis";
+
+type Opts = { limit: number; windowSeconds: number; keyOf?: (req: express.Request) => string; now?: () => number };
+
+export function rateLimit(redis: Redis, { limit, windowSeconds, keyOf = (req) => req.ip ?? "unknown", now = Date.now }: Opts): express.RequestHandler {
+  return async (req, res, next) => {
+    const t = now();
+    const window = Math.floor(t / 1000 / windowSeconds);
+    const key = `rl:${keyOf(req)}:${window}`;
+    const r = await redis.multi().incr(key).expire(key, windowSeconds, "NX").exec();
+    const count = Number(r![0][1]);
+    res.set("X-RateLimit-Limit", String(limit));
+    res.set("X-RateLimit-Remaining", String(Math.max(0, limit - count)));
+    if (count > limit) {
+      const end = (window + 1) * windowSeconds * 1000;
+      res.set("Retry-After", String(Math.ceil((end - t) / 1000)));
+      return res.status(429).json({ error: "יותר מדי בקשות" });
+    }
+    next();
+  };
+}
+```
+<p>‏<code>now</code> כפרמטר הוא אותו "שעון מוזרק" מפרק 24: בבדיקה הזמן קבוע, ואין סיכוי שהבדיקה תיפול כי עברה בדיוק בגבול של דקה.</p>
+@mistakes
+<ul><li><code>Retry-After</code> = ‏<code>windowSeconds</code> קבוע — לקוח שנחסם שנייה לפני סוף החלון מחכה דקה שלמה.</li><li><code>Math.floor</code> ב־Retry-After — יוצא 0 בשנייה האחרונה, והלקוח מנסה מיד.</li></ul>
+
+@@ P26-E70 | 3 | מנעול שמחכה בתור 🤖 | 25 | פרק 10, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>E12 מחזיר <code>null</code> מיד כשהמנעול תפוס. לפעמים רוצים לחכות קצת. בקובץ <code>26-redis/starter/P26-E70.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function withLockRetry<T>(redis: Redis, name: string, ttlMs: number, fn: () => Promise<T>, opts?: { retries?: number; delayMs?: number }): Promise<T>
+```
+<ul><li>לוקח מנעול <code>lock:&lt;name&gt;</code> עם token אקראי (<code>SET NX PX</code>). תפוס ← מחכה <code>delayMs</code> (ברירת מחדל 50) ומנסה שוב, עד <code>retries</code> ניסיונות חוזרים (ברירת מחדל 10). עדיין תפוס ← <code>Error("LOCKED")</code>.</li><li>הצליח ← מריץ את <code>fn</code> ומחזיר את התוצאה שלו. בסוף — תמיד, גם אם <code>fn</code> זרק — משחרר עם סקריפט Lua שמוחק רק אם ה־token עדיין שלו.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>sleep</code> עם Promise ו־<code>try/finally</code> מפרקים 8 ו־10 — והשיעור: מנעול מבוזר עם token.</p>
+```term
+% npm run check P26-E70
+```
+@hint1
+```ts
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+for (let attempt = 0; attempt <= retries; attempt++) { … }
+```
+@hint2
+<p>‏<code>RELEASE</code> מהשיעור:</p>
+```lua
+if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end
+```
+@solution
+```ts save=solutions/P26-E70.ts
+// P26-E70: מנעול שמחכה בתור
+import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
+
+const RELEASE = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function withLockRetry<T>(redis: Redis, name: string, ttlMs: number, fn: () => Promise<T>, opts: { retries?: number; delayMs?: number } = {}): Promise<T> {
+  const { retries = 10, delayMs = 50 } = opts;
+  const key = `lock:${name}`;
+  const token = randomUUID();
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if ((await redis.set(key, token, "PX", ttlMs, "NX")) === "OK") {
+      try {
+        return await fn();
+      } finally {
+        await redis.eval(RELEASE, 1, key, token);
+      }
+    }
+    if (attempt < retries) await sleep(delayMs);
+  }
+  throw new Error("LOCKED");
+}
+```
+<p>‏<code>return await fn()</code> בתוך <code>try</code>, ולא <code>return fn()</code>: בלי <code>await</code> ה־<code>finally</code> רץ מיד — לפני ש־<code>fn</code> סיים — והמנעול משתחרר באמצע העבודה.</p>
+@mistakes
+<ul><li><code>return fn()</code> בלי <code>await</code> — המנעול משתחרר לפני שהעבודה נגמרת, והבודק רואה שתי עבודות במקביל.</li><li>לולאה בלי <code>sleep</code> — מאות פקודות בשנייה ל־Redis מכל מחכה.</li></ul>
+
+@@ P26-E71 | 2 | ‏backoff: מתי כל ניסיון? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>עבודה עם <code>attempts: 5</code> ו־<code>backoff: { type: "exponential", delay: 1000 }</code>. הניסיון הראשון יוצא ב־t=0, וכל ניסיון נכשל מיד.</p>
+<ol><li>מתי יוצא כל אחד מהניסיונות 2–5? (BullMQ מחכה <code>delay × 2^(n−1)</code> לפני הניסיון החוזר ה־n.)</li><li>מתי העבודה עוברת ל־failed?</li><li>אותו דבר עם <code>type: "fixed"</code>.</li><li>שרת המייל למטה 10 דקות. אילו מההגדרות "מחזיקה מעמד", ואיזה ערך <code>attempts</code> היה מספיק עם exponential של שנייה?</li></ol>
+@hint1
+<p>1, 2, 4, 8 שניות.</p>
+@hint2
+<p>סכום ההמתנות: 1+2+4+…</p>
+@solution
+<ol><li>ניסיון 2 ב־t=1s, ‏3 ב־t=3s (עוד 2), ‏4 ב־t=7s (עוד 4), ‏5 ב־t=15s (עוד 8).</li><li>מיד אחרי שהחמישי נכשל — t≈15s.</li><li>ב־1, 2, 3, 4 שניות; ‏failed ב־t≈4s.</li><li>אף אחת — שתיהן מוותרות אחרי פחות מ־20 שניות. עם exponential של שנייה, סכום ההמתנות אחרי n ניסיונות חוזרים הוא 2^n−1 שניות. כדי לעבור 600 שניות צריך 2^n−1 ≥ 600 ← ‏n=10, כלומר <code>attempts: 11</code> (הניסיון האחרון אחרי ~17 דקות). זה הכוח של exponential: מעט ניסיונות, טווח זמן גדול.</li></ol>
+@mistakes
+<ul><li>לספור את הניסיון הראשון כ"ניסיון חוזר" — <code>attempts</code> הוא סך הכול, כולל הראשון.</li></ul>
+
+@@ P26-E72 | 2 | ‏worker קרס — איפה בדיוק? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>ה־worker של מייל האישור עושה שלושה צעדים: (א) לוקח עבודה מהתור, (ב) שולח את המייל, (ג) מסמן "הושלם". לכל רגע קריסה — מה יקרה ללקוח?</p>
+<ol><li>קריסה בין (א) ל־(ב).</li><li>קריסה בין (ב) ל־(ג).</li><li>עכשיו "משפרים": מסמנים הושלם <em>לפני</em> השליחה — (א), (ג), (ב). קריסה בין (ג) ל־(ב)?</li></ol>
+<p>איזה מהם at-least-once ואיזה at-most-once, ולמה תורים כמעט תמיד בוחרים את הראשון?</p>
+@hint1
+<p>BullMQ מזהה worker שנעלם (stalled) ומחזיר את העבודה לתור.</p>
+@hint2
+<p>מה גרוע יותר ללקוח: שני מיילים, או אף אחד?</p>
+@solution
+<ol><li>העבודה stalled ← חוזרת לתור ← worker אחר שולח. הלקוח מקבל מייל אחד.</li><li>המייל נשלח, אבל העבודה לא סומנה ← חוזרת ← נשלח שוב. <strong>שני מיילים</strong>.</li><li>סומן הושלם ולא נשלח ← אף אחד לא ינסה שוב. <strong>אפס מיילים</strong>, בלי שום סימן.</li></ol>
+<p>(א)(ב)(ג) הוא at-least-once, ו־(א)(ג)(ב) הוא at-most-once. תורים בוחרים at-least-once כי את הכפילות אפשר לנטרל בצרכן (idempotent — ‏UNIQUE, ‏SET NX), ואת ההיעלמות אי אפשר לגלות.</p>
+@mistakes
+<ul><li>"נבחר exactly-once" — אין דבר כזה מקצה לקצה עם מערכת חיצונית (שרת מייל). יש at-least-once + צרכן idempotent, שנראה מבחוץ כמו "פעם אחת".</li></ul>
+
+@@ P26-E73 | 1 | איזה ‏jobId? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>לכל עבודה — איזה <code>jobId</code> (או בלי), כך שלחיצה כפולה / קריאה כפולה לא תיצור עבודה כפולה, אבל עבודה לגיטימית שנייה כן תיווצר:</p>
+<ol><li>מייל אישור להזמנה.</li><li>הקטנת תמונה שהמשתמש העלה (כל העלאה — קובץ חדש).</li><li>דוח מכירות יומי.</li><li>"הזכר לי לשלם" — לכל היותר תזכורת אחת ביום למשתמש.</li><li>webhook ללקוח על כל שינוי סטטוס של הזמנה.</li></ol>
+@hint1
+<p>ה־jobId צריך לתאר "מה העבודה", לא "מתי ביקשו אותה".</p>
+@hint2
+<p>אצל BullMQ אי אפשר להשתמש בנקודתיים בתוך jobId מותאם — משתמשים במקף.</p>
+@solution
+<ol><li><code>confirm-&lt;orderId&gt;</code>.</li><li><code>resize-&lt;uploadId&gt;</code> — כל העלאה מקבלת מזהה; העלאה חוזרת של אותו קובץ היא העלאה חדשה.</li><li><code>daily-report-2026-11-08</code> — התאריך הוא חלק מהזהות.</li><li><code>remind-&lt;userId&gt;-2026-11-08</code>.</li><li><code>webhook-&lt;orderId&gt;-&lt;status&gt;</code> — שינוי ל־<code>shipped</code> ושינוי ל־<code>paid</code> הם שני אירועים; אותו שינוי פעמיים — אחד.</li></ol>
+<p>וזכור: jobId מונע כפילות רק כל עוד העבודה הקודמת עדיין קיימת בתור (כולל completed שלא נמחקה). הוא לא תחליף לצרכן idempotent.</p>
+@mistakes
+<ul><li><code>jobId: randomUUID()</code> — זהה לבלי jobId.</li><li><code>jobId: String(Date.now())</code> — שתי לחיצות באותה מילישנייה ייחשבו אחת, ושתיים שונות ייחשבו שתיים.</li></ul>
+
+@@ P26-E74 | 2 | לבטל את העבודה, או לבדוק כשהיא רצה? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>הזמנה נוצרת ← עבודת <code>expire-order</code> בעוד 30 דקות. חבר צוות מציע: "כשהלקוח משלם — נמחק את העבודה (<code>job.remove()</code>), ואז ה־worker יכול פשוט לבטל, בלי לבדוק כלום".</p>
+<ol><li>תאר שני תרחישים שבהם ההצעה מבטלת הזמנה ששולמה.</li><li>מה הגרסה בפרויקט עושה במקום, ולמה היא נכונה גם אם העבודה רצה פעמיים או באיחור של שעה?</li><li>יש בכל זאת סיבה טובה <em>גם</em> למחוק את העבודה בתשלום. מה היא?</li></ol>
+@hint1
+<p>מה אם <code>remove</code> נכשל? ומה אם העבודה כבר <code>active</code> בדיוק ברגע התשלום?</p>
+@hint2
+<p><code>UPDATE … WHERE status = 'pending_payment'</code>.</p>
+@solution
+<ol><li>(א) ה־<code>remove</code> נכשל (Redis לא זמין לרגע, השרת קרס אחרי ה־UPDATE) — העבודה רצה ומבטלת. (ב) העבודה כבר רצה (active) כשהתשלום הגיע — אי אפשר למחוק עבודה פעילה, והיא מבטלת. ועוד: retry של עבודה שנכשלה באמצע.</li><li>היא מבטלת <em>בתנאי</em>: <code>UPDATE</code> עם <code>AND status = 'pending_payment'</code> בתוך ה־<code>WHERE</code>. שולם? אפס שורות ← <code>skipped</code>. התנאי נבדק במסד, ברגע הביצוע — לא משנה מתי או כמה פעמים.</li><li>חיסכון: פחות עבודות מיותרות בתור. אופטימיזציה — בתנאי שהנכונות עדיין בבדיקה בזמן הריצה.</li></ol>
+@mistakes
+<ul><li>"נבדוק את הסטטוס ב־SELECT, ואז UPDATE" — בין השניים התשלום יכול להיכנס. התנאי בתוך ה־UPDATE (פרק 18).</li></ul>
+
+@@ P26-E75 | 1 | תור עם delay, או cron? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>לכל משימה — עבודה מתוזמנת בתור (<code>delay</code>), cron שרץ כל X דקות, או שניהם? נמק.</p>
+<ol><li>לבטל הזמנה שלא שולמה תוך 30 דקות.</li><li>לשלוח דוח מכירות יומי ב־07:00.</li><li>למחוק sessions שפג תוקפן מטבלה במסד.</li><li>"תזכורת: העגלה שלך מחכה" — 24 שעות אחרי שהמשתמש הוסיף מוצר ולא קנה.</li></ol>
+<p>ומה קורה לכל עבודה מתוזמנת בתור אם Redis התאפס בלי גיבוי?</p>
+@hint1
+<p>אירוע לכל ישות מול סריקה תקופתית.</p>
+@hint2
+<p>"תור לזמן אמת, cron כרשת ביטחון".</p>
+@solution
+<ol><li>שניהם: תור — מדויק לשנייה ולא סורק טבלה; cron כל כמה דקות — "בטל כל מה שב־<code>pending_payment</code> יותר מ־30 דקות" — תופס את מה שהתור איבד.</li><li>cron (או repeatable job של BullMQ, שהוא cron בתוך התור) — זה זמן ביום, לא "X אחרי אירוע".</li><li>cron — ניקוי תקופתי, אין אירוע לכל session.</li><li>תור עם <code>delay</code>, ו־<code>jobId</code> לכל משתמש. העבודה בודקת כשהיא רצה: "האם העגלה עדיין לא נקנתה?".</li></ol>
+<p>Redis התאפס ← כל העבודות המתוזמנות נעלמו. לכן כל דבר חשוב שתלוי בהן צריך רשת ביטחון שמבוססת על המסד (cron שסורק לפי סטטוס וזמן).</p>
+@mistakes
+<ul><li>להחזיק <code>setTimeout</code> של 30 דקות בתהליך — כל deploy מוחק את כולם.</li></ul>
+
+@@ P26-E76 | 2 | לוח זמנים של backoff 🤖 | 10 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>חימום. בקובץ <code>26-redis/starter/P26-E76.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function backoffDelays(attempts: number, delay: number, type: "fixed" | "exponential"): number[]
+export function giveUpAfter(attempts: number, delay: number, type: "fixed" | "exponential"): number
+```
+<ul><li><code>backoffDelays</code> ← ההמתנה (ms) לפני כל ניסיון חוזר — <code>attempts − 1</code> מספרים. ‏<code>fixed</code> — תמיד <code>delay</code>. ‏<code>exponential</code> — ‏<code>delay × 2^(n−1)</code> לניסיון החוזר ה־n.</li><li><code>giveUpAfter</code> ← סכום ההמתנות: אחרי כמה ms (מהניסיון הראשון) יוצא הניסיון האחרון.</li><li><code>attempts</code> שאינו שלם חיובי, או <code>delay</code> שלילי ← <code>RangeError</code>.</li></ul>
+<p>דוגמה: <code>backoffDelays(5, 1000, "exponential")</code> ← <code>[1000, 2000, 4000, 8000]</code>, ו־<code>giveUpAfter</code> ← ‏15000 (‏E71).</p>
+```term
+% npm run check P26-E76
+```
+@hint1
+<p>‏<code>Array.from({ length: attempts - 1 }, (_, i) =&gt; …)</code> — ‏<code>i</code> מתחיל מ־0, אז <code>2 ** i</code>.</p>
+@hint2
+<p>‏<code>reduce((s, x) =&gt; s + x, 0)</code>.</p>
+@solution
+```ts save=solutions/P26-E76.ts
+// P26-E76: לוח זמנים של backoff
+type Kind = "fixed" | "exponential";
+
+export function backoffDelays(attempts: number, delay: number, type: Kind): number[] {
+  if (!Number.isInteger(attempts) || attempts < 1) throw new RangeError("attempts חייב להיות שלם חיובי");
+  if (!(delay >= 0)) throw new RangeError("delay לא יכול להיות שלילי");
+  return Array.from({ length: attempts - 1 }, (_, i) => (type === "fixed" ? delay : delay * 2 ** i));
+}
+
+export function giveUpAfter(attempts: number, delay: number, type: Kind): number {
+  return backoffDelays(attempts, delay, type).reduce((s, x) => s + x, 0);
+}
+```
+<p>כדאי לחשב את זה לפני שבוחרים מספרים: <code>giveUpAfter(5, 200, "exponential")</code> הוא 3 שניות — מעט מדי לשרת מייל שנופל לדקה.</p>
+@mistakes
+<ul><li><code>attempts</code> מספרים במקום <code>attempts − 1</code> — הניסיון הראשון לא מחכה.</li><li><code>delay * 2 ** (i + 1)</code> — ההמתנה הראשונה כפולה.</li></ul>
+
+@@ P26-E77 | 3 | ‏worker עם התקדמות 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>ייבוא של קובץ גדול הוא עבודה ארוכה, והמשתמש רוצה לראות "‏67%". בקובץ <code>26-redis/starter/P26-E77.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function startImportWorker(connection: ConnectionOptions, prefix: string, handleItem: (item: string) => Promise<void>): Worker
+```
+<ul><li>Worker של BullMQ לתור <code>imports</code>. ‏<code>job.data</code> הוא <code>{ items: string[] }</code>.</li><li>מעבד את הפריטים <strong>לפי הסדר</strong>, אחד אחד. אחרי כל פריט — ‏<code>job.updateProgress(…)</code> עם אחוז שלם (‏<code>Math.round</code>).</li><li>מחזיר <code>{ processed: n }</code>. בלי פריטים ← התקדמות 100, ו־<code>{ processed: 0 }</code>.</li><li>פריט שזרק ← העבודה נכשלת (לא בולעים).</li></ul>
+```term
+% npm run check P26-E77
+```
+@hint1
+```ts
+new Worker("imports", async (job) => { … }, { connection, prefix })
+```
+@hint2
+```ts
+for (let i = 0; i < items.length; i++) {
+  await handleItem(items[i]);
+  await job.updateProgress(Math.round(((i + 1) / items.length) * 100));
+}
+```
+@solution
+```ts save=solutions/P26-E77.ts
+// P26-E77: worker עם התקדמות
+import { Worker, type ConnectionOptions } from "bullmq";
+
+export function startImportWorker(connection: ConnectionOptions, prefix: string, handleItem: (item: string) => Promise<void>) {
+  return new Worker(
+    "imports",
+    async (job) => {
+      const items: string[] = job.data.items;
+      if (items.length === 0) {
+        await job.updateProgress(100);
+        return { processed: 0 };
+      }
+      for (let i = 0; i < items.length; i++) {
+        await handleItem(items[i]);
+        await job.updateProgress(Math.round(((i + 1) / items.length) * 100));
+      }
+      return { processed: items.length };
+    },
+    { connection, prefix },
+  );
+}
+```
+<p>ההתקדמות נשמרת ב־Redis (בתוך העבודה) ומתפרסמת כאירוע <code>progress</code> ב־<code>QueueEvents</code>. ה־API יכול להחזיר אותה ב־<code>GET /imports/:id</code>, או להעביר אותה ב־SSE (שיעור 6).</p>
+@mistakes
+<ul><li><code>Promise.all(items.map(handleItem))</code> — לא לפי הסדר, וההתקדמות קופצת מ־0 ל־100.</li><li><code>job.updateProgress</code> בלי <code>await</code> — העבודה עלולה להסתיים לפני שהעדכון האחרון נכתב.</li></ul>
+
+@@ P26-E78 | 3 | לוח בקרה: מצב התור והרצה מחדש 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>שרת המייל נפל לשעה, ו־40 עבודות ב־failed. בקובץ <code>26-redis/starter/P26-E78.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function queueStats(queue: Queue): Promise<{ waiting: number; active: number; delayed: number; completed: number; failed: number }>
+export async function retryAllFailed(queue: Queue): Promise<number>
+```
+<ul><li><code>queueStats</code> — חמשת המספרים, תמיד כל החמישה (גם 0).</li><li><code>retryAllFailed</code> — מחזירה לתור את <em>כל</em> העבודות שב־failed (גם אם יש יותר מ־10), ומחזירה כמה.</li></ul>
+```term
+% npm run check P26-E78
+```
+@hint1
+<p>מחזיר אובייקט עם המפתחות האלה:</p>
+```ts
+await queue.getJobCounts("waiting", "active", "delayed", "completed", "failed")
+```
+@hint2
+<p>‏<code>queue.getFailed(0, -1)</code> — כל ה־failed (בלי הטווח, ברירת המחדל מחזירה רק חלק). לכל אחת: <code>await job.retry()</code>.</p>
+@solution
+```ts save=solutions/P26-E78.ts
+// P26-E78: לוח בקרה — מצב התור והרצה מחדש
+import type { Queue } from "bullmq";
+
+export async function queueStats(queue: Queue) {
+  const c = await queue.getJobCounts("waiting", "active", "delayed", "completed", "failed");
+  return { waiting: c.waiting ?? 0, active: c.active ?? 0, delayed: c.delayed ?? 0, completed: c.completed ?? 0, failed: c.failed ?? 0 };
+}
+
+export async function retryAllFailed(queue: Queue) {
+  const jobs = await queue.getFailed(0, -1);
+  for (const job of jobs) await job.retry();
+  return jobs.length;
+}
+```
+<p>זה בדיוק מה ש־bull-board עושה בכפתור "Retry all". ההרצה מחדש בטוחה רק כי הצרכן idempotent: אם חלק מהמיילים נשלחו לפני שהעבודה נכשלה — הם לא יישלחו שוב.</p>
+@mistakes
+<ul><li><code>queue.getFailed()</code> בלי טווח — רק העמוד הראשון.</li><li>להוסיף עבודות חדשות עם אותם נתונים במקום <code>retry</code> — העבודה הישנה נשארת ב־failed, ו־jobId קבוע ימנע את החדשה.</li></ul>
+
+@@ P26-E79 | 2 | תור פשוט מ־list 🤖 | 15 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>לפני BullMQ: תור הוא list. בקובץ <code>26-redis/starter/P26-E79.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function enqueue(redis: Redis, queue: string, job: unknown): Promise<number>
+export async function drain(redis: Redis, queue: string, handler: (job: any) => Promise<void>): Promise<{ done: number; failed: number }>
+```
+<ul><li><code>enqueue</code> — מוסיף JSON לסוף ה־list <code>q:&lt;queue&gt;</code>, ומחזיר את האורך החדש.</li><li><code>drain</code> — מוציא מהראש, אחד אחד (FIFO), עד שהתור ריק, ומריץ <code>handler</code>. ‏<code>handler</code> זרק ← מוסיף לסוף <code>q:&lt;queue&gt;:failed</code> את ה־JSON ‏<code>{ job, error }</code> (‏<code>error</code> — ההודעה), וממשיך.</li><li>שני <code>drain</code> במקביל (שני workers) — כל עבודה מטופלת פעם אחת.</li></ul>
+```term
+% npm run check P26-E79
+```
+@hint1
+<p>‏<code>RPUSH</code> לסוף, ‏<code>LPOP</code> מהראש. ‏<code>LPOP</code> על list ריקה ← <code>null</code>.</p>
+@hint2
+<p>‏<code>LPOP</code> אטומי — שני workers לא יקבלו אותה עבודה.</p>
+@solution
+```ts save=solutions/P26-E79.ts
+// P26-E79: תור פשוט מ־list
+import type { Redis } from "ioredis";
+
+export async function enqueue(redis: Redis, queue: string, job: unknown) {
+  return redis.rpush(`q:${queue}`, JSON.stringify(job));
+}
+
+export async function drain(redis: Redis, queue: string, handler: (job: any) => Promise<void>) {
+  let done = 0, failed = 0;
+  for (let raw = await redis.lpop(`q:${queue}`); raw !== null; raw = await redis.lpop(`q:${queue}`)) {
+    const job = JSON.parse(raw);
+    try {
+      await handler(job);
+      done++;
+    } catch (e) {
+      failed++;
+      await redis.rpush(`q:${queue}:failed`, JSON.stringify({ job, error: (e as Error).message }));
+    }
+  }
+  return { done, failed };
+}
+```
+<p>מה חסר כאן לעומת BullMQ? worker שקרס אחרי <code>LPOP</code> ולפני הסוף — העבודה אבדה (at-most-once). אין ניסיונות חוזרים, אין עיכוב, אין התקדמות. לכן בפרויקט — BullMQ, שעושה את כל זה עם סקריפטי Lua מעל אותם מבנים.</p>
+@mistakes
+<ul><li><code>LPUSH</code> ו־<code>LPOP</code> — מחסנית (LIFO), לא תור: העבודה הישנה ביותר מחכה הכי הרבה.</li><li><code>LRANGE</code> ואז <code>DEL</code> — שני workers קוראים את אותה רשימה.</li></ul>
+
+@@ P26-E80 | 2 | outbox עם Prisma — צעד אחר צעד | 10 | פרק 19, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>ב־<code>pay</code> רוצים outbox. (1) כתוב (בפסאודו־קוד, או ב־Prisma) מה קורה בתוך <code>prisma.$transaction</code>, ומה <em>אחריו</em>. (2) תהליך ה־relay קורא את <code>outbox</code>, מוסיף לתור, ומסמן <code>sent_at</code>. הוא קרס אחרי <code>queue.add</code> ולפני הסימון. מה יקרה בהרצה הבאה, ואיך <code>jobId</code> עוזר? (3) מה צריך להיות נכון בצרכן, גם עם jobId?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>prisma.$transaction</code> מפרק 19 — והשיעור: outbox בין המסד לתור.</p>
+@hint1
+<p>שתי כתיבות לטבלאות שונות — באותה טרנזקציה.</p>
+@hint2
+<p>‏jobId מונע כפילות רק כל עוד העבודה הקודמת קיימת בתור.</p>
+@solution
+<ol><li>בתוך הטרנזקציה: <code>order.update</code> לסטטוס <code>paid</code>, ו־<code>outbox.create</code> עם <code>kind: "order-confirmation"</code> ו־<code>payload: { orderId }</code>. אחריה — כלום (או "העיר את ה־relay"). שתי השורות נכתבות יחד או לא בכלל.</li><li>הוא יקרא שוב את אותה שורה (<code>sent_at IS NULL</code>) ויוסיף שוב. עם <code>jobId: outbox-&lt;id&gt;</code> — ה־add השני לא יוצר עבודה (זה E83).</li><li>idempotent: העבודה הראשונה אולי כבר הושלמה ונמחקה (‏<code>removeOnComplete</code>), ואז ה־add השני <em>כן</em> יוצר עבודה חדשה. הצרכן חייב לעמוד בזה (UNIQUE על המייל).</li></ol>
+@mistakes
+<ul><li>לקרוא ל־<code>queue.add</code> בתוך ה־<code>$transaction</code> — אם הטרנזקציה נכשלת אחריו, יש עבודה על תשלום שלא קרה.</li></ul>
+
+@@ P26-E81 | 2 | ‏SIGTERM ל־worker באמצע עבודה | 10 | פרק 24, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>deploy חדש שולח SIGTERM (פרק 24), ויש לך 10 שניות עד SIGKILL. ה־worker באמצע עבודה של 3 שניות. (1) מה עושה <code>await worker.close()</code>? (2) באיזה סדר סוגרים: שרת HTTP, ‏worker, ‏Queue, חיבור Redis, ‏Prisma? (3) מה קורה אם עבודה לוקחת 30 שניות, ולמה זה עדיין לא אסון?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כיבוי מסודר ו־SIGTERM מפרק 24 — והשיעור: worker שמחזיק עבודה.</p>
+@hint1
+<p>‏<code>close()</code> מפסיק לקחת עבודות חדשות ומחכה לפעילות.</p>
+@hint2
+<p>stalled.</p>
+@solution
+<ol><li>מפסיק לקחת עבודות חדשות, ומחכה שהעבודה הפעילה תסתיים (ותסומן). אז מתנתק.</li><li>קודם מפסיקים לקבל עבודה חדשה: שרת HTTP (‏<code>server.close</code>) ו־<code>worker.close()</code> — במקביל. אחר כך מה שהם השתמשו בו: Queue (שה־API מוסיף אליו), ואז Redis ו־Prisma. סוגרים מסד אחרון — עבודה שבאמצע עוד כותבת אליו.</li><li>SIGKILL הורג אותה באמצע. BullMQ יזהה אותה כ־stalled ויחזיר לתור, ו־worker אחר יריץ מההתחלה. לכן זה לא אסון — <em>כי</em> הצרכן idempotent. מה שכדאי: עבודות קצרות, או לחלק עבודה ארוכה לצעדים.</li></ol>
+@mistakes
+<ul><li>לסגור את Prisma ב־hook לפני שה־worker סיים — העבודה האחרונה נכשלת על "client closed" (בדיוק הניסוי מפרק 24).</li></ul>
+
+@@ P26-E82 | 2 | ‏idempotent: ‏UNIQUE במסד או SET NX ב־Redis? | 10 | פרק 17, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>שתי דרכים לוודא שמייל אישור נשלח פעם אחת: (א) ‏<code>processOnce</code> עם <code>SET processed:&lt;id&gt; NX EX</code> (‏E18). (ב) שורה ב־<code>email_outbox</code> עם <code>UNIQUE (kind, order_id)</code>, ו־<code>P2002</code> ← "duplicate" (הפרויקט).</p>
+<ol><li>Redis התאפס אחרי שהמייל נשלח, והעבודה רצה שוב. מה קורה בכל אחת?</li><li>ה־TTL של (א) הוא יום, והעבודה רצה שוב אחרי יומיים (retry ידני מ־failed). ומה ב־(ב)?</li><li>מתי (א) מספיקה?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> אילוץ <code>UNIQUE</code> מפרק 17 ו־<code>P2002</code> מפרק 19 — והשיעור: צרכן idempotent.</p>
+@hint1
+<p>מה מקור האמת בכל אחת?</p>
+@hint2
+<p>"נשלח" ו"נרשם שנשלח" — באותה פעולה?</p>
+@solution
+<ol><li>(א) הסימון נעלם ← המייל נשלח שוב. (ב) השורה במסד ← ‏<code>P2002</code> ← לא נשלח.</li><li>(א) הסימון פג ← נשלח שוב. (ב) ה־UNIQUE לא פג לעולם.</li><li>כשכפילות נדירה לא מזיקה באמת, והעבודה לא נוגעת במסד בכלל: עיבוד תמונה, חישוב מטמון, התראת push. ל"כסף" ו"מייל ללקוח" — במסד.</li></ol>
+@mistakes
+<ul><li>לבדוק עם <code>findFirst</code> ואז <code>create</code> — מרוץ בין שני workers. ה־UNIQUE הוא מה שאוכף.</li></ul>
+
+@@ P26-E83 | 3 | ‏outbox relay: מ־PostgreSQL לתור 🤖 | 25 | פרק 18, שיעור 4
+@lesson 4
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E83.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function relayOutbox(db: pg.Client, queue: Queue, limit?: number): Promise<number>
+```
+<ul><li>הטבלה <code>outbox</code>: ‏<code>id serial</code>, ‏<code>kind text</code>, ‏<code>payload jsonb</code>, ‏<code>sent_at timestamptz</code>.</li><li>קוראת עד <code>limit</code> (ברירת מחדל 100) שורות שעוד לא נשלחו, לפי <code>id</code>. לכל שורה: <code>queue.add(kind, payload, { jobId: "outbox-" + id })</code>, ואז מסמנת <code>sent_at = now()</code> לשורה הזו.</li><li>מחזירה כמה שורות טופלו. ריצה שנייה ← 0.</li><li>אם ה־relay קרס אחרי ה־add ולפני הסימון — הריצה הבאה מוסיפה שוב, אבל בתור עדיין יש עבודה <em>אחת</em>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> שאילתות עם פרמטרים ו־<code>jsonb</code> מפרקים 16–18 (‏<code>pg</code>) — והשיעור: outbox ו־jobId קבוע.</p>
+```term
+% npm run check P26-E83
+```
+@hint1
+```sql
+SELECT id, kind, payload FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT $1
+```
+@hint2
+<p>‏<code>payload</code> מגיע מ־<code>pg</code> כבר כאובייקט (jsonb). סימון: <code>UPDATE outbox SET sent_at = now() WHERE id = $1</code>.</p>
+@solution
+```ts save=solutions/P26-E83.ts
+// P26-E83: outbox relay — מ־PostgreSQL לתור
+import type pg from "pg";
+import type { Queue } from "bullmq";
+
+export async function relayOutbox(db: pg.Client, queue: Queue, limit = 100) {
+  const { rows } = await db.query("SELECT id, kind, payload FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT $1", [limit]);
+  for (const r of rows) {
+    await queue.add(r.kind, r.payload, { jobId: `outbox-${r.id}` });
+    await db.query("UPDATE outbox SET sent_at = now() WHERE id = $1", [r.id]);
+  }
+  return rows.length;
+}
+```
+<p>הסדר — קודם add, אחר כך סימון — הוא בחירה ב־at-least-once: קריסה ביניהם = הוספה כפולה (ש־jobId מנטרל). ההפך (קודם סימון) = שורה מסומנת שאף פעם לא נשלחה.</p>
+<p>עם כמה relays במקביל, שניים יקראו את אותן שורות. התיקון מפרק 18: <code>FOR UPDATE SKIP LOCKED</code> בתוך טרנזקציה — כל relay לוקח שורות אחרות.</p>
+@mistakes
+<ul><li>לסמן את כל השורות ב־UPDATE אחד <em>לפני</em> הלולאה — קריסה באמצע הלולאה משאירה שורות מסומנות שלא נשלחו.</li><li>‏jobId בלי קידומת (<code>String(id)</code>) — BullMQ לא מקבל jobId שהוא מספר שלם.</li></ul>
+
+@@ P26-E84 | 3 | ‏POST /pay שעונה מיד ושולח לתור 🤖 | 20 | פרק 15, שיעור 4
+@lesson 4
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E84.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function payApp(deps: { queue: Queue; markPaid: (orderId: number) => Promise<boolean> }): express.Express
+```
+<ul><li><code>POST /orders/:id/pay</code>: ‏<code>id</code> לא שלם חיובי ← ‏<code>400 { error }</code>. ‏<code>markPaid</code> החזיר <code>false</code> (אין הזמנה כזו, או שכבר לא ממתינה) ← ‏<code>404 { error }</code>, ושום עבודה לא נוספת.</li><li>אחרת — עבודה <code>order-confirmation</code> עם <code>{ orderId }</code>, ‏<code>jobId</code> ‏<code>confirm-&lt;id&gt;</code>, ‏3 ניסיונות עם exponential backoff — ואז ‏<code>202 { status: "paid" }</code>.</li><li>התשובה לא מחכה למייל: הבודק לא מריץ worker בכלל.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> נתיבי Express וקודי סטטוס מפרקים 14–15 — והשיעור: מה לא שייך לבקשה.</p>
+```term
+% npm run check P26-E84
+```
+@hint1
+<p>‏202 Accepted = "קיבלתי, ממשיך ברקע".</p>
+@hint2
+```ts
+await queue.add("order-confirmation", { orderId }, {
+  jobId: `confirm-${orderId}`,
+  attempts: 3,
+  backoff: { type: "exponential", delay: 1000 },
+});
+```
+@solution
+```ts save=solutions/P26-E84.ts
+// P26-E84: POST /pay שעונה מיד ושולח לתור
+import express from "express";
+import type { Queue } from "bullmq";
+
+export function payApp({ queue, markPaid }: { queue: Queue; markPaid: (orderId: number) => Promise<boolean> }) {
+  const app = express();
+  app.post("/orders/:id/pay", async (req, res) => {
+    if (!/^[1-9]\d*$/.test(req.params.id)) return res.status(400).json({ error: "id לא תקין" });
+    const orderId = Number(req.params.id);
+    if (!(await markPaid(orderId))) return res.status(404).json({ error: "אין הזמנה שממתינה לתשלום" });
+    await queue.add("order-confirmation", { orderId }, { jobId: `confirm-${orderId}`, attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+    res.status(202).json({ status: "paid" });
+  });
+  return app;
+}
+```
+<p>הבקשה עושה שני דברים מהירים: עדכון במסד ו־<code>queue.add</code> (כתיבה אחת ל־Redis). שרת המייל יכול להיות למטה שעה — הלקוח לא יודע.</p>
+@mistakes
+<ul><li>להוסיף לתור לפני <code>markPaid</code> — מייל על הזמנה שלא קיימת.</li><li>‏<code>200</code> במקום <code>202</code> — עובד, אבל <code>202</code> אומר במפורש שחלק מהעבודה עוד לא נעשה.</li></ul>
+
+@@ P26-E85 | 3 | ‏timeout בתוך worker 🤖 | 25 | פרק 10, שיעור 4
+@lesson 4
+@part 2
+@task
+<p>שרת SMTP לפעמים "נתקע" — לא עונה ולא נכשל. העבודה נשארת active לנצח. בקובץ <code>26-redis/starter/P26-E85.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function startWorkerWithTimeout(connection: ConnectionOptions, prefix: string, queueName: string, handler: (data: any) => Promise<unknown>, timeoutMs: number): Worker
+```
+<ul><li>Worker לתור <code>queueName</code> שקורא ל־<code>handler(job.data)</code> ומחזיר את התוצאה שלו.</li><li><code>handler</code> לא הסתיים תוך <code>timeoutMs</code> ← העבודה נכשלת עם <code>Error("TIMEOUT")</code> (ואז BullMQ מנסה שוב, לפי ה־attempts של העבודה).</li><li>ה־timer מתבטל כשה־handler מסתיים בזמן — לא משאירים timers תלויים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>Promise.race</code> ו־<code>setTimeout</code>/<code>clearTimeout</code> מפרק 10 — והשיעור: כישלון = ניסיון חוזר.</p>
+```term
+% npm run check P26-E85
+```
+@hint1
+```ts
+let timer: NodeJS.Timeout | undefined;
+const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs); });
+```
+@hint2
+```ts
+try {
+  return await Promise.race([handler(job.data), timeout]);
+} finally {
+  clearTimeout(timer);
+}
+```
+@solution
+```ts save=solutions/P26-E85.ts
+// P26-E85: timeout בתוך worker
+import { Worker, type ConnectionOptions } from "bullmq";
+
+export function startWorkerWithTimeout(connection: ConnectionOptions, prefix: string, queueName: string, handler: (data: any) => Promise<unknown>, timeoutMs: number) {
+  return new Worker(
+    queueName,
+    async (job) => {
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs);
+      });
+      try {
+        return await Promise.race([handler(job.data), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    { connection, prefix },
+  );
+}
+```
+<p>שים לב מה <code>Promise.race</code> <em>לא</em> עושה: הוא לא עוצר את ה־handler. הבקשה ל־SMTP ממשיכה ברקע, ואם היא בכל זאת תצליח — והניסיון החוזר גם — יישלחו שני מיילים. עוד סיבה לצרכן idempotent (ואם הספרייה תומכת — <code>AbortSignal</code>, שבאמת מבטל).</p>
+@mistakes
+<ul><li>בלי <code>clearTimeout</code> — כל עבודה שהצליחה משאירה timer, והתהליך לא נסגר עד שכולם פגים.</li><li>timeout שמחזיר ערך (<code>resolve</code>) במקום לזרוק — BullMQ חושב שהעבודה הצליחה.</li></ul>
+
+@@ P26-E86 | 1 | למה Redis אופציונלי? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>בפרויקט, בלי <code>REDIS_URL</code> השרת עולה ועובד. (1) תן שלוש סיבות לבחירה הזו. (2) מה בדיוק משתנה בהתנהגות כשאין Redis — בקטלוג, במייל האישור, ובביטול האוטומטי? (3) מה המחיר של ההחלטה בקוד?</p>
+@hint1
+<p>מי מריץ את בודקי PR3 הקודמים, ובאיזו סביבה?</p>
+@hint2
+<p>"כל שימוש בודק <code>null</code>".</p>
+@solution
+<ol><li>(א) בודקי PR3 הקודמים ו־<code>npm run start:dev</code> בלי Docker ממשיכים לעבוד. (ב) Redis הוא אופטימיזציה ותשתית עזר, לא מקור אמת — המערכת לא אמורה ליפול איתו. (ג) פריסה הדרגתית: אפשר להעלות את הקוד לפני שה־Redis המנוהל מוכן.</li><li>קטלוג: <code>X-Cache: OFF</code>, כל בקשה למסד. מייל: נכתב מיד, בתוך הבקשה (בלי תור ובלי retries). ביטול אוטומטי: אין — הזמנות שלא שולמו מחזיקות מלאי (לכן כדאי cron כרשת ביטחון, ‏E75).</li><li>כל מקום שמשתמש ב־Redis צריך שני מסלולים (<code>if (!this.redis)</code>), ושניהם צריכים בדיקות. ושגיאות של Redis שנבלעות — צריך לוג או מדד, אחרת אף אחד לא יודע שה־cache כבוי.</li></ol>
+@mistakes
+<ul><li>"אופציונלי" = לבלוע כל שגיאה בשקט. בלי <code>logger.warn</code>, ‏Redis יכול להיות למטה שבוע.</li></ul>
+
+@@ P26-E87 | 1 | ‏X-Cache: ‏HIT, ‏MISS או OFF? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>מה יהיה ה־<code>X-Cache</code> בכל בקשה, לפי הסדר? (‏<code>REDIS_URL</code> מוגדר, TTL של 60 שניות.)</p>
+<ol><li><code>GET /products?q=V60</code></li><li><code>GET /products?q=V60</code> (שוב)</li><li><code>GET /products?q=V60&amp;page=1</code></li><li>מנהל: <code>PATCH /products/3</code>, ואז <code>GET /products?q=V60</code></li><li>לקוח: <code>POST /orders</code>, ואז <code>GET /products?q=V60</code></li><li>Redis נעצר (<code>docker stop</code>), ואז <code>GET /products?q=V60</code></li></ol>
+@hint1
+<p>המפתח בנוי מה־DTO אחרי ולידציה, כולל ברירות מחדל.</p>
+@hint2
+<p>הזמנה משנה מלאי, והמלאי מופיע ברשימה.</p>
+@solution
+<ol><li>MISS.</li><li>HIT.</li><li>HIT — <code>page=1</code> היא ברירת המחדל, ולכן אותו מפתח בדיוק.</li><li>MISS — ה־PATCH העלה את הגרסה (<code>INCR v:products</code>).</li><li>MISS — יצירת הזמנה מבטלת גם היא (המלאי השתנה).</li><li>OFF — הקריאה ל־Redis נכשלת מהר (<code>enableOfflineQueue: false</code>), והבקשה חוזרת למסד. סטטוס 200, לא 500.</li></ol>
+@mistakes
+<ul><li>לחשוב שבשורה 6 יחזור MISS — MISS אומר "Redis עבד ולא היה ערך". OFF אומר "Redis לא בתמונה", וזה מה שרוצים לראות בדיבאג.</li></ul>
+
+@@ P26-E88 | 2 | עבודה בתוך הטרנזקציה או אחריה? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>ב־<code>OrdersService.create</code>, ה־<code>jobs.add("expire-order", …)</code> נמצא <em>אחרי</em> סוף הטרנזקציה. (1) מה היה קורה אם היינו מעבירים אותו לתוך ה־callback של <code>$transaction</code>, והטרנזקציה נכשלת אחריו (למשל המלאי נגמר בשורה הבאה)? (2) ומה הסיכון שנשאר במיקום הנוכחי? (3) למה הסיכון הנוכחי "פחות גרוע" בפרויקט הזה, ומה היה פותר אותו?</p>
+@hint1
+<p>‏Redis לא משתתף בטרנזקציה של PostgreSQL.</p>
+@hint2
+<p>קריסה בין <code>COMMIT</code> ל־<code>add</code>.</p>
+@solution
+<ol><li>העבודה כבר ב־Redis, וההזמנה לא קיימת (ROLLBACK). בעוד 30 דקות העבודה רצה על הזמנה שלא קיימת — ‏<code>skipped</code> במקרה הטוב, ובמקרה גרוע (אם ה־id נוצל שוב) מבטלת הזמנה אחרת.</li><li>קריסה בין ה־<code>COMMIT</code> ל־<code>add</code>: ההזמנה קיימת, ואין עבודה שתבטל אותה. מחזיקה מלאי לנצח.</li><li>"הזמנה שלא בוטלה" היא נזק קטן וניתן לגילוי (שאילתה על <code>pending_payment</code> ישנות), לעומת "ביטול של משהו שלא קיים". הפתרון המלא: outbox (שיעור 4) — שורה בטבלה באותה טרנזקציה, ו־relay שמעביר לתור (‏E83). או cron כרשת ביטחון.</li></ol>
+@mistakes
+<ul><li>"נעשה את ה־add ראשון, ואם הטרנזקציה נכשלת — נמחק את העבודה" — המחיקה יכולה להיכשל בדיוק כמו כל דבר אחר.</li></ul>
+
+@@ P26-E89 | 1 | מתי מבטלים את ה־cache של הקטלוג? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>לכל פעולה — האם היא צריכה <code>cache.invalidate("products")</code>? אם כן — לפני ה־<code>COMMIT</code> או אחריו?</p>
+<ol><li>מנהל מוסיף מוצר.</li><li>לקוח יוצר הזמנה (מלאי יורד).</li><li>לקוח משלם על הזמנה.</li><li>הזמנה פגה ומתבטלת (מלאי חוזר).</li><li>לקוח מוסיף מוצר לעגלה.</li><li>מנהל משנה את התיאור של מוצר.</li></ol>
+@hint1
+<p>מה מופיע ב־<code>GET /products</code>? שם, מחיר, מלאי…</p>
+@hint2
+<p>אם מבטלים לפני ה־COMMIT, בקשה שמגיעה בין השניים טוענת את הישן — לגרסה החדשה.</p>
+@solution
+<ol><li>כן.</li><li>כן — המלאי ברשימה השתנה.</li><li>לא — תשלום לא משנה מלאי או מחיר (המלאי ירד ביצירה).</li><li>כן (‏<code>cancelAndRestock</code> עושה את זה).</li><li>לא — העגלה לא משנה את הקטלוג.</li><li>כן, אם התיאור מופיע ברשימה (או בדף מוצר שגם הוא ב־cache).</li></ol>
+<p>תמיד <strong>אחרי</strong> ה־COMMIT: ביטול לפני ה־COMMIT מאפשר לבקשה שמגיעה ביניהם לטעון את הנתונים הישנים ולשמור אותם תחת הגרסה החדשה (‏E48).</p>
+@mistakes
+<ul><li>לבטל "ליתר ביטחון" בכל בקשה — ה־hit ratio יורד לאפס, וה־cache רק מוסיף זמן.</li></ul>
+
+@@ P26-E90 | 2 | ‏WORKER=true בשלושה שרתים | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>מריצים שלושה עותקים של ה־API, כולם עם <code>WORKER=true</code> (ברירת המחדל), מול אותו Redis. (1) עבודת <code>order-confirmation</code> אחת נכנסת לתור. כמה workers ירוצו עליה? (2) למה ייתכן בכל זאת שתרוץ פעמיים, ואיפה זה מטופל בפרויקט? (3) מתי עוברים ל־<code>WORKER=false</code> ב־API ו־worker נפרד? תן שתי סיבות.</p>
+@hint1
+<p>BullMQ מעביר עבודה מ־wait ל־active בסקריפט Lua.</p>
+@hint2
+<p>שליחת PDF של 3 שניות מאטה את מי?</p>
+@solution
+<ol><li>אחד. הלקיחה (wait ← active) אטומית, ורק worker אחד מקבל כל עבודה.</li><li>at-least-once: worker שקרס באמצע (stalled), או retry אחרי כישלון שקרה <em>אחרי</em> שהמייל נכתב. בפרויקט: <code>@@unique([kind, orderId])</code> ב־<code>email_outbox</code> ← ‏<code>duplicate</code>.</li><li>(א) עבודות כבדות (PDF, תמונות) גוזלות CPU מאותו תהליך שעונה לבקשות HTTP — ה־API מאט. (ב) להגדיל בנפרד: 2 עותקי API ו־10 workers בזמן עומס של מיילים. וגם: deploy של ה־API לא עוצר עבודות באמצע.</li></ol>
+@mistakes
+<ul><li>"צריך מנעול כדי שרק שרת אחד יריץ את ה־worker" — BullMQ כבר מחלק עבודות. מנעול רק יבטל את המקביליות.</li></ul>
+
+@@ P26-E91 | 2 | המפתח שבנוי מה־DTO | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>אחרי בקשה אחת לקטלוג, ב־Redis יש:</p>
+```text
+shop:cache:products:0:{"q":"V60","sort":"newest","page":1,"limit":20}
+```
+<ol><li>פרק את המפתח: מה כל חלק, ומי הוסיף כל אחד (הקוד שלך, ioredis, או ה־DTO)?</li><li>הבקשה הייתה רק <code>?q=V60</code>. מאיפה הגיעו <code>sort</code>, ‏<code>page</code> ו־<code>limit</code>, ולמה זה טוב?</li><li>מה היה קורה אם המפתח היה <code>JSON.stringify(req.query)</code>, ומישהו שולח <code>?q=V60&amp;limit=999999</code>?</li></ol>
+@hint1
+<p>‏<code>keyPrefix: "shop:"</code> ב־ioredis.</p>
+@hint2
+<p>ולידציה לפני cache — גם להגנה.</p>
+@solution
+<ol><li><code>shop:</code> — ‏<code>keyPrefix</code> של ioredis (מ־<code>REDIS_PREFIX</code>). ‏<code>cache:products:</code> — הקבוצה, מהקוד. ‏<code>0</code> — הגרסה (<code>v:products</code>). ה־JSON — ה־DTO אחרי ולידציה.</li><li>ברירות המחדל של ה־DTO. כך <code>?q=V60</code> ו־<code>?q=V60&amp;page=1&amp;limit=20</code> חולקות מפתח אחד (‏E45, E87).</li><li>‏<code>limit</code> לא נבדק ← שאילתה של מיליון שורות, ותשובה ענקית שנשמרת ב־Redis (זיכרון!). ועם פרמטר אקראי (<code>&amp;x=1</code>, ‏<code>&amp;x=2</code>…) תוקף ממלא את Redis במפתחות. ה־DTO חוסם את שניהם: <code>limit</code> עד 50, ושדות לא מוכרים לא נכנסים למפתח.</li></ol>
+@mistakes
+<ul><li>לשכוח שהקידומת <code>shop:</code> לא מופיעה בקוד — מי שמחפש ב־<code>redis-cli</code> את <code>cache:*</code> לא מוצא כלום.</li></ul>
+
+@@ P26-E92 | 2 | חיבור Redis — או null 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E92.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createRedisOrNull(url: string | undefined, prefix: string): Redis | null
+```
+<ul><li>אין <code>url</code> (או מחרוזת ריקה / רק רווחים) ← <code>null</code>.</li><li>אחרת ← <code>new Redis(url, …)</code> של ioredis, עם ההגדרות של הפרויקט: <code>keyPrefix</code> = ‏<code>prefix</code> ונקודתיים, ‏<code>maxRetriesPerRequest: 2</code>, ‏<code>enableOfflineQueue: false</code>.</li></ul>
+```term
+% npm run check P26-E92
+```
+@hint1
+<p>‏<code>if (!url?.trim()) return null;</code></p>
+@hint2
+<p>הבודק קורא את <code>redis.options</code> — שם ioredis שומר את מה שהעברת.</p>
+@solution
+```ts save=solutions/P26-E92.ts
+// P26-E92: חיבור Redis — או null
+import { Redis } from "ioredis";
+
+export function createRedisOrNull(url: string | undefined, prefix: string): Redis | null {
+  if (!url?.trim()) return null;
+  return new Redis(url, { keyPrefix: `${prefix}:`, maxRetriesPerRequest: 2, enableOfflineQueue: false });
+}
+```
+<p>שתי ההגדרות האחרונות הן ההבדל בין "cache שנופל מהר" ל"בקשה שתלויה 20 ניסיונות": ‏<code>enableOfflineQueue: false</code> — כשאין חיבור, פקודה נכשלת מיד במקום לחכות בתור; ‏<code>maxRetriesPerRequest: 2</code> — גם כשיש חיבור לא יציב, לא מנסים בלי סוף.</p>
+@mistakes
+<ul><li>להשתמש בחיבור הזה גם ל־BullMQ — ה־Worker דורש <code>maxRetriesPerRequest: null</code>, ו־BullMQ לא תומך ב־<code>keyPrefix</code> של ioredis. לתור — חיבור משלו (‏<code>bullConnection</code>).</li></ul>
+
+@@ P26-E93 | 3 | ‏getOrSet: ‏HIT, ‏MISS או OFF 🤖 | 25 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>ה־<code>CacheService</code> של הפרויקט, כפונקציות. בקובץ <code>26-redis/starter/P26-E93.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function getOrSet<T>(redis: Redis | null, group: string, key: string, ttl: number, load: () => Promise<T>): Promise<{ value: T; status: "HIT" | "MISS" | "OFF" }>
+export async function invalidate(redis: Redis | null, group: string): Promise<void>
+```
+<ul><li>הגרסה ב־<code>v:&lt;group&gt;</code> (אין ← <code>"0"</code>). המפתח: <code>cache:&lt;group&gt;:&lt;version&gt;:&lt;key&gt;</code>.</li><li><code>redis</code> הוא <code>null</code> ← ‏<code>load()</code> ו־<code>OFF</code>. קריאה מ־Redis זרקה ← ‏<code>load()</code> ו־<code>OFF</code> — לא מפילים את הבקשה.</li><li>MISS ← ‏<code>load()</code>, שמירה עם TTL. שמירה שזרקה ← עדיין מחזירים את הערך, עם <code>MISS</code>. ‏<code>load</code> שזרק ← השגיאה עולה.</li><li><code>invalidate</code> ← ‏<code>INCR</code> לגרסה. ‏<code>null</code> או שגיאה ← לא זורק.</li></ul>
+```term
+% npm run check P26-E93
+```
+@hint1
+<p>שני <code>try</code> נפרדים: אחד לקריאה (שגיאה ← OFF), ואחד לכתיבה (שגיאה ← מתעלמים). ה־<code>load()</code> <em>מחוץ</em> לשניהם — כדי ששגיאה שלו תעלה.</p>
+@hint2
+<p>‏<code>await redis.set(...).catch(() =&gt; {})</code>.</p>
+@solution
+```ts save=solutions/P26-E93.ts
+// P26-E93: getOrSet — HIT, MISS או OFF
+import type { Redis } from "ioredis";
+
+type Status = "HIT" | "MISS" | "OFF";
+
+export async function getOrSet<T>(redis: Redis | null, group: string, key: string, ttl: number, load: () => Promise<T>): Promise<{ value: T; status: Status }> {
+  if (!redis) return { value: await load(), status: "OFF" };
+  let fullKey: string;
+  try {
+    const version = (await redis.get(`v:${group}`)) ?? "0";
+    fullKey = `cache:${group}:${version}:${key}`;
+    const hit = await redis.get(fullKey);
+    if (hit !== null) return { value: JSON.parse(hit) as T, status: "HIT" };
+  } catch {
+    return { value: await load(), status: "OFF" };
+  }
+  const value = await load();
+  await redis.set(fullKey, JSON.stringify(value), "EX", ttl).catch(() => {});
+  return { value, status: "MISS" };
+}
+
+export async function invalidate(redis: Redis | null, group: string) {
+  await redis?.incr(`v:${group}`).catch(() => {});
+}
+```
+<p>שים לב איפה <code>load()</code> נמצא: אם הוא היה בתוך ה־<code>try</code> הראשון, שגיאה של <em>המסד</em> הייתה נתפסת כ"Redis נפל" — ו־<code>load()</code> היה רץ שוב, עם <code>OFF</code>. בפרויקט יש גם <code>logger.warn</code> בכל <code>catch</code> — בלי זה אף אחד לא יודע שה־cache כבוי.</p>
+@mistakes
+<ul><li>‏<code>try</code> אחד סביב הכול — שגיאת מסד מריצה את <code>load</code> פעמיים.</li><li><code>await redis.set(...)</code> בלי <code>catch</code> — Redis שנפל בין הקריאה לכתיבה מפיל בקשה שכבר יש לה תשובה.</li></ul>
+
+@@ P26-E94 | 2 | מפתח הקטלוג מתוך DTO עם zod 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E94.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function productsCacheKey(query: unknown): string
+```
+<ul><li>ולידציה עם zod של ה־query (הערכים מגיעים כמחרוזות): <code>q</code> — רשות, אחרי trim (ריק ← כאילו לא נשלח); ‏<code>sort</code> — ‏<code>newest</code>/<code>price_asc</code>/<code>price_desc</code>, ברירת מחדל <code>newest</code>; ‏<code>page</code> — שלם ≥ 1, ברירת מחדל 1; ‏<code>limit</code> — שלם 1–50, ברירת מחדל 20. שדות אחרים — מתעלמים מהם.</li><li>לא תקין ← <code>Error("VALIDATION_ERROR")</code>.</li><li>התוצאה: JSON בסדר קבוע — <code>q</code> (רק אם יש), <code>sort</code>, <code>page</code>, <code>limit</code>. למשל <code>{"q":"V60","sort":"newest","page":1,"limit":20}</code>.</li></ul>
+```term
+% npm run check P26-E94
+```
+@hint1
+<p>‏<code>z.coerce.number().int().min(1).default(1)</code> — ממיר מחרוזת למספר. ‏<code>z.object</code> (לא strict) מוריד שדות לא מוכרים.</p>
+@hint2
+<p>‏<code>JSON.stringify</code> שומר את סדר ההכנסה: בנה אובייקט חדש בסדר הרצוי — <code>{ ...(q ? { q } : {}), sort, page, limit }</code>.</p>
+@solution
+```ts save=solutions/P26-E94.ts
+// P26-E94: מפתח הקטלוג מתוך DTO עם zod
+import { z } from "zod";
+
+const schema = z.object({
+  q: z.string().trim().optional(),
+  sort: z.enum(["newest", "price_asc", "price_desc"]).default("newest"),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export function productsCacheKey(query: unknown): string {
+  const r = schema.safeParse(query);
+  if (!r.success) throw new Error("VALIDATION_ERROR");
+  const { q, sort, page, limit } = r.data;
+  return JSON.stringify({ ...(q ? { q } : {}), sort, page, limit });
+}
+```
+<p>שלוש בעיות של E45 נפתרות כאן בבת אחת: סדר הפרמטרים, ברירות מחדל, ופרמטרים שלא משפיעים (<code>utm_source</code>). ועוד אחת מ־E91: ‏<code>limit=999999</code> לא מגיע לא למסד ולא ל־cache.</p>
+@mistakes
+<ul><li><code>z.number()</code> בלי <code>coerce</code> — ‏<code>"2"</code> מה־query נדחה.</li><li><code>z.strictObject</code> — ‏<code>?utm_source=fb</code> מחזיר 400 לכל מי שהגיע מפרסומת.</li></ul>
+
+@@ P26-E95 | 2 | גוף מייל האישור 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E95.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function confirmationEmail(order: { id: number; user: { name: string; email: string }; items: { name: string; quantity: number; priceCents: number }[]; totalCents: number }): { to: string; subject: string; body: string }
+```
+<ul><li><code>to</code> — האימייל. ‏<code>subject</code> — ‏<code>אישור הזמנה #7</code>.</li><li><code>body</code> — שורות, מופרדות ב־<code>\n</code>: ‏<code>שלום &lt;שם&gt;,</code>, שורה ריקה, שורה לכל פריט (<code>&lt;שם&gt; × &lt;כמות&gt; — ₪&lt;מחיר כפול כמות, שתי ספרות&gt;</code>), שורה ריקה, ‏<code>סה״כ: ₪&lt;total&gt;</code>.</li></ul>
+<p>הדוגמה מהשיעור: פריט <code>פילטרים לבנים V60</code>, כמות 2, ‏<code>priceCents: 2990</code>, ‏<code>totalCents: 5980</code> ←</p>
+```out
+שלום דנה,
+
+פילטרים לבנים V60 × 2 — ₪59.80
+
+סה״כ: ₪59.80
+```
+```term
+% npm run check P26-E95
+```
+@hint1
+<p>‏<code>(cents / 100).toFixed(2)</code>.</p>
+@hint2
+<p>‏<code>[`שלום ${name},`, "", ...lines, "", `סה״כ: ₪…`].join("\n")</code>.</p>
+@solution
+```ts save=solutions/P26-E95.ts
+// P26-E95: גוף מייל האישור
+type Order = { id: number; user: { name: string; email: string }; items: { name: string; quantity: number; priceCents: number }[]; totalCents: number };
+
+const money = (cents: number) => `₪${(cents / 100).toFixed(2)}`;
+
+export function confirmationEmail(order: Order) {
+  const lines = order.items.map((i) => `${i.name} × ${i.quantity} — ${money(i.priceCents * i.quantity)}`);
+  return {
+    to: order.user.email,
+    subject: `אישור הזמנה #${order.id}`,
+    body: [`שלום ${order.user.name},`, "", ...lines, "", `סה״כ: ${money(order.totalCents)}`].join("\n"),
+  };
+}
+```
+<p>פונקציה טהורה, בלי Prisma ובלי תור — לכן קל לבדוק אותה. ה־worker רק טוען את ההזמנה וקורא לה. הסה״כ נלקח מההזמנה (<code>totalCents</code>), לא מחושב מחדש: זה המחיר שהלקוח שילם.</p>
+@mistakes
+<ul><li>לחשב <code>(priceCents / 100) * quantity</code> — חלוקה לפני כפל מכניסה שגיאות של שברים עשרוניים. מכפילים באגורות, ומחלקים פעם אחת.</li></ul>
+
+@@ P26-E96 | 2 | ‏JobsService: עבודות עם jobId קבוע 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E96.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createJobs(connection: ConnectionOptions, prefix: string): { queue: Queue; add(name: string, orderId: number, delayMs?: number): Promise<boolean>; close(): Promise<void> }
+```
+<ul><li>Queue של BullMQ בשם <code>shop</code>, עם <code>prefix</code>.</li><li><code>add</code> — רק <code>order-confirmation</code> או <code>expire-order</code> (אחרת <code>Error</code>, ושום דבר לא נוסף). ‏data: ‏<code>{ orderId }</code>. אפשרויות: ‏<code>jobId</code> ‏<code>&lt;name&gt;-&lt;orderId&gt;</code>, ‏<code>delay</code>, ‏5 ניסיונות, backoff ‏exponential של 1000, ‏<code>removeOnComplete: 1000</code>, ‏<code>removeOnFail: 5000</code>. מחזיר <code>true</code>.</li><li><code>close</code> סוגר את ה־Queue.</li></ul>
+```term
+% npm run check P26-E96
+```
+@hint1
+<p>‏<code>removeOnComplete: 1000</code> — שומרים רק את 1000 האחרונות שהושלמו, כדי ש־Redis לא יתמלא.</p>
+@hint2
+<p>בדיקת השם — <code>Set</code> של השמות המותרים, ו־<code>NAMES.has(name)</code>.</p>
+@solution
+```ts save=solutions/P26-E96.ts
+// P26-E96: JobsService — עבודות עם jobId קבוע
+import { Queue, type ConnectionOptions } from "bullmq";
+
+const NAMES = new Set(["order-confirmation", "expire-order"]);
+
+export function createJobs(connection: ConnectionOptions, prefix: string) {
+  const queue = new Queue("shop", { connection, prefix });
+  return {
+    queue,
+    async add(name: string, orderId: number, delayMs = 0) {
+      if (!NAMES.has(name)) throw new Error(`עבודה לא מוכרת: ${name}`);
+      await queue.add(
+        name,
+        { orderId },
+        { jobId: `${name}-${orderId}`, delay: delayMs, attempts: 5, backoff: { type: "exponential", delay: 1000 }, removeOnComplete: 1000, removeOnFail: 5000 },
+      );
+      return true;
+    },
+    close: () => queue.close(),
+  };
+}
+```
+<p>‏<code>removeOnComplete</code> ו־<code>removeOnFail</code> הם תחזוקה: בלעדיהם כל עבודה שהושלמה נשארת ב־Redis לנצח. אבל שים לב לקשר ל־jobId: אחרי שעבודה נמחקה, אותו jobId <em>כן</em> ייצור עבודה חדשה. עוד סיבה שהצרכן חייב להיות idempotent בעצמו.</p>
+@mistakes
+<ul><li><code>jobId: `${name}:${orderId}`</code> — BullMQ לא מקבל נקודתיים ב־jobId מותאם.</li></ul>
+
+@@ P26-E97 | 3 | ביטול הזמנה שפגה — בתנאי, בטרנזקציה 🤖 | 25 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p><code>OrdersService.expire</code> ב־SQL. בקובץ <code>26-redis/starter/P26-E97.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function expireOrder(pool: pg.Pool, orderId: number): Promise<"expired" | "skipped">
+```
+<ul><li>הטבלאות: <code>orders(id, status)</code>, ‏<code>order_items(order_id, product_id, quantity)</code>, ‏<code>products(id, stock)</code>.</li><li>בטרנזקציה אחת, על חיבור אחד מה־pool: ‏<code>UPDATE</code> של <code>status</code> ל־<code>'cancelled'</code> <strong>רק אם</strong> הוא <code>'pending_payment'</code>. אף שורה לא עודכנה ← ‏<code>ROLLBACK</code> ו־<code>"skipped"</code>.</li><li>אחרת — מחזירים לכל מוצר את הכמות שבהזמנה, ‏<code>COMMIT</code>, ו־<code>"expired"</code>.</li><li>הבודק מריץ 5 עותקים של אותה עבודה במקביל — רק אחד מחזיר <code>"expired"</code>, והמלאי חוזר פעם אחת.</li></ul>
+```term
+% npm run check P26-E97
+```
+@hint1
+<p>‏<code>const client = await pool.connect()</code>, ואז <code>BEGIN</code>/<code>COMMIT</code>/<code>ROLLBACK</code> על <code>client</code>, ו־<code>client.release()</code> ב־<code>finally</code> (פרק 18).</p>
+@hint2
+```sql
+UPDATE products p SET stock = p.stock + i.quantity
+FROM order_items i WHERE i.order_id = $1 AND i.product_id = p.id
+```
+@solution
+```ts save=solutions/P26-E97.ts
+// P26-E97: ביטול הזמנה שפגה — בתנאי, בטרנזקציה
+import type pg from "pg";
+
+export async function expireOrder(pool: pg.Pool, orderId: number): Promise<"expired" | "skipped"> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query("UPDATE orders SET status = 'cancelled' WHERE id = $1 AND status = 'pending_payment'", [orderId]);
+    if (r.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return "skipped";
+    }
+    await client.query(
+      "UPDATE products p SET stock = p.stock + i.quantity FROM order_items i WHERE i.order_id = $1 AND i.product_id = p.id",
+      [orderId],
+    );
+    await client.query("COMMIT");
+    return "expired";
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>כל הנכונות בשורה אחת: <code>WHERE … AND status = 'pending_payment'</code>. חמישה עותקים במקביל — PostgreSQL נועל את השורה לראשון, והשאר מחכים; כשהם ממשיכים, הסטטוס כבר <code>cancelled</code>, ו־<code>rowCount</code> הוא 0. בלי <code>SELECT</code> לפני, בלי מנעול Redis.</p>
+@mistakes
+<ul><li><code>SELECT status</code>, בדיקה ב־JS, ואז <code>UPDATE</code> — חמישה עותקים רואים <code>pending_payment</code>, והמלאי חוזר חמש פעמים.</li><li><code>pool.query("BEGIN")</code> ואז <code>pool.query(...)</code> — כל קריאה יכולה לקבל חיבור אחר מה־pool, וה־BEGIN לא חל עליהן.</li></ul>
+
+@@ P26-E98 | 2 | מייל פעם אחת: ‏UNIQUE ו־23505 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p><code>EmailsService.sendOrderConfirmation</code> בלי Prisma. בקובץ <code>26-redis/starter/P26-E98.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function recordEmailOnce(pool: pg.Pool, email: { kind: string; orderId: number; to: string; subject: string; body: string }): Promise<"sent" | "duplicate">
+```
+<ul><li>הטבלה <code>email_outbox</code>: ‏<code>id</code>, ‏<code>kind</code>, ‏<code>order_id</code>, ‏<code>"to"</code>, ‏<code>subject</code>, ‏<code>body</code>, ‏<code>created_at</code> — עם <code>UNIQUE (kind, order_id)</code>.</li><li><code>INSERT</code> אחד. הצליח ← <code>"sent"</code>. שגיאת ייחודיות של PostgreSQL (קוד <code>23505</code>) ← <code>"duplicate"</code>. כל שגיאה אחרת — עולה.</li><li>הבודק: 10 עותקים של אותה עבודה במקביל — בדיוק <code>"sent"</code> אחד.</li></ul>
+```term
+% npm run check P26-E98
+```
+@hint1
+<p>‏<code>to</code> היא מילה שמורה ב־SQL — לכן במירכאות: <code>"to"</code>.</p>
+@hint2
+```ts
+catch (e) {
+  if ((e as { code?: string }).code === "23505") return "duplicate";
+  throw e;
+}
+```
+<p>‏<code>P2002</code> של Prisma הוא אותה שגיאה, עטופה.</p>
+@solution
+```ts save=solutions/P26-E98.ts
+// P26-E98: מייל פעם אחת — UNIQUE ו־23505
+import type pg from "pg";
+
+type Email = { kind: string; orderId: number; to: string; subject: string; body: string };
+
+export async function recordEmailOnce(pool: pg.Pool, e: Email): Promise<"sent" | "duplicate"> {
+  try {
+    await pool.query('INSERT INTO email_outbox (kind, order_id, "to", subject, body) VALUES ($1, $2, $3, $4, $5)', [e.kind, e.orderId, e.to, e.subject, e.body]);
+    return "sent";
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") return "duplicate";
+    throw err;
+  }
+}
+```
+<p>"נשלח" ו"נרשם שנשלח" הם אותה פעולה — ה־INSERT. אין רגע שבו אחד קרה והשני לא, ולכן זה שורד retries, workers במקביל, ו־Redis שהתאפס (‏E82).</p>
+@mistakes
+<ul><li><code>SELECT</code> לבדוק אם כבר נשלח, ואז <code>INSERT</code> — עשרה workers רואים "עוד לא".</li><li>לבלוע כל שגיאה כ־<code>"duplicate"</code> — מסד שנפל נראה כמו "כבר נשלח", והמייל לא יישלח לעולם.</li></ul>
+
+@@ P26-E99 | 2 | ה־worker: עבודה ← פונקציה 🤖 | 10 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>חימום. בקובץ <code>26-redis/starter/P26-E99.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function handleJob(job: { name: string; data: { orderId: number } }, deps: { emails: { sendOrderConfirmation(orderId: number): Promise<string> }; orders: { expire(orderId: number): Promise<string> } }): Promise<string>
+```
+<ul><li><code>order-confirmation</code> ← ‏<code>deps.emails.sendOrderConfirmation(orderId)</code>. ‏<code>expire-order</code> ← ‏<code>deps.orders.expire(orderId)</code>. מחזירה את מה שהם החזירו.</li><li>שם אחר ← <code>Error("עבודה לא מוכרת: &lt;name&gt;")</code> — כדי שהעבודה תיכשל ותופיע ב־failed, ולא "תצליח" בלי לעשות כלום.</li><li>שגיאה מהשירות — עולה כמו שהיא (BullMQ ינסה שוב).</li></ul>
+```term
+% npm run check P26-E99
+```
+@hint1
+<p>‏<code>switch (job.name)</code>.</p>
+@hint2
+<p>‏<code>return await …</code> או פשוט <code>return …</code> — בשני המקרים השגיאה עולה למי שמחכה.</p>
+@solution
+```ts save=solutions/P26-E99.ts
+// P26-E99: ה־worker — עבודה ← פונקציה
+type Deps = { emails: { sendOrderConfirmation(orderId: number): Promise<string> }; orders: { expire(orderId: number): Promise<string> } };
+
+export async function handleJob(job: { name: string; data: { orderId: number } }, deps: Deps): Promise<string> {
+  switch (job.name) {
+    case "order-confirmation":
+      return deps.emails.sendOrderConfirmation(job.data.orderId);
+    case "expire-order":
+      return deps.orders.expire(job.data.orderId);
+    default:
+      throw new Error(`עבודה לא מוכרת: ${job.name}`);
+  }
+}
+```
+<p>זה ה־<code>handle</code> של <code>JobsProcessor</code> בפרויקט. כשה־worker הוא רק "ניתוב", כל הלוגיקה נשארת בשירותים — ואפשר לבדוק אותה בלי Redis ובלי BullMQ.</p>
+@mistakes
+<ul><li><code>default: return "unknown"</code> — עבודה עם שם שגוי "מצליחה", ואף אחד לא שם לב שהמייל לא נשלח.</li></ul>
+
+@@ P26-E100 | 2 | ‏depends_on עם healthcheck | 10 | פרק 23, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>ב־<code>compose.yaml</code> של הפרויקט, ל־<code>redis</code> יש <code>healthcheck</code> עם <code>redis-cli ping</code>, וה־<code>api</code> תלוי בו עם <code>condition: service_healthy</code> (פרק 23). (1) מה היה קורה עם <code>depends_on: [redis]</code> בלבד? (2) ה־API עלה, ו־Redis נפל אחרי שעה. האם Compose יעצור את ה־API? מה ה־API עושה? (3) למה <code>REDIS_URL</code> הוא <code>redis://redis:6379</code> ולא <code>localhost</code>?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏healthcheck, ‏<code>depends_on</code> ורשת של Compose מפרק 23 — והשיעור: Redis בתוך הפרויקט.</p>
+@hint1
+<p>"התחיל" מול "מוכן לקבל חיבורים".</p>
+@hint2
+<p>‏<code>depends_on</code> פועל רק בעלייה.</p>
+@solution
+<ol><li>Compose מחכה רק שהקונטיינר <em>יתחיל</em>. ה־API עלול להתחבר לפני ש־Redis מקשיב — ioredis ינסה שוב לבד, אבל ה־Worker של BullMQ והבקשות הראשונות מקבלים שגיאות.</li><li>לא. ‏<code>depends_on</code> משפיע רק על סדר העלייה. ה־API ממשיך: ‏cache ‏<code>OFF</code>, ‏<code>queue.add</code> נכשל (תשלום שמנסה להוסיף מייל ← לוג/שגיאה), ו־ioredis מתחבר מחדש כשהוא חוזר.</li><li>בתוך הרשת של Compose, כל שירות נגיש בשם שלו. ‏<code>localhost</code> בתוך קונטיינר ה־API הוא הקונטיינר עצמו.</li></ol>
+@mistakes
+<ul><li>להוסיף <code>ports: ["6379:6379"]</code> ל־Redis "כדי שה־API יגיע אליו" — לא צריך בתוך הרשת, וזה חושף Redis בלי סיסמה למחשב (ולפעמים לאינטרנט).</li></ul>
+
+@@ P26-E101 | 2 | למה כל בודקי PR3 רצים בלי Redis | 10 | פרק 22, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>בסוף השיעור מריצים <code>npm run check PR3</code> — כל בודקי הפרויקט, בלי Redis. (1) מה בדיוק הבדיקה הזו מוכיחה? (2) כתבת בדיקת e2e (פרק 22) ל־<code>GET /products</code> שעוברת. איך תדע שהיא בודקת את המסלול עם cache, ולא רק את המסלול בלי? (3) הצע בדיקה אחת שמוכיחה שביטול ה־cache עובד.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> בדיקות e2e ו"שני מסלולים — שתי בדיקות" מפרק 22 — והשיעור: Redis אופציונלי.</p>
+@hint1
+<p>מה ה־<code>X-Cache</code> בבדיקה בלי Redis?</p>
+@hint2
+<p>שתי בקשות, שינוי, ובקשה שלישית.</p>
+@solution
+<ol><li>שהמסלול "בלי Redis" לא נשבר: אף שינוי בשלב 5 לא הפך את Redis לחובה, וההתנהגות הקיימת (תשובות, סטטוסים, הרשאות) לא השתנתה.</li><li>בודקים את ה־header: בלי Redis הוא <code>OFF</code>. בדיקה שרצה עם <code>REDIS_URL</code> (כמו PR3-REDIS) צריכה לראות <code>MISS</code> ואז <code>HIT</code> — אחרת ייתכן שה־cache בכלל לא מחובר, והבדיקה "עוברת" על המסד.</li><li><code>GET /products</code> ← MISS; שוב ← HIT; מנהל משנה מחיר; ‏<code>GET</code> ← MISS <em>והמחיר החדש בגוף</em>. רק "MISS" לא מספיק — צריך גם את הנתון החדש.</li></ol>
+@mistakes
+<ul><li>לבדוק רק שהגוף נכון — עם cache שבור או בלי cache, הגוף נכון בדיוק אותו דבר.</li></ul>
+
+@@ P26-E102 | 2 | ‏@Global ו־onApplicationShutdown | 10 | פרק 20, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>‏<code>RedisModule</code> בפרויקט הוא <code>@Global()</code>, מספק את הטוקן <code>REDIS</code> (חיבור או <code>null</code>), ומממש <code>onApplicationShutdown</code> עם <code>quit()</code> (פרק 20). (1) מה <code>@Global</code> חוסך, ומה המחיר שלו? (2) למה <code>quit()</code> ולא <code>disconnect()</code>, ולמה יש <code>.catch(() =&gt; disconnect())</code>? (3) ה־<code>JobsProcessor</code> סוגר את ה־worker ב־<code>onApplicationShutdown</code> שלו. מה קורה אם החיבור של Redis נסגר לפני שה־worker סיים עבודה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> מודולים, providers ו־lifecycle hooks מפרק 20, וסדר הכיבוי מפרק 24 — והשיעור: Redis כחלק מהאפליקציה.</p>
+@hint1
+<p>בלי <code>@Global</code>, כל מודול שמשתמש ב־<code>CacheService</code> צריך <code>imports: [RedisModule]</code>.</p>
+@hint2
+<p>‏<code>quit</code> מחכה שפקודות ממתינות יסתיימו.</p>
+@solution
+<ol><li>חוסך <code>imports</code> בכל מודול (Products, Orders, Emails…). המחיר: התלות לא כתובה במודול — קשה לראות מי משתמש ב־Redis, וקל להוסיף תלות בלי לשים לב. ל"תשתית" כמו config ו־Redis — בדרך כלל שווה.</li><li><code>quit</code> שולח <code>QUIT</code> ומחכה שהפקודות שבדרך יסתיימו; <code>disconnect</code> חותך מיד. ה־<code>catch</code>: אם Redis כבר לא זמין, <code>quit</code> נכשל — ואז חותכים, כדי שהכיבוי לא ייתקע.</li><li>ה־worker (שיש לו חיבור משלו) עדיין עובד, אבל אם העבודה כותבת ל־cache דרך החיבור הסגור (<code>invalidate</code>), הכתיבה נכשלת — ובפרויקט היא נבלעת בלוג. גרוע יותר אם זה Prisma: העבודה נכשלת, ותרוץ שוב אחרי deploy. לכן בכיבוי: קודם מפסיקים לקבל עבודה (HTTP, ‏worker), ורק אחר כך סוגרים חיבורים.</li></ol>
+@mistakes
+<ul><li>לסמוך על הסדר ש־Nest קורא ל־hooks בין מודולים בלי לבדוק — זה בדיוק הניסוי של פרק 24.</li></ul>
+
+@@ P26-E103 | 3 | ‏compose.yaml: ‏Redis עם healthcheck 🤖 | 20 | פרק 23, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E103.yaml</code> (יש בו רק הערה) כתוב <code>compose.yaml</code> עם שלושה שירותים:</p>
+<ul><li><code>db</code> — ‏<code>postgres:18-alpine</code>, עם משתני הסביבה <code>POSTGRES_USER</code>, ‏<code>POSTGRES_PASSWORD</code>, ‏<code>POSTGRES_DB</code> (כולם <code>shop</code>), ו־healthcheck עם <code>pg_isready</code>.</li><li><code>redis</code> — ‏<code>redis:8-alpine</code>, healthcheck עם <code>redis-cli ping</code>. <strong>בלי</strong> <code>ports</code>.</li><li><code>api</code> — ‏<code>build: .</code>, פורט 3000, ומשתני סביבה: <code>DATABASE_URL</code> (לשירות <code>db</code>), ‏<code>REDIS_URL: redis://redis:6379</code>, ‏<code>REDIS_PREFIX: shop</code>. תלוי ב־<code>db</code> וב־<code>redis</code>, שניהם עם <code>condition: service_healthy</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏Compose, ‏healthcheck ו־<code>depends_on</code> מפרק 23 — והשיעור: Redis כשירות של הפרויקט.</p>
+```term
+% npm run check P26-E103
+```
+@hint1
+<p>‏healthcheck: <code>test: ["CMD", "redis-cli", "ping"]</code>, ועוד <code>interval</code>, ‏<code>timeout</code>, ‏<code>retries</code>.</p>
+@hint2
+```yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+```
+@solution
+```yaml save=solutions/P26-E103.yaml
+# P26-E103: compose.yaml — Redis עם healthcheck
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://shop:shop@db:5432/shop
+      REDIS_URL: redis://redis:6379
+      REDIS_PREFIX: shop
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+```
+<p>ל־Redis אין <code>ports</code>: רק ה־API צריך אותו, והוא מגיע אליו ברשת הפנימית בשם <code>redis</code>. לראות מה יש בו: <code>docker compose exec redis redis-cli</code>.</p>
+@mistakes
+<ul><li><code>REDIS_URL: redis://localhost:6379</code> — בתוך קונטיינר ה־API, ‏localhost הוא ה־API עצמו.</li><li><code>depends_on: [db, redis]</code> (רשימה) — מחכה רק שהקונטיינרים יתחילו.</li></ul>
+
+@@ P26-E104 | 3 | ‏config של Redis עם zod 🤖 | 20 | פרק 24, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E104.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function loadRedisConfig(env: Record<string, string | undefined>): { redis?: { url: string; prefix: string }; productsCacheTtlSeconds: number; orderPaymentTimeoutSeconds: number; runWorker: boolean }
+```
+<ul><li><code>REDIS_URL</code> — רשות; אם יש, חייב להתחיל ב־<code>redis://</code> או <code>rediss://</code>. ‏<code>REDIS_PREFIX</code> — אותיות, ספרות, ‏<code>_</code> ו־<code>-</code> בלבד, ברירת מחדל <code>shop</code>.</li><li><code>PRODUCTS_CACHE_TTL_SECONDS</code> — שלם ≥ 1, ברירת מחדל 60. ‏<code>ORDER_PAYMENT_TIMEOUT_SECONDS</code> — שלם ≥ 1, ברירת מחדל 1800. ‏<code>WORKER</code> — ‏<code>"true"</code>/<code>"false"</code>, ברירת מחדל <code>"true"</code>.</li><li><code>redis</code> קיים בתוצאה רק אם יש <code>REDIS_URL</code>.</li><li>לא תקין ← <code>Error</code> שההודעה שלו מתחילה ב־<code>הגדרות לא תקינות</code> ומזכירה את שם <em>כל</em> המשתנים הבעייתיים — לא רק הראשון.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏config עם zod ו"ליפול בעלייה" מפרק 24 — והשיעור: ההגדרות של Redis בפרויקט.</p>
+```term
+% npm run check P26-E104
+```
+@hint1
+<p>‏<code>z.coerce.number().int().min(1).default(60)</code>, ו־<code>z.enum(["true", "false"]).default("true")</code>.</p>
+@hint2
+<p>כל הבעיות, לא רק הראשונה:</p>
+```ts
+r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+```
+@solution
+```ts save=solutions/P26-E104.ts
+// P26-E104: config של Redis עם zod
+import { z } from "zod";
+
+const schema = z.object({
+  REDIS_URL: z.string().regex(/^rediss?:\/\//, "חייב להתחיל ב־redis:// או rediss://").optional(),
+  REDIS_PREFIX: z.string().regex(/^[a-z0-9_-]+$/i).default("shop"),
+  PRODUCTS_CACHE_TTL_SECONDS: z.coerce.number().int().min(1).default(60),
+  ORDER_PAYMENT_TIMEOUT_SECONDS: z.coerce.number().int().min(1).default(1800),
+  WORKER: z.enum(["true", "false"]).default("true"),
+});
+
+export function loadRedisConfig(env: Record<string, string | undefined>) {
+  const r = schema.safeParse(env);
+  if (!r.success) throw new Error(`הגדרות לא תקינות — ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+  const e = r.data;
+  return {
+    ...(e.REDIS_URL ? { redis: { url: e.REDIS_URL, prefix: e.REDIS_PREFIX } } : {}),
+    productsCacheTtlSeconds: e.PRODUCTS_CACHE_TTL_SECONDS,
+    orderPaymentTimeoutSeconds: e.ORDER_PAYMENT_TIMEOUT_SECONDS,
+    runWorker: e.WORKER === "true",
+  };
+}
+```
+<p>‏<code>WORKER=yes</code> או <code>REDIS_URL=localhost:6379</code> (בלי <code>redis://</code>) — השרת לא עולה, עם הודעה שאומרת בדיוק מה לתקן. עדיף על שרת שעולה ומתנהג אחרת ממה שחשבת.</p>
+@mistakes
+<ul><li><code>z.coerce.boolean()</code> ל־WORKER — ‏<code>Boolean("false")</code> הוא <code>true</code>.</li><li>‏<code>parse</code> (שזורק עם ההודעה של zod) במקום הודעה מסודרת — עובד, אבל ב־log של פרודקשן קשה לקרוא JSON של issues.</li></ul>
+
+@@ P26-E105 | 3 | ‏GET /products עם X-Cache וביטול 🤖 | 25 | פרק 15, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E105.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function productsApp(deps: { redis: Redis | null; loadProducts: (q: string) => Promise<unknown[]>; ttl?: number }): express.Express
+```
+<ul><li><code>GET /products?q=…</code> — ‏<code>q</code> אחרי trim ו־<code>toLowerCase</code> (ברירת מחדל <code>""</code>). cache בגרסאות כמו בפרויקט: גרסה ב־<code>v:products</code>, מפתח <code>cache:products:&lt;version&gt;:&lt;q&gt;</code>, ‏TTL ‏<code>ttl</code> (ברירת מחדל 60). ‏header <code>X-Cache</code>: ‏<code>HIT</code>/<code>MISS</code>/<code>OFF</code>.</li><li>‏<code>redis</code> הוא <code>null</code>, או Redis זורק ← ‏<code>OFF</code>, והתשובה מהמסד (200).</li><li><code>POST /products/invalidate</code> ← ‏<code>INCR</code> לגרסה, ו־<code>204</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏Express ו־headers מפרקים 14–15 — והשיעור: ה־cache של הקטלוג בפרויקט, מקצה לקצה.</p>
+```term
+% npm run check P26-E105
+```
+@hint1
+<p>אם כתבת את E93 — אפשר לייבא ממנו, או להעתיק את <code>getOrSet</code>. ה־route רק קורא לו וקובע header.</p>
+@hint2
+<p>‏<code>res.set("X-Cache", status).json(value)</code>.</p>
+@solution
+```ts save=solutions/P26-E105.ts
+// P26-E105: GET /products עם X-Cache וביטול
+import express from "express";
+import type { Redis } from "ioredis";
+
+type Deps = { redis: Redis | null; loadProducts: (q: string) => Promise<unknown[]>; ttl?: number };
+
+export function productsApp({ redis, loadProducts, ttl = 60 }: Deps) {
+  const app = express();
+
+  async function cached(q: string): Promise<{ value: unknown[]; status: string }> {
+    if (!redis) return { value: await loadProducts(q), status: "OFF" };
+    let key: string;
+    try {
+      const version = (await redis.get("v:products")) ?? "0";
+      key = `cache:products:${version}:${q}`;
+      const hit = await redis.get(key);
+      if (hit !== null) return { value: JSON.parse(hit), status: "HIT" };
+    } catch {
+      return { value: await loadProducts(q), status: "OFF" };
+    }
+    const value = await loadProducts(q);
+    await redis.set(key, JSON.stringify(value), "EX", ttl).catch(() => {});
+    return { value, status: "MISS" };
+  }
+
+  app.get("/products", async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+    const { value, status } = await cached(q);
+    res.set("X-Cache", status).json(value);
+  });
+
+  app.post("/products/invalidate", async (req, res) => {
+    await redis?.incr("v:products").catch(() => {});
+    res.status(204).end();
+  });
+
+  return app;
+}
+```
+<p>‏<code>q</code> מנורמל לפני שהוא נכנס למפתח (‏E45): <code>V60</code>, ‏<code>v60</code> ו־<code>" v60 "</code> הם אותה בקשה — וגם <code>loadProducts</code> מקבל את אותו ערך, כך שהתשובה באמת זהה.</p>
+@mistakes
+<ul><li>לשמור את <code>q</code> המקורי במפתח ולהעביר ל־<code>loadProducts</code> את המנורמל — שלושה מפתחות לאותה תשובה.</li><li>להחזיר 500 כש־Redis זורק — ה־cache הוא אופטימיזציה.</li></ul>
+
+@@ P26-E106 | 2 | מה הדפדפן רואה בזרם הזה? | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>זה מה שעבר על החוט (כל שורה מסתיימת ב־<code>\n</code>). אילו אירועים <code>EventSource</code> יפעיל, עם איזה שם, ‏<code>data</code> ו־<code>lastEventId</code>?</p>
+```out
+: connected
+
+retry: 5000
+
+id: 1
+event: status
+data: {"status":"received"}
+
+data: שורה ראשונה
+data: שורה שנייה
+
+: ping
+
+id: 2
+event: status
+data: {"status":"shipped"}
+```
+<p>ומה יקרה אם החיבור נופל עכשיו?</p>
+@hint1
+<p>שורה ריקה מסיימת הודעה. שורה שמתחילה בנקודתיים — הערה.</p>
+@hint2
+<p>הודעה בלי <code>data</code> — לא מפעילה אירוע. ‏<code>data</code> בכמה שורות — מתחבר עם <code>\n</code>.</p>
+@solution
+<ol><li><code>: connected</code> — הערה, כלום.</li><li><code>retry: 5000</code> — אין אירוע; הדפדפן יחכה 5 שניות לפני התחברות מחדש.</li><li>אירוע <code>status</code>, ‏data <code>{"status":"received"}</code>, ‏<code>lastEventId</code> ‏<code>"1"</code>.</li><li>אירוע <code>message</code> (אין <code>event</code>), ‏data <code>"שורה ראשונה\nשורה שנייה"</code>. ‏<code>lastEventId</code> נשאר <code>"1"</code> (ב־EventSource ה־id האחרון נשמר עד שמגיע חדש).</li><li><code>: ping</code> — heartbeat, כלום.</li><li><strong>שום דבר — עדיין.</strong> להודעה האחרונה אין שורה ריקה בסוף, אז היא לא הסתיימה. אם החיבור ייפול עכשיו — היא אבדה.</li></ol>
+<p>נפל ← אחרי 5 שניות, ‏<code>EventSource</code> מתחבר מחדש עם <code>Last-Event-ID: 1</code>, ושרת טוב (‏E28) שולח שוב את 2.</p>
+@mistakes
+<ul><li>לשכוח את <code>\n\n</code> בסוף כל הודעה בשרת — הדפדפן מחכה, והאירוע מגיע רק עם ההודעה <em>הבאה</em>.</li></ul>
+
+@@ P26-E107 | 2 | ‏101, ‏Upgrade ו־token בכתובת | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<ol><li>מה ההבדל בין התשובה לבקשת WebSocket שהצליחה לבין <code>200</code> רגיל? מה קורה ל־TCP אחרי ה־101?</li><li>למה אי אפשר לשלוח <code>Authorization: Bearer …</code> מ־<code>new WebSocket(url)</code> בדפדפן, ומה שתי האפשרויות?</li><li>בחרת token בכתובת (<code>?token=…</code>). למה הוא חייב להיות קצר־מועד וחד־פעמי, ולא ה־JWT הרגיל של שעה?</li><li>למה בודקים אותו באירוע <code>upgrade</code> של שרת ה־HTTP, ולא בהודעה הראשונה אחרי שהחיבור נפתח?</li></ol>
+@hint1
+<p>‏<code>101 Switching Protocols</code>.</p>
+@hint2
+<p>מי עוד רואה את הכתובת המלאה של בקשה?</p>
+@solution
+<ol><li><code>101 Switching Protocols</code>: מאותו רגע זה לא HTTP — שני הצדדים שולחים frames על אותו חיבור TCP, שנשאר פתוח.</li><li>ה־API של <code>WebSocket</code> בדפדפן פשוט לא מאפשר headers. האפשרויות: cookie של session (נשלח לבד), או token קצר־מועד בכתובת.</li><li>הכתובת המלאה נכתבת ללוגים של proxies, load balancers ושרתים, ולפעמים להיסטוריה. JWT של שעה בלוג = מי שקורא את הלוג יכול להתחזות שעה. token של 30 שניות לחיבור אחד — חסר ערך אחרי שנוצל.</li><li>חיבור פתוח הוא משאב (זיכרון, socket). אם מאמתים אחרי — כל אחד יכול לפתוח אלפי חיבורים ולא לשלוח כלום. ב־<code>upgrade</code> מחזירים <code>401</code> והחיבור לא נפתח בכלל (‏E29).</li></ol>
+@mistakes
+<ul><li>לסמוך על <code>from</code> שהלקוח שולח בהודעה — מי ששלח נקבע לפי החיבור (ה־token), לא לפי מה שכתוב.</li></ul>
+
+@@ P26-E108 | 2 | כל כמה זמן heartbeat? | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>ה־load balancer סוגר חיבור "שקט" אחרי 60 שניות. השרת שולח heartbeat כל <code>H</code> שניות.</p>
+<ol><li>מה קורה עם <code>H = 90</code>? ועם <code>H = 59</code>? מה ערך סביר?</li><li>ב־WebSocket: <code>ping</code> כל 30 שניות, ומי שלא ענה <code>pong</code> עד ה־ping הבא — <code>terminate()</code>. לקוח שהטלפון שלו נכבה ברגע t=0 (בלי לסגור את החיבור). מתי לכל המוקדם, ולכל המאוחר, השרת מגלה?</li><li>ב־SSE, <code>: ping</code> לא מקבל תשובה. איך השרת מגלה לקוח מת בכל זאת?</li></ol>
+@hint1
+<p>‏heartbeat צריך להגיע <em>לפני</em> ה־timeout, עם מרווח לעיכובים.</p>
+@hint2
+<p>בדיקה כל 30 שניות: "קיבלתי pong מאז ה־ping הקודם?".</p>
+@solution
+<ol><li>90 — החיבור נסגר אחרי 60 שניות, והלקוח מתחבר מחדש כל דקה. ‏59 — עובד על הנייר, אבל עיכוב של שנייה (GC, רשת) וזה נסגר. סביר: 15–30 שניות.</li><li>הבדיקה הבאה (עד 30 שניות אחרי t=0) שולחת ping ומסמנת "מחכה". הבדיקה שאחריה, עוד 30 שניות, רואה שלא היה pong ← terminate. כלומר בין 30 ל־60 שניות.</li><li>כתיבה לחיבור מת נכשלת בסוף — TCP מגלה שאין מי שיקבל, ו־<code>req.on("close")</code> נקרא. ה־ping של SSE הוא בעיקר כדי לשמור את החיבור חי בפני proxies, והגילוי בא כתופעת לוואי של הכתיבה.</li></ol>
+@mistakes
+<ul><li>heartbeat כל שנייה "ליתר ביטחון" — עם 50,000 לקוחות, 50,000 כתיבות בשנייה בשביל כלום.</li></ul>
+
+@@ P26-E109 | 1 | הלשונית השביעית | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>משתמש פותח את דף ההזמנות של חנות הקפה בשבע לשוניות. בכל אחת — <code>EventSource</code> פתוח. השרת מאחורי HTTP/1.1.</p>
+<ol><li>מה קורה בלשונית השביעית? ומה קורה כשהוא מנסה לטעון <em>כל</em> דף אחר באתר?</li><li>מה משתנה ב־HTTP/2?</li><li>תן שתי דרכים לצמצם את הבעיה גם בלי HTTP/2.</li></ol>
+@hint1
+<p>דפדפנים מגבילים ל־6 חיבורי HTTP/1.1 לכל דומיין.</p>
+@hint2
+<p>ב־HTTP/2 כל הבקשות לאותו דומיין עוברות על חיבור אחד.</p>
+@solution
+<ol><li>השביעית נתקעת — אין חיבור פנוי. וגם כל בקשה אחרת לאותו דומיין (תמונה, ‏<code>fetch</code>, דף) מחכה: ששת החיבורים תפוסים לנצח ב־SSE.</li><li>HTTP/2 מעביר את כל הבקשות על חיבור TCP אחד (multiplexing), וההגבלה היא ~100 זרמים. שבע לשוניות — בלי בעיה. ה־reverse proxy מפרק 25 נותן HTTP/2.</li><li>(א) לשונית אחת מחזיקה את ה־SSE ומעבירה עדכונים לאחרות (<code>BroadcastChannel</code> / SharedWorker). (ב) לסגור את ה־<code>EventSource</code> כשהלשונית מוסתרת (<code>visibilitychange</code>), ולפתוח כשחוזרים. וגם: SSE מתת־דומיין נפרד (<code>events.shop.com</code>) — מגבלה נפרדת.</li></ol>
+@mistakes
+<ul><li>"לפתוח WebSocket במקום" — עוקף את המגבלה, אבל מוותר על כל מה ש־SSE נותן חינם (התחברות מחדש, Last-Event-ID).</li></ul>
+
+@@ P26-E110 | 2 | ‏fan-out: פעמיים, או אף פעם | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>שלושה שרתים עם relay של pub/sub (‏E30). דנה מחוברת ל־A.</p>
+<ol><li>מפתח "משפר": כשהאירוע קורה ב־A, הוא שולח ללקוחות המקומיים של A מיד, <em>וגם</em> מפרסם ב־Redis. מה דנה רואה?</li><li>Redis לא זמין 10 שניות, ובזמן הזה ההזמנה של דנה נשלחה. מה דנה רואה, ומה אפשר לעשות?</li><li>שרת C עלה מחדש (deploy) ושני לקוחות התחברו אליו מחדש. האם הם צריכים משהו מ־pub/sub כדי לדעת מה פספסו?</li></ol>
+@hint1
+<p>‏A מנוי לערוץ בעצמו.</p>
+@hint2
+<p>pub/sub לא שומר.</p>
+@solution
+<ol><li>את האירוע פעמיים: פעם מהשליחה המקומית, ופעם כשההודעה חוזרת מ־Redis ל־A (גם הוא מנוי). לכן ב־E30 לא שולחים מקומית — רק <code>publish</code>.</li><li>כלום — ה־publish נכשל (או הגיע לאפס מנויים). הסטטוס במסד נכון, רק העדכון החי אבד. מה עושים: הדף טוען את הסטטוס מה־API כשהוא מתחבר (ומתחבר מחדש), כך שכל פספוס מתוקן בהתחברות הבאה; ולמה שאסור לפספס — תור.</li><li>לא. pub/sub הוא רק "מה קורה עכשיו". מה שפספסו — מ־Last-Event-ID מול מאגר אירועים (‏E28, ובין שרתים — ‏E120), או פשוט טעינה מחדש של המצב מה־API.</li></ol>
+@mistakes
+<ul><li>להשתמש ב־pub/sub כמקור האמת של הסטטוס — הוא רק הודעה ש"משהו השתנה".</li></ul>
+
+@@ P26-E111 | 2 | לפרק זרם SSE 🤖 | 20 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>הצד השני של E27: מה <code>EventSource</code> עושה עם הטקסט שמגיע. בקובץ <code>26-redis/starter/P26-E111.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function parseSSE(text: string): { event: string; data: string; id?: string }[]
+```
+<ul><li>שורות מופרדות ב־<code>\n</code>, ‏<code>\r\n</code> או <code>\r</code>. שורה ריקה מסיימת הודעה.</li><li>שורה שמתחילה ב־<code>:</code> — הערה, מדלגים. אחרת: שם השדה עד הנקודתיים הראשונות, והערך אחריהן (בלי רווח <em>אחד</em> בתחילתו, אם יש). שורה בלי נקודתיים — שדה עם ערך ריק.</li><li><code>data</code> — כמה שורות מתחברות עם <code>\n</code>. ‏<code>event</code> — ברירת מחדל <code>message</code>. ‏<code>id</code> — רק אם היה בהודעה. שדות אחרים (<code>retry</code>) — מתעלמים.</li><li>הודעה בלי אף שורת <code>data</code> — לא נכנסת. הודעה בסוף הטקסט בלי שורה ריקה אחריה — לא נכנסת (עוד לא הסתיימה).</li></ul>
+```term
+% npm run check P26-E111
+```
+@hint1
+<p>‏<code>text.split(/\r\n|\r|\n/)</code>. משתנים להודעה הנוכחית: <code>event</code>, ‏<code>id</code>, ומערך <code>data</code>.</p>
+@hint2
+<p>‏<code>const i = line.indexOf(":")</code>; ‏<code>let value = i === -1 ? "" : line.slice(i + 1)</code>; ‏<code>if (value.startsWith(" ")) value = value.slice(1)</code>.</p>
+@solution
+```ts save=solutions/P26-E111.ts
+// P26-E111: לפרק זרם SSE
+type Event = { event: string; data: string; id?: string };
+
+export function parseSSE(text: string): Event[] {
+  const out: Event[] = [];
+  let data: string[] = [];
+  let event = "";
+  let id: string | undefined;
+  const lines = text.split(/\r\n|\r|\n/);
+  lines.pop(); // מה שאחרי ירידת השורה האחרונה — שורה שעוד לא הסתיימה (או ריק)
+  for (const line of lines) {
+    if (line === "") {
+      if (data.length) out.push({ event: event || "message", data: data.join("\n"), ...(id !== undefined ? { id } : {}) });
+      data = [];
+      event = "";
+      id = undefined;
+      continue;
+    }
+    if (line.startsWith(":")) continue;
+    const i = line.indexOf(":");
+    const field = i === -1 ? line : line.slice(0, i);
+    let value = i === -1 ? "" : line.slice(i + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (field === "data") data.push(value);
+    else if (field === "event") event = value;
+    else if (field === "id") id = value;
+  }
+  return out;
+}
+```
+<p>‏<code>lines.pop()</code>: האיבר האחרון של <code>split</code> הוא מה שבא אחרי ירידת השורה האחרונה — ריק, או שורה שעוד לא הגיעה עד סופה. בלי ה־<code>pop</code>, טקסט שמסתיים ב־<code>data: x\n</code> (שורה אחת, בלי שורה ריקה) היה נראה כמו הודעה גמורה. זה בדיוק מה שהדפדפן עושה: הודעה שלא הסתיימה לא נמסרת.</p>
+@mistakes
+<ul><li><code>value.trim()</code> — מוחק רווחים שהם חלק מה־data (‏<code>data:   x</code> הוא <code>"  x"</code>).</li><li><code>line.split(":")</code> — ‏<code>data: {"a":1}</code> נחתך בנקודתיים שבתוך ה־JSON.</li></ul>
+
+@@ P26-E112 | 3 | ‏SSE עם heartbeat וניקוי 🤖 | 20 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E112.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function sseWithHeartbeat(opts: { intervalMs: number }): { handler: express.RequestHandler; active(): number }
+```
+<ul><li><code>handler</code> — ‏route של SSE: status 200, ‏<code>Content-Type: text/event-stream</code>, ‏<code>Cache-Control: no-cache</code>, ‏<code>X-Accel-Buffering: no</code>. כותב מיד <code>: connected</code> ושורה ריקה.</li><li>כל <code>intervalMs</code> — ‏<code>: ping</code> ושורה ריקה.</li><li><code>active()</code> — כמה חיבורים פתוחים עכשיו. כשהלקוח סוגר — ה־interval מתבטל, והמספר יורד.</li></ul>
+```term
+% npm run check P26-E112
+```
+@hint1
+<p>‏<code>res.writeHead(200, { … })</code>, ואז <code>res.write(": connected\n\n")</code>.</p>
+@hint2
+<p>‏<code>req.on("close", () =&gt; { clearInterval(timer); count--; })</code>.</p>
+@solution
+```ts save=solutions/P26-E112.ts
+// P26-E112: SSE עם heartbeat וניקוי
+import type express from "express";
+
+export function sseWithHeartbeat({ intervalMs }: { intervalMs: number }) {
+  let count = 0;
+  const handler: express.RequestHandler = (req, res) => {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" });
+    res.write(": connected\n\n");
+    count++;
+    const timer = setInterval(() => res.write(": ping\n\n"), intervalMs);
+    req.on("close", () => {
+      clearInterval(timer);
+      count--;
+    });
+  };
+  return { handler, active: () => count };
+}
+```
+<p>‏<code>: connected</code> בהתחלה לא רק "נחמד": חלק מה־proxies לא מעבירים את ה־headers ללקוח עד שמגיע הבייט הראשון של הגוף, ו־<code>fetch</code> מחכה להם.</p>
+@mistakes
+<ul><li>בלי <code>clearInterval</code> — כל לקוח שעזב משאיר timer שכותב לחיבור סגור, לנצח.</li><li>‏<code>res.on("finish")</code> במקום <code>req.on("close")</code> — ‏<code>finish</code> לא נקרא כשהלקוח מתנתק באמצע.</li></ul>
+
+@@ P26-E113 | 3 | ‏heartbeat ל־WebSocket: ‏ping, ‏pong, ‏terminate 🤖 | 25 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>בקובץ <code>26-redis/starter/P26-E113.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function attachHeartbeat(wss: WebSocketServer, intervalMs: number): () => void
+```
+<ul><li>כל חיבור חדש מסומן "חי". ‏<code>pong</code> מהלקוח ← שוב "חי".</li><li>כל <code>intervalMs</code>, לכל לקוח ב־<code>wss.clients</code>: לא "חי" מאז הבדיקה הקודמת ← <code>terminate()</code>. אחרת ← מסמנים "לא חי" ושולחים <code>ping()</code>.</li><li>מחזירה פונקציה שעוצרת את ה־interval.</li></ul>
+<p>הבודק מחבר שני לקוחות: אחד רגיל (עונה <code>pong</code> לבד), ואחד "מת" שלא עונה. אחרי כמה מחזורים — רק המת נותק.</p>
+```term
+% npm run check P26-E113
+```
+@hint1
+<p>איפה לשמור "חי"? ‏<code>const alive = new WeakMap&lt;WebSocket, boolean&gt;()</code> — כשהחיבור נעלם, גם הרשומה.</p>
+@hint2
+```ts
+wss.on("connection", (ws) => { alive.set(ws, true); ws.on("pong", () => alive.set(ws, true)); });
+```
+@solution
+```ts save=solutions/P26-E113.ts
+// P26-E113: heartbeat ל־WebSocket — ping, pong, terminate
+import type { WebSocket, WebSocketServer } from "ws";
+
+export function attachHeartbeat(wss: WebSocketServer, intervalMs: number) {
+  const alive = new WeakMap<WebSocket, boolean>();
+  wss.on("connection", (ws) => {
+    alive.set(ws, true);
+    ws.on("pong", () => alive.set(ws, true));
+  });
+  const timer = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!alive.get(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.set(ws, false);
+      ws.ping();
+    }
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+```
+<p>‏<code>terminate()</code> ולא <code>close()</code>: ‏<code>close</code> שולח frame של סגירה ומחכה לתשובה — מלקוח מת היא לא תגיע. ‏<code>terminate</code> הורס את ה־socket מיד, ו־<code>ws.on("close")</code> של השרת נקרא (כדי לנקות חדרים, מנויים וכו׳).</p>
+@mistakes
+<ul><li>לבדוק "חי" <em>אחרי</em> ששולחים ping באותו סיבוב — אף אחד לא מספיק לענות, וכולם מנותקים.</li><li>לשכוח להחזיר פונקציית עצירה — בבדיקות ובכיבוי מסודר ה־interval משאיר את התהליך חי.</li></ul>
+
+@@ P26-E114 | 3 | ‏SSE של הזמנה — רק לבעלים 🤖 | 25 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>ה־"רשות" של פרויקט 3: <code>GET /orders/:id/events</code>. בקובץ <code>26-redis/starter/P26-E114.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function orderEvents(deps: { authenticate(req: express.Request): number | null; ownerOf(orderId: number): Promise<number | null>; bus: EventEmitter }): express.RequestHandler
+```
+<ul><li><code>authenticate</code> החזיר <code>null</code> ← ‏<code>401 { error }</code>.</li><li>ההזמנה לא קיימת, או שייכת למשתמש אחר ← ‏<code>404 { error }</code> (לא 403 — לא מגלים שהיא קיימת).</li><li>אחרת — SSE (‏200, ‏<code>text/event-stream</code>, ‏<code>no-cache</code>), ומאזין לאירוע <code>status</code> של <code>bus</code> (‏payload: ‏<code>{ orderId, status }</code>). רק אירועים של ההזמנה הזו נשלחים: <code>event: status</code> ו־<code>data</code> עם ה־JSON.</li><li>הלקוח סגר ← המאזין יורד מה־bus (הבודק בודק את <code>listenerCount</code>).</li></ul>
+```term
+% npm run check P26-E114
+```
+@hint1
+```ts
+const listener = (e) => { if (e.orderId === orderId) res.write(…); };
+bus.on("status", listener);
+req.on("close", () => bus.off("status", listener));
+```
+@hint2
+<p>‏<code>Number(req.params.id)</code> — ובדיקת בעלות עם <code>!==</code>.</p>
+@solution
+```ts save=solutions/P26-E114.ts
+// P26-E114: SSE של הזמנה — רק לבעלים
+import type { EventEmitter } from "node:events";
+import type express from "express";
+
+type Deps = { authenticate(req: express.Request): number | null; ownerOf(orderId: number): Promise<number | null>; bus: EventEmitter };
+
+export function orderEvents({ authenticate, ownerOf, bus }: Deps): express.RequestHandler {
+  return async (req, res) => {
+    const userId = authenticate(req);
+    if (userId === null) return void res.status(401).json({ error: "נדרשת התחברות" });
+    const orderId = Number(req.params.id);
+    const owner = Number.isInteger(orderId) ? await ownerOf(orderId) : null;
+    if (owner === null || owner !== userId) return void res.status(404).json({ error: "הזמנה לא נמצאה" });
+
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.write(": connected\n\n");
+    const listener = (e: { orderId: number; status: string }) => {
+      if (e.orderId === orderId) res.write(`event: status\ndata: ${JSON.stringify(e)}\n\n`);
+    };
+    bus.on("status", listener);
+    req.on("close", () => bus.off("status", listener));
+  };
+}
+```
+<p>אותה בדיקת בעלות כמו ב־<code>GET /orders/:id</code> — ‏SSE הוא עוד endpoint, ויש לו אותן הרשאות. וה־<code>bus.off</code>: אלף לקוחות שהתחברו ועזבו בלי ניקוי = אלף מאזינים שכותבים לחיבורים סגורים (ו־Node מזהיר: <code>MaxListenersExceededWarning</code>).</p>
+@mistakes
+<ul><li>לבדוק רק ש"מחובר" — כל לקוח רואה את הסטטוס של כל הזמנה.</li><li>לשלוח את כל האירועים ולסנן בדפדפן — מידע של אחרים עובר ברשת.</li></ul>
+
+@@ P26-E115 | 2 | ‏SIGTERM וחיבורי SSE פתוחים | 10 | פרק 24, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>הכיבוי המסודר מפרק 24: <code>server.close()</code>, מחכים שהבקשות יסתיימו, ואז סוגרים את המסד. עכשיו יש 300 לקוחות עם SSE פתוח.</p>
+<ol><li>מה קורה ל־<code>server.close()</code>?</li><li>מה צריך להוסיף לכיבוי, ובאיזה סדר?</li><li>מה הלקוחות חווים, ולמה זה בסדר (או כמעט)?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> SIGTERM וכיבוי מסודר מפרק 24 — והשיעור: חיבורים שלא נגמרים לעולם.</p>
+@hint1
+<p>‏<code>close</code> מחכה שכל הבקשות יסתיימו. בקשת SSE לא מסתיימת.</p>
+@hint2
+<p>‏<code>EventSource</code> מתחבר מחדש לבד.</p>
+@solution
+<ol><li>הוא מפסיק לקבל חיבורים חדשים ומחכה — לנצח. אחרי 10 שניות מגיע SIGKILL, והכול נחתך באמצע (כולל בקשות רגילות וכתיבות למסד).</li><li>ב־SIGTERM: (א) <code>server.close()</code> — לא לקבל חדשים. (ב) לעבור על כל חיבורי ה־SSE ולסיים אותם (<code>res.end()</code>), אולי אחרי הודעת <code>retry</code> קצרה. (ג) לחכות לבקשות הרגילות. (ד) לסגור Redis, ‏pub/sub ומסד.</li><li>החיבור נסגר, ו־<code>EventSource</code> מתחבר מחדש (אחרי <code>retry</code>) — לשרת אחר מאחורי ה־load balancer — עם <code>Last-Event-ID</code>. מה שפורסם ברגע המעבר — Last-Event-ID מול מאגר משותף (‏E120) מכסה; בלעדיו — נטען מחדש מה־API.</li></ol>
+@mistakes
+<ul><li>להעלות את ה־timeout ל־SIGKILL לדקה "כדי לתת לחיבורים להיסגר" — הם לא ייסגרו לבד.</li></ul>
+
+@@ P26-E116 | 2 | ‏EventSource ו־JWT | 10 | פרק 21, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>האתר מאמת עם <code>Authorization: Bearer &lt;JWT&gt;</code> (פרק 21). ל־<code>new EventSource(url)</code> אי אפשר להוסיף headers.</p>
+<ol><li>תן שלוש דרכים להעביר זהות לבקשת ה־SSE, עם יתרון וחיסרון לכל אחת.</li><li>ה־JWT פג אחרי שעה, אבל חיבור ה־SSE פתוח כבר שעתיים. מה הבעיה, ומה עושים?</li><li>אם בוחרים cookie — מה צריך לבדוק מהשיעורים על CORS ו־CSRF?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> JWT, תוקף ו־cookies מפרק 21 — והשיעור: SSE ו־WebSocket לא שולחים headers משלך.</p>
+@hint1
+<p>‏cookie, ‏token בכתובת, ו־<code>fetch</code> עם קריאה ידנית של הזרם.</p>
+@hint2
+<p>האימות קורה פעם אחת — בפתיחה.</p>
+@solution
+<ol><li>(א) cookie (‏<code>HttpOnly</code>) — נשלח לבד, ‏<code>withCredentials: true</code> אם בדומיין אחר; חיסרון: צריך הגנת CSRF ו־CORS נכון. (ב) token קצר־מועד בכתובת (<code>POST /events/token</code> ← ‏<code>?token=</code>) — פשוט; חיסרון: עוד endpoint, והכתובת בלוגים. (ג) ‏<code>fetch</code> עם header וקריאת הזרם ידנית (כמו בדוגמה בשיעור) — האימות הרגיל; חיסרון: אין התחברות מחדש אוטומטית ו־Last-Event-ID — צריך לכתוב לבד.</li><li>האימות נעשה רק בפתיחה, אז החיבור ממשיך גם אחרי שה־JWT פג — וגם אחרי שהמשתמש נחסם. פתרון: השרת סוגר חיבורים כשהתוקף של הטוקן שלהם עובר (טיימר לכל חיבור), והלקוח מתחבר מחדש עם טוקן חדש.</li><li>CORS: ‏<code>Access-Control-Allow-Credentials: true</code> ו־origin מפורש (לא <code>*</code>). CSRF: ‏SSE הוא GET שרק קורא — סיכון נמוך יותר, אבל ה־cookie הוא אותו cookie שמאמת גם POST.</li></ol>
+@mistakes
+<ul><li>לשים את ה־JWT הרגיל ב־<code>?token=</code> — שעה של התחזות לכל מי שקורא לוגים (‏E107).</li></ul>
+
+@@ P26-E117 | 2 | ‏sticky sessions או pub/sub? | 10 | פרק 25, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>מעבירים את חנות הקפה לשלושה עותקים מאחורי load balancer (פרק 25). חבר צוות מציע "sticky sessions" — כל לקוח תמיד מגיע לאותו שרת — "ואז לא צריך Redis בשביל זמן אמת".</p>
+<ol><li>מה sticky sessions כן פותר?</li><li>הסטטוס של ההזמנה של דנה מתעדכן כשמנהל לוחץ "נשלחה". למה sticky sessions לא עוזר כאן?</li><li>מה קורה ללקוחות של שרת שנפל או הוחלף ב־deploy?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> load balancer ו־deploy מפרק 25 — והשיעור: fan-out בין שרתים.</p>
+@hint1
+<p>מי גורם לאירוע, ומי מחכה לו?</p>
+@hint2
+<p>"תמיד לאותו שרת" — כל עוד הוא קיים.</p>
+@solution
+<ol><li>שבקשות של אותו לקוח מגיעות לאותו תהליך — שימושי כשיש מצב בזיכרון של חיבור אחד (למשל ההתחברות מחדש של WebSocket לאותו שרת).</li><li>האירוע קורה בבקשה של <em>המנהל</em>, שמגיעה לשרת שלו. דנה "דבוקה" לשרת אחר. משהו צריך להעביר את האירוע בין השרתים — pub/sub.</li><li>הם מתחברים מחדש לשרת אחר ("הדבק" נשבר), וכל מה שהיה בזיכרון של השרת הקודם אבד. עם pub/sub ומאגר משותף — אין מה לאבד.</li></ol>
+@mistakes
+<ul><li>"נשלח את האירוע מה־API של המנהל ישירות לשרת של דנה" — צריך לדעת איפה כל לקוח מחובר, ולתחזק את זה. pub/sub עושה את זה בלי לדעת.</li></ul>
+
+@@ P26-E118 | 3 | ‏SSE בשני שרתים: ‏POST ב־A, אירוע ב־B 🤖 | 30 | פרק 15, שיעור 6
+@lesson 6
+@part 2
+@task
+<p>בקובץ <code>26-redis/starter/P26-E118.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function createLiveApp(deps: { pub: Redis; sub: Redis; channel: string }): Promise<{ app: express.Express; close(): Promise<void> }>
+```
+<ul><li><code>GET /events</code> — ‏SSE (‏200, ‏<code>text/event-stream</code>, ‏<code>no-cache</code>). כל הודעה שמגיעה מהערוץ נכתבת לכל הלקוחות <em>של השרת הזה</em> כ־<code>data: &lt;json&gt;</code> ושורה ריקה. לקוח שסגר — יוצא מהרשימה.</li><li><code>POST /events</code> עם גוף JSON ← מפרסם אותו ב־<code>channel</code> ומחזיר <code>202</code>. לא שולח ישירות ללקוחות המקומיים — ההודעה חוזרת מ־Redis.</li><li>מנוי <strong>אחד</strong> לערוץ לכל אפליקציה (ב־<code>createLiveApp</code>, לא לכל לקוח). הודעות מערוצים אחרים על אותו חיבור — לא נכנסות. ‏<code>close()</code> מבטל את המנוי.</li></ul>
+<p>הבודק מרים שתי אפליקציות (A ו־B) עם חיבורי Redis נפרדים: לקוח מחובר ל־B, ו־POST נשלח ל־A.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>express.json()</code> ו־routes מפרק 15, ו־pub/sub משיעור 3 — והשיעור: fan-out של SSE בין שרתים.</p>
+```term
+% npm run check P26-E118
+```
+@hint1
+<p>‏<code>const clients = new Set&lt;express.Response&gt;()</code>. ב־GET: ‏<code>clients.add(res)</code>, ו־<code>req.on("close", () =&gt; clients.delete(res))</code>.</p>
+@hint2
+```ts
+await sub.subscribe(channel);
+sub.on("message", (ch, msg) => {
+  if (ch === channel) for (const c of clients) c.write(`data: ${msg}\n\n`);
+});
+```
+@solution
+```ts save=solutions/P26-E118.ts
+// P26-E118: SSE בשני שרתים — POST ב־A, אירוע ב־B
+import express from "express";
+import type { Redis } from "ioredis";
+
+export async function createLiveApp({ pub, sub, channel }: { pub: Redis; sub: Redis; channel: string }) {
+  const clients = new Set<express.Response>();
+  await sub.subscribe(channel);
+  const onMessage = (ch: string, msg: string) => {
+    if (ch !== channel) return;
+    for (const c of clients) c.write(`data: ${msg}\n\n`);
+  };
+  sub.on("message", onMessage);
+
+  const app = express();
+  app.use(express.json());
+  app.get("/events", (req, res) => {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.write(": connected\n\n");
+    clients.add(res);
+    req.on("close", () => clients.delete(res));
+  });
+  app.post("/events", async (req, res) => {
+    await pub.publish(channel, JSON.stringify(req.body));
+    res.status(202).end();
+  });
+
+  return {
+    app,
+    async close() {
+      sub.off("message", onMessage);
+      await sub.unsubscribe(channel);
+    },
+  };
+}
+```
+<p>זה E30 ו־E28 יחד, בתוך אפליקציה: ה־HTTP הוא הכניסה (POST) והיציאה (SSE), ו־Redis הוא החוט שמחבר בין השרתים. בפרויקט אמיתי ה־POST הוא לא endpoint ציבורי — הוא השירות שמשנה סטטוס (‏<code>OrdersService.ship</code>) שמפרסם.</p>
+@mistakes
+<ul><li><code>sub.subscribe</code> בתוך ה־GET — מנוי לכל לקוח, וכל הודעה נכתבת לכל לקוח כמספר הלקוחות.</li><li>לשלוח מקומית <em>וגם</em> לפרסם — הלקוחות של A מקבלים כל הודעה פעמיים (‏E110).</li></ul>
+
+@@ P26-E119 | 2 | הודעות WebSocket עם zod 🤖 | 15 | פרק 15, שיעור 6
+@lesson 6
+@part 2
+@task
+<p>כל הודעה שמגיעה ב־WebSocket היא קלט מהרשת — בדיוק כמו גוף של POST. בקובץ <code>26-redis/starter/P26-E119.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function parseClientMessage(raw: string | Buffer): { ok: true; msg: ClientMessage } | { ok: false; error: string }
+// ClientMessage = { type: "join"; room: string } | { type: "say"; text: string } | { type: "typing" }
+```
+<ul><li>JSON לא תקין ← ‏<code>{ ok: false, error: "JSON לא תקין" }</code>.</li><li>‏<code>join</code>: ‏<code>room</code> — אותיות קטנות באנגלית, ספרות ומקף, 1–30 תווים. ‏<code>say</code>: ‏<code>text</code> — אחרי trim, 1–500 תווים. ‏<code>typing</code> — בלי שדות נוספים.</li><li>שדה נוסף בכל סוג (למשל <code>from</code>), או <code>type</code> לא מוכר ← <code>ok: false</code> עם הודעה כלשהי.</li><li>‏<code>raw</code> יכול להגיע כ־<code>Buffer</code> (כך <code>ws</code> מוסר הודעות).</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏zod, ‏<code>strictObject</code> ו־discriminated union מפרקים 11 ו־15 — והשיעור: הודעות WebSocket הן קלט כמו כל קלט.</p>
+```term
+% npm run check P26-E119
+```
+@hint1
+```ts
+z.discriminatedUnion("type", [z.strictObject({ type: z.literal("join"), room: … }), …])
+```
+@hint2
+<p>‏<code>JSON.parse(String(raw))</code> בתוך <code>try</code>. ואז <code>safeParse</code>.</p>
+@solution
+```ts save=solutions/P26-E119.ts
+// P26-E119: הודעות WebSocket עם zod
+import { z } from "zod";
+
+const schema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("join"), room: z.string().regex(/^[a-z0-9-]{1,30}$/) }),
+  z.strictObject({ type: z.literal("say"), text: z.string().trim().min(1).max(500) }),
+  z.strictObject({ type: z.literal("typing") }),
+]);
+export type ClientMessage = z.infer<typeof schema>;
+
+export function parseClientMessage(raw: string | Buffer): { ok: true; msg: ClientMessage } | { ok: false; error: string } {
+  let data: unknown;
+  try {
+    data = JSON.parse(String(raw));
+  } catch {
+    return { ok: false, error: "JSON לא תקין" };
+  }
+  const r = schema.safeParse(data);
+  if (!r.success) return { ok: false, error: r.error.issues[0]?.message ?? "הודעה לא תקינה" };
+  return { ok: true, msg: r.data };
+}
+```
+<p>‏<code>strictObject</code> הוא ההגנה מ־E107: הודעה עם <code>from: "admin"</code> נדחית, במקום להיבלע בשקט — והשרת ממילא קובע את <code>from</code> לפי החיבור. ו־<code>max(500)</code>: בלעדיו, הודעה של 10MB נשלחת לכל מי שבחדר.</p>
+@mistakes
+<ul><li><code>JSON.parse(raw)</code> על Buffer בלי <code>String</code> — עובד ב־Node (‏Buffer מומר), אבל TypeScript מתלונן, וקל לשכוח במקום אחר.</li><li><code>z.object</code> — שדות נוספים נמחקים בשקט, והקוד אחר כך אולי קורא את <code>raw</code> המקורי.</li></ul>
+
+@@ P26-E120 | 3 | ‏Last-Event-ID בין שרתים: מאגר ב־Redis 🤖 | 25 | שיעור 1, שיעור 6
+@lesson 6
+@part 2
+@task
+<p>ב־E28 המאגר של האירועים האחרונים היה בזיכרון של שרת אחד. לקוח שמתחבר מחדש לשרת <em>אחר</em> — לא מקבל את מה שפספס. בקובץ <code>26-redis/starter/P26-E120.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function appendEvent(redis: Redis, stream: string, event: string, data: unknown, max?: number): Promise<number>
+export async function eventsAfter(redis: Redis, stream: string, lastId: number): Promise<{ id: number; event: string; data: unknown }[]>
+```
+<ul><li><code>appendEvent</code> — ‏id עולה ומשותף לכל השרתים מ־<code>INCR sse:&lt;stream&gt;:seq</code>. מוסיף <code>{ id, event, data }</code> כ־JSON לסוף list ‏<code>sse:&lt;stream&gt;:log</code>, ומשאיר רק את <code>max</code> (ברירת מחדל 100) האחרונים. מחזיר את ה־id.</li><li><code>eventsAfter</code> — כל האירועים במאגר עם <code>id &gt; lastId</code>, ממוינים לפי id.</li><li>הבודק מוסיף 40 אירועים במקביל משני שרתים — כל ה־ids שונים, ו־<code>eventsAfter(0)</code> מחזיר את כולם, בסדר.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>INCR</code>, ‏<code>RPUSH</code> ו־<code>LTRIM</code> משיעור 1 — והשיעור: Last-Event-ID גם כשהלקוח עובר שרת.</p>
+```term
+% npm run check P26-E120
+```
+@hint1
+<p>‏<code>LTRIM key -max -1</code> — משאיר את <code>max</code> האחרונים.</p>
+@hint2
+<p>שני workers יכולים לקבל id 7 ו־8, אבל לדחוף את 8 לפני 7. לכן <code>eventsAfter</code> ממיין.</p>
+@solution
+```ts save=solutions/P26-E120.ts
+// P26-E120: Last-Event-ID בין שרתים — מאגר ב־Redis
+import type { Redis } from "ioredis";
+
+export async function appendEvent(redis: Redis, stream: string, event: string, data: unknown, max = 100) {
+  const id = await redis.incr(`sse:${stream}:seq`);
+  const log = `sse:${stream}:log`;
+  await redis.multi().rpush(log, JSON.stringify({ id, event, data })).ltrim(log, -max, -1).exec();
+  return id;
+}
+
+export async function eventsAfter(redis: Redis, stream: string, lastId: number) {
+  const all = (await redis.lrange(`sse:${stream}:log`, 0, -1)).map((x) => JSON.parse(x) as { id: number; event: string; data: unknown });
+  return all.filter((e) => e.id > lastId).sort((a, b) => a.id - b.id);
+}
+```
+<p>id מ־<code>INCR</code> ולא מונה בזיכרון — כך <code>Last-Event-ID: 42</code> אומר אותו דבר בכל שרת. (ל־Redis יש גם מבנה שנבנה בדיוק לזה — Streams, ‏<code>XADD</code>/<code>XRANGE</code> — עם ids עולים וחיתוך מובנים. כאן בנינו אותו משני הכלים שכבר מכירים.)</p>
+@mistakes
+<ul><li><code>LTRIM key 0 max-1</code> — משאיר את הראשונים (הישנים), ומוחק כל אירוע חדש.</li><li>לסמוך על הסדר ב־list בלי מיון — במקביל, ה־id וסדר ה־RPUSH לא תמיד אותו דבר.</li></ul>
