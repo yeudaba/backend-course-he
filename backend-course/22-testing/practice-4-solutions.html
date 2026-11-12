@@ -36,7 +36,787 @@
 
 </div></details>
   </div>
+<div class="ex" id="P22-E64">
+    <h3>P22-E64 · מ־node:test ל־Jest — ביד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־Jest אין import ל־<code>it</code>/<code>expect</code>/<code>jest</code> — הם גלובליים.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>toHaveBeenCalledTimes</code>, ‏<code>toHaveBeenCalledWith</code>, ו־<code class="mid">await expect(p).rejects.toMatchObject(...)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">it("עמוד ראשון", () =&gt; {
+  expect(paginate(23, 1)).toEqual({ pages: 3, offset: 0, hasPrev: false, hasNext: true });
+});
+it("page 0 ← RangeError", () =&gt; {
+  expect(() =&gt; paginate(10, 0)).toThrow(RangeError);
+});
+it("שולח מייל אחד", async () =&gt; {
+  const send = jest.fn(async () =&gt; {});
+  await notify({ send }, "dana@example.com");
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledWith("dana@example.com", "יש לך משימה באיחור");
+});
+it("משתמש לא קיים", async () =&gt; {
+  await expect(loadUser(99)).rejects.toMatchObject({ status: 404 });
+});</code></pre>
+<p>שים לב ל־<code class="mid">expect(() =&gt; paginate(10, 0))</code>: פונקציה, לא תוצאה. ‏<code class="mid">expect(paginate(10, 0)).toThrow()</code> זורק <em>לפני</em> ש־<code>expect</code> מקבל משהו, והבדיקה נכשלת עם השגיאה עצמה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את ה־<code>await</code> לפני <code>expect(...).rejects</code> — אותה בעיה כמו ב־E35.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E65">
+    <h3>P22-E65 · ‏toBe, toEqual, toMatchObject — מה עובר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>toBe</code> הוא <code>Object.is</code>. ‏<code>toEqual</code> הוא "deep", אבל סלחן ל־<code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>toMatchObject</code> חלקי באובייקטים — אבל במערכים האורך חייב להתאים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { expect } from "expect";
+const checks: [string, () =&gt; void][] = [
+  ["toBe על אובייקט", () =&gt; expect({ id: 1 }).toBe({ id: 1 })],
+  ["toEqual מתעלם מ־undefined", () =&gt; expect({ id: 1, note: undefined }).toEqual({ id: 1 })],
+  ["toStrictEqual לא מתעלם", () =&gt; expect({ id: 1, note: undefined }).toStrictEqual({ id: 1 })],
+  ["toMatchObject חלקי", () =&gt; expect({ id: 1, title: "חלב", ownerId: 7 }).toMatchObject({ title: "חלב" })],
+  ["toMatchObject על מערך קצר", () =&gt; expect([1, 2, 3]).toMatchObject([1, 2])],
+  ["toEqual מערך בסדר אחר", () =&gt; expect([1, 2]).toEqual([2, 1])],
+  ["toThrow עם מחרוזת חלקית", () =&gt; expect(() =&gt; { throw new RangeError("page חייב להיות חיובי"); }).toThrow("חיובי")],
+  ["toThrow עם סוג", () =&gt; expect(() =&gt; { throw new Error("x"); }).toThrow(RangeError)],
+];
+for (const [name, check] of checks) {
+  try { check(); console.log(`✔ ${name}`); } catch { console.log(`✖ ${name}`); }
+}</code></pre>
+<pre class="terminal">?</pre>
+<p>ההבדל המעשי: ‏<code class="mid">toEqual({ id: 1, email: "d@x.co" })</code> עובר גם על <code class="mid">{ id: 1, email: "d@x.co", passwordHash: undefined }</code>. עם ערך אמיתי (<code>"$2b$..."</code>) הוא כבר נכשל, אז לבאג 5 של PR2-TESTS זה מספיק. אבל כשרוצים לוודא ששדה <em>לא קיים בכלל</em>, ‏<code>toStrictEqual</code> או <code class="mid">expect(body).not.toHaveProperty("passwordHash")</code>. ו־<code>toMatchObject</code> הפוך: נוח כשבודקים רק חלק (<code class="mid">{ status: 422, code: "DUE_DATE_IN_PAST" }</code>), ומסוכן כשבודקים "מה יצא החוצה", כי הוא לא רואה שדות נוספים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>toMatchObject</code> לכל דבר "כי הוא עובר". הוא עובר כי הוא בודק פחות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E66">
+    <h3>P22-E66 · ‏"Must use import to load ES Module" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשיעור: "גם כשהפרויקט שלך CommonJS, החבילות של Nest עצמן הן ESM".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>require(esm)</code> — ב־Node 24 אפשר לטעון ESM מתוך CommonJS. Jest מריץ קוד בתוך vm, ושם זה דורש את הדגל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) CommonJS: ‏<code>require</code>/<code>module.exports</code>. ‏ESM: ‏<code>import</code>/<code>export</code>. הפרויקט שלך מתקמפל ל־CommonJS (‏<code>"module": "commonjs"</code>), והקוד של ts-jest הופך כל <code>import</code> שלך ל־<code>require</code>.</li><li>(ב) כי <code>@nestjs/common</code> 12 מגיע רק כ־ESM. הקוד שלך עושה <code>require("@nestjs/common")</code>, וזה עובד רק אם הסביבה יודעת לטעון ESM מתוך require.</li><li>(ג) מאפשר ל־Jest (שמריץ כל קובץ בתוך <code>vm</code> של Node) לטעון מודולי ESM. ב־Node 24.9+ ‏<code>require(esm)</code> עובד, ו־Jest 30 משתמש בזה. ‏<code>npx jest</code> הוא בלי הדגל.</li><li>(ד) אותה שגיאה בדיוק. לכן ב־CI (פרק 25) מציינים את גרסת Node במפורש, ובפרויקט — ‏<code class="mid">"engines": { "node": "&gt;=24" }</code>.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>transformIgnorePatterns</code> ותרגום של כל <code>node_modules</code>. זה עובד לפעמים, איטי מאוד, ושובר דברים אחרים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E67">
+    <h3>P22-E67 · לקרוא טבלת coverage <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שורה אחת יכולה להכיל שני כיוונים: <code>return discount ? a : b;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>coverage עונה רק על "מה רץ".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) שורה 18 רצה, אבל רק לכיוון אחד של תנאי. למשל <code class="mid">const vat = isExport ? 0 : amount * 0.18;</code>, והבדיקות אף פעם לא שלחו <code>isExport: true</code>. הכיוון השני לא נבדק בכלל.</li><li>(ב) לא. 100% אומר שכל שורה רצה. אם הבדיקה קוראת ל־<code>round()</code> ולא בודקת את התוצאה (או בודקת עם <code>assert.ok</code>), באג בעיגול עובר. רק בדיקה עם ציפייה מדויקת, או mutation testing, עונה על זה (E05).</li><li>(ג) <code>pricing.ts</code>: יש בו קוד שלא רץ בכלל (22–31, ‏40), כלומר אפס ביטחון. מסתכלים על השורות האלה ושואלים: איזה מצב (קלט) מגיע אליהן? איזה באג שם היה כואב? ‏(אחר כך: הכיוון החסר בשורה 18.)</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב בדיקה ש"מכסה" את 22–31 בלי assert, רק כדי שהמספר יעלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E68">
+    <h3>P22-E68 · מוטנט ששרד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>באיזו בדיקה יש admin?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם ה־admin נבדק קודם, מה admin מקבל על משימה בארכיון?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) אין בדיקה עם admin, אז שום בדיקה לא מגיעה לחלק הזה בהצלחה, ולא משנה מה כתוב שם.</li><li>(ב) admin על משימה של אחר ← <code>true</code> (הקוד למטה).</li><li>(ג) המוטנט: <code class="mid">if (user.role === "admin") return true;</code> לפני הארכיון ← admin עורך משימות בארכיון. הבדיקה: admin על משימה בארכיון ← <code>false</code>.</li></ul>
+<pre><code class="lang-ts">test("admin יכול משימה של אחר", () =&gt; assert.equal(canEdit({ id: 9, role: "admin" }, { ownerId: 1, archived: false }), true));</code></pre>
+<p>זו הדרך לחשוב על מוטנט ששרד: "איזה קלט היה גורם לגרסה הזו ולמקורית לתת תשובה שונה?" — והקלט הזה הוא הבדיקה שחסרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "admin" רק על משימה שלו. אז גם בלי בדיקת admin בכלל הוא יכול (הוא הבעלים), והמוטנט שורד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E69">
+    <h3>P22-E69 · ‏expect משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה רקורסיבית <code>equal(a, b, partial)</code>: אם אחד מהם לא אובייקט ← <code>Object.is</code>. מערך מול לא־מערך ← <code>false</code>. מערכים ← אורך + כל איבר. אובייקטים ← מפתחות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"מתעלמים מ־undefined":</p>
+<pre><code class="lang-ts">const keys = (o) =&gt; Object.keys(o).filter((k) =&gt; o[k] !== undefined)</code></pre>
+<p>ב־partial בודקים רק את המפתחות של <code>b</code>, וכל אחד חייב להיות קיים ב־<code>a</code> (<code>k in a</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E69: expect משלך — toBe, toEqual, toMatchObject, toThrow
+type Ctor = new (...args: any[]) =&gt; Error;
+
+const isObj = (v: unknown): v is Record&lt;string, unknown&gt; =&gt; typeof v === "object" &amp;&amp; v !== null;
+const keys = (o: Record&lt;string, unknown&gt;) =&gt; Object.keys(o).filter((k) =&gt; o[k] !== undefined);
+
+function equal(a: unknown, b: unknown, partial: boolean): boolean {
+  if (!isObj(a) || !isObj(b)) return Object.is(a, b);
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) &amp;&amp; Array.isArray(b)) {
+    return a.length === b.length &amp;&amp; a.every((x, i) =&gt; equal(x, b[i], partial));
+  }
+  if (a instanceof Date || b instanceof Date) {
+    return a instanceof Date &amp;&amp; b instanceof Date &amp;&amp; a.getTime() === b.getTime();
+  }
+  if (partial) return Object.keys(b).every((k) =&gt; k in a &amp;&amp; equal(a[k], b[k], true));
+  const kb = keys(b);
+  return keys(a).length === kb.length &amp;&amp; kb.every((k) =&gt; equal(a[k], b[k], false));
+}
+
+export function expect(actual: unknown) {
+  const fail = (what: string) =&gt; {
+    throw new Error(`expect(${JSON.stringify(actual)}) ${what}`);
+  };
+  return {
+    toBe(expected: unknown) {
+      if (!Object.is(actual, expected)) fail(`toBe(${JSON.stringify(expected)})`);
+    },
+    toEqual(expected: unknown) {
+      if (!equal(actual, expected, false)) fail(`toEqual(${JSON.stringify(expected)})`);
+    },
+    toMatchObject(expected: object) {
+      if (!equal(actual, expected, true)) fail(`toMatchObject(${JSON.stringify(expected)})`);
+    },
+    toThrow(expected?: string | RegExp | Ctor) {
+      if (typeof actual !== "function") return fail("toThrow — צריך פונקציה");
+      let thrown: unknown;
+      let didThrow = false;
+      try {
+        (actual as () =&gt; unknown)();
+      } catch (err) {
+        didThrow = true;
+        thrown = err;
+      }
+      if (!didThrow) return fail("toThrow — לא נזרקה שגיאה");
+      const message = thrown instanceof Error ? thrown.message : String(thrown);
+      if (typeof expected === "string" &amp;&amp; !message.includes(expected)) fail(`toThrow("${expected}")`);
+      if (expected instanceof RegExp &amp;&amp; !expected.test(message)) fail(`toThrow(${expected})`);
+      if (typeof expected === "function" &amp;&amp; !(thrown instanceof expected)) fail(`toThrow(${expected.name})`);
+    },
+  };
+}</code></pre>
+<p>עכשיו ההבדלים מ־E65 ברורים מתוך הקוד: <code>toEqual</code> ו־<code>toMatchObject</code> הם אותה רקורסיה, ורק דגל אחד (<code>partial</code>) קובע אם בודקים את כל המפתחות. ו־"מתעלם מ־undefined" הוא סינון אחד של מפתחות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">JSON.stringify(a) === JSON.stringify(b)</code> — תלוי בסדר המפתחות, ולא מבחין בין <code>NaN</code> ל־<code>null</code>.</li><li><code>typeof null === "object"</code> — בלי הבדיקה, <code>Object.keys(null)</code> זורק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E70">
+    <h3>P22-E70 · ‏it.each משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">table.map((row) =&gt; { const args = Array.isArray(row) ? row : [row]; ... })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">title.replace(/%[sd%]/g, (m) =&gt; ...)</code> עם מונה <code>let i = 0</code>: ‏<code>%%</code> ← <code>"%"</code>, אחרת <code>args[i++]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E70: it.each — טבלה של מקרים ← רשימה של בדיקות עם שמות
+export function each&lt;Row&gt;(table: Row[]) {
+  return (title: string, fn: (...args: any[]) =&gt; void) =&gt;
+    table.map((row) =&gt; {
+      const args: unknown[] = Array.isArray(row) ? row : [row];
+      let i = 0;
+      const name = title.replace(/%[sd%]/g, (m) =&gt; {
+        if (m === "%%") return "%";
+        const value = args[i++];
+        return m === "%d" ? String(Number(value)) : String(value);
+      });
+      return { name, run: () =&gt; fn(...args) };
+    });
+}</code></pre>
+<p>זה כל הקסם של <code>it.each</code>: לולאה, ושם שנבנה מהשורה. השם חשוב: כשמקרה אחד נכשל, הפלט אומר "add(0, 0) = 0" ולא "test 2".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>fn(row)</code> במקום <code>fn(...row)</code> — הפונקציה מקבלת מערך אחד.</li><li><code>replace("%s", ...)</code> עם מחרוזת — מחליף רק את המופע הראשון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E71">
+    <h3>P22-E71 · מריץ מוטנטים משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">let code = source; for (const [from, to] of m.replace) { if (!code.includes(from)) throw ...; code = code.replace(from, to); }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>replace</code> עם מחרוזת מחליף מופע אחד. אבל אם <code>to</code> מכיל <code>$&amp;</code> או <code>$1</code>, יש להם משמעות מיוחדת. כדי להחליף "כמו שזה", העבר פונקציה: <code class="mid">code.replace(from, () =&gt; to)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E71: mutation testing — הלב של הבודק
+export type Mutant = { desc: string; replace: [from: string, to: string][] };
+export type Result = { killed: string[]; survived: string[]; score: number };
+
+export async function runMutants(
+  source: string,
+  mutants: Mutant[],
+  runTests: (code: string) =&gt; boolean | Promise&lt;boolean&gt;,
+): Promise&lt;Result&gt; {
+  if (!(await runTests(source))) throw new Error("הבדיקות נכשלות על הקוד התקין");
+  const killed: string[] = [];
+  const survived: string[] = [];
+  for (const m of mutants) {
+    let code = source;
+    for (const [from, to] of m.replace) {
+      if (!code.includes(from)) throw new Error(`"${from}" לא נמצא (${m.desc})`);
+      code = code.replace(from, () =&gt; to);
+    }
+    if (await runTests(code)) survived.push(m.desc);
+    else killed.push(m.desc);
+  }
+  const score = mutants.length === 0 ? 100 : Math.round((100 * killed.length) / mutants.length);
+  return { killed, survived, score };
+}</code></pre>
+<p>שלושה פרטים שעושים את ההבדל: בדיקה על הקוד התקין קודם (אחרת "כל המוטנטים נהרגו" כי הבדיקות פשוט שבורות), שגיאה כשההחלפה לא נמצאה (אחרת "מוטנט" זהה למקור תמיד "שורד" ומבלבל), ו־<code>() =&gt; to</code> שמונע מ־<code>$</code> בקוד להתפרש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>replaceAll</code> — מוטנט אמור להיות שינוי <em>אחד</em>.</li><li>לא לחכות ל־<code>runTests</code> (Promise) — כל Promise הוא truthy, וכל המוטנטים "שורדים".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E72">
+    <h3>P22-E72 · ‏jest.fn משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה פנימית <code class="mid">const spy = (...args) =&gt; { ... }</code>, ואז <code class="mid">Object.assign(spy, { calls: [], ... })</code>. ל־<code>callCount</code> —</p>
+<pre><code class="lang-ts">Object.defineProperty(spy, "callCount", { get: () =&gt; spy.calls.length })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תור: <code>const once: any[] = [];</code> ‏— <code class="mid">once.length ? once.shift() : current?.(...args)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E72: createSpy — jest.fn בקטן
+export type Spy = ((...args: any[]) =&gt; any) &amp; {
+  calls: any[][];
+  results: any[];
+  readonly callCount: number;
+  mockReturnValueOnce(value: any): Spy;
+  mockImplementation(fn: (...args: any[]) =&gt; any): Spy;
+  reset(): void;
+};
+
+export function createSpy(impl?: (...args: any[]) =&gt; any): Spy {
+  let current = impl;
+  const once: any[] = [];
+  const spy = ((...args: any[]) =&gt; {
+    spy.calls.push(args);
+    const value = once.length &gt; 0 ? once.shift() : current?.(...args);
+    spy.results.push(value);
+    return value;
+  }) as Spy;
+  spy.calls = [];
+  spy.results = [];
+  Object.defineProperty(spy, "callCount", { get: () =&gt; spy.calls.length });
+  spy.mockReturnValueOnce = (value) =&gt; {
+    once.push(value);
+    return spy;
+  };
+  spy.mockImplementation = (fn) =&gt; {
+    current = fn;
+    return spy;
+  };
+  spy.reset = () =&gt; {
+    spy.calls = [];
+    spy.results = [];
+    once.length = 0;
+  };
+  return spy;
+}</code></pre>
+<p>עכשיו ברור למה <code class="mid">expect(send).toHaveBeenCalledWith(...)</code> עובד: ה־spy הוא פונקציה רגילה עם מערך <code>calls</code>, ו־<code>toHaveBeenCalledWith</code> פשוט מחפש בו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לרשום ב־<code>calls</code> רק אחרי שה־implementation הצליח — קריאה שזרקה "נעלמת".</li><li><code>once.pop()</code> — מחזיר מהסוף, לא לפי הסדר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E73">
+    <h3>P22-E73 · ‏createTestApp ל־Nest 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">let builder = Test.createTestingModule({ imports: [rootModule] }); for (const [token, value] of overrides) builder = builder.overrideProvider(token).useValue(value);</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">import { Test } from "@nestjs/testing"; import type { INestApplication } from "@nestjs/common";</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E73: createTestApp — אפליקציית Nest מלאה לבדיקות e2e, עם החלפות
+import type { INestApplication } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
+import request from "supertest";
+
+export async function createTestApp(
+  rootModule: any,
+  overrides: [token: any, value: any][] = [],
+  configure?: (app: INestApplication) =&gt; void,
+) {
+  let builder = Test.createTestingModule({ imports: [rootModule] });
+  for (const [token, value] of overrides) builder = builder.overrideProvider(token).useValue(value);
+  const moduleRef = await builder.compile();
+  const app = moduleRef.createNestApplication({ logger: false });
+  configure?.(app);
+  await app.init();
+  return {
+    app,
+    http: () =&gt; request(app.getHttpServer()),
+    close: () =&gt; app.close(),
+  };
+}</code></pre>
+<p>זה <code>test/helpers.ts</code> של שלב ה׳ (שיעור 5), בלי הפרטים של הפרויקט: ‏<code>overrides</code> מחליפים מה שאיטי או לא צפוי (מסד, שעון), ו־<code>configure</code> מוודא שהבדיקה רצה עם אותם pipes, ‏filters ו־prefix כמו השרת האמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code>configure</code> אחרי <code>init()</code> — ‏<code>setGlobalPrefix</code> לא משפיע על routes שכבר נרשמו.</li><li>לשכוח <code>close()</code> בסוף — Jest מדווח "did not exit one second after the test run".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E74">
+    <h3>P22-E74 · בדיקות ב־Jest עם it.each 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">it.each([[0, "0:00"], [65, "1:05"], ...])("%d ← %s", (seconds, expected) =&gt; { expect(formatDuration(seconds)).toBe(expected); });</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הגבולות: <code>59</code>, ‏<code>60</code>, ‏<code>3599</code>, ‏<code>3600</code>. ושעה עם דקות ושניות של ספרה אחת (<code>3661</code>) — כדי לבדוק ריפוד בשני המקומות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E74 — בדיקות ב־Jest
+import { formatDuration } from "./P22-E74";
+
+describe("formatDuration", () =&gt; {
+  it.each([
+    [0, "0:00"],
+    [5, "0:05"],
+    [59, "0:59"],
+    [60, "1:00"],
+    [65, "1:05"],
+    [3599, "59:59"],
+    [3600, "1:00:00"],
+    [3661, "1:01:01"],
+    [3725, "1:02:05"],
+    [36000, "10:00:00"],
+  ])("%d שניות ← %s", (seconds, expected) =&gt; {
+    expect(formatDuration(seconds)).toBe(expected);
+  });
+
+  it.each([-1, 1.5, NaN])("%p ← RangeError", (bad) =&gt; {
+    expect(() =&gt; formatDuration(bad)).toThrow(RangeError);
+  });
+});</code></pre>
+<p>‏<code>it.each</code> הופך עשר בדיקות לטבלה אחת, וכל שורה מופיעה בפלט בשם משלה ("3600 שניות ← 1:00:00"). ‏<code>%p</code> מדפיס ערך "יפה" (גם <code>NaN</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">expect(formatDuration(-1)).toThrow()</code> — החריגה נזרקת לפני ש־<code>expect</code> מקבל משהו. צריך פונקציה.</li><li>לבדוק רק 3725. מוטנט שלא מרפד דקות בפורמט של שעות (<code>"1:2:05"</code>) נתפס, אבל כזה שלא מרפד שניות — רק עם 3661.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E75">
+    <h3>P22-E75 · מה לא כוסה? לקרוא lcov 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">for (const line of lcov.split("\n"))</code> עם <code>let file = ""</code>: ‏<code>SF:</code> ← קובץ נוכחי; ‏<code>DA:</code> ← <code class="mid">const [n, hits] = line.slice(3).split(",").map(Number)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורות <code>DA</code> יכולות להכיל שדה שלישי (checksum): <code>DA:5,0,abc</code>. ‏<code>split(",")</code> ולקחת רק את השניים הראשונים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E75: קריאת lcov.info
+function parse(lcov: string) {
+  const rows: { file: string; line: number; hits: number }[] = [];
+  let file = "";
+  for (const raw of lcov.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("SF:")) file = line.slice(3);
+    else if (line.startsWith("DA:")) {
+      const [n, hits] = line.slice(3).split(",");
+      rows.push({ file, line: Number(n), hits: Number(hits) });
+    }
+  }
+  return rows;
+}
+
+export function uncoveredLines(lcov: string): Record&lt;string, number[]&gt; {
+  const out: Record&lt;string, number[]&gt; = {};
+  for (const r of parse(lcov)) {
+    if (r.hits === 0) (out[r.file] ??= []).push(r.line);
+  }
+  for (const lines of Object.values(out)) lines.sort((a, b) =&gt; a - b);
+  return out;
+}
+
+export function linePercent(lcov: string): number {
+  const rows = parse(lcov);
+  if (rows.length === 0) return 100;
+  const hit = rows.filter((r) =&gt; r.hits &gt; 0).length;
+  return Math.round((hit / rows.length) * 1000) / 10;
+}</code></pre>
+<p>זה בדיוק מה שהכלים עושים כשהם מסמנים לך שורות אדומות ב־VS Code, או כותבים ב־PR "הקוד החדש מכוסה ב־62%". ‏lcov הוא סתם טקסט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>sort()</code> בלי פונקציה — ממיין מספרים כמחרוזות (<code>[10, 9]</code>).</li><li>לספור גם שורות <code>LH</code>/<code>LF</code> (סיכומים) — כאן מחשבים בעצמנו מה־<code>DA</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E76">
+    <h3>P22-E76 · בדיקות unit ל־service, ב־Jest 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שעון:</p>
+<pre><code class="lang-ts">const clock = { now: () =&gt; new Date("2026-11-04T22:30:00Z") };</code></pre>
+<p>— שעה מאוחרת בכוונה. מה "היום" ב־UTC?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">await expect(service.create(1, { title: "x", dueDate: "2026-11-03" })).rejects.toMatchObject({ status: 422, code: "DUE_DATE_IN_PAST" });</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E76 — בדיקות unit ב־Jest
+import { HttpError, InMemoryTasksRepository, TasksService } from "./P22-E76";
+
+describe("TasksService", () =&gt; {
+  let service: TasksService;
+  beforeEach(() =&gt; {
+    const clock = { now: () =&gt; new Date("2026-11-04T22:30:00Z") };
+    service = new TasksService(new InMemoryTasksRepository(), clock);
+  });
+
+  it("יוצר משימה, עם trim", async () =&gt; {
+    await expect(service.create(1, { title: "  חלב " })).resolves.toMatchObject({ id: 1, ownerId: 1, title: "חלב", done: false, dueDate: null });
+  });
+
+  it("title ריק ← 400", async () =&gt; {
+    await expect(service.create(1, { title: "   " })).rejects.toMatchObject({ status: 400, code: "TITLE_REQUIRED" });
+  });
+
+  it("dueDate: היום מותר, אתמול — 422", async () =&gt; {
+    await expect(service.create(1, { title: "x", dueDate: "2026-11-04" })).resolves.toMatchObject({ dueDate: "2026-11-04" });
+    await expect(service.create(1, { title: "x", dueDate: "2026-11-03" })).rejects.toMatchObject({ status: 422, code: "DUE_DATE_IN_PAST" });
+    await expect(service.create(1, { title: "x", dueDate: "2026-11-05" })).resolves.toMatchObject({ dueDate: "2026-11-05" });
+  });
+
+  it("השגיאה היא HttpError", async () =&gt; {
+    await expect(service.create(1, { title: "" })).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it("complete — רק של הבעלים", async () =&gt; {
+    const t = await service.create(1, { title: "חלב" });
+    await expect(service.complete(2, t.id)).rejects.toMatchObject({ status: 404, code: "TASK_NOT_FOUND" });
+    await expect(service.complete(1, 99)).rejects.toMatchObject({ status: 404 });
+    await expect(service.complete(1, t.id)).resolves.toMatchObject({ id: t.id, done: true });
+  });
+});</code></pre>
+<p>השעה 22:30 UTC נבחרה בכוונה: בישראל זה כבר 5 בנובמבר. קוד שמחשב "היום" לפי שעון מקומי ידחה את <code>"2026-11-04"</code> (אם השרת בישראל), ובדיקה בשעה הזו תתפוס אותו. ו־<code>complete(2, ...)</code> לפני <code>complete(1, ...)</code>: אם הבעלות לא נבדקת, המשימה כבר מסומנת, וה־404 לא מגיע.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שעון בצהריים — לא מבדיל בין UTC לשעון מקומי.</li><li><code class="mid">expect(...).rejects.toThrow("...")</code> בלי <code>await</code> — הבדיקה נגמרת לפני ההשוואה.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P22-E77">
+    <h3>P22-E77 · למה ts-jest ולא פשוט node --test? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Node "מוחק" טיפוסים, אבל לא מתרגם תחביר שאין לו מקבילה ב־JavaScript.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>decorators ו־parameter properties (<code class="mid">constructor(private readonly repo: Repo)</code>) צריכים תרגום, לא מחיקה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) Node מוחק את הטיפוסים (type stripping) ומריץ. הוא לא מתרגם decorators (<code>@Injectable()</code>), ‏parameter properties, ‏<code>enum</code> — תחביר שצריך לייצר ממנו קוד JavaScript. וגם לא בודק טיפוסים.</li><li>(ב) מתרגם כל קובץ <code>.ts</code> ל־JavaScript (CommonJS) עם הקומפיילר של TypeScript, לפי <code>tsconfig</code>, כולל <code>emitDecoratorMetadata</code> ש־Nest צריך ל־DI.</li><li>(ג) מרוויחים מהירות: כל קובץ מתורגם לבד, בלי לבנות את כל הפרויקט ובלי בדיקת טיפוסים. מפסידים: שגיאת טיפוס בבדיקה לא נתפסת ב־<code>npm test</code>. לכן מריצים גם <code>tsc --noEmit</code> (או <code>npm run build</code>) ב־CI.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שבדיקה ירוקה ב־Jest אומרת שהקוד מתקמפל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E78">
+    <h3>P22-E78 · "חובה 100% coverage על כל PR" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"כשמדד הופך למטרה, הוא מפסיק להיות מדד טוב".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טיפול בשגיאות של מערכת ההפעלה, קוד הפעלה (<code>main.ts</code>), ענפים של "לא אמור לקרות".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) בדיקות שמריצות שורות בלי assert, ‏mocks לכל דבר כדי "להגיע" לענף, וקוד שנכתב כדי שיהיה קל לכסות במקום כדי שיהיה ברור. המספר 100, והביטחון נמוך.</li><li>(ב) <code>main.ts</code> (‏<code>bootstrap()</code>), ‏<code>catch</code> של שגיאת דיסק מלא, ‏<code>default</code> ב־switch שאמור להיות בלתי אפשרי. לבדוק אותם עולה הרבה ומוכיח מעט.</li><li>(ג) למשל: "ה־coverage של הקבצים ששונו לא יורד", או סף סביר (70–80%) לקוד העסקי, בלי <code>main.ts</code> ו־<code>generated</code>. ובנוסף mutation testing לילי על הלוגיקה החשובה.</li><li>(ד) "איזה באג הבדיקה הזו הייתה תופסת?"</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבטל coverage לגמרי "כי הוא מטעה". הוא מצוין בתשובה לשאלה אחת: מה לא רץ בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E79">
+    <h3>P22-E79 · בדיקה שנכשלת "לפעמים" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה מבטיח שה"רקע" הסתיים תוך 50ms? במחשב של CI עמוס?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>E63 (‏<code>waitFor</code>). ובקוד: אפשר לחכות למשהו מוגדר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) המייל נשלח ב־Promise שלא מחכים לו (fire and forget). ב־CI איטי זה לוקח יותר מ־50ms לפעמים.</li><li>(ב) להגדיל ל־500ms (איטי, ועדיין לא מובטח); ‏"retry" אוטומטי לבדיקות שנכשלו (מסתיר באגים אמיתיים של מקביליות); לסמן <code>skip</code> ולשכוח.</li><li>(ג) בבדיקה: ‏<code class="mid">await waitFor(() =&gt; expect(mailer.sent).toHaveLength(1))</code> — ממשיך ברגע שהתנאי מתקיים, ונכשל עם הודעה ברורה. בקוד: לחשוף את מה שקורה ברקע (למשל ה־service מחזיר Promise שאפשר לחכות לו בבדיקה, או תור עם <code>drain()</code>). בדיקה שתלויה בזמן היא בדיקה שתלויה במזל.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתייחס לבדיקה flaky כ"בעיה של הבדיקה". לפעמים היא מגלה race condition אמיתי בקוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E80">
+    <h3>P22-E80 · בדיקות ל־verifyJwt 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כדי לבנות טוקנים "רעים", כתוב בבדיקה helper קטן:</p>
+<pre><code class="lang-ts">b64 = (o) =&gt; Buffer.from(JSON.stringify(o)).toString("base64url")</code></pre>
+<p>וחתימה עם</p>
+<pre><code class="lang-ts">createHmac("sha256", secret).update(`${h}.${p}`).digest("base64url")</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טוקן שגם פג וגם מזויף: איזו שגיאה? ("החתימה נבדקת לפני התוקף".) וטוקן עם <code>alg: "none"</code> וחתימה תקינה של ה־header הזה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E80 — בדיקות ל־verifyJwt
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { signJwt, verifyJwt } from "./P22-E80.ts";
+
+const SECRET = "test-secret-at-least-32-characters!!";
+const NOW = 1793872800;
+const b64 = (o: object) =&gt; Buffer.from(JSON.stringify(o)).toString("base64url");
+const sign = (h: string, p: string, secret = SECRET) =&gt; createHmac("sha256", secret).update(`${h}.${p}`).digest("base64url");
+
+test("טוקן תקין", () =&gt; {
+  const t = signJwt({ sub: 7, role: "user" }, SECRET, 900, NOW);
+  assert.deepEqual(verifyJwt(t, SECRET, NOW), { sub: 7, role: "user", iat: NOW, exp: NOW + 900 });
+  assert.deepEqual(verifyJwt(t, SECRET, NOW + 899).sub, 7);
+});
+
+test("תוקף — בדיוק ב־exp כבר פג", () =&gt; {
+  const t = signJwt({ sub: 7, role: "user" }, SECRET, 900, NOW);
+  assert.throws(() =&gt; verifyJwt(t, SECRET, NOW + 900), { message: "פג תוקף" });
+});
+
+test("payload ששונה ← חתימה לא תקינה", () =&gt; {
+  const [h, , s] = signJwt({ sub: 7, role: "user" }, SECRET, 900, NOW).split(".");
+  const evil = b64({ sub: 7, role: "admin", iat: NOW, exp: NOW + 900 });
+  assert.throws(() =&gt; verifyJwt(`${h}.${evil}.${s}`, SECRET, NOW), { message: "חתימה לא תקינה" });
+});
+
+test("סוד אחר ← חתימה לא תקינה", () =&gt; {
+  const t = signJwt({ sub: 7, role: "user" }, "another-secret-another-secret-123", 900, NOW);
+  assert.throws(() =&gt; verifyJwt(t, SECRET, NOW), { message: "חתימה לא תקינה" });
+});
+
+test("מזויף ופג — החתימה קודם", () =&gt; {
+  const h = b64({ alg: "HS256", typ: "JWT" });
+  const p = b64({ sub: 1, role: "admin", iat: NOW - 2000, exp: NOW - 1000 });
+  assert.throws(() =&gt; verifyJwt(`${h}.${p}.${sign(h, p, "wrong-secret-wrong-secret-wrong-12")}`, SECRET, NOW), { message: "חתימה לא תקינה" });
+});
+
+test("alg: none ← טוקן לא תקין, גם עם חתימה שמתאימה", () =&gt; {
+  const h = b64({ alg: "none", typ: "JWT" });
+  const p = b64({ sub: 1, role: "admin", iat: NOW, exp: NOW + 900 });
+  assert.throws(() =&gt; verifyJwt(`${h}.${p}.${sign(h, p)}`, SECRET, NOW), { message: "טוקן לא תקין" });
+});
+
+test("מבנה שבור", () =&gt; {
+  for (const bad of ["", "abc", "a.b", "a.b.c.d"]) assert.throws(() =&gt; verifyJwt(bad, SECRET, NOW), { message: "טוקן לא תקין" }, JSON.stringify(bad));
+  const [h, p] = signJwt({ sub: 7, role: "user" }, SECRET, 900, NOW).split(".");
+  assert.throws(() =&gt; verifyJwt(`${h}.${p}.`, SECRET, NOW), { message: "חתימה לא תקינה" }, "חתימה ריקה");
+  assert.throws(() =&gt; verifyJwt(`${h}.${p}.abc`, SECRET, NOW), { message: "חתימה לא תקינה" }, "חתימה קצרה");
+});</code></pre>
+<p>בדיקות אבטחה הן בדיוק המקום שבו mutation testing משתלם: מוטנט כמו "לא בודקים <code>alg</code>" לא שובר אף שימוש רגיל. רק בדיקה שמנסה את התקיפה בעצמה תופסת אותו. ו"חתימה קצרה" תופסת מימוש שזורק <code>RangeError</code> מ־<code>timingSafeEqual</code> במקום להחזיר שגיאה מסודרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק "טוקן תקין עובר". כל המוטנטים של האבטחה שורדים.</li><li><code>assert.throws(fn)</code> בלי הודעה — מוטנט שבודק תוקף לפני חתימה עדיין זורק (רק הודעה אחרת).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E81">
+    <h3>P22-E81 · בדיקות לנעילה אחרי ניסיונות כושלים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">let t = 0; const limiter = new LoginLimiter(() =&gt; t);</code> ואז <code>t += 60_000</code> כדי להזיז דקה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>גבולות: 4 כישלונות (לא נעול) מול 5; ‏<code>retryAfterSeconds</code> שנייה לפני ובדיוק ב־15 דקות; כישלון בדקה 0 וארבעה בדקה 16 (הראשון כבר לא נספר).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E81 — בדיקות ל־LoginLimiter
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { LoginLimiter } from "./P22-E81.ts";
+
+const MIN = 60_000;
+function setup() {
+  const clock = { t: 0 };
+  return { clock, limiter: new LoginLimiter(() =&gt; clock.t) };
+}
+
+test("4 כישלונות — עוד לא נעול; 5 — נעול ל־15 דקות מהראשון", () =&gt; {
+  const { clock, limiter } = setup();
+  for (let i = 0; i &lt; 4; i++) {
+    limiter.recordFailure("dana@example.com");
+    clock.t += MIN;
+  }
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 0);
+  limiter.recordFailure("dana@example.com"); // דקה 4
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 11 * 60);
+  clock.t = 15 * MIN - 500;
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 1, "מעוגל למעלה");
+  clock.t = 15 * MIN;
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 0, "בדיוק 15 דקות אחרי הראשון — פתוח");
+});
+
+test("כישלונות ישנים לא נספרים", () =&gt; {
+  const { clock, limiter } = setup();
+  limiter.recordFailure("dana@example.com");
+  clock.t = 16 * MIN;
+  for (let i = 0; i &lt; 4; i++) limiter.recordFailure("dana@example.com");
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 0);
+});
+
+test("בלי תלות באותיות, ולכל אימייל בנפרד", () =&gt; {
+  const { limiter } = setup();
+  for (let i = 0; i &lt; 5; i++) limiter.recordFailure(i % 2 ? "Dana@Example.com" : "dana@example.com");
+  assert.ok(limiter.retryAfterSeconds("DANA@example.com") &gt; 0);
+  assert.equal(limiter.retryAfterSeconds("yossi@example.com"), 0);
+});
+
+test("reset", () =&gt; {
+  const { limiter } = setup();
+  for (let i = 0; i &lt; 5; i++) limiter.recordFailure("dana@example.com");
+  limiter.reset("dana@example.com");
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 0);
+  for (let i = 0; i &lt; 4; i++) limiter.recordFailure("dana@example.com");
+  assert.equal(limiter.retryAfterSeconds("dana@example.com"), 0, "אחרי reset סופרים מאפס");
+});</code></pre>
+<p>הבדיקה הראשונה שווה כמו חמש: היא בודקת את הסף (4 מול 5), שהספירה היא מה<em>ראשון</em> (11 דקות ולא 15), את העיגול למעלה, ואת הגבול של 15 דקות בדיוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>כל הכישלונות באותו רגע (<code>t = 0</code>) — אז "15 דקות מהראשון" ו"15 דקות מהאחרון" זהים, והמוטנט שורד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E82">
+    <h3>P22-E82 · שער coverage ל־CI 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const METRICS: Metric[] = ["lines", "statements", "functions", "branches"];</code></pre>
+<p>ועליהם לולאה, עם <code class="mid">thresholds[m] !== undefined</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Object.entries(summary).filter(([file]) =&gt; file !== "total")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E82: שער coverage — מה נכשל, ולמה
+export type Metric = "lines" | "statements" | "functions" | "branches";
+const METRICS: Metric[] = ["lines", "statements", "functions", "branches"];
+
+export function checkCoverage(
+  summary: any,
+  thresholds: Partial&lt;Record&lt;Metric, number&gt;&gt;,
+  perFile?: Partial&lt;Record&lt;Metric, number&gt;&gt;,
+): string[] {
+  const failures: string[] = [];
+  const check = (name: string, data: any, limits: Partial&lt;Record&lt;Metric, number&gt;&gt;) =&gt; {
+    for (const m of METRICS) {
+      const min = limits[m];
+      if (min !== undefined &amp;&amp; data[m].pct &lt; min) failures.push(`${name} ${m}: ${data[m].pct}% &lt; ${min}%`);
+    }
+  };
+  check("total", summary.total, thresholds);
+  if (perFile) {
+    for (const [file, data] of Object.entries(summary)) if (file !== "total") check(file, data, perFile);
+  }
+  return failures;
+}</code></pre>
+<p>ב־Jest עצמו יש <code>coverageThreshold</code> שעושה את זה. הנקודה כאן: זה רק השוואת מספרים מקובץ JSON. מה שחשוב הוא איזה סף בוחרים, ועל מה (E78).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>&lt;=</code> במקום <code>&lt;</code> — בדיוק בסף נחשב כישלון.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-project.html"><small>הבא</small>שיעור 5 — פרויקט 2, שלב ה׳: בדיקות</a></div>
 </main>
 </body>
