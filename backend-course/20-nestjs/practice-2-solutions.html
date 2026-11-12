@@ -36,6 +36,127 @@
 
 </div></details>
   </div>
+<div class="ex" id="P20-E45">
+    <h3>P20-E45 · איזה status בלי לבקש? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"<code>@Post()</code> — 201 אוטומטית". ומה לשאר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>204 = "No Content" — לפי HTTP אסור לו גוף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>הרצה אמיתית (Nest 12):</p>
+<pre class="terminal"><span class="dim">POST       201 {"created":true}</span>
+<span class="dim">GET        200 {"id":1}</span>
+<span class="dim">PUT        200 {"put":true}</span>
+<span class="dim">DELETE     200 {"deleted":true}</span>
+<span class="dim">DELETE 204 204 (גוף ריק)</span></pre>
+<p>רק POST מקבל 201 לבד. DELETE מחזיר 200 עם גוף — אם רוצים 204 (כמו בפרויקט 2), צריך <code>@HttpCode(204)</code>, ואז מה שהמתודה מחזירה נזרק. אז ב־DELETE עם 204 — לא להחזיר כלום.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר ב־204 "הודעת הצלחה" — הלקוח לא יקבל אותה, ובדיקה שמצפה לגוף תיכשל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E46">
+    <h3>P20-E46 · ‏whitelist, ‏forbidNonWhitelisted ו־transform <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי pipe — אף אחד לא מסתכל על ה־decorators. הם רק metadata.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>transform</code> ממיר גם params לפי הטיפוס שכתבת (<code>number</code>). מה זה <code>Number("abc")</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>הרצה אמיתית:</p>
+<pre class="terminal"><span class="dim">== בלי pipe</span>
+<span class="dim">POST extra      201 {"dto":{"name":"a","price":5,"extra":1}}</span>
+<span class="dim">POST price str  201 {"dto":{"name":"a","price":"10"}}</span>
+<span class="dim">GET abc         200 {"id":"abc","type":"string"}</span>
+<span class="dim">== whitelist</span>
+<span class="dim">POST extra      201 {"dto":{"name":"a","price":5}}</span>
+<span class="dim">POST price str  400 {"message":["price must not be less than 0.01","price must be a number conforming to the specified constraints"],...}</span>
+<span class="dim">GET abc         200 {"id":"abc","type":"string"}</span>
+<span class="dim">== whitelist + forbidNonWhitelisted + transform</span>
+<span class="dim">POST extra      400 {"message":["property extra should not exist"],...}</span>
+<span class="dim">POST price str  400 (אותן שתי הודעות)</span>
+<span class="dim">GET abc         200 {"id":null,"type":"number"}</span></pre>
+<ul><li>בלי pipe — שום ולידציה: <code>price: "10"</code> (מחרוזת) נכנס, וגם <code>extra</code>.</li><li><code>whitelist</code> — מוחק בשקט שדות שאין להם decorator.</li><li><code>forbidNonWhitelisted</code> — במקום למחוק, 400. ו־<code>transform</code> הפך את <code>"abc"</code> ל־<code>NaN</code> (שמגיע ב־JSON כ־<code>null</code>) — בלי שגיאה! לכן ל־id משתמשים ב־<code>ParseIntPipe</code>, ולא סומכים על <code>transform</code>.</li></ul>
+<p>ו־<code>"10"</code> בגוף — גם עם <code>transform</code> — לא הופך למספר (ב־body אין המרה אוטומטית; ב־query צריך <code>@Type(() =&gt; Number)</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>useGlobalPipes</code> ב־<code>main.ts</code> — כל ה־DTOs "קיימים", ושום דבר לא נבדק. הבדיקות של הקורס מפעילות את ה־pipe בעצמן, אז זה לא ייתפס בהן — רק ב־<code>main.ts</code> שלך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E47">
+    <h3>P20-E47 · ‏PATCH עם null <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>PartialType</code> מוסיף <code>@IsOptional()</code> לכל שדה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>@IsOptional()</code> מדלג על הבדיקות כשהערך <code>undefined</code> — <strong>או</strong> <code>null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>הרצה אמיתית: שתיהן 200 — <code>{"dto":{}}</code> ו־<code>{"dto":{"price":null}}</code>. ‏<code>{}</code> הוא בסדר (לא מעדכנים כלום). אבל <code>null</code> עובר את הוולידציה ומגיע ל־service: אם הוא עושה <code class="mid">Object.assign(product, dto)</code> — המחיר נמחק; אם המסד דורש NOT NULL — 500. תיקון: לא לתת ל־null לעבור — <code class="mid">@ValidateIf((o, v) =&gt; v !== undefined)</code> על השדה (בודק תמיד, חוץ מכשהשדה חסר), או בדיקה ב־service, או Zod (<code>.optional()</code> בלי <code>.nullable()</code> — P20-E52).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על הטיפוס <code>price?: number</code> — TypeScript לא רואה את ה־JSON שהגיע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E48">
+    <h3>P20-E48 · איזה exception? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה ב"Exceptions" בשיעור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>401 — "מי אתה?"; 403 — "אני יודע מי אתה, ואסור לך".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>BadRequestException</code> — 400 (ה־ValidationPipe זורק לבד).</li><li><code>UnauthorizedException</code> — 401.</li><li><code>ForbiddenException</code> — 403. (או 404 — "לא מגלים שקיים" — פרק 21.)</li><li><code>ConflictException</code> — 409.</li><li><code class="mid">UnprocessableEntityException</code> — 422, או 409 (<code>INSUFFICIENT_FUNDS</code>, כמו P18-E41). העיקר: לא 400 (הבקשה תקינה) ולא 500.</li><li><code>NotFoundException</code> — 404.</li><li>כלום — לא לתפוס. <code>Error</code> רגיל ← 500 "Internal server error", וההודעה רק בלוג. (או 503 מ־filter, אם רוצים שהלקוח ינסה שוב.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לזרוק <code>BadRequestException</code> לכל דבר "לא בסדר" — הלקוח לא יכול להבדיל בין "שלחת שטויות" לבין "אין לך כסף".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E49">
+    <h3>P20-E49 · ‏@Query() מול @Query("page") <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ל־<code>@Query("page")</code> אין DTO — רק הטיפוס <code>number</code>. מה <code>transform</code> עושה עם טיפוס פרימיטיבי (P20-E46)?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה יקרה ב־<code>a</code> עם <code>?page=abc</code>? וב־<code>b</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>a</code>: ‏<code>page</code> הוא <code>2</code> (מספר — <code>transform</code> המיר לפי הטיפוס), ‏<code>q</code> הוא <code>"mug"</code>. אבל אין ולידציה: <code>?page=abc</code> ← <code>NaN</code>, ו־<code>?page=-5</code> ← ‏<code>-5</code>, בלי שגיאה. וגם <code>limit</code> לא נקרא בכלל.</li><li><code>b</code>: ‏<code>query</code> הוא מופע של <code>ListProductsQuery</code> עם <code>page: 2</code>, <code>limit: 5</code>, <code>q: "mug"</code> — אחרי בדיקה. ‏<code>?page=abc</code> ← 400 עם הודעה. ברירות מחדל — בשדות של ה־class.</li></ul>
+<p>פרמטר בודד בלי כללים (<code>?q=</code>) — <code>@Query("q")</code> מספיק. כל דבר עם כללים (מספרים, טווחים, רשימה סגורה) — DTO, כמו ב־P20-E10.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">@Query("page", ParseIntPipe)</code> כשהפרמטר לא חובה — בלי <code>page</code> ב־URL, ‏<code>ParseIntPipe</code> מחזיר 400 (צריך <code>new DefaultValuePipe(1)</code> לפניו).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P20-E08">
     <h3>P20-E08 · DTO וולידציה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -522,6 +643,206 @@ export class BookmarksModule {}</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P20-E50">
+    <h3>P20-E50 · הרשמה: DTO, ‏409 ובלי סיסמה בתשובה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>@IsEmail()</code>, ‏</p>
+<pre><code class="lang-ts">@IsString() @MinLength(8) @Matches(/\d/, { message: "password חייב לכלול ספרה" })</code></pre>
+<p>‏<code class="mid">@IsOptional() @IsString() @Length(2, 40)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור את המשתמש עם הסיסמה (בפרק 21 — hash!), והחזר אובייקט חדש בלי השדה: <code class="mid">const { password, ...pub } = user; return pub;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E50: הרשמה — DTO, 409 ובלי סיסמה בתשובה
+import { Body, ConflictException, Controller, Injectable, Module, Post } from "@nestjs/common";
+import { IsEmail, IsOptional, IsString, Length, Matches, MinLength } from "class-validator";
+
+export class SignupDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/\d/, { message: "password חייב לכלול ספרה" })
+  password: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 40)
+  displayName?: string;
+}
+
+type User = { id: number; email: string; displayName: string | null; password: string };
+
+@Injectable()
+export class UsersService {
+  private users: User[] = [];
+
+  signup(dto: SignupDto) {
+    const email = dto.email.toLowerCase();
+    if (this.users.some((u) =&gt; u.email === email)) throw new ConflictException("האימייל כבר רשום");
+    const user: User = { id: this.users.length + 1, email, displayName: dto.displayName ?? null, password: dto.password };
+    this.users.push(user);
+    const { password, ...pub } = user;
+    return pub;
+  }
+}
+
+@Controller("signup")
+export class SignupController {
+  constructor(private readonly users: UsersService) {}
+  @Post()
+  signup(@Body() dto: SignupDto) {
+    return this.users.signup(dto);
+  }
+}
+
+@Module({ controllers: [SignupController], providers: [UsersService] })
+export class SignupModule {}</code></pre>
+<p>התשובה נבנית במפורש בלי <code>password</code> — לא "מוחקים לפני ששולחים" מאובייקט ששמור. (ובפרק 21 — הסיסמה תישמר כ־hash, אף פעם לא כמו שהיא.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">delete user.password; return user;</code> — מוחק את הסיסמה מהמשתמש <strong>השמור</strong>; ההתחברות הבאה נכשלת.</li><li><code>@Matches(/\d/)</code> בלי <code>message</code> — הלקוח מקבל <code class="mid">"password must match /\d/ regular expression"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E51">
+    <h3>P20-E51 · אירועים: Query DTO עם תאריכים ורשימה סגורה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">@IsOptional() @IsIn(["tel-aviv", "haifa", "jerusalem"])</code>, ‏<code class="mid">@IsOptional() @IsDateString()</code>, ו־</p>
+<pre><code class="lang-ts">@IsOptional() @Type(() =&gt; Number) @IsInt() @Min(1) @Max(20) limit = 10;</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תאריכים בפורמט <code>YYYY-MM-DD</code> אפשר להשוות כמחרוזות (P17-E66).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E51: אירועים — Query DTO עם תאריכים ורשימה סגורה
+import { BadRequestException, Controller, Get, Module, Query } from "@nestjs/common";
+import { Type } from "class-transformer";
+import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
+
+const EVENTS = [
+  { id: 1, title: "Latte Art", city: "tel-aviv", date: "2026-12-01" },
+  { id: 2, title: "Cupping", city: "haifa", date: "2026-11-20" },
+  { id: 3, title: "Roasting 101", city: "tel-aviv", date: "2027-01-15" },
+  { id: 4, title: "Espresso Lab", city: "jerusalem", date: "2026-12-10" },
+  { id: 5, title: "Pour Over", city: "haifa", date: "2027-02-02" },
+];
+
+export class EventsQuery {
+  @IsOptional()
+  @IsIn(["tel-aviv", "haifa", "jerusalem"])
+  city?: string;
+
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @IsOptional()
+  @Type(() =&gt; Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit = 10;
+}
+
+@Controller("events")
+export class EventsController {
+  @Get()
+  list(@Query() q: EventsQuery) {
+    if (q.from &amp;&amp; q.to &amp;&amp; q.from &gt; q.to) throw new BadRequestException("from חייב להיות לפני to");
+    return EVENTS.filter((e) =&gt; (!q.city || e.city === q.city) &amp;&amp; (!q.from || e.date &gt;= q.from) &amp;&amp; (!q.to || e.date &lt;= q.to))
+      .sort((a, b) =&gt; a.date.localeCompare(b.date))
+      .slice(0, q.limit);
+  }
+}
+
+@Module({ controllers: [EventsController] })
+export class EventsModule {}</code></pre>
+<p>ברירת המחדל (<code>limit = 10</code>) בשדה של ה־class — עם <code>transform</code>, ה־query הופך למופע, והשדה מקבל את הערך כשלא נשלח. בדיקה שתלויה בשני שדות (<code>from</code> מול <code>to</code>) — בקוד, אחרי שכל שדה עבר לבד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>@IsInt()</code> על <code>limit</code> בלי <code>@Type(() =&gt; Number)</code> — <code>"5"</code> הוא מחרוזת ← 400 (P20-E21).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P20-E52">
+    <h3>P20-E52 · ‏class-validator מול Zod <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־Zod הסכמה היא ערך, והטיפוס נגזר ממנה. ב־class-validator ה־class הוא גם הטיפוס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Zod, <code>.optional()</code> מקבל רק <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>Zod — <code>z.infer</code> גוזר טיפוס מהסכמה. class-validator — ה־class עצמו הוא הטיפוס, וה־decorators הם metadata עליו.</li><li>ב־class-validator, ‏<code>@IsOptional()</code> מדלג גם על <code>null</code>. ב־Zod, ‏<code>.optional()</code> דוחה <code>null</code> (צריך <code>.nullable()</code> במפורש) — ההתנהגות מפורשת יותר.</li><li>Swagger של Nest קורא את ה־class (ועם ה־plugin או <code>@ApiProperty</code> — גם את הכללים). לסכמת Zod צריך ספרייה נוספת שתתרגם אותה ל־OpenAPI.</li><li>הסכמות כבר היו כתובות ונבדקות (PR2-SCHEMA), ומשמשות גם מחוץ ל־HTTP. במקום לשכתב — <code>ZodValidationPipe</code> קטן (P20-E76). שתי הגישות לגיטימיות; מה שחשוב הוא לבחור אחת לכל פרויקט.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לערבב בפרויקט אחד DTOs של class-validator וסכמות Zod לאותם נתונים — שני מקורות אמת שיתרחקו זה מזה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E53">
+    <h3>P20-E53 · ‏PUT מול PATCH, ו־204 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>PUT = "הנה המשאב כולו"; PATCH = "הנה מה שמשתנה".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>idempotent = לשלוח פעמיים ≡ לשלוח פעם אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>PATCH: ‏<code class="mid">{ id: 7, name: "Mug", price: 45, stock: 60 }</code>. ‏PUT: הגוף הוא המשאב <strong>כולו</strong> — <code>{ price: 45 }</code> בלי <code>name</code> ו־<code>stock</code> אינו מוצר שלם; שרת נכון מחזיר 400 (ולא "מוחק" את השדות שחסרים).</li><li>PUT — <code>CreateProductDto</code> (כל השדות חובה). PATCH — <code class="mid">PartialType(CreateProductDto)</code>.</li><li><code>{ "price": 45 }</code> פעמיים — אותה תוצאה: idempotent, בטוח לנסות שוב. ‏<code>{ "stockDelta": -1 }</code> פעמיים — המלאי יורד ב־2: לא idempotent. פעולות "יחסיות" כאלה עדיף לתאר כ־POST לפעולה (<code class="mid">POST /products/7/reservations</code>) עם idempotency key (P18-E37).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־PUT ל"עדכון חלקי" — לקוחות שמכירים HTTP ישלחו את כל האובייקט, ואחרים — חלק, והשרת לא יודע מה התכוונו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E54">
+    <h3>P20-E54 · ‏"10" או 10 בגוף JSON <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>P20-E46: גם עם <code>transform</code>, ‏<code>"10"</code> בגוף לא הופך למספר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי יודע ש־<code>price</code> הוא מספר — השרת או הטופס?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>400 (פלט אמיתי, P20-E46), עם שתי הודעות:</p>
+<pre class="terminal"><span class="dim">price must not be less than 0.01</span>
+<span class="dim">price must be a number conforming to the specified constraints</span></pre>
+<p>‏<code>z.number()</code> — גם דוחה. ‏<code>z.coerce.number()</code> — מקבל ומחזיר 10 (ובאותה הזדמנות גם <code>""</code> ← 0 — שגיאה שקטה). ב־class-validator — <code>@Type(() =&gt; Number)</code> על השדה. אבל התיקון הנכון הוא בצד הלקוח: API של JSON מצפה ל־<code>10</code>; ה־JavaScript של הדף (יחידה 15.5) צריך לשלוח <code>Number(input.value)</code>. המרה "סלחנית" בשרת היא בחירה מודעת, לא ברירת מחדל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>@IsNumberString()</code> כדי "לפתור" — עכשיו ה־service מקבל מחרוזת, ו־<code>price * 2</code> עובד אבל <code>price + 1</code> הוא <code>"101"</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P20-E27">
     <h3>P20-E27 · slug: ‏regex בפונקציה וב־pipe 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -581,7 +902,138 @@ export class SlugsModule {}</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P20-E55">
+    <h3>P20-E55 · הזמנה עם פריטים — DTO מקונן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מערך של DTOs:</p>
+<pre><code class="lang-ts">@IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() =&gt; OrderItemDto)</code></pre>
+<p>בלי <code>@Type</code>, ה־pipe לא יודע לאיזה class להפוך כל איבר — והוא לא נבדק.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>sku: <code class="mid">@Matches(/^[A-Z]{3}-\d{3}$/)</code>. סדר בקובץ: <code>OrderItemDto</code> לפני <code>CreateOrderDto</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E55: הזמנה עם פריטים — DTO מקונן
+import { BadRequestException, Body, Controller, Module, Post } from "@nestjs/common";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsInt, IsNumber, Matches, Max, Min, ValidateNested } from "class-validator";
+
+export class OrderItemDto {
+  @Matches(/^[A-Z]{3}-\d{3}$/)
+  sku: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  qty: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  price: number;
+}
+
+export class CreateOrderDto {
+  @IsEmail()
+  customerEmail: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() =&gt; OrderItemDto)
+  items: OrderItemDto[];
+}
+
+@Controller("orders")
+export class OrdersController {
+  private nextId = 1;
+
+  @Post()
+  create(@Body() dto: CreateOrderDto) {
+    const seen = new Set&lt;string&gt;();
+    for (const i of dto.items) {
+      if (seen.has(i.sku)) throw new BadRequestException(`sku כפול: ${i.sku}`);
+      seen.add(i.sku);
+    }
+    const cents = dto.items.reduce((sum, i) =&gt; sum + Math.round(i.price * 100) * i.qty, 0);
+    const items = dto.items.map((i) =&gt; ({ sku: i.sku, qty: i.qty, price: i.price }));
+    return { id: this.nextId++, customerEmail: dto.customerEmail, items, total: cents / 100 };
+  }
+}
+
+@Module({ controllers: [OrdersController] })
+export class OrdersModule {}</code></pre>
+<p>‏<code>@ValidateNested</code> + <code>@Type</code> הם הזוג שהופך "מערך של אובייקטים" ל"מערך של DTOs שנבדקים". שגיאה בפריט מגיעה עם נתיב: <code class="mid">"items.1.qty must not be greater than 99"</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>@IsArray()</code> לבד — הפריטים עצמם לא נבדקים בכלל, ו־<code>{ qty: -5 }</code> עובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E56">
+    <h3>P20-E56 · עמודים עם קישורים: next ו־prev 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const link = (p: number) =&gt; "/articles?" + new URLSearchParams({ ...(q ? { q } : {}), page: String(p), limit: String(limit) })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">pages = Math.ceil(total / limit)</code>; ‏<code class="mid">next = page &lt; pages ? link(page + 1) : null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E56: עמודים עם קישורים — next ו־prev
+import { Controller, Get, Module, Query } from "@nestjs/common";
+import { Type } from "class-transformer";
+import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+
+const ARTICLES = Array.from({ length: 30 }, (_, i) =&gt; {
+  const id = i + 1;
+  const special: Record&lt;number, string&gt; = { 7: "Nest Tips", 21: "More Nest" };
+  return { id, title: special[id] ?? `Article ${id}` };
+});
+
+export class ListArticlesQuery {
+  @IsOptional() @Type(() =&gt; Number) @IsInt() @Min(1)
+  page = 1;
+
+  @IsOptional() @Type(() =&gt; Number) @IsInt() @Min(1) @Max(20)
+  limit = 5;
+
+  @IsOptional() @IsString()
+  q?: string;
+}
+
+@Controller("articles")
+export class ArticlesController {
+  @Get()
+  list(@Query() { page, limit, q }: ListArticlesQuery) {
+    const all = q ? ARTICLES.filter((a) =&gt; a.title.toLowerCase().includes(q.toLowerCase())) : ARTICLES;
+    const total = all.length;
+    const pages = Math.ceil(total / limit);
+    const link = (p: number) =&gt; "/articles?" + new URLSearchParams({ ...(q ? { q } : {}), page: String(p), limit: String(limit) });
+    return {
+      data: all.slice((page - 1) * limit, page * limit),
+      meta: { page, limit, total, pages },
+      links: { self: link(page), next: page &lt; pages ? link(page + 1) : null, prev: page &gt; 1 ? link(page - 1) : null },
+    };
+  }
+}
+
+@Module({ controllers: [ArticlesController] })
+export class ArticlesModule {}</code></pre>
+<p>הלקוח (דף, אפליקציה) עוקב אחרי <code>next</code> עד שהוא <code>null</code> — בלי לדעת איך בנויים העמודים. מחר אפשר להחליף ל־cursor (P18-E76), והלקוח לא ישתנה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות את הקישור עם <code><code>?q=${q}</code></code> — ‏<code>q = "a&amp;page=9"</code> שובר את הקישור (‏<code>URLSearchParams</code> מקודד).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-di.html"><small>הבא</small>שיעור 3 — Dependency injection, guards ו־filters</a></div>
 </main>
 </body>

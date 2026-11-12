@@ -62,6 +62,86 @@ export class OrdersModule {}</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P20-E57">
+    <h3>P20-E57 · ‏useValue, ‏useClass או useFactory? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>useValue</code> — ערך מוכן. ‏<code>useClass</code> — Nest יוצר מופע (ומזריק לו תלויות). ‏<code>useFactory</code> — פונקציה שלך (גם async).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי יכול לקבל תלויות של Nest — ערך מוכן, או class?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>useValue</strong> — אובייקט מוכן, בלי תלויות.</li><li><strong>useClass</strong> — Nest יוצר את <code>PrismaTasksRepository</code> ומזריק לו <code>PrismaService</code>. בבדיקות — <code class="mid">overrideProvider(...).useValue(new InMemory...)</code>.</li><li><strong>useFactory</strong> — <code class="mid">() =&gt; loadConfig(process.env)</code>; אם הפונקציה זורקת, <code>NestFactory.create</code> נכשל, והשרת לא עולה עם הגדרות שגויות (P20-E17).</li><li><strong>useValue</strong> — <code>new Set(["test-key"])</code>.</li><li><strong>useFactory</strong> async — פונקציה שיוצרת client, עושה <code>await client.connect()</code> ומחזירה אותו. Nest מחכה ל־Promise לפני שהוא ממשיך לבנות (יחידה 26).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">useValue: new PrismaTasksRepository(new PrismaService())</code> — עובד, אבל עוקף את ה־DI: ה־PrismaService הזה הוא מופע נוסף, עם pool נוסף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E58">
+    <h3>P20-E58 · ‏exports ו־imports — מה חסר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני תנאים: המייצא — <code>exports</code>; המשתמש — <code>imports</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ד׳ האפליקציה עולה. אבל כמה מופעים של <code>UsersService</code> יש?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>א</strong> — לא עולה: יש import, אבל <code>UsersModule</code> לא מייצא — ה־provider "פרטי". הוסף <code>exports: [UsersService]</code>.</li><li><strong>ב</strong> — לא עולה: מייצא, אבל <code>OrdersModule</code> לא מייבא. הוסף <code>imports: [UsersModule]</code>.</li><li><strong>ג</strong> — עולה. זו הצורה הנכונה.</li><li><strong>ד</strong> — עולה, אבל עם <strong>שני</strong> מופעים של <code>UsersService</code>: אחד ב־<code>UsersModule</code> ואחד ב־<code>OrdersModule</code> (ה־provider המקומי מנצח). אם יש בו state (מטמון, מונה) — שני העותקים לא מסונכרנים. זה התיקון ה"מפתה" של P20-E03, ובגללו שם כתוב "למה לא".</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>@Global()</code> לכל module כדי "לא לחשוב על imports" — הקשרים בין חלקי האפליקציה נעלמים מהקוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E59">
+    <h3>P20-E59 · ‏guard, ‏interceptor, ‏pipe או filter? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איור 1 בשיעור: middleware ← guard ← interceptor (לפני) ← pipe ← handler ← interceptor (אחרי) ← filter.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בקשה שה־guard דחה — האם היא מגיעה ל־interceptor?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>guard</strong> — "מותר או אסור", לפני כל השאר.</li><li><strong>interceptor</strong> (או middleware) — עוטף את התשובה.</li><li><strong>pipe</strong> — משנה/בודק ערך של פרמטר.</li><li><strong>filter</strong> — מתרגם exceptions לתשובה.</li><li><strong>interceptor</strong> — ‏<code>map((data) =&gt; ({ data }))</code> אחרי ה־handler.</li><li><strong>middleware</strong> — רץ ראשון, לפני ה־guard, ורואה כל בקשה (ומאזין ל־<code>res.on("finish")</code>). interceptor לא רץ כשה־guard דוחה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקת הרשאות בתוך interceptor — עובד, אבל הקוד שקורא את הקוד מחפש אותה ב־guards; ו־pipes כבר רצו על הקלט של מי שלא מורשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E60">
+    <h3>P20-E60 · מה ה־interceptor רואה, ומתי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד לפני <code>next.handle()</code> רץ לפני ה־handler; מה שבתוך <code>pipe(...)</code> — על התוצאה שלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>map</code> רץ רק על ערך שהגיע. שגיאה "מדלגת" עליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p><code>GET /x</code>: ‏<code>before</code>, ‏<code>handler</code>, ‏<code>after [ 1, 2 ]</code>. הלקוח מקבל <code>{"data":[1,2]}</code> — ה־interceptor שינה את התשובה. ‏<code>GET /x/fail</code>: ‏<code>before</code>, ‏<code>handler</code> — ו־<code>after</code> לא מודפס; השגיאה עוברת ליד ה־<code>map</code>, ומגיעה ל־filter (404). כדי לפעול גם על שגיאות — <code>catchError</code> (או <code>tap({ error })</code>) ב־pipe.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים לוגיקה של "אחרי" ישר אחרי <code>next.handle()</code> (בלי <code>pipe</code>) — היא רצה <strong>לפני</strong> ה־handler: ה־Observable רק נוצר, הוא עוד לא רץ.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P20-E11">
     <h3>P20-E11 · שעון כ־provider 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -877,6 +957,72 @@ export class DataModule {}</code></pre>
 
 </div></details>
   </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P20-E61">
+    <h3>P20-E61 · שרשרת middleware מול מחזור החיים של Nest <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־Express הסדר נקבע לפי סדר השורות של <code>app.use</code>. ב־Nest?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה ב־Express אפשר היה לשים את <code>errorHandler</code> במקום הלא נכון?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>express.json()</code> ← מובנה. לוג ← middleware או interceptor. מפתח API ← guard. ‏<code>validate</code> ← pipe (‏ValidationPipe או ZodValidationPipe). handler ← handler. ‏<code>errorHandler</code> ← filter.</li></ul>
+<p>ב־Express הסדר הוא סדר השורות — ו־<code>errorHandler</code> לפני ה־routes, או בדיקת מפתח אחרי <code>validate</code>, הם באגים קלאסיים. ב־Nest הסדר קבוע לפי <strong>סוג</strong> הכלי: guard תמיד לפני pipe, filter תמיד בסוף. מה שנשאר לבחור הוא <strong>היקף</strong>: גלובלי, controller, או מתודה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>@UseGuards</code> מעל <code>@UsePipes</code> בקוד משנה את הסדר — לא; הסדר לפי סוג.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E62">
+    <h3>P20-E62 · ‏token כמחרוזת — ומה אם שניים בחרו אותו שם? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>"CONFIG" === "CONFIG"</code>. ‏<code class="mid">Symbol("CONFIG") === Symbol("CONFIG")</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Nest, token הוא סתם מפתח ב־Map.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>שני ה־tokens הם <strong>אותו</strong> מפתח, אז אחד דורס את השני: <code>PaymentsService</code> עלול לקבל את ההגדרות של המיילים — בלי שום שגיאה, ורק בייצור יתגלה שהתשלום נשלח לכתובת של שרת המיילים. ‏<code class="mid">export const PAYMENTS_CONFIG = Symbol("PAYMENTS_CONFIG")</code> — כל <code>Symbol</code> ייחודי, גם עם אותו תיאור; מייבאים את הקבוע עצמו, אז אי אפשר להתבלבל. או class (<code class="mid">class PaymentsConfig { ... }</code>) כ־token — ייחודי, ונותן גם טיפוס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים prefix בשמות ונזהר" — עובד עד שמישהו מעתיק module לפרויקט אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E63">
+    <h3>P20-E63 · למה tokens עושים בדיקות קלות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־א׳ — איך מחליפים את <code>new Date()</code>? ואת ה־Prisma?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ב׳: <code class="mid">.overrideProvider(CLOCK).useValue(...)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>א׳: ה־service יוצר בעצמו את ה־repository (עם חיבור למסד!) ומשתמש בשעון של המחשב. כדי לבדוק צריך מסד אמיתי, ו"זמן" — לשנות את השעון של התהליך או לחכות. ב׳: בבדיקה —</p>
+<pre><code class="lang-ts">overrideProvider(TASKS_REPOSITORY).useValue(new InMemoryTasksRepository())</code></pre>
+<p>ו־</p>
+<pre><code class="lang-ts">overrideProvider(CLOCK).useValue({ now: () =&gt; new Date("2026-11-04T10:00:00Z") })</code></pre>
+<p>ובודקים משימה עם <code>dueDate: "2026-11-03"</code>. בדיקה של מילישניות, שתמיד מחזירה אותה תשובה. ה־"<code>new</code>" שמחוץ לקוד שלך הוא מה שמאפשר להחליף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נבדוק עם <code>dueDate</code> של אתמול לפי <code>new Date()</code> בבדיקה" — הבדיקה נכשלת בחצות, ובאזור זמן אחר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P20-E28">
     <h3>P20-E28 · סיכום לקוח משני repositories 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -979,7 +1125,140 @@ export class SummaryModule {}</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P20-E64">
+    <h3>P20-E64 · ‏interceptor של idempotency 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>להחזיר תוצאה בלי handler: <code>return of(saved);</code> (‏<code>of</code> מ־<code>rxjs</code>) — במקום <code>next.handle()</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לשמור אחרי הצלחה: <code class="mid">next.handle().pipe(tap((body) =&gt; this.store.set(key, body)))</code>. ‏header: <code class="mid">context.switchToHttp().getResponse().setHeader(...)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E64: interceptor של idempotency
+import { Body, CallHandler, Controller, ExecutionContext, Get, Inject, Injectable, Module, NestInterceptor, Post, UseInterceptors } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { Observable, of, tap } from "rxjs";
+
+export const IDEMPOTENCY_STORE = "IDEMPOTENCY_STORE";
+
+@Injectable()
+export class IdempotencyInterceptor implements NestInterceptor {
+  constructor(@Inject(IDEMPOTENCY_STORE) private readonly store: Map&lt;string, unknown&gt;) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;unknown&gt; {
+    const http = context.switchToHttp();
+    const key = http.getRequest&lt;Request&gt;().get("idempotency-key");
+    if (!key) return next.handle();
+    if (this.store.has(key)) {
+      http.getResponse&lt;Response&gt;().setHeader("Idempotent-Replayed", "true");
+      return of(this.store.get(key));
+    }
+    return next.handle().pipe(tap((body) =&gt; this.store.set(key, body)));
+  }
+}
+
+@Controller("payments")
+export class PaymentsController {
+  private payments: { id: number; amount: number }[] = [];
+
+  @Post()
+  @UseInterceptors(IdempotencyInterceptor)
+  create(@Body() body: { amount: number }) {
+    const p = { id: this.payments.length + 1, amount: body.amount };
+    this.payments.push(p);
+    return p;
+  }
+
+  @Get("count")
+  count() {
+    return { count: this.payments.length };
+  }
+}
+
+@Module({
+  controllers: [PaymentsController],
+  providers: [IdempotencyInterceptor, { provide: IDEMPOTENCY_STORE, useFactory: () =&gt; new Map() }],
+})
+export class PaymentsModule {}</code></pre>
+<p>‏<code>of(saved)</code> הוא "תשובה מוכנה" — ה־handler לא רץ, ושום תשלום לא נוצר. ‏<code>tap</code> רץ רק על הצלחה, כך שבקשה שנכשלה לא "נועלת" את המפתח. (במערכת עם כמה שרתים — המטמון צריך להיות משותף: Redis או טבלה עם UNIQUE, P18-E51.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>useValue: new Map()</code> — ה־Map נוצר פעם אחת, כשהקובץ נטען, ושתי אפליקציות באותו תהליך (בבדיקות) חולקות מטמון: מפתח מאפליקציה אחת "משוחזר" בשנייה. הבודק בודק בדיוק את זה.</li><li>לשמור לפני ה־handler (מפתח ← "בטיפול") ולשכוח למחוק בכישלון — המפתח "תקוע".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E65">
+    <h3>P20-E65 · אסטרטגיית תמחור לפי הגדרה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">{ provide: PRICING, useFactory: (cfg: { holiday: boolean }) =&gt; (cfg.holiday ? new HolidayPricing() : new RegularPricing()), inject: [CONFIG] }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפרמטר עשרוני אין <code>ParseIntPipe</code> — <code>ParseFloatPipe</code>, ובדיקה ש־<code>&gt; 0</code> (<code>BadRequestException</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E65: אסטרטגיית תמחור לפי הגדרה
+import { BadRequestException, Controller, Get, Inject, Module, Param, ParseFloatPipe } from "@nestjs/common";
+
+export const CONFIG = "CONFIG";
+export const PRICING = "PRICING";
+
+export interface Pricing {
+  name: string;
+  price(base: number): number;
+}
+
+export class RegularPricing implements Pricing {
+  name = "regular";
+  price(base: number) {
+    return base;
+  }
+}
+
+export class HolidayPricing implements Pricing {
+  name = "holiday";
+  price(base: number) {
+    return Math.round(Math.round(base * 100) * 0.85) / 100;
+  }
+}
+
+@Controller("price")
+export class PriceController {
+  constructor(@Inject(PRICING) private readonly pricing: Pricing) {}
+
+  @Get(":base")
+  get(@Param("base", ParseFloatPipe) base: number) {
+    if (!(base &gt; 0)) throw new BadRequestException("base חייב להיות חיובי");
+    return { base, final: this.pricing.price(base), strategy: this.pricing.name };
+  }
+}
+
+@Module({
+  controllers: [PriceController],
+  providers: [
+    { provide: CONFIG, useValue: { holiday: false } },
+    {
+      provide: PRICING,
+      useFactory: (cfg: { holiday: boolean }) =&gt; (cfg.holiday ? new HolidayPricing() : new RegularPricing()),
+      inject: [CONFIG],
+    },
+  ],
+})
+export class PricingModule {}</code></pre>
+<p>ה־controller לא יודע שיש שתי אסטרטגיות — הוא מקבל <code>Pricing</code>. ההחלטה במקום אחד (ה־factory), לפי הגדרה. מחר — אסטרטגיה שלישית (Black Friday) היא class חדש ושורה ב־factory.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (config.holiday)</code> בתוך ה־controller או ה־service — כל אסטרטגיה חדשה היא עוד <code>if</code> בכל מקום שמחשב מחיר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-project.html"><small>הבא</small>שיעור 4 — Swagger, בדיקות ופרויקט 2 ב־Nest</a></div>
 </main>
 </body>
