@@ -9,7 +9,7 @@ export default {
   database: true, // שאלות ה־SQL (E12, E18, E23)
   testTimeout: 120000,
   time: "4 מפגשים — ועוד 2–3 שאלות בשבוע לאורך הקורס",
-  expectedExercises: 28,
+  expectedExercises: 102,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24 ו־PostgreSQL עם <code>COURSE_DATABASE_URL</code> ב־<code>.env</code> (פרק 16) — לשלוש שאלות ה־SQL. אין התקנות חדשות.</p>
 ${copyStep("27-algorithms")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm run check P27-E06</code> ← הבודק רץ ונכשל על קובץ ההתחלה ("עוד לא כתבת את הפתרון").</p>
