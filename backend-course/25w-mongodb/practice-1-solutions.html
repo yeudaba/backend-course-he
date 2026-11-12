@@ -40,6 +40,129 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E29">
+    <h3>P25.7-E29 · הזמנה: מסמך אחד או שלוש טבלאות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏orders + order_items, ו־JOIN.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"בלי schema" — אין <code>ALTER TABLE</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>Postgres: שורה ב־<code>orders</code> ושתיים ב־<code>order_items</code>. Mongo: מסמך אחד.</li><li>Postgres: שאילתה אחת עם JOIN (או שתיים). Mongo: <code>findOne</code> אחד — והכול בפנים.</li><li>Postgres: migration (<code class="mid">ADD COLUMN gift_wrap boolean NOT NULL DEFAULT false</code> ל־order_items). Mongo: פשוט מתחילים לכתוב את השדה בהזמנות חדשות.</li><li>אין להן אותו. הקוד חייב לטפל ב"שדה חסר" (<code>item.giftWrap ?? false</code>) — לנצח, או עד שמריצים עדכון שממלא אותו. ה־migration לא נעלם — הוא עבר לקוד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ב־Mongo אין migrations" — יש; הם פשוט לא חובה, ולכן נשכחים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E30">
+    <h3>P25.7-E30 · ‏=== על ObjectId, ועוד שלוש השוואות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>includes</code> ו־<code>Set</code> משתמשים בהשוואה של <code>===</code> (בערך).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏ObjectId יודע להפוך את עצמו ל־JSON.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { ObjectId } from "mongodb";
+const a = new ObjectId("6af1a8c0e4b0f1a2b3c4d5e6");
+const b = new ObjectId("6af1a8c0e4b0f1a2b3c4d5e6");
+console.log(a === b, a.equals(b), String(a) === String(b));
+console.log([a].includes(b), new Set([a, b]).size);
+console.log(JSON.stringify({ id: a }));</code></pre>
+<pre class="terminal">false true true
+false 2
+{"id":"6af1a8c0e4b0f1a2b3c4d5e6"}</pre>
+<p>‏<code>===</code>, ‏<code>includes</code> ו־<code>Set</code> — כולם משווים הפניות לאובייקט, ולכן "שונים". ‏<code>note.ownerId === user._id</code> תמיד <code>false</code> — אף אחד לא בעלים של שום דבר (או, אם כתבו <code>!==</code> לבדיקת הרשאה — כולם נחסמים). משווים עם <code>.equals()</code>, או ממירים למחרוזת פעם אחת, בגבול של ה־API.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"תיקון" עם <code>==</code> — גם הוא משווה הפניות כששני הצדדים אובייקטים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E31">
+    <h3>P25.7-E31 · ‏Date או מחרוזת? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־BSON, Date ומחרוזת הם טיפוסים שונים — ו־<code>$gte</code> משווה רק בתוך אותו טיפוס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון בין טיפוסים: יש סדר קבוע בין סוגי BSON.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא תחזור — Date לא משתווה למחרוזת. ההזמנה "נעלמת" מכל דוח לפי תאריך.</li><li>מסמכים עם מחרוזת ממוינים <em>לפני</em> כל ה־Dates (ב־BSON, String קטן מ־Date) — לא לפי הזמן.</li><li>מחרוזת היא לא רגע: <code>"2026-11-01"</code> של איזה אזור זמן? אי אפשר לקבץ לפי יום בישראל (שיעור 4), ולא לחשב "לפני 24 שעות". שומרים <code>Date</code> — רגע ב־UTC (פרק 24).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור את מה שהגיע ב־JSON כמו שהוא — JSON לא מכיר Date, אז כל תאריך מה־API מגיע כמחרוזת וצריך המרה לפני insert (E43).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E32">
+    <h3>P25.7-E32 · ‏insertOne שינה לי את האובייקט <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־driver מוסיף <code>_id</code> לאובייקט שקיבל, אם אין לו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>11000 — duplicate key.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const col = client.db("e32").collection("notes");
+const template = { text: "hello" };
+await col.insertOne(template);
+console.log("_id" in template);
+try { await col.insertOne(template); } catch (e) { console.log((e as { code?: number }).code); }
+await col.insertOne({ ...template, _id: undefined });
+console.log(await col.countDocuments());
+await client.db("e32").dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">true
+11000
+2</pre>
+<p>‏<code>insertOne</code> כותב <code>_id</code> לתוך האובייקט שהעברת. ההכנסה השנייה של אותו אובייקט — אותו <code>_id</code> ← ‏11000. בלולאה: הראשון נכנס, וכל השאר נכשלים. מכניסים עותק (<code>{ ...template }</code>, או <code>structuredClone</code>), כמו ב־<code>seed.mjs</code> של היחידה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>delete template._id</code> אחרי כל insert — עובד, עד שמישהו שוכח שורה אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E33">
+    <h3>P25.7-E33 · ‏projection — מה חוזר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>_id</code> חוזר תמיד, אלא אם כתבת <code>_id: 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אסור לערבב "כלול" ו"השמט" — חוץ מ־<code>_id</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code class="mid">{ _id: "p1", name: "Ethiopia Yirgacheffe" }</code>.</li><li><code class="mid">{ name: "Ethiopia Yirgacheffe" }</code>.</li><li>הכול חוץ מ־<code>reviews</code> ו־<code>specs</code> (כולל <code>_id</code>, ‏<code>tags</code>, ‏<code>ratingCount</code>…).</li><li><code class="mid">{ specs: { roast: "light" } }</code> — השדה המקונן חוזר בתוך אובייקט, לא כ"roast" שטוח.</li><li>שגיאה מהשרת: ‏<code class="mid">Cannot do exclusion on field price in inclusion projection</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח מסמך שלם ל־API "ולסנן ב־frontend" — כל השדות (גם <code>passwordHash</code>) עוברים ברשת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.7-E06">
     <h3>P25.7-E06 · חיפוש מוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -145,6 +268,224 @@ export async function customerOrders(db: Db, customerId: string, { status }: { s
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E34">
+    <h3>P25.7-E34 · כרטיס מוצר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">{ projection: { name: 1, price: 1, "specs.roast": 1 } }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>doc.specs?.roast ?? null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E34: כרטיס מוצר
+import type { Db } from "mongodb";
+
+export async function productCard(db: Db, id: string) {
+  const doc = await db.collection&lt;{ _id: string; name: string; price: number; specs?: { roast?: string } }&gt;("products")
+    .findOne({ _id: id }, { projection: { name: 1, price: 1, "specs.roast": 1 } });
+  if (!doc) return null;
+  return { id: doc._id, name: doc.name, price: doc.price, roast: doc.specs?.roast ?? null };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>doc.specs.roast</code> — זורק על מוצר בלי <code>specs</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E35">
+    <h3>P25.7-E35 · לקוחות בעיר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">find({ city }, { projection: { _id: 0, name: 1, email: 1 } })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">.sort({ name: 1 }).toArray()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E35: לקוחות בעיר
+import type { Db } from "mongodb";
+
+export async function customersInCity(db: Db, city: string) {
+  return (await db.collection("customers")
+    .find({ city }, { projection: { _id: 0, name: 1, email: 1 } })
+    .sort({ name: 1 })
+    .toArray()) as unknown as { name: string; email: string }[];
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מיון ב־JavaScript אחרי <code>toArray</code> — עובד כאן, אבל עם <code>limit</code> מקבלים "10 ראשונים" שגויים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E36">
+    <h3>P25.7-E36 · מוצר חדש — עם Zod לפני insert 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>z.strictObject({ … })</code> ו־<code>safeParse</code> (פרק 15).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>insertedId.toHexString()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E36: מוצר חדש — עם Zod לפני insert
+import type { Db } from "mongodb";
+import { z } from "zod";
+
+const schema = z.strictObject({
+  name: z.string().trim().min(1),
+  category: z.enum(["beans", "gear", "merch"]),
+  price: z.number().int().positive(),
+  stock: z.number().int().min(0).default(0),
+  tags: z.array(z.string()).default([]),
+});
+
+export async function addProduct(db: Db, input: unknown) {
+  const r = schema.safeParse(input);
+  if (!r.success) throw new Error("VALIDATION_ERROR");
+  const { insertedId } = await db.collection("products").insertOne({ ...r.data, createdAt: new Date() });
+  return { id: insertedId.toHexString() };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>insertOne(input)</code> אחרי הבדיקה — נכנס האובייקט המקורי, בלי trim ובלי ברירות מחדל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E37">
+    <h3>P25.7-E37 · ההזמנות האחרונות של לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">.sort({ createdAt: -1 }).limit(limit)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">doc.createdAt.toISOString()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E37: ההזמנות האחרונות של לקוח
+import type { Db } from "mongodb";
+
+type Order = { _id: string; customerId: string; status: string; total: number; createdAt: Date };
+
+export async function lastOrders(db: Db, customerId: string, limit: number) {
+  const docs = await db.collection&lt;Order&gt;("orders")
+    .find({ customerId }, { projection: { status: 1, total: 1, createdAt: 1 } })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map((o) =&gt; ({ id: o._id, status: o.status, total: o.total, createdAt: o.createdAt.toISOString() }));
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את <code>Date</code> כמו שהוא — ‏<code>res.json</code> יהפוך אותו למחרוזת, אבל קוד אחר שקורא לפונקציה מקבל טיפוס אחר ממה שהבטחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E38">
+    <h3>P25.7-E38 · ממסמך ל־JSON של API 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>value instanceof ObjectId</code> — עם <code class="mid">import { ObjectId } from "mongodb"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>רקורסיה:</p>
+<pre><code class="lang-ts">Object.fromEntries(Object.entries(v).map(([k, x]) =&gt; [k === "_id" ? "id" : k, toApi(x)]))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E38: ממסמך ל־JSON של API
+import { ObjectId } from "mongodb";
+
+export function toApi(value: unknown): unknown {
+  if (value instanceof ObjectId) return value.toHexString();
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toApi);
+  if (value !== null &amp;&amp; typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, x]) =&gt; [k === "_id" ? "id" : k, toApi(x)]));
+  }
+  return value;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">JSON.parse(JSON.stringify(doc))</code> — ‏Date ו־ObjectId אכן הופכים למחרוזות, אבל <code>_id</code> נשאר <code>_id</code>, ובדרך עוברים סריאליזציה מלאה של כל המסמך בלי צורך.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.7-E39">
+    <h3>P25.7-E39 · ‏jsonb ב־Postgres מול מסמך <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־jsonb רק עמודה אחת גמישה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה עוד יש במערכת — הזמנות, תשלומים, קשרים?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ב־Postgres רק העמודה הזו גמישה; כל השאר מוגדר, עם טיפוסים ואילוצים. ב־Mongo כל המסמך גמיש — גם <code>price</code> יכול להיות מחרוזת במסמך אחד.</li><li>Postgres: ‏<code class="mid">price numeric NOT NULL CHECK (price &gt; 0)</code> — המסד אוכף. Mongo: רק אם הוספת <code>$jsonSchema</code> (שיעור 3) או בדיקה בקוד (E36).</li><li>כשכל השאר במערכת רלציוני — הזמנות, תשלומים, משתמשים, עם מפתחות זרים וטרנזקציות. jsonb נותן את הגמישות לחלק הקטן שצריך אותה, בלי מסד שני.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור Mongo רק בגלל "מאפיינים שונים למוצרים" — jsonb פותר את זה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E40">
+    <h3>P25.7-E40 · ‏Zod — עכשיו הוא ה־schema <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>{ "price": "35" }</code>, ‏<code>{ "role": "admin" }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>parse</code> מחזיר אובייקט חדש.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>נשמר מה שהגיע. ‏<code>price: "35"</code> (מחרוזת) — ‏<code>$gte: 30</code> לא ימצא אותו, ו־<code>$inc</code> עליו ייכשל. ‏<code>role: "admin"</code> בהרשמה — נשמר, ואולי מעניק הרשאות (mass assignment, ‏OWASP — פרק 21).</li><li>שדה לא מוכר שנבלע ב־<code>z.object</code> (שמוריד שדות) — בסדר, כל עוד מכניסים את התוצאה. אבל עם passthrough או כשמכניסים את הקלט המקורי — כל שדה נכנס למסד. ‏strict הופך את זה לשגיאה ברורה.</li><li>נכנס הקלט <em>המקורי</em> — בלי trim, בלי ברירות מחדל, ועם כל שדה ש־Zod הוריד. מכניסים את מה ש־<code>parse</code> החזיר (E36).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתמך על TypeScript (<code>Collection&lt;Product&gt;</code>) — הוא בודק את הקוד שלך, לא את מה שהגיע ברשת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E41">
+    <h3>P25.7-E41 · ‏_id: אימייל או ObjectId? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אי אפשר לשנות <code>_id</code> של מסמך — רק למחוק וליצור מחדש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מזהה שמופיע ב־URL, בלוגים, ובקבצים של אחרים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>_id</code> לא משתנה: מוחקים, יוצרים מסמך חדש, ומעדכנים 200 הזמנות (ובלי טרנזקציה — חלק עלול להישאר עם הישן). ועוד: האימייל מופיע בכל URL ולוג — מידע אישי שמתפזר.</li><li>אותו כלל: מפתח ראשי צריך להיות יציב ולא נושא משמעות. אימייל הוא "מפתח טבעי" — ייחודי היום, משתנה מחר. לכן <code>_id</code> סינתטי, ו־<code>email</code> עם אינדקס ייחודי (‏P25.7-E07).</li><li>כשהערך באמת לא משתנה ומגיע מבחוץ: קוד מדינה (<code>"IL"</code>), ‏<code>sku</code> מספק, מזהה של אירוע (‏<code>evt_91</code>, פרק 24) — ואז ה־<code>_id</code> הוא גם ה־dedup.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף אינדקס ייחודי על email" — וגם נשאיר אותו כ־<code>_id</code>: שתי בעיות במקום אחת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P25.7-E28">
     <h3>P25.7-E28 · מה מסתתר ב־ObjectId 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -203,7 +544,93 @@ TypeError ObjectId לא תקין: 6af2d608</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E42">
+    <h3>P25.7-E42 · ‏GET /products/:id ב־Express 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה אחת <code>toDto(doc)</code> לשתי הנקודות.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>req.query.category</code> יכול להיות מערך — ‏<code>typeof … === "string"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E42: GET /products/:id ב־Express
+import { Router } from "express";
+import type { Db } from "mongodb";
+
+type Product = { _id: string; name: string; category: string; price: number; stock: number };
+const projection = { name: 1, category: 1, price: 1, stock: 1 };
+const toDto = (p: Product) =&gt; ({ id: p._id, name: p.name, category: p.category, price: p.price, inStock: p.stock &gt; 0 });
+
+export function productsRouter(db: Db) {
+  const products = db.collection&lt;Product&gt;("products");
+  const router = Router();
+  router.get("/products/:id", async (req, res) =&gt; {
+    const p = await products.findOne({ _id: req.params.id }, { projection });
+    if (!p) {
+      res.status(404).json({ error: { code: "NOT_FOUND" } });
+      return;
+    }
+    res.json(toDto(p));
+  });
+  router.get("/products", async (req, res) =&gt; {
+    const filter = typeof req.query.category === "string" ? { category: req.query.category } : {};
+    res.json((await products.find(filter, { projection }).sort({ name: 1 }).toArray()).map(toDto));
+  });
+  return router;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">find({ category: req.query.category })</code> בלי לבדוק טיפוס — ‏<code>?category[$ne]=x</code> מחזיר הכול (שיעור 5).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E43">
+    <h3>P25.7-E43 · ‏seed מקובץ JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>JSON.parse(text, reviver)</code> — ה־reviver מקבל <code>(key, value)</code> לכל שדה, בכל עומק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תאריך לא תקין: <code>Number.isNaN(d.getTime())</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E43: seed מקובץ JSON
+import type { Db } from "mongodb";
+
+export async function loadSeed(db: Db, jsonText: string) {
+  let data: Record&lt;string, Record&lt;string, unknown&gt;[]&gt;;
+  try {
+    data = JSON.parse(jsonText, (key, value) =&gt; {
+      if (!key.endsWith("At") || typeof value !== "string") return value;
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) throw new Error(`תאריך לא תקין בשדה ${key}`);
+      return d;
+    });
+  } catch (err) {
+    if (err instanceof SyntaxError) throw new Error("JSON לא תקין");
+    throw err;
+  }
+  const counts: Record&lt;string, number&gt; = {};
+  for (const [name, docs] of Object.entries(data)) {
+    if (docs.length) await db.collection(name).insertMany(docs);
+    counts[name] = docs.length;
+  }
+  return counts;
+}</code></pre>
+<p>ה־reviver רץ על כל שדה בדרך — גם בתוך מערכים של פריטים — ולכן תופס גם <code>items[0].shippedAt</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמיר רק ברמה העליונה (<code>doc.createdAt</code>) — ותאריכים בתוך items נשארים מחרוזות.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-queries.html"><small>הבא</small>שיעור 2 — שאילתות ועדכונים</a></div>
 </main>
 </body>

@@ -65,6 +65,107 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E44">
+    <h3>P25.7-E44 · שני תנאים על אותו שדה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>באובייקט JavaScript אין שני מפתחות זהים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שדות שונים ברמה העליונה — AND.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("e44");
+await db.collection("products").insertMany([ // המחירים, הקטגוריות והמלאי מנתוני היחידה
+  { _id: "p1", category: "beans", price: 62, stock: 40 }, { _id: "p2", category: "beans", price: 55, stock: 0 },
+  { _id: "p3", category: "beans", price: 48, stock: 120 }, { _id: "p4", category: "beans", price: 50, stock: 15 },
+  { _id: "p5", category: "gear", price: 89, stock: 12 }, { _id: "p6", category: "gear", price: 249, stock: 5 },
+  { _id: "p7", category: "gear", price: 199, stock: 0 }, { _id: "p8", category: "merch", price: 35, stock: 60 },
+]);
+const ids = async (f: object) =&gt; (await db.collection("products").find(f).sort({ _id: 1 }).toArray()).map((p) =&gt; p._id);
+console.log(await ids({ price: { $gte: 50 }, price: { $lte: 90 } }));
+console.log(await ids({ price: { $gte: 50, $lte: 90 } }));
+console.log(await ids({ $or: [{ category: "gear" }, { stock: 0 }] }));
+console.log(await ids({ category: "gear", $or: [{ price: { $lt: 100 } }, { stock: 0 }] }));
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">[ 'p1', 'p2', 'p3', 'p4', 'p5', 'p8' ]
+[ 'p1', 'p2', 'p4', 'p5' ]
+[ 'p2', 'p5', 'p6', 'p7' ]
+[ 'p5', 'p7' ]</pre>
+<p>1 — המפתח השני דורס את הראשון: נשאר רק <code>$lte: 90</code> (‏TypeScript אפילו מתריע על מפתח כפול). 2 — טווח, כמו BETWEEN. 3 — גם p2 (פולים שאזלו) נכנס. 4 — ציוד שזול מ־100 <em>או</em> שאזל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות פילטר בלולאה עם <code>filter[field] = …</code> פעמיים לאותו שדה — התנאי הראשון נעלם בשקט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E45">
+    <h3>P25.7-E45 · מערך — "מכיל" או "שווה"? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ערך יחיד מול שדה מערך = "מכיל". מערך מול מערך = שוויון מדויק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שוויון מדויק כולל סדר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כן — המערך מכיל.</li><li>לא — המערך כולו לא שווה ל־<code>["kettle"]</code>.</li><li>לא — סדר אחר.</li><li>כן — זהה בדיוק.</li><li>כן — מכיל את שניהם, בכל סדר.</li><li>כן — בדיוק שני איברים.</li></ol>
+<p>"מכיל את כולם" — ‏<code>$all</code>; "מכיל אחד מ־" — ‏<code>$in</code>. שוויון מערכים כמעט אף פעם לא מה שרוצים בחיפוש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">{ tags: req.query.tags.split(",") }</code> ל"מכיל את כל התגיות" — מוצא רק מוצרים עם בדיוק אותן תגיות באותו סדר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E46">
+    <h3>P25.7-E46 · ‏skip של 100,000 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏skip עובר על הרשומות — הוא לא "קופץ".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>keyset — כמו בפרק 18.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏100,020 רשומות באינדקס (בלי ה־COLLSCAN, אבל עדיין קריאה של כולן).</li><li>כי בעמוד הראשון עוברים 20, ובעמוד ה־5000 — מאה אלף.</li><li>keyset: ‏<code>$or</code> של "זמן מוקדם יותר" ו"אותו זמן עם <code>_id</code> קטן יותר" (E52), עם אותו sort ו־<code>limit(20)</code> — כל עמוד עולה כמו הראשון (E53).</li><li>‏countDocuments עם filter סורק את כל מה שמתאים — בכל בקשה. או לחשב לעיתים רחוקות, או <code>estimatedDocumentCount</code> בלי filter, או לוותר על "מתוך" (רוב האפליקציות מציגות "עוד").</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף אינדקס ולחשוב שזה פותר את ה־skip — הוא חוסך את המיון, לא את המעבר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E47">
+    <h3>P25.7-E47 · ‏upsert במקביל — שני מסמכים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>upsert = "חפש; אם אין — הכנס". שתי הבקשות לא מצאו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה מונע מסמך שני עם אותו ערך?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שתיהן לא מוצאות עגלה, ושתיהן מכניסות — שתי עגלות ללקוח c9, כל אחת עם פריט אחד. מעכשיו <code class="mid">findOne({ customerId: "c9" })</code> מחזיר אחת "אקראית".</li><li><code>_id</code> ייחודי תמיד: הבקשה השנייה מקבלת duplicate key (‏11000) — ו־Mongo אפילו מנסה שוב את ה־upsert לבד במקרה הזה, ומעדכן.</li><li>אינדקס ייחודי על <code>customerId</code>. עכשיו השנייה נכשלת ב־11000 (או, בגרסאות חדשות, ה־upsert מנוסה שוב אוטומטית) — ותופסים ומנסים שוב.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתמך על "זה נדיר" — לחיצה כפולה על "הוסף לעגלה" היא בדיוק שתי בקשות במקביל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.7-E08">
     <h3>P25.7-E08 · הוספה למלאי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -342,6 +443,126 @@ RangeError minPrice גדול מ־maxPrice</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E48">
+    <h3>P25.7-E48 · תגית sold-out לפי המלאי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">$addToSet: { tags: "sold-out" }</code> ו־<code class="mid">$pull: { tags: "sold-out" }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>modifiedCount</code>, לא <code>matchedCount</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E48: תגית sold-out לפי המלאי
+import type { Db } from "mongodb";
+
+export async function syncSoldOutTags(db: Db) {
+  const products = db.collection("products");
+  const a = await products.updateMany({ stock: 0 }, { $addToSet: { tags: "sold-out" } });
+  const b = await products.updateMany({ stock: { $gt: 0 } }, { $pull: { tags: "sold-out" } });
+  return { tagged: a.modifiedCount, untagged: b.modifiedCount };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>$push</code> במקום <code>$addToSet</code> — בכל הרצה עוד "sold-out".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E49">
+    <h3>P25.7-E49 · מחיר חדש — רק אם לא השתנה בינתיים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">updateOne({ _id: id, price: expectedPrice }, { $set: { price: newPrice } })</code></pre>
+<p>ו־<code>matchedCount</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>expectedPrice === newPrice</code> — ‏matched 1, ‏modified 0. זה "updated" (ממילא זה המחיר).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E49: מחיר חדש — רק אם לא השתנה בינתיים
+import type { Db } from "mongodb";
+
+export async function updatePrice(db: Db, id: string, expectedPrice: number, newPrice: number) {
+  if (!Number.isInteger(newPrice) || newPrice &lt;= 0) throw new RangeError(`מחיר לא תקין: ${newPrice}`);
+  const products = db.collection&lt;{ _id: string; price: number }&gt;("products");
+  const r = await products.updateOne({ _id: id, price: expectedPrice }, { $set: { price: newPrice } });
+  if (r.matchedCount === 1) return "updated" as const;
+  return (await products.countDocuments({ _id: id }, { limit: 1 })) ? ("conflict" as const) : ("not_found" as const);
+}</code></pre>
+<p>זה "optimistic concurrency": לא נועלים כלום, ובודקים בכתיבה שמה שראית עדיין נכון. ב־API — ‏409 על conflict, והממשק מציג "המחיר השתנה ל־X, לעדכן בכל זאת?". (במקום המחיר עצמו אפשר להשתמש במספר גרסה, <code>version</code>, שעולה בכל עדכון.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>findOne</code>, השוואה בקוד, ואז <code>updateOne</code> — בין שתי הפקודות מנהל שני מספיק לעדכן.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.7-E50">
+    <h3>P25.7-E50 · המרוץ מפרק 18 — בגרסת Mongo <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏filter + ‏<code>$inc</code> + ‏<code>modifiedCount</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה אטומי ב־Mongo בלי טרנזקציה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>updateOne</code> עם filter של <code>stock: { $gte: 1 }</code> ו־<code>$inc: { stock: -1 }</code>, ובדיקת <code>modifiedCount === 1</code> (‏P25.7-E13).</li><li>שינוי של מסמך אחד אטומי תמיד — התנאי וה־<code>$inc</code> קורים יחד. אין צורך לנעול ולקרוא; זה בדיוק מה שה־UPDATE המותנה עשה ב־Postgres.</li><li>כשההחלטה תלויה בכמה מסמכים — הזמנה עם כמה מוצרים שצריכים כולם מלאי, "הכול או כלום" (‏P25.7-E17, שיעור 5).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק את דפוס ה־FOR UPDATE ל־Mongo עם findOne בתוך טרנזקציה — Mongo לא נועל בקריאה, ו־findOne לא "תופס" את המסמך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E51">
+    <h3>P25.7-E51 · ‏matchedCount מול affectedRows <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>matched — התאים ל־filter. modified — באמת השתנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏upsert רק אם ביקשת <code>{ upsert: true }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>matchedCount</code> ≈ ‏affectedRows (עם found rows), ‏<code>modifiedCount</code> ≈ ‏changedRows.</li><li>o1: ‏matched 1, ‏modified 0 (כבר כך). o3: ‏1, ‏1. o5: ‏0, ‏0 — ואז בודקים אם בכלל קיים (409 מול 404).</li><li>כמה מסמכים נוצרו כי לא נמצא — רק עם <code>upsert: true</code>; ואז <code>upsertedId</code> הוא ה־<code>_id</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>modifiedCount === 1</code> בתור "הצליח" — שליחה חוזרת (idempotent, פרק 24) נראית כמו כישלון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E52">
+    <h3>P25.7-E52 · ‏keyset ב־Mongo — למה <code>$or</code>? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"לפני" = זמן מוקדם יותר, <em>או</em> אותו זמן ו־_id קטן יותר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הזמנה ישנה יותר, עם <code>_id</code> גדול יותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>$or</code> של שני תנאים — ‏<code>{ createdAt: { $lt: t } }</code>, ו־<code class="mid">{ createdAt: t, _id: { $lt: id } }</code> — עם <code class="mid">sort({ createdAt: -1, _id: -1 })</code>.</li><li>הוא דורש <em>שני</em> התנאים: הזמנה מאתמול עם <code>_id</code> גדול יותר (למשל <code>_id</code> מחרוזת, או ייבוא שנעשה אחר כך) — לא תופיע לעולם.</li><li><code>{ createdAt: -1, _id: -1 }</code> (או הפוך — אינדקס מורכב עובד גם בכיוון ההפוך).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש רק ב־<code>_id</code> כ־cursor כשהמיון לפי <code>createdAt</code> — עובד רק אם הם תמיד באותו סדר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P25.7-E27">
     <h3>P25.7-E27 · בדיקות ל־parseSort 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -402,7 +623,86 @@ test("שדה לא מותר, ריק או כפול ← RangeError", () =&gt; {
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E53">
+    <h3>P25.7-E53 · עמוד הבא של הזמנות — keyset 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>after.split("|")</code> — שני חלקים, ואז <code>new Date(parts[0])</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־filter של E52.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E53: עמוד הבא של הזמנות — keyset
+import type { Db, Filter } from "mongodb";
+
+type Order = { _id: string; createdAt: Date; total: number };
+
+export async function ordersPage(db: Db, { limit, after }: { limit: number; after?: string }) {
+  let filter: Filter&lt;Order&gt; = {};
+  if (after !== undefined) {
+    const parts = after.split("|");
+    const t = new Date(parts[0]);
+    if (parts.length !== 2 || !parts[1] || Number.isNaN(t.getTime())) throw new Error("BAD_CURSOR");
+    filter = { $or: [{ createdAt: { $lt: t } }, { createdAt: t, _id: { $lt: parts[1] } }] };
+  }
+  const docs = await db.collection&lt;Order&gt;("orders")
+    .find(filter, { projection: { createdAt: 1, total: 1 } })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit)
+    .toArray();
+  const items = docs.map((o) =&gt; ({ id: o._id, createdAt: o.createdAt.toISOString(), total: o.total }));
+  const last = items.at(-1);
+  return { items, next: items.length === limit &amp;&amp; last ? `${last.createdAt}|${last.id}` : null };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>cursor שהוא רק התאריך — שתי הזמנות באותה שנייה בגבול העמוד, ואחת נעלמת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E54">
+    <h3>P25.7-E54 · ‏PATCH למוצר — רק שדות מותרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">findOneAndUpdate({ _id: id }, { $set: data }, { returnDocument: "after", projection: { … } })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">Object.keys(data).length === 0</code> ← שגיאה. (ובגרסת ה־driver של הקורס, ‏<code>findOneAndUpdate</code> מחזיר את המסמך עצמו, או <code>null</code>.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E54: PATCH למוצר — רק שדות מותרים
+import type { Db } from "mongodb";
+import { z } from "zod";
+
+const schema = z.strictObject({
+  name: z.string().trim().min(1).optional(),
+  price: z.number().int().positive().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export async function patchProduct(db: Db, id: string, body: unknown) {
+  const r = schema.safeParse(body);
+  if (!r.success || Object.keys(r.data).length === 0) throw new Error("VALIDATION_ERROR");
+  const doc = await db.collection&lt;{ _id: string; name: string; price: number; tags: string[] }&gt;("products").findOneAndUpdate(
+    { _id: id },
+    { $set: r.data },
+    { returnDocument: "after", projection: { name: 1, price: 1, tags: 1 } },
+  );
+  return doc ? { id: doc._id, name: doc.name, price: doc.price, tags: doc.tags } : null;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>$set: body</code> — ‏<code>{ "stock": 9999 }</code> או <code>{ "reviews": [] }</code> עוברים.</li><li><code>replaceOne</code> עם מה שהגיע — כל שאר השדות נמחקים (‏P25.7-E21).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-modeling.html"><small>הבא</small>שיעור 3 — תכנון מבנה: embed או reference</a></div>
 </main>
 </body>

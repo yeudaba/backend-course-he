@@ -14,6 +14,127 @@
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25w-mongodb/solutions/</code>.</p></div>
   <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.7-E86">
+    <h3>P25.7-E86 · ‏MongoClient לכל בקשה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏MongoClient הוא pool. כל אחד פותח חיבורים משלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>client.close()</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כל בקשה פותחת חיבור חדש (TCP + אימות — עשרות מילישניות), וב־Mongo מספר החיבורים מטפס לאלפים, עד המגבלה. איטי, ובסוף נופל.</li><li>אין <code>close()</code> — החיבורים נשארים פתוחים לעד: דליפה. גם אם היה close — עדיין חיבור לכל בקשה.</li><li>לקוח אחד בעלייה (‏<code>src/db.ts</code>), שכל הבקשות משתמשות בו; ‏<code>client.close()</code> פעם אחת בכיבוי מסודר, אחרי שהשרת הפסיק לקבל בקשות (פרק 24, E95).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה עובד בפיתוח" — עם בקשה בכל כמה שניות, הדליפה לא מורגשת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E87">
+    <h3>P25.7-E87 · ‏ObjectId ב־URL: ‏400, ‏404 או 500? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>new ObjectId("abc")</code> זורק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>ObjectId.isValid</code> מקבל גם מחרוזת של 12 תווים כלשהם (12 "בתים").</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>200.</li><li>404.</li><li>400. בקוד נאיבי — <code>new ObjectId</code> זורק ← 500, ובלוג נראה כמו תקלה בשרת.</li><li>מזהה hex תקין — אותו ObjectId. ‏200 (ב־API אפשר לנרמל לאותיות קטנות בתשובה).</li><li>‏<code class="mid">ObjectId.isValid("123456789012")</code> הוא <code>true</code> (12 תווים = 12 בתים)! והתוצאה ObjectId אחר לגמרי ← 404. לכן בודקים ב־API ‏<code>/^[0-9a-f]{24}$/i</code> (‏P25.7-E19).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על <code>ObjectId.isValid</code> בלבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E88">
+    <h3>P25.7-E88 · ‏NoSQL injection — מה מגיע ב־req.body? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏JSON יכול להכיל אובייקט בכל מקום שציפית למחרוזת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Express (עם הגדרות מסוימות של parser) הופך <code>a[b]=c</code> לאובייקט.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כניסה רגילה (נכשלת על סיסמה שגויה).</li><li>"סיסמה שאינה null" — מתאים לכל משתמש עם סיסמה: נכנסים לחשבון של דנה בלי סיסמה.</li><li>המשתמש הראשון שהאימייל שלו מתחיל ב־a.</li><li>תלוי ב־query parser: עם "extended" (‏qs) — <code>{ $ne: "x" }</code>; ב־Express 5 ברירת המחדל "simple" — מחרוזת. לא סומכים על זה.</li></ol>
+<p>ההגנה: לוודא טיפוס — <code>z.string()</code> לכל שדה שמגיע לשאילתה (E92). הסרת <code>$</code> חלקית: יש גם אופרטורים בתוך מבנים מקוננים, ושדות עם נקודה; וגם אם לא נשאר אופרטור — אובייקט במקום מחרוזת הוא באג. ובכלל: סיסמאות — רק hash והשוואה בקוד (פרק 21, E98).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"יש לי TypeScript, אז email הוא string" — הטיפוס בקוד לא אומר כלום על מה שהגיע ברשת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E89">
+    <h3>P25.7-E89 · פעולה בלי session — בתוך טרנזקציה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איזו פעולה לא קיבלה <code>{ session }</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בבדיקה "מוצלחת" — שום דבר לא מתבטל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ההזמנה בוטלה (היא עם session). ה־<code>updateOne</code> של p1 רץ <em>מחוץ</em> לטרנזקציה — הוא כבר מחויב: המלאי ירד ב־2, להזמנה שלא קיימת.</li><li><code class="mid">products.updateOne(filter, update, { session })</code> — כל פעולה בתוך הטרנזקציה מקבלת את ה־session.</li><li>במסלול המוצלח הכול נכתב, והתוצאה נכונה. הבאג מופיע רק כשמשהו נכשל באמצע — צריך בדיקה שמכשילה בכוונה פריט שני ובודקת שהמלאי של הראשון לא זז (‏P25.7-E17, ‏E93).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את ה־session רק ל־insert "כי זה העיקר" — הטרנזקציה מגינה רק על מה שעבר דרכה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E90">
+    <h3>P25.7-E90 · ‏withTransaction מנסה שוב — ומה עם המייל? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏withTransaction מריץ את כל ה־callback שוב.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מייל הוא "תופעת לוואי" שאי אפשר לבטל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־driver עושה abort ומריץ את ה־callback מההתחלה.</li><li>אחד לכל ניסיון — שניים, שלושה.</li><li>הלקוח קיבל "ההזמנה התקבלה", וההזמנה לא קיימת.</li><li>אחרי ש־<code>withTransaction</code> הסתיים בהצלחה. ועוד יותר טוב: רושמים "לשלוח מייל" (outbox) <em>בתוך</em> הטרנזקציה, ותהליך נפרד שולח (פרק 26) — כך גם קריסה מיד אחרי ה־commit לא מפסידה את המייל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>קריאות לשירותים חיצוניים (תשלום, מייל, webhook) בתוך טרנזקציה — גם ב־Postgres: מחזיקות נעילות, ולא מתבטלות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E91">
+    <h3>P25.7-E91 · ‏Mongo או Postgres — לכל מקרה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמה קשרים יש, וכמה חשובה שלמות בין ישויות?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>jsonb קיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>Postgres — קשרים, טרנזקציות על הרבה רשומות, אילוצים (סכומים שחייבים להתאזן).</li><li>שניהם: Mongo טבעי (מסמך למוצר); Postgres עם jsonb למאפיינים — גם מצוין, אם השאר (הזמנות, משתמשים) רלציוני.</li><li>Mongo מתאים מאוד: מסמך שנקרא ונכתב בשלמותו, מבנה גמיש. (Postgres יעבוד גם.)</li><li>Postgres — הרבה קשרים, ואילוצים כמו "אין שני תורים לאותו חדר באותה שעה" (‏exclusion constraint).</li><li>Mongo (או מסד ייעודי לסדרות זמן) — כתיבות רבות של מבנים שונים, בלי קשרים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לענות בראיון "Mongo כי הוא מהיר" — מהירות תלויה במבנה ובאינדקסים, לא במותג.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.7-E17">
     <h3>P25.7-E17 · הזמנה בטרנזקציה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -258,7 +379,301 @@ export async function migrateOrders(pool: pg.Pool, db: Db) {
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E92">
+    <h3>P25.7-E92 · ‏login בלי NoSQL injection 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">z.strictObject({ email: z.string().trim().toLowerCase(), password: z.string().min(1) })</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בשאילתה — רק ערך מה־<code>data</code> של zod, שכבר מחרוזת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E92: login בלי NoSQL injection
+import type { Db } from "mongodb";
+import { z } from "zod";
+
+const schema = z.strictObject({ email: z.string().trim().toLowerCase(), password: z.string().min(1) });
+
+export async function findUserForLogin(db: Db, body: unknown) {
+  const r = schema.safeParse(body);
+  if (!r.success) throw new Error("VALIDATION_ERROR");
+  const u = await db.collection&lt;{ _id: string; email: string; passwordHash: string }&gt;("users")
+    .findOne({ email: r.data.email }, { projection: { email: 1, passwordHash: 1 } });
+  return u ? { id: u._id, email: u.email, passwordHash: u.passwordHash } : null;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">findOne({ email: body.email })</code> "כי הסיסמה נבדקת אחר כך" — ‏<code>{ "$ne": "" }</code> מחזיר משתמש כלשהו, ואם בדיקת הסיסמה פגיעה במשהו — נכנסים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E93">
+    <h3>P25.7-E93 · העברת מלאי בין מחסנים — בטרנזקציה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה דינמי: <code>{ [<code>stock.${productId}</code>]: { $gte: qty } }</code> ו־<code>$inc: { [<code>stock.${productId}</code>]: -qty }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const session = client.startSession(); try { await session.withTransaction(async () =&gt; { … }) } finally { await session.endSession() }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E93: העברת מלאי בין מחסנים — בטרנזקציה
+import type { Db, MongoClient } from "mongodb";
+
+export async function moveStock(client: MongoClient, db: Db, { from, to, productId, qty }: { from: string; to: string; productId: string; qty: number }) {
+  if (!Number.isInteger(qty) || qty &lt;= 0) throw new RangeError(`כמות לא תקינה: ${qty}`);
+  const warehouses = db.collection&lt;{ _id: string }&gt;("warehouses");
+  const field = `stock.${productId}`;
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () =&gt; {
+      const out = await warehouses.updateOne({ _id: from, [field]: { $gte: qty } }, { $inc: { [field]: -qty } }, { session });
+      if (out.modifiedCount === 0) throw new Error("INSUFFICIENT_STOCK");
+      const inn = await warehouses.updateOne({ _id: to }, { $inc: { [field]: qty } }, { session });
+      if (inn.matchedCount === 0) throw new Error("NO_SUCH_WAREHOUSE"); // abort — גם ההורדה מתבטלת
+    });
+  } finally {
+    await session.endSession();
+  }
+}</code></pre>
+<p>שני מסמכים — ולכן טרנזקציה. (אם המלאי היה <em>במסמך אחד</em> — ‏<code>stock: { tlv: { p1: 10 } }</code> — עדכון אחד היה אטומי בלי טרנזקציה. זה בדיוק השיקול של שיעור 3.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>{ session }</code> בעדכון השני — "מחסן לא קיים" מבטל את ההורדה, אבל עדכון שרץ בלי session כבר נכתב (E89).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E94">
+    <h3>P25.7-E94 · מחירון חדש — ב־bulkWrite אחד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">list.map(({ productId, price }) =&gt; ({ updateOne: { filter: { _id: productId }, update: { $set: { price } } } }))</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏missing: ‏<code class="mid">find({ _id: { $in: ids } }, { projection: { _id: 1 } })</code> — לפני, או אחרי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E94: מחירון חדש — ב־bulkWrite אחד
+import type { Db } from "mongodb";
+
+export async function applyPriceList(db: Db, list: { productId: string; price: number }[]) {
+  for (const { price } of list) if (!Number.isInteger(price) || price &lt;= 0) throw new RangeError(`מחיר לא תקין: ${price}`);
+  if (list.length === 0) return { matched: 0, modified: 0, missing: [] };
+  const products = db.collection&lt;{ _id: string; price: number }&gt;("products");
+  const ids = [...new Set(list.map((l) =&gt; l.productId))];
+  const found = new Set((await products.find({ _id: { $in: ids } }, { projection: { _id: 1 } }).toArray()).map((p) =&gt; p._id));
+  const r = await products.bulkWrite(list.map(({ productId, price }) =&gt; ({ updateOne: { filter: { _id: productId }, update: { $set: { price } } } })));
+  return { matched: r.matchedCount, modified: r.modifiedCount, missing: ids.filter((id) =&gt; !found.has(id)).sort() };
+}</code></pre>
+<p>‏bulkWrite שולח את כל הפעולות בבקשה אחת (או בכמה גדולות). ברירת המחדל <code>ordered: true</code> — עוצר בשגיאה הראשונה; ‏<code>ordered: false</code> — ממשיך ומדווח על כל השגיאות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.all</code> של מאות <code>updateOne</code> — עדיין מאות בקשות, רק במקביל, ומציף את ה־pool.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.7-E95">
+    <h3>P25.7-E95 · סגירת MongoClient בכיבוי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אותה מלכודת כמו PrismaService.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טרנזקציה שלא הגיעה ל־commit.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אחרי ש־<code>server.close()</code> הסתיים (הבקשות שבאמצע סיימו) — ולפני היציאה. קודם = בקשות באמצע נכשלות עם "client was closed".</li><li>הטרנזקציה נכשלת; השרת של Mongo עושה לה abort (לא חלקית — היא אטומית). הלקוח מקבל 500, וה־Idempotency-Key (פרק 24) מאפשר לו לנסות שוב בבטחה.</li><li><code>onApplicationShutdown</code> — אחרי ש־Nest סגר את שרת ה־HTTP (לא <code>onModuleDestroy</code>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא לסגור בכלל ("התהליך יוצא ממילא") — פעולות שבדרך נקטעות, וב־Mongo נשארים חיבורים "יתומים" עד timeout.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E96">
+    <h3>P25.7-E96 · ‏Prisma עם Mongo? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אין "ALTER TABLE" ב־Mongo.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה עם <code>$inc</code> עם תנאי, aggregation ו־<code>"addresses.4"</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏API דומה מאוד: <code>findMany</code>, ‏<code>create</code>, ‏<code>update</code> (כולל <code>increment</code>), ו־<code>include</code> ל"קשרים" (שמתורגם לשאילתות נוספות).</li><li>אין migrations (‏<code>prisma db push</code> יוצר אינדקסים בלבד). ‏<code>@relation</code> הוא קשר ב־Prisma, לא מפתח זר — המסד לא אוכף. ‏<code>_id</code> ממופה ל־<code class="mid">@id @map("_id") @db.ObjectId</code>. ותמיכה במבנים מוטמעים (composite types) — אבל לא בכל האופרטורים.</li><li>הכוח של Mongo — עדכונים אטומיים עשירים, aggregation, פילטרים על מערכים — מגיע בצורה מלאה רק דרך ה־driver. Prisma מכסה "CRUD רגיל" טוב, ואז מגיעים ל־<code>$runCommandRaw</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור Mongo + Prisma "כדי שזה ירגיש כמו Postgres" — ואז לקבל Mongo בלי היתרונות שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E97">
+    <h3>P25.7-E97 · בדיקות מול Mongo — database לכל בדיקה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקות שרצות במקביל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>E32.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>בדיקות רצות במקביל (‏node --test מריץ קבצים בתהליכים נפרדים). ‏deleteMany של אחת מוחק נתונים של אחרת. database נפרד = בידוד מלא, וגם אינדקסים ו־validators נקיים.</li><li>‏<code>insertMany</code> מוסיף <code>_id</code> לאובייקטים, והבדיקות משנות מסמכים — בלי עותק, הנתונים של הבדיקה הבאה (באותו תהליך) "מלוכלכים".</li><li>טרנזקציות דורשות replica set. על שרת יחיד: ‏"Transaction numbers are only allowed on a replica set member" — לכן הקונטיינר של הקורס רץ כ־replica set של שרת אחד.</li><li>יצירה ומחיקה של database — עשרות מילישניות לבדיקה. עם אלפי בדיקות — מאחדים לבדיקות בקובץ, או משתמשים ב־prefix לשמות collections.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקות שעוברות לבד ונכשלות יחד — כמעט תמיד מצב משותף, לא "Mongo לא יציב".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E98">
+    <h3>P25.7-E98 · ‏POST /login — עם bcrypt ובלי injection 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">import bcrypt from "bcryptjs"</code>, ‏<code class="mid">await bcrypt.compare(password, user.passwordHash)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הבדיקה של E92 — עכשיו בתוך handler.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E98: POST /login — עם bcrypt ובלי injection
+import bcrypt from "bcryptjs";
+import { Router } from "express";
+import type { Db } from "mongodb";
+import { z } from "zod";
+
+const schema = z.strictObject({ email: z.string().trim().toLowerCase(), password: z.string() });
+
+export function loginRouter(db: Db) {
+  const users = db.collection&lt;{ _id: string; email: string; passwordHash: string }&gt;("users");
+  const router = Router();
+  router.post("/login", async (req, res) =&gt; {
+    const r = schema.safeParse(req.body);
+    if (!r.success) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR" } });
+      return;
+    }
+    const user = await users.findOne({ email: r.data.email });
+    const ok = user !== null &amp;&amp; (await bcrypt.compare(r.data.password, user.passwordHash));
+    if (!ok) {
+      res.status(401).json({ error: { code: "INVALID_CREDENTIALS" } });
+      return;
+    }
+    res.json({ id: user._id, email: user.email });
+  });
+  return router;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">findOne({ email, passwordHash: hash(password) })</code> — bcrypt מייצר hash אחר בכל פעם (salt). משווים עם <code>compare</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E99">
+    <h3>P25.7-E99 · ‏Idempotency-Key ב־Mongo 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>_id</code> יכול להיות אובייקט: <code>{ userId, key }</code> — אבל שימו לב שסדר השדות בו חשוב להשוואה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">err instanceof MongoServerError &amp;&amp; err.code === 11000</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E99: Idempotency-Key ב־Mongo
+import { MongoServerError, type Db } from "mongodb";
+
+type Rec = { _id: { userId: string; key: string }; fingerprint: string; status: "pending" | "done"; result?: unknown; createdAt: Date };
+
+export async function runOnce&lt;T&gt;(db: Db, userId: string, key: string, fingerprint: string, fn: () =&gt; Promise&lt;T&gt;) {
+  const col = db.collection&lt;Rec&gt;("idempotency");
+  const _id = { userId, key };
+  try {
+    await col.insertOne({ _id, fingerprint, status: "pending", createdAt: new Date() });
+  } catch (err) {
+    if (!(err instanceof MongoServerError &amp;&amp; err.code === 11000)) throw err;
+    const existing = await col.findOne({ _id });
+    if (!existing) throw new Error("IN_PROGRESS"); // נמחק בדיוק עכשיו — הלקוח ינסה שוב
+    if (existing.fingerprint !== fingerprint) throw new Error("KEY_REUSED");
+    if (existing.status === "pending") throw new Error("IN_PROGRESS");
+    return { replayed: true, result: existing.result as T };
+  }
+  try {
+    const result = await fn();
+    await col.updateOne({ _id }, { $set: { status: "done", result } });
+    return { replayed: false, result };
+  } catch (err) {
+    await col.deleteOne({ _id, status: "pending" });
+    throw err;
+  }
+}</code></pre>
+<p>בדיוק כמו ה־INSERT … ON CONFLICT של פרק 24: ה־<code>_id</code> הייחודי הוא מה שמחליט מי "זכה". ובשונה מ־Postgres — <code>fn</code> והרישום לא באותה טרנזקציה (אם <code>fn</code> כותב ל־Mongo, אפשר לעטוף את שניהם ב־<code>withTransaction</code>). ו־TTL על <code>createdAt</code> — כדי שמפתחות ישנים יימחקו לבד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>findOne</code> ואז <code>insertOne</code> — 10 קריאות במקביל לא מוצאות, ו־fn רץ עשר פעמים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E100">
+    <h3>P25.7-E100 · עגלה שפגה לבד — TTL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">$setOnInsert: { items: [] }</code> — רק כשה־upsert יוצר מסמך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">new Date(now.getTime() + 7 * 86_400_000)</code> — כאן זה בסדר: רגע + 7 × 24 שעות, לא "אותה שעה בעוד שבוע".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E100: עגלה שפגה לבד — TTL
+import type { Db } from "mongodb";
+
+const WEEK_MS = 7 * 86_400_000;
+
+export async function ensureCartTtl(db: Db): Promise&lt;void&gt; {
+  await db.collection("carts").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+}
+
+export async function touchCart(db: Db, customerId: string, now: Date): Promise&lt;Date&gt; {
+  const expiresAt = new Date(now.getTime() + WEEK_MS);
+  await db.collection&lt;{ _id: string }&gt;("carts").updateOne(
+    { _id: customerId },
+    { $set: { updatedAt: now, expiresAt }, $setOnInsert: { items: [] } },
+    { upsert: true },
+  );
+  return expiresAt;
+}</code></pre>
+<p>‏"7 ימים" כאן הוא משך (‏7 × 24 שעות) — ולא "אותה שעה על השעון בעוד שבוע" (פרק 24). לתפוגה זה בדיוק מה שרוצים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>$set: { items: [] }</code> בכל touch — כל פעולה מרוקנת את העגלה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>

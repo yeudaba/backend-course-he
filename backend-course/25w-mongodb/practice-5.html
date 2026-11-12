@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.7</a> ‹ תרגול שיעור 5</div>
   <h1>✍️ תרגול שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</h1>
-  <p class="subtitle">יחידה 25.7 · 5 שאלות · 0 הבנה · 5 קוד · ⏱ כ־150 דק׳</p>
+  <p class="subtitle">יחידה 25.7 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־365 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,63 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 5: Node.js, טרנזקציות — ו־Mongo או Postgres?</h2>
-  <p class="subtitle">5 שאלות · 0 הבנה · 5 קוד · ⏱ כ־150 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־270 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P25.7-E86">
+    <h3>P25.7-E86 · ‏MongoClient לכל בקשה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>בקוד:</p>
+<pre><code class="lang-ts">app.get("/products", async (req, res) =&gt; {
+  const client = new MongoClient(process.env.MONGO_URL!);
+  await client.connect();
+  res.json(await client.db("shop").collection("products").find().toArray());
+});</code></pre>
+<p>(1) מה קורה תחת 200 בקשות בשנייה? מה רואים ב־Mongo? (2) ומה חסר שם בכלל, שמחמיר את זה? (3) איך נראה הקוד הנכון, ומתי סוגרים את הלקוח?</p>
+
+  </div>
+<div class="ex" id="P25.7-E87">
+    <h3>P25.7-E87 · ‏ObjectId ב־URL: ‏400, ‏404 או 500?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>‏<code>GET /notes/:id</code>, כש־<code>_id</code> הוא ObjectId. מה צריך להחזיר על כל אחת, ומה יקרה בקוד נאיבי (<code class="mid">findOne({ _id: new ObjectId(req.params.id) })</code>)?</p>
+<ol><li><code class="mid">/notes/6af1a8c0e4b0f1a2b3c4d5e6</code> — קיים.</li><li><code class="mid">/notes/6af1a8c0e4b0f1a2b3c4d5e7</code> — לא קיים.</li><li><code>/notes/abc</code></li><li><code class="mid">/notes/6AF1A8C0E4B0F1A2B3C4D5E6</code> (אותיות גדולות)</li><li><code>/notes/123456789012</code> (12 תווים)</li></ol>
+
+  </div>
+<div class="ex" id="P25.7-E88">
+    <h3>P25.7-E88 · ‏NoSQL injection — מה מגיע ב־req.body?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>‏<code>POST /login</code> עם <code>express.json()</code>, והקוד:</p>
+<pre><code class="lang-ts">users.findOne({ email: req.body.email, password: req.body.password })</code></pre>
+<p>(נאיבי — בלי hash). מה עושה כל גוף בקשה?</p>
+<ol><li><code class="mid">{"email": "dana@example.com", "password": "x"}</code></li><li><code class="mid">{"email": "dana@example.com", "password": {"$ne": null}}</code></li><li><code class="mid">{"email": {"$regex": "^a"}, "password": {"$ne": ""}}</code></li><li>ב־query string: <code>?email[$ne]=x</code> — ומה <code>req.query.email</code>?</li></ol>
+<p>ומה ההגנה — ולמה "להסיר מפתחות שמתחילים ב־$" היא הגנה חלקית?</p>
+
+  </div>
+<div class="ex" id="P25.7-E89">
+    <h3>P25.7-E89 · פעולה בלי session — בתוך טרנזקציה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>הקוד יוצר הזמנה ומוריד מלאי. משהו "לא מתבטל":</p>
+<pre><code class="lang-ts">await session.withTransaction(async () =&gt; {
+  await orders.insertOne(order, { session });
+  for (const it of order.items) {
+    const r = await products.updateOne({ _id: it.productId, stock: { $gte: it.qty } }, { $inc: { stock: -it.qty } });
+    if (r.modifiedCount === 0) throw new Error(`out of stock: ${it.productId}`);
+  }
+});</code></pre>
+<p>הזמנה עם p1 ×2 ו־p7 ×1 (p7 אזל). (1) מה המצב אחרי ה־abort — של ההזמנה, ושל המלאי של p1? (2) תקן. (3) למה זה באג שקשה לתפוס בבדיקות?</p>
+
+  </div>
+<div class="ex" id="P25.7-E90">
+    <h3>P25.7-E90 · ‏withTransaction מנסה שוב — ומה עם המייל?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>בתוך ה־callback של <code>withTransaction</code>: יצירת הזמנה, הורדת מלאי, ו־<code class="mid">await sendConfirmationEmail(order)</code>. (1) מה קורה כשיש התנגשות זמנית עם טרנזקציה אחרת (‏TransientTransactionError)? (2) כמה מיילים הלקוח יכול לקבל? (3) ומה אם המייל נשלח, ואז ה־commit נכשל? (4) איפה המייל צריך להיות?</p>
+
+  </div>
+<div class="ex" id="P25.7-E91">
+    <h3>P25.7-E91 · ‏Mongo או Postgres — לכל מקרה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>לכל מערכת — Mongo, Postgres, או "שניהם יעבדו, ההחלטה לפי הצוות"? נמק במשפט.</p>
+<ol><li>מערכת הנהלת חשבונות: חשבונות, תנועות, יתרות.</li><li>קטלוג של חנות עם 200 סוגי מוצרים, לכל סוג מאפיינים אחרים.</li><li>אפליקציית פתקים: פתק עם רשימות, תגיות ותמונות.</li><li>מערכת הזמנות לרשת מרפאות: מטופלים, רופאים, תורים, חדרים — וכללים שאסור לשבור.</li><li>איסוף אירועים מ־10,000 חיישנים, כל אחד שולח JSON אחר.</li></ol>
+
+  </div>
 <div class="ex" id="P25.7-E17">
     <h3>P25.7-E17 · הזמנה בטרנזקציה 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 30 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
@@ -55,7 +111,86 @@
 <ul><li><code>_id: "o101"</code>, <code>customerId: "c1"</code>, <code>status</code>, <code>createdAt</code> (Date), <code class="mid">items: [{ productId: "p1", name, price, qty }]</code> לפי סדר השורות, ו־<code>total</code>. <code>price</code> — המחיר מהשורה (<code>unit_price</code>), כמספר.</li><li>מחזיר <code>{ migrated }</code>. אפשר להריץ שוב: אין כפילויות, ושינויים ב־Postgres מתעדכנים.</li></ul>
 
   </div>
+<div class="ex" id="P25.7-E92">
+    <h3>P25.7-E92 · ‏login בלי NoSQL injection 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>בקובץ <code class="mid">25w-mongodb/starter/P25.7-E92.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function findUserForLogin(db: Db, body: unknown): Promise&lt;{ id: string; email: string; passwordHash: string } | null&gt;</code></pre>
+<ul><li><code>body</code> — מה שהגיע ב־JSON. בדיקה עם zod: ‏<code>email</code> — מחרוזת (trim, lowercase), ‏<code>password</code> — מחרוזת לא ריקה. כל דבר אחר (גם אובייקט עם <code>$ne</code>) ← <code>Error("VALIDATION_ERROR")</code>, בלי לגעת במסד.</li><li><code>findOne</code> ב־<code>users</code> לפי email בלבד (את הסיסמה בודקים בקוד, עם hash — E98). לא נמצא ← <code>null</code>.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E92</pre>
 
+  </div>
+<div class="ex" id="P25.7-E93">
+    <h3>P25.7-E93 · העברת מלאי בין מחסנים — בטרנזקציה 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>collection <code>warehouses</code>: <code class="mid">{ _id: "tlv", stock: { p1: 10, … } }</code>. בקובץ <code class="mid">25w-mongodb/starter/P25.7-E93.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function moveStock(client: MongoClient, db: Db, opts: { from: string; to: string; productId: string; qty: number }): Promise&lt;void&gt;</code></pre>
+<ul><li>בטרנזקציה (‏<code>withTransaction</code>): מורידים מ־<code>from</code> רק אם יש מספיק (עדכון מותנה), ומוסיפים ל־<code>to</code>. כל פעולה עם ה־session.</li><li>אין מספיק ← <code class="mid">Error("INSUFFICIENT_STOCK")</code>. מחסן יעד לא קיים ← <code>Error("NO_SUCH_WAREHOUSE")</code> — וגם המלאי במקור לא זז.</li><li>‏<code>qty</code> שלם חיובי, אחרת <code>RangeError</code>. ה־session נסגר תמיד.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E93</pre>
+
+  </div>
+<div class="ex" id="P25.7-E94">
+    <h3>P25.7-E94 · מחירון חדש — ב־bulkWrite אחד 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>הספק שלח מחירון: מאות שורות <code>{ productId, price }</code>. לולאה של <code>updateOne</code> היא מאות round trips. בקובץ <code class="mid">25w-mongodb/starter/P25.7-E94.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function applyPriceList(db: Db, list: { productId: string; price: number }[]): Promise&lt;{ matched: number; modified: number; missing: string[] }&gt;</code></pre>
+<ul><li>כל מחיר — שלם חיובי; אחרת <code>RangeError</code> לפני שכותבים משהו.</li><li>פקודת <code>bulkWrite</code> אחת, עם <code>updateOne</code> לכל שורה (‏<code>$set</code> של המחיר). רשימה ריקה ← בלי מסד.</li><li><code>missing</code> — ה־productIds שלא קיימים (ממוינים). ‏matched/modified — מה ש־bulkWrite מחזיר.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E94</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־95 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P25.7-E95">
+    <h3>P25.7-E95 · סגירת MongoClient בכיבוי</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 5</span></div>
+<p>בפרק 24 הכיבוי המסודר היה: ‏/ready ← 503, ‏<code>server.close()</code>, סגירת המסד, יציאה. (1) איפה בסדר הזה <code>client.close()</code> של Mongo, ולמה לא קודם? (2) מה קורה לבקשה שבאמצע <code>withTransaction</code> אם סוגרים את הלקוח לפניה? (3) ב־Nest — באיזה hook, לפי מה שראית בפרק 24?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כיבוי מסודר ו־onApplicationShutdown מפרק 24 — והשיעור: MongoClient אחד לתהליך.</p>
+
+  </div>
+<div class="ex" id="P25.7-E96">
+    <h3>P25.7-E96 · ‏Prisma עם Mongo?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 19, שיעור 5</span></div>
+<p>Prisma (פרק 19) תומך גם ב־MongoDB (‏<code>provider = "mongodb"</code>). (1) מה עובד כמו ב־Postgres — <code>findMany</code>, ‏<code>create</code>, ‏<code>include</code>? (2) מה שונה מהותית: migrations, ‏<code>@relation</code>, ‏<code>_id</code>? (3) למה בחלק גדול מהפרויקטים עם Mongo תפגוש driver ישיר או Mongoose ולא Prisma?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> Prisma, ‏schema ו־migrations מפרק 19 — והשיעור: ה־driver של Mongo.</p>
+
+  </div>
+<div class="ex" id="P25.7-E97">
+    <h3>P25.7-E97 · בדיקות מול Mongo — database לכל בדיקה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 22, שיעור 5</span></div>
+<p>הבודקים של היחידה (‏<code>tools/mongo.mjs</code>) יוצרים database חדש לכל בדיקה, טוענים seed, ומוחקים בסוף. (1) למה database לכל בדיקה ולא <code>deleteMany</code> בין בדיקות? (2) למה ב־seed מכניסים <em>עותקים</em> (<code>structuredClone</code>)? (3) מה הבעיה בבדיקה של "הזמנה בטרנזקציה" על Mongo שרץ כשרת יחיד (לא replica set)? (4) ומה המחיר של database לכל בדיקה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> בידוד בדיקות ומסד בדיקות מפרק 22 — והשיעור: טרנזקציות ו־MongoClient.</p>
+
+  </div>
+<div class="ex" id="P25.7-E98">
+    <h3>P25.7-E98 · ‏POST /login — עם bcrypt ובלי injection 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 21, שיעור 5</span></div>
+<p>בקובץ <code class="mid">25w-mongodb/starter/P25.7-E98.ts</code> (יש בו רק הערה) כתוב וייצא <code>loginRouter(db)</code> — Router של Express (האפליקציה של הבודק עושה <code>express.json()</code>):</p>
+<ul><li><code>POST /login</code> ‏<code>{ email, password }</code> — שתי מחרוזות (zod; email אחרי trim/lowercase). אחרת ← 400 <code>VALIDATION_ERROR</code>.</li><li>משתמש לפי email ב־<code>users</code>, ו־<code>bcrypt.compare</code> (‏<code>bcryptjs</code>, פרק 21) מול <code>passwordHash</code>. לא נמצא או סיסמה שגויה ← 401 <code>INVALID_CREDENTIALS</code> — אותה תשובה בשני המקרים.</li><li>הצלחה ← 200 <code>{ id, email }</code> (בלי ה־hash).</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E98</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏bcrypt ו־401 אחיד מפרק 21 — והשיעור: NoSQL injection.</p>
+
+  </div>
+<div class="ex" id="P25.7-E99">
+    <h3>P25.7-E99 · ‏Idempotency-Key ב־Mongo 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 5</span></div>
+<p>המנגנון מפרק 24 — הפעם על Mongo. בקובץ <code class="mid">25w-mongodb/starter/P25.7-E99.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function runOnce&lt;T&gt;(db: Db, userId: string, key: string, fingerprint: string, fn: () =&gt; Promise&lt;T&gt;): Promise&lt;{ replayed: boolean; result: T }&gt;</code></pre>
+<ul><li>collection <code>idempotency</code>, עם <code>_id: { userId, key }</code> (ייחודי מעצם היותו _id).</li><li>קודם תופסים: <code>insertOne</code> של <code>_id</code>, ‏<code>fingerprint</code>, ‏<code>status: "pending"</code> ו־<code>createdAt</code>. הצליח ← מריצים <code>fn</code>, ושומרים <code>status: "done"</code> ו־<code>result</code>. ‏<code>fn</code> נכשל ← מוחקים את הרשומה (רק אם עדיין pending) וזורקים הלאה.</li><li>נכשל עם 11000 ← קוראים את הקיימת: טביעה אחרת ← <code>Error("KEY_REUSED")</code>; ‏pending ← <code>Error("IN_PROGRESS")</code>; ‏done ← <code>{ replayed: true, result }</code>.</li><li>10 קריאות במקביל עם אותו מפתח ← <code>fn</code> רץ פעם אחת.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E99</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏Idempotency-Key, טביעה ו־"קודם לתפוס" מפרק 24 — והשיעור: ‏_id ייחודי ו־11000.</p>
+
+  </div>
+<div class="ex" id="P25.7-E100">
+    <h3>P25.7-E100 · עגלה שפגה לבד — TTL 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 5</span></div>
+<p>עגלות נטושות צריכות להימחק אחרי 7 ימים בלי פעילות. בקובץ <code class="mid">25w-mongodb/starter/P25.7-E100.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function ensureCartTtl(db: Db): Promise&lt;void&gt;
+export async function touchCart(db: Db, customerId: string, now: Date): Promise&lt;Date&gt;</code></pre>
+<ul><li><code>ensureCartTtl</code> — אינדקס TTL על <code>expiresAt</code> ב־<code>carts</code>, שמוחק כשהזמן עבר (<code>expireAfterSeconds: 0</code>).</li><li><code>touchCart</code> — upsert של העגלה (‏<code>_id: customerId</code>): ‏<code>updatedAt = now</code>, ‏<code>expiresAt = now + 7 ימים</code> (‏Date). עגלה חדשה מקבלת גם <code>items: []</code> — ועגלה קיימת שומרת על ה־items שלה. מחזיר את <code>expiresAt</code>.</li><li>‏<code>now</code> מוזרק — בלי <code>new Date()</code> בפנים.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.7-E100</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> שעון מוזרק ו"רגע" כ־Date מפרק 24 — והשיעור: TTL ו־upsert.</p>
+
+  </div>
 <div class="pager"><a href="lesson-05-node.html"><small>חזרה לשיעור</small>שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>

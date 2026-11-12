@@ -38,6 +38,119 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E72">
+    <h3>P25.7-E72 · ‏$match — לפני או אחרי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אינדקס עוזר רק לשלב שקורא מה־collection — כלומר לשלב הראשון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"מוצרים שההכנסה שלהם מעל 1,000".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א: מיליון הזמנות ← 3 מיליון מסמכים אחרי unwind, ואז קיבוץ של כולם. ב: ‏100,000 ← ‏300,000.</li><li>ב — <code>$match</code> בתחילה עובר ישירות על ה־collection ויכול להשתמש באינדקס (‏IXSCAN). אחרי <code>$unwind</code>/<code>$group</code> המסמכים כבר לא "מה־collection" — אין אינדקס.</li><li>כשהתנאי הוא על תוצאה של הקיבוץ: <code class="mid">{ $match: { revenue: { $gt: 1000 } } }</code> — כמו <code>HAVING</code> ב־SQL.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על כך שהאופטימייזר "יזיז" את ה־$match לבד — לפעמים כן, אבל לא כשהוא תלוי בשדה שנוצר ב־$group.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E73">
+    <h3>P25.7-E73 · ‏$unwind ומערך ריק <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>$unwind</code> על מערך ריק — מסמך אחד לכל איבר. כמה איברים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>$size</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { MongoClient } from "mongodb";
+const client = new MongoClient(process.env.MONGO_URL ?? "mongodb://localhost:27017/?directConnection=true");
+const db = client.db("e73");
+await db.collection("products").insertMany([{ _id: "p1", reviews: [{ r: 5 }, { r: 4 }] }, { _id: "p4", reviews: [] }, { _id: "p9" }]);
+const run = async (p: object[]) =&gt; console.log(JSON.stringify(await db.collection("products").aggregate(p).toArray()));
+await run([{ $unwind: "$reviews" }, { $group: { _id: "$_id", n: { $sum: 1 } } }, { $sort: { _id: 1 } }]);
+await run([{ $unwind: { path: "$reviews", preserveNullAndEmptyArrays: true } }, { $group: { _id: "$_id", n: { $sum: { $cond: [{ $ifNull: ["$reviews", false] }, 1, 0] } } } }, { $sort: { _id: 1 } }]);
+await run([{ $project: { n: { $size: { $ifNull: ["$reviews", []] } } } }, { $sort: { _id: 1 } }]);
+await db.dropDatabase();
+await client.close();</code></pre>
+<pre class="terminal">[{"_id":"p1","n":2}]
+[{"_id":"p1","n":2},{"_id":"p4","n":0},{"_id":"p9","n":0}]
+[{"_id":"p1","n":2},{"_id":"p4","n":0},{"_id":"p9","n":0}]</pre>
+<ol><li>נעלמים — אין איברים, אין מסמכים.</li><li>גם נעלם.</li><li><code class="mid">preserveNullAndEmptyArrays: true</code> — נשאר מסמך אחד בלי <code>reviews</code>; אבל <code>$sum: 1</code> היה סופר אותו כ־1, ולכן סופרים רק כשיש ביקורת.</li><li><code>$size</code> (עם <code>$ifNull</code> למסמך בלי השדה) — בלי לפרק בכלל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>דוח "מוצרים בלי ביקורות" עם <code>$unwind</code> רגיל — תמיד ריק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E74">
+    <h3>P25.7-E74 · ‏ESR — איזה אינדקס? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Equality, Sort, Range — בסדר הזה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שדה עם טווח, השדות הבאים כבר לא ממוינים "גלובלית".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מסנן היטב, אבל <code>createdAt</code> אחרי טווח — ממוין רק בתוך כל ערך של total. ‏SORT בזיכרון.</li><li><strong>הנכון (ESR)</strong>: ‏customerId (שוויון) ← createdAt (מיון, כבר בסדר) ← total (טווח — מסונן בתוך האינדקס, בלי לקרוא מסמכים).</li><li>הסדר נכון, אבל עובר על <em>כל</em> ההזמנות לפי זמן כדי למצוא את של c1.</li><li>טווח ראשון — סורק את כל ה־total ≥ 100 של כל הלקוחות, ואז ממיין.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"השדה הכי סלקטיבי ראשון" — כלל ישן שלא מתחשב במיון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E75">
+    <h3>P25.7-E75 · ‏TTL — מתי זה באמת נמחק? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תהליך הרקע רץ בערך פעם בדקה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>TTL עובד רק על Date.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כנראה כן — המחיקה לא מיידית (עד דקה ויותר, תחת עומס).</li><li>לא נמחק לעולם — TTL מתעלם מערכים שאינם Date.</li><li>לא נמחק לעולם.</li><li>בדיקה בשאילתה עצמה: <code class="mid">findOne({ token, expiresAt: { $gt: new Date() } })</code>. ה־TTL הוא ניקיון, לא אבטחה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על TTL כ"תוקף" של טוקן — חלון של דקה שבו טוקן שפג עדיין עובד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E76">
+    <h3>P25.7-E76 · ‏multikey ושני מערכים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>multikey — רשומה לכל ערך במערך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>4 תגיות × 5 צבעים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>4 — אחת לכל תגית.</li><li>זה היה מכפלה קרטזית (4 × 5 = 20 רשומות למסמך, ומתפוצץ). Mongo לא מרשה: "cannot index parallel arrays".</li><li>אינדקס על אחד מהם (הסלקטיבי יותר), והשני מסונן על המסמכים שנמצאו. או אינדקס מורכב עם שדה רגיל: <code>{ category: 1, tags: 1 }</code>. או, אם צריך באמת — מבנה אחר (<code>variants: [{ tag, color }]</code>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף אינדקס על כל מערך "כדי שיהיה" — כל עדכון של המערך מעדכן רשומה לכל ערך.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.7-E12">
     <h3>P25.7-E12 · אינדקסים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -230,7 +343,272 @@ export async function dashboard(db: Db, from: Date, to: Date) {
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E77">
+    <h3>P25.7-E77 · הכנסות לפי יום — בשעון ישראל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">{ $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone } }</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>$match</code> קודם:</p>
+<pre><code class="lang-ts">{ status: { $ne: "cancelled" }, createdAt: { $gte: from, $lt: to } }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E77: הכנסות לפי יום — בשעון ישראל
+import type { Db } from "mongodb";
+
+export async function revenueByDay(db: Db, { timezone, from, to }: { timezone: string; from: Date; to: Date }) {
+  return (await db.collection("orders").aggregate([
+    { $match: { status: { $ne: "cancelled" }, createdAt: { $gte: from, $lt: to } } },
+    { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone } }, orders: { $sum: 1 }, revenue: { $sum: "$total" } } },
+    { $sort: { _id: 1 } },
+    { $project: { _id: 0, day: "$_id", orders: 1, revenue: 1 } },
+  ]).toArray()) as { day: string; orders: number; revenue: number }[];
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>$dateToString</code> בלי <code>timezone</code> — יום לפי UTC, והזמנה של 00:30 בישראל נספרת ביום הקודם (פרק 24).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E78">
+    <h3>P25.7-E78 · הזמנות לפי סטטוס — עם אחוזים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>$group</code> לפי <code>"$status"</code> עם <code>{ $sum: 1 }</code>, ואת האחוז — בקוד, אחרי שיש סך הכול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Math.round((count / total) * 1000) / 10</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E78: הזמנות לפי סטטוס — עם אחוזים
+import type { Db } from "mongodb";
+
+export async function ordersByStatus(db: Db) {
+  const rows = (await db.collection("orders").aggregate([
+    { $group: { _id: "$status", count: { $sum: 1 } } },
+    { $sort: { count: -1, _id: 1 } },
+  ]).toArray()) as { _id: string; count: number }[];
+  const total = rows.reduce((s, r) =&gt; s + r.count, 0);
+  return rows.map((r) =&gt; ({ status: r._id, count: r.count, percent: Math.round((r.count / total) * 1000) / 10 }));
+}</code></pre>
+<p>אפשר גם הכול ב־aggregation (‏<code>$group</code> נוסף עם <code>_id: null</code> ו־<code>$push</code>, או <code>$setWindowFields</code>) — אבל כמה שורות של חשבון בקוד, על 4–5 שורות תוצאה, פשוטות יותר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>countDocuments</code> לכל סטטוס בנפרד — שאילתה לכל ערך, ורשימת סטטוסים קבועה בקוד שמתיישנת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E79">
+    <h3>P25.7-E79 · האינדקסים של החנות — ובדיקה ב־explain 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>createIndex</code> על אינדקס שכבר קיים (עם אותן הגדרות) לא עושה כלום.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כמו בשיעור: <code class="mid">JSON.stringify(ex.queryPlanner.winningPlan)</code> ו־<code>includes</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E79: האינדקסים של החנות — ובדיקה ב־explain
+import type { Db } from "mongodb";
+
+export async function ensureShopIndexes(db: Db): Promise&lt;void&gt; {
+  await db.collection("orders").createIndex({ customerId: 1, createdAt: -1 });
+  await db.collection("orders").createIndex({ status: 1, createdAt: -1 });
+  await db.collection("products").createIndex({ category: 1, price: 1 });
+  await db.collection("products").createIndex({ tags: 1 });
+  await db.collection("customers").createIndex({ email: 1 }, { unique: true });
+}
+
+export async function usesIndex(db: Db, filter: object, sort: object) {
+  const ex = await db.collection("orders").find(filter).sort(sort as Record&lt;string, 1 | -1&gt;).explain("executionStats");
+  const plan = JSON.stringify(ex.queryPlanner.winningPlan);
+  return { ixscan: plan.includes("IXSCAN"), inMemorySort: plan.includes('"SORT"') };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ליצור אינדקסים "ביד" ב־mongosh בפרודקשן ולשכוח אותם בפיתוח — ‏<code>ensureShopIndexes</code> בעלייה (או ב־migration) שומר אותם בקוד.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.7-E80">
+    <h3>P25.7-E80 · ‏GROUP BY מפרק 17 מול $group <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏HAVING ← <code>$match</code> אחרי <code>$group</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב׳: הפריטים כבר בתוך ההזמנה. הקטגוריה — לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>א:</p>
+<pre><code class="lang-ts">[{ $match: { status: { $ne: "cancelled" } } }, { $group: { _id: "$customerId", n: { $sum: 1 }, sum: { $sum: "$total" } } }, { $match: { n: { $gte: 2 } } }]</code></pre>
+<p>ב:</p>
+<pre><code class="lang-ts">[{ $unwind: "$items" }, { $lookup: { from: "products", localField: "items.productId", foreignField: "_id", as: "p" } }, { $unwind: "$p" }, { $group: { _id: "$p.category", revenue: { $sum: { $multiply: ["$items.qty", "$items.price"] } } } }]</code></pre>
+<p>מה אין צורך: JOIN בין orders ל־order_items — הפריטים מוטמעים (‏<code>$unwind</code> במקום). ומה כן: הקטגוריה לא שוכפלה לפריט, אז <code>$lookup</code>. אם הדוח הזה חם — שווה לשכפל גם <code>category</code> לפריט (E57).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>$sum: "$items.qty"</code> בלי <code>$unwind</code> — סכום של מערך בתוך $group הוא 0 (‏P25.7-E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E81">
+    <h3>P25.7-E81 · ‏EXPLAIN מפרק 18 מול explain <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏COLLSCAN, ‏IXSCAN + FETCH, ‏PROJECTION_COVERED, ‏SORT.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏totalDocsExamined.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>Seq Scan</code> ← <code>COLLSCAN</code>.</li><li><code>Index Scan</code> ← <code>IXSCAN</code> ואחריו <code>FETCH</code> (קריאת המסמך).</li><li><code>Index Only Scan</code> ← <code>IXSCAN</code> בלי FETCH (‏covered query — ה־projection רק מהאינדקס, בלי <code>_id</code> אם הוא לא באינדקס).</li><li><code>Sort</code> ← שלב <code>SORT</code> (מיון בזיכרון).</li><li>שורות בפועל ← <code>nReturned</code>, ‏<code>totalDocsExamined</code>, ‏<code>totalKeysExamined</code>.</li></ul>
+<p>היחס <code class="mid">totalDocsExamined / nReturned</code>: בשיעור — 5000 / 10 לפני, 10 / 10 אחרי. יחס קרוב ל־1 = האינדקס מוצא בדיוק את מה שצריך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתפק ב"יש IXSCAN" — אינדקס על שדה לא סלקטיבי עדיין יכול לבדוק 400,000 מסמכים כדי להחזיר 10.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E82">
+    <h3>P25.7-E82 · אזור זמן מפרק 24 — ב־aggregation <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏+02:00 בחורף; בקיץ?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תחילת יום בישראל ב־UTC — ‏P24-E12.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏+02:00 קבוע — בקיץ ישראל ב־+03:00, וכל הזמנה בין 23:00 ל־00:00 (שעון ישראל) נספרת ביום הקודם. השם — Mongo מחשב לפי החוקים.</li><li>from = חצות של אתמול בישראל, to = חצות של היום — כרגעים ב־UTC (‏<code>dayRangeInZone</code> / <code>startOfDayInZone</code>, ‏P24-E12). בחורף: <code>22:00Z</code> של יום קודם.</li><li>"יום" של מי? אזור של החנות היום, של לקוח בחו״ל, של דוח בעוד שנה אחרי שינוי מדיניות — כל אחד צריך חלוקה אחרת. Date אחד, והיום מחושב בשאילתה. (אפשר כ־cache נוסף, לא כמקור.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נקבץ ב־UTC, זה מספיק קרוב" — עד שמישהו משווה לדוח של הקופה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E83">
+    <h3>P25.7-E83 · התגיות הפופולריות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>{ $unwind: "$tags" }</code>, ואז <code>$group</code> לפי <code>"$tags"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">inStock: { $sum: { $cond: [{ $gt: ["$stock", 0] }, 1, 0] } }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E83: התגיות הפופולריות
+import type { Db } from "mongodb";
+
+export async function popularTags(db: Db, limit: number) {
+  return (await db.collection("products").aggregate([
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", products: { $sum: 1 }, inStock: { $sum: { $cond: [{ $gt: ["$stock", 0] }, 1, 0] } } } },
+    { $sort: { products: -1, _id: 1 } },
+    { $limit: limit },
+    { $project: { _id: 0, tag: "$_id", products: 1, inStock: 1 } },
+  ]).toArray()) as { tag: string; products: number; inStock: number }[];
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להביא את כל המוצרים ולספור ב־JavaScript — עובד על 8, לא על 800,000.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E84">
+    <h3>P25.7-E84 · לקוחות חוזרים — עם השם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>$match</code> ← ‏<code>$group</code> (‏<code>$max: "$createdAt"</code>) ← ‏<code>$match</code> על הספירה ← ‏<code>$lookup</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>$lookup</code> רק אחרי שנשארו מעט קבוצות — זול יותר. ואת ה־ISO — ב־JS, או <code>$dateToString</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E84: לקוחות חוזרים — עם השם
+import type { Db } from "mongodb";
+
+export async function repeatCustomers(db: Db, minOrders: number) {
+  const rows = await db.collection("orders").aggregate([
+    { $match: { status: { $ne: "cancelled" } } },
+    { $group: { _id: "$customerId", orders: { $sum: 1 }, spent: { $sum: "$total" }, lastOrderAt: { $max: "$createdAt" } } },
+    { $match: { orders: { $gte: minOrders } } },
+    { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "c" } },
+    { $unwind: "$c" },
+    { $sort: { spent: -1 } },
+  ]).toArray();
+  return rows.map((r) =&gt; ({ customerId: r._id, name: r.c.name, orders: r.orders, spent: r.spent, lastOrderAt: (r.lastOrderAt as Date).toISOString() }));
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>$lookup</code> לפני ה־<code>$group</code> — על כל הזמנה, במקום על כל לקוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.7-E85">
+    <h3>P25.7-E85 · דוח קטגוריות ל־CSV 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הצנרת של E80 (ב׳), עם <code>$match</code> בהתחלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const cell = (v) =&gt; /[",\n]/.test(String(v)) ? `"${String(v).replaceAll('"', '""')}"` : String(v)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E85: דוח קטגוריות ל־CSV
+import type { Db } from "mongodb";
+
+const cell = (v: unknown) =&gt; {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+};
+
+export async function categoryCsv(db: Db): Promise&lt;string&gt; {
+  const rows = await db.collection("orders").aggregate([
+    { $match: { status: { $in: ["delivered", "paid"] } } },
+    { $unwind: "$items" },
+    { $lookup: { from: "products", localField: "items.productId", foreignField: "_id", as: "p" } },
+    { $unwind: "$p" },
+    { $group: { _id: "$p.category", units: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } } } },
+    { $sort: { _id: 1 } },
+  ]).toArray();
+  const lines = ["category,units,revenue", ...rows.map((r) =&gt; [r._id, r.units, r.revenue].map(cell).join(","))];
+  return lines.join("\n") + "\n";
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>row.join(",")</code> בלי escaping — קטגוריה כמו <code>gear, misc</code> מוסיפה עמודה ושוברת את הקובץ באקסל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-node.html"><small>הבא</small>שיעור 5 — Node.js, טרנזקציות — ו־Mongo או Postgres?</a></div>
 </main>
 </body>
