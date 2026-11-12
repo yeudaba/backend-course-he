@@ -35,6 +35,108 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25-E59">
+    <h3>P25-E59 · ‏VPS, פלטפורמה או Kubernetes? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי מנהל את מערכת ההפעלה, את ה־HTTPS ואת ה־scaling בכל אחד?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Kubernetes פותר בעיות של הרבה שירותים והרבה צוותים — ויוצר עבודה לצוות שמתחזק אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>פלטפורמה — חינמית, HTTPS מובנה, deploy מ־Git. (כמו בפרויקט.)</li><li>פלטפורמה. הזמן של 4 מפתחים יקר יותר מהשרת. עוברים כשהמחיר או המגבלות כואבים.</li><li>Kubernetes (בדרך כלל מנוהל — EKS/GKE), עם צוות פלטפורמה. הסטנדרטיזציה בין 120 שירותים שווה את המורכבות.</li><li>VPS (או שרת פיזי) — שליטה מלאה בחומרה, ומחיר נמוך לכוח עיבוד. המחיר: אתה אחראי לעדכונים, ל־HTTPS ולגיבויים.</li><li>פלטפורמה עם scaling אוטומטי (או serverless) — לא משלמים על השרתים בלילה.</li></ol>
+<p>מה לא משתנה: image אחד שעבר בדיקות, הגדרות מה־env, migrations לפני הקוד, health check, ודרך חזרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתחיל פרויקט אישי ב־Kubernetes "כי זה מה שמבקשים במשרות" — שבוע של YAML, ואפס פיצ'רים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E60">
+    <h3>P25-E60 · למה migrations לפני הקוד? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>deploy הוא חלון של דקות, לא רגע. ובכל רגע בחלון — איזו גרסה רצה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כמה עותקים של השרת עולים במקביל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הגרסה החדשה עולה, מקבלת בקשות, ומנסה לקרוא <code>users.time_zone</code> שעוד לא קיים ← 500 עד שה־migration רץ.</li><li>הקוד הישן מול המסד החדש. בסדר — אם ה־migration "מוסיף" (expand): עמודה עם DEFAULT, טבלה חדשה. לא בסדר — אם הוא "שובר": מחק או שינה שם של עמודה שהקוד הישן קורא. לכן כל migration חייב לעבוד עם שתי הגרסאות.</li><li>(א) כמה עותקים עולים יחד — כולם מנסים להריץ migrations במקביל (‏Prisma נועל, אבל זה עדיין עיכוב ושגיאות מבלבלות). (ב) migration ארוך מעכב את העלייה, וה־health check של הפלטפורמה עלול "להרוג" את השרת באמצע. (ג) ב־CI זה צעד גלוי, עם לוג, שאם הוא נכשל — אין deploy.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להריץ <code>prisma migrate dev</code> בפרודקשן — הוא יכול להציע reset ולמחוק נתונים. בפרודקשן — רק <code>migrate deploy</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E61">
+    <h3>P25-E61 · לשנות שם של עמודה — בלי downtime <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בכל שלב: הגרסה הקודמת והגרסה הנוכחית צריכות לעבוד מול המסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"הקוד כותב לשתיהן" — בשביל מה, אם כבר העברנו את הנתונים?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ברגע שה־migration רץ, הקוד הישן (שעוד מקבל בקשות) מנסה <code>SELECT title</code> ← <code class="mid">column "title" does not exist</code> ← 500, עד שהחדש עולה. ו־rollback לקוד הישן — שבור לגמרי.</li><li>שלושה deploys:<ol><li><strong>expand</strong> — migration: ‏<code>ADD COLUMN name text</code>. קוד: כותב לשתיהן, קורא מ־<code>title</code>.</li><li><strong>migrate</strong> — migration: ‏<code class="mid">UPDATE tasks SET name = title WHERE name IS NULL</code>. קוד: קורא מ־<code>name</code>, עדיין כותב לשתיהן.</li><li><strong>contract</strong> — קוד: רק <code>name</code>. ואחריו (deploy נוסף, או באותו אחד אחרי שהקוד עלה): ‏<code>DROP COLUMN title</code>.</li></ol></li><li>אחרי 1 ו־2 — rollback בטוח: הגרסה הקודמת עדיין מוצאת את מה שהיא צריכה (ובגלל שכותבים לשתיהן, אין נתונים שחסרים לה). אחרי ה־DROP — כבר לא; לכן הוא האחרון, ורק כשבטוחים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב רק לעמודה החדשה בשלב 1 — rollback לגרסה שקוראת מ־<code>title</code> מראה משימות "בלי כותרת".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E62">
+    <h3>P25-E62 · בדיקת עשן שבודקת רק 200 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>/health</code> לא בודק את המסד (שיעור 4) — בכוונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה מבדיל בין "הגרסה הקודמת" ל"החדשה" מבחוץ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>עובר — <strong>שגוי</strong>: הגרסה הקודמת עונה.</li><li>עובר — <strong>שגוי</strong>: ‏<code>/health</code> לא נוגע במסד.</li><li>עובר — <strong>שגוי</strong>: שוב, הקודמת.</li><li>עובר — נכון.</li></ol>
+<p>בודקים (א) ש־<code>/version</code> מחזיר את ה־commit שפרסנו — שזו באמת הגרסה החדשה; ו־(ב) ש־<code>/ready</code> מחזיר 200 — שהיא באמת יכולה לעבוד (מסד). עם המתנה וניסיונות חוזרים, כי ה־deploy לוקח דקות (P25-E10, ‏P25-E22).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקת עשן מיד אחרי ה־hook, בלי המתנה — היא תמיד "עוברת" מול הישנה, או תמיד נכשלת מול שרת שעוד עולה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E63">
+    <h3>P25-E63 · ‏rollback אחרי migration <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Render מחזיר image קודם. הוא לא נוגע במסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>migration שהוא "expand" — הקוד הישן פשוט לא יודע עליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כלום — ה־migration נשאר. אין "down migration" אוטומטי (וב־Prisma אין בכלל).</li><li>כן — זו כל הנקודה של migration תואם: 1.3 לא יודע על <code>tags</code> ועל <code>color</code>, וה־DEFAULT ממלא את <code>color</code> ב־INSERT שלו.</li><li>ב־1.3 לא רואים אותם (הקוד לא יודע עליהם), אבל הם קיימים במסד. ב־1.4.1 — חוזרים. לא אבד כלום.</li><li>כשה־migration עצמו הוא הבאג (מחק נתונים, או שינה אותם לא נכון) — rollback של קוד לא מחזיר נתונים. אז: גיבוי / point-in-time restore של המסד (ב־Neon — branch מנקודת זמן), ו־migration מתקן קדימה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב "down migration" ידני שמוחק את <code>tags</code> כחלק מה־rollback — ומוחק את הנתונים שמשתמשים יצרו בשעה האחרונה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25-E08">
     <h3>P25-E08 · GET /version 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -506,6 +608,67 @@ true false false
 
 </div></details>
   </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25-E64">
+    <h3>P25-E64 · ‏migrate dev מול migrate deploy <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>dev</code> הוא כלי לפיתוח: הוא גם <em>יוצר</em> migrations.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Prisma שומר checksum של כל migration שרץ, בטבלה <code>_prisma_migrations</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>dev</code> — מריץ אותו (ומייצר client). ‏<code>deploy</code> — מריץ אותו. זהה.</li><li><code>dev</code> — <em>יוצר</em> migration חדש מההבדל ומריץ. ‏<code>deploy</code> — לא עושה כלום עם ההבדל: הוא רק מריץ migrations שקיימים. (לכן שוכחים לעשות commit ל־migration ← הפרודקשן לא משתנה.)</li><li>reset — למחוק את כל המסד ולבנות מחדש, כשהוא מזהה סטייה ("drift"). במסד פיתוח זה מעצבן; בפרודקשן — אסון.</li><li>ה־checksum לא תואם ל־<code>_prisma_migrations</code> ← <code>migrate deploy</code> מזהיר/נכשל. migration שרץ הוא היסטוריה: לא עורכים — מוסיפים migration חדש שמתקן.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>prisma db push</code> בפרודקשן "כי זה מהיר" — בלי היסטוריה, בלי review, ועם אפשרות לאבד נתונים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E65">
+    <h3>P25-E65 · ‏HEALTHCHECK ב־Dockerfile מול Health Check Path <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏Docker יודע לסמן קונטיינר unhealthy. מי בכלל מסתכל על זה ב־Render?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־HEALTHCHECK רץ <em>בתוך</em> הקונטיינר — עם משתני הסביבה שלו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>HEALTHCHECK — ‏Docker, בתוך הקונטיינר; כשנכשל: הסטטוס <code>unhealthy</code>, ש־compose (עם <code>condition: service_healthy</code>) ו־orchestrators משתמשים בו. Health Check Path — הפלטפורמה, מבחוץ; כשנכשל: לא מעבירים תנועה (ובהמשך — מפעילים מחדש).</li><li>/health — "התהליך חי" (לא תלוי במסד; restart לא יעזור לבעיה במסד). /ready — "אפשר לשלוח אליי" — מה שהפלטפורמה צריכה לפני שהיא מעבירה תנועה.</li><li>השרת מאזין על <code>PORT</code> (10000 ב־Render). ‏HEALTHCHECK על 3000 קבוע נכשל תמיד, והקונטיינר מסומן unhealthy — למרות שהוא תקין.</li><li>Health Check Path: הפלטפורמה מעבירה תנועה לגרסה החדשה רק אחרי ש־<code>/ready</code> שלה מחזיר 200. עד אז — הישנה ממשיכה (blue/green, ‏P25-E25).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את המסד ב־HEALTHCHECK — תקלה של שנייה במסד, וכל הקונטיינרים "חולים" ונהרגים יחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E66">
+    <h3>P25-E66 · תשלום באמצע deploy <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>טרנזקציה שלא הגיעה ל־COMMIT — מה המסד עושה כשהחיבור נקטע?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם המפתח נשמר באותה טרנזקציה עם ההזמנה — מה קורה לו ב־ROLLBACK?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הבקשה מסתיימת על הגרסה הישנה, הלקוח מקבל 201, ורק אז השרת יוצא. אף אחד לא שם לב ל־deploy.</li><li>החיבור נקטע. אם ה־COMMIT לא קרה — המסד מבטל את הטרנזקציה, וההזמנה לא נשמרה (וגם המפתח, אם הוא באותה טרנזקציה). אם ה־COMMIT קרה רגע לפני — ההזמנה נשמרה, והתשובה אבדה. הלקוח לא יודע איזה מהשניים.</li><li>בשני המקרים — תוצאה נכונה: לא נשמר ← מבוצע עכשיו; נשמר ← replay של אותה הזמנה. בדיוק התרחיש שהמנגנון נועד לו.</li><li>אם ה־COMMIT קרה — הזמנה כפולה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"deploy קורה בלילה, אז זה לא קורה" — ב־CD אמיתי יש deploy כמה פעמים ביום.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P25-E27">
     <h3>P25-E27 · כמה זמן השרת למעלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -633,7 +796,61 @@ peak: 2 · ~ms: 300
 
 </div></details>
   </div>
+<div class="ex" id="P25-E67">
+    <h3>P25-E67 · ‏expand ו־contract — במסד אמיתי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">ALTER TABLE tasks ADD COLUMN IF NOT EXISTS name text</code> — ‏<code>IF NOT EXISTS</code> הופך את הצעד לבטוח להרצה חוזרת.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>rowCount</code> של ה־UPDATE הוא מספר השורות שמולאו. וב־contract: <code class="mid">SELECT COUNT(*) ... WHERE name IS NULL</code> לפני ה־DROP — באותה טרנזקציה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E67: expand ו־contract — במסד אמיתי
+import type { Pool } from "pg";
+
+export async function expand(pool: Pool): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS name text");
+    const r = await client.query("UPDATE tasks SET name = title WHERE name IS NULL");
+    await client.query("COMMIT");
+    return r.rowCount ?? 0;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function contract(pool: Pool): Promise&lt;void&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT COUNT(*)::int AS n FROM tasks WHERE name IS NULL");
+    if (rows[0].n &gt; 0) throw new Error("NOT_MIGRATED");
+    await client.query("ALTER TABLE tasks DROP COLUMN title");
+    await client.query("ALTER TABLE tasks ALTER COLUMN name SET NOT NULL");
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>ב־PostgreSQL גם <code>ALTER TABLE</code> הוא חלק מהטרנזקציה: אם ה־<code>SET NOT NULL</code> נכשל, גם ה־<code>DROP</code> מתבטל. (לא בכל מסד זה כך — ב־MySQL, ‏DDL עושה COMMIT מרומז.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להריץ את ה־contract באותו deploy של ה־expand — הקוד הישן, שעוד רץ, מחפש <code>title</code>.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-https.html"><small>הבא</small>שיעור 4 — HTTPS, proxy ובריאות בפרודקשן</a></div>
 </main>
 </body>

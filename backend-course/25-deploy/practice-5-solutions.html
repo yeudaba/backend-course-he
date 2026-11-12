@@ -13,8 +13,518 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25-deploy/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25-E83">
+    <h3>P25-E83 · ‏seed.ts ← seed.mts <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פרויקט ה־Nest הוא CommonJS (פרק 20) — בלי <code>"type": "module"</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה בודק טיפוסים, ומה רק מריץ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>בלי <code>"type": "module"</code> ב־package.json, קובץ <code>.ts</code> הוא CommonJS — וב־CommonJS אין <code>await</code> ברמה העליונה.</li><li><code>.mts</code> = "המודול הזה הוא ESM", בלי קשר ל־package.json — כמו <code>.mjs</code> ב־JavaScript. TypeScript בודק אותו כ־ESM, ו־Node מריץ אותו כ־ESM.</li><li>זה הופך את <em>כל</em> הפרויקט ל־ESM — ה־build של Nest, ה־imports בלי סיומת, Jest. שינוי גדול בשביל קובץ אחד.</li><li>כי Node (עם strip-types) פשוט הריץ אותו — ולא בדק טיפוסים. רק <code>npm run typecheck</code> על כל הפרויקט ראה את השגיאה — ואף אחד לא הריץ אותו עד ה־CI.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>main().then(...)</code> בלי await — עובד, אבל מסתיר שהבעיה היא סוג המודול, ותחזור בקובץ הבא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E84">
+    <h3>P25-E84 · ‏app.listen(PORT, "0.0.0.0") <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>127.0.0.1</code> — "רק מתוך אותה מכונה". ומה זה "אותה מכונה" בתוך קונטיינר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־proxy של Render פונה לקונטיינר דרך הרשת שלו, לא דרך localhost של הקונטיינר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>127.0.0.1</code> — רק חיבורים מתוך אותה מכונה (loopback). ‏<code>0.0.0.0</code> — מכל הממשקים: גם מהרשת.</li><li>הקונטיינר הוא "מכונה" משלו. ה־proxy (או ה־port mapping של Docker) מתחבר מבחוץ לממשק הרשת של הקונטיינר — והשרת לא מאזין שם. ‏Render: ‏"No open ports detected", וה־deploy נכשל.</li><li>הדפדפן ו־curl רצים על אותה מכונה, אז loopback מספיק.</li><li>כן, קצת: כל מי שברשת יכול לפנות לפורט 3000 אצלך. לכן בפיתוח בלי Docker — עדיף 127.0.0.1 (או ש־firewall של ה־Mac שואל). בקונטיינר זה בטוח — רק מה שפותחים עם <code>-p</code> נגיש מבחוץ.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"עובד אצלי" עם <code>localhost</code> — וב־Docker השרת עולה, ה־HEALTHCHECK (שרץ בפנים) עובר, ומבחוץ אין תשובה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E85">
+    <h3>P25-E85 · למה Auto-Deploy כבוי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Auto-Deploy מתחיל לבנות ברגע ה־push — במקביל ל־CI, בלי לדעת עליו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי מריץ את ה־migrations?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>Render בונה ומעלה את הקוד החדש, בזמן שה־CI עוד מריץ בדיקות — וה־migration עוד לא רץ. הקוד החדש מחפש עמודה שלא קיימת ← 500, עד שה־CI מגיע לשלב ה־migrations (ואם הבדיקות נכשלות — לעולם לא).</li><li>הקוד עולה לאוויר למרות הבדיקה האדומה. ה־CI הופך ל"דיווח", לא לשער.</li><li>בערך יחד — ובדיקת העשן של ה־CI עלולה לפגוש גרסה שעוד מתחלפת. ועם hook — Render בונה פעם שנייה. הסדר לא מוגדר, וזו כל הבעיה.</li></ol>
+<p>עם hook: בדיקות ← migrations ← deploy ← עשן. סדר אחד, ושער אחד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר את שניהם דולקים "ליתר ביטחון" — שני deploys לכל push, ואחד מהם לפני ה־migrations.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E86">
+    <h3>P25-E86 · השרת החינמי נרדם <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הבקשה הראשונה מחכה שהקונטיינר יעלה מאפס.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>build של image אורך כמה דקות, ועוד דקה להתעורר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>דף שנטען דקה (או timeout בדפדפן), ואחר כך הכול מהיר. ב־README: "השרת על תוכנית חינמית ונרדם — הבקשה הראשונה לוקחת עד דקה".</li><li>אחרי ה־hook, Render בונה את ה־image (דקות), מעלה, ומחכה ל־/ready. בדיקת עשן של 30 שניות תיכשל כמעט תמיד, למרות שה־deploy בסדר.</li><li>השרת אף פעם לא עובר 15 דקות בלי בקשה. אבל זה עוקף את תנאי התוכנית, ולשירות אמיתי — משלמים על instance שלא נרדם, כדי שמשתמש לא יחכה דקה.</li><li>גם Neon מכבה compute כשאין שימוש (scale to zero) ומדליק בבקשה — עוד שנייה־שתיים בחיבור הראשון. ה־<code>/ready</code> עם timeout של 2 שניות יכול להיכשל פעם ראשונה — ולכן בדיקת העשן מנסה שוב.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד את ה־timeout של בדיקת העשן "כי זה איטי" — ואז ה־CI אדום כל פעם, ומפסיקים להסתכל עליו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E87">
+    <h3>P25-E87 · ‏environment: production <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדף ה־repo ב־GitHub יש "Deployments" — מאיפה הוא בא?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סוד של environment זמין רק ל־job שמצהיר על ה־environment.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>היסטוריה: בדף ה־repo מופיע "Deployments ← production", עם כל ה־deploys, איזה commit, ומתי. וקישור ישיר לריצה.</li><li>branches: גם אם מישהו ישנה את ה־<code>if</code> ב־workflow (או יריץ אותו מ־branch אחר) — ה־job לא יקבל את ה־environment, ולא ירוץ. reviewers: ה־job מחכה ל"Approve" של אדם לפני שהוא מתחיל — שער ידני לפרודקשן.</li><li>רק job עם <code>environment: production</code>. ה־job של הבדיקות (שמריץ קוד מכל PR) לא יכול לקרוא אותו בכלל — גם לא בטעות (P25-E20). זה "הסוד רק איפה שצריך אותו", ברמת ההרשאות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את כל הסודות ברמת ה־repo — כל workflow, בכל job, יכול לקרוא אותם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E88">
+    <h3>P25-E88 · ‏&amp; בכתובת של Neon <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>&amp;</code> ב־shell = "הרץ את מה שלפניי ברקע, והמשך".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך מרכאות כפולות, <code>$</code> עדיין מחליף משתנים. בתוך בודדות — לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־shell מפצל ב־<code>&amp;</code>: ‏<code class="mid">DATABASE_URL=…sslmode=require</code> רץ ברקע (השמה בלבד, בלי פקודה), ואז <code class="mid">channel_binding=require npx prisma migrate deploy</code> — בלי <code>DATABASE_URL</code> בכלל. השגיאה: "Environment variable not found: DATABASE_URL" — מבלבל.</li><li>עובד — <code>&amp;</code> בתוך מרכאות הוא תו רגיל.</li><li>עובד — במרכאות בודדות שום דבר לא מתפרש.</li><li>‏<code>$5</code> מתפרש כמשתנה (ריק) ← הסיסמה הופכת ל־<code>px</code> ← "password authentication failed". לכן — מרכאות בודדות (E94).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק כתובת מהדפדפן לטרמינל בלי מרכאות "כי זה עבד מקומית" — לכתובת המקומית לא היו <code>&amp;</code> ו־<code>$</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E89">
+    <h3>P25-E89 · הפרמטרים של smoke.mjs 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>new URL(value)</code> זורק על כתובת לא תקינה, ו־<code>u.protocol</code> הוא <code>"https:"</code> (עם נקודתיים).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלם חיובי ממחרוזת: <code class="mid">/^\d+$/.test(v) &amp;&amp; Number(v) &gt; 0</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E89: הפרמטרים של smoke.mjs
+function positiveInt(env: Record&lt;string, string | undefined&gt;, name: string, fallback: number): number {
+  const v = env[name];
+  if (v === undefined || v === "") return fallback;
+  if (!/^\d+$/.test(v) || Number(v) &lt;= 0) throw new Error(`${name} לא תקין`);
+  return Number(v);
+}
+
+export function parseSmokeEnv(env: Record&lt;string, string | undefined&gt;) {
+  const raw = env.BASE_URL;
+  if (!raw) throw new Error("חסר BASE_URL");
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error("BASE_URL לא תקין");
+  }
+  if (u.protocol !== "http:" &amp;&amp; u.protocol !== "https:") throw new Error("BASE_URL לא תקין");
+  const baseUrl = raw.replace(/\/+$/, "");
+  const commit = env.EXPECT_COMMIT || null;
+  if (commit !== null &amp;&amp; !/^[0-9a-f]{7,40}$/.test(commit)) throw new Error("EXPECT_COMMIT לא תקין");
+  const timeoutSeconds = positiveInt(env, "TIMEOUT_SECONDS", 900);
+  const intervalSeconds = positiveInt(env, "INTERVAL_SECONDS", 10);
+  if (intervalSeconds &gt; timeoutSeconds) throw new Error("INTERVAL_SECONDS גדול מ־TIMEOUT_SECONDS");
+  return { baseUrl, expectCommit: commit, timeoutSeconds, intervalSeconds };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Number(env.TIMEOUT_SECONDS) || 900</code> — ‏<code>"abc"</code> הופך בשקט ל־900, ו־<code>"-5"</code> עובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E90">
+    <h3>P25-E90 · ההודעות של בדיקת העשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code><code class="mid">#${n}: /version ← ${v.status || v.error}</code></code> — ואחר כך מוסיפים חלקים לפי מה שיש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>expect ? <code> ${expect.slice(0, 7)}</code> : ""</code> בתוך <code>failLine</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E90: ההודעות של בדיקת העשן
+const short = (sha: string) =&gt; sha.slice(0, 7);
+
+export function waitingLine(n: number, v: { status: number; commit?: string; error?: string }, expect: string | null): string {
+  let line = `#${n}: /version ← ${v.status || v.error}`;
+  if (v.commit) {
+    line += `, commit ${short(v.commit)}`;
+    if (expect) line += ` (מחכים ל־${short(expect)})`;
+  }
+  return line;
+}
+
+export function notReadyLine(n: number, status: number): string {
+  return `#${n}: הגרסה החדשה רצה, אבל /ready ← ${status}`;
+}
+
+export function successLine(base: string, commit: string, seconds: number): string {
+  return `✔ ${base} — commit ${short(commit)}, ready (${Math.round(seconds)}s)`;
+}
+
+export function failLine(expect: string | null, timeoutSeconds: number): string {
+  return `✖ הגרסה${expect ? ` ${short(expect)}` : ""} לא עלתה תוך ${timeoutSeconds} שניות`;
+}</code></pre>
+<p>שורה טובה ב־CI עונה על "מה קרה" בלי לפתוח קוד: איזה ניסיון, מה השרת ענה, איזו גרסה רצה, ולמה מחכים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להדפיס את כל ה־JSON של <code>/version</code> בכל ניסיון — 90 שורות של רעש בלוג, והשורה החשובה נבלעת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E91">
+    <h3>P25-E91 · ה־job של deploy 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" &gt; /dev/null</code> עם</p>
+<pre><code class="lang-yaml">env: { RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }} }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>השיעור (שיעור 3, סעיף 2) מראה את ה־job — נסה לכתוב בלי להסתכל, ואז השווה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-yaml"># P25-E91: ה־job של deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm test
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t tasks-api:ci .
+  deploy:
+    if: github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: migrations on the production database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: trigger deploy on Render
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" &gt; /dev/null
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      - name: smoke test of the live URL
+        run: node scripts/smoke.mjs
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL }}
+          EXPECT_COMMIT: ${{ github.sha }}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>DATABASE_URL</code> ב־<code>env</code> של ה־job כולו — גם <code>npm ci</code> (שמריץ סקריפטים של חבילות) רואה אותו.</li><li>‏<code>&gt; /dev/null</code> בלי <code>-f</code> — hook שהחזיר 404 (כתובת ישנה) "מצליח" בשקט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E92">
+    <h3>P25-E92 · ה־README של פרויקט 2 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">md.split("\n").slice(0, 5).some((l) =&gt; l.includes(badge))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">liveUrl.replace(/\/+$/, "") + "/docs"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E92: ה־README של פרויקט 2
+export function readmeProblems(md: string, { user, repo, liveUrl }: { user: string; repo: string; liveUrl: string }): string[] {
+  const lines = md.split("\n");
+  const problems: string[] = [];
+  const badge = `![CI](https://github.com/${user}/${repo}/actions/workflows/ci.yml/badge.svg)`;
+  if (!lines.slice(0, 5).some((l) =&gt; l.includes(badge))) problems.push("badge");
+  if (!md.includes(`${liveUrl.replace(/\/+$/, "")}/docs`)) problems.push("live-link");
+  if (!lines.some((l) =&gt; l.includes("NestJS") &amp;&amp; l.includes("PostgreSQL") &amp;&amp; l.includes("Docker"))) problems.push("architecture");
+  if (/YOUR-(USER|SERVICE)/.test(md)) problems.push("placeholder");
+  return problems;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>תג עם <code>YOUR-USER</code> שהועתק מהשיעור — תמונה שבורה בראש ה־README. זה הדבר הראשון שהמראיין רואה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E93">
+    <h3>P25-E93 · הכתובת של ה־API בדף 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>/&lt;meta\b[^&gt;]*&gt;/gi</code> — כל תגית meta; ובתוכה בודקים <code>name="api-url"</code> ומוציאים <code>content="…"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>new URL(pageUrl).hostname</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E93: הכתובת של ה־API בדף
+export function apiBase(html: string, pageUrl: string): string {
+  const page = new URL(pageUrl);
+  if (page.hostname === "localhost" || page.hostname === "127.0.0.1") return "http://localhost:3000";
+  let api: string | undefined;
+  for (const [tag] of html.matchAll(/&lt;meta\b[^&gt;]*&gt;/gi)) {
+    if (/\bname="api-url"/i.test(tag)) api = /\bcontent="([^"]*)"/i.exec(tag)?.[1];
+  }
+  if (!api) throw new Error("חסר api-url");
+  if (api.includes("YOUR-SERVICE")) throw new Error("api-url לא הוגדר");
+  if (page.protocol === "https:" &amp;&amp; api.startsWith("http:")) throw new Error("mixed content");
+  return api.replace(/\/+$/, "");
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>regex שמניח ש־<code>name</code> לפני <code>content</code> — ואז עורך HTML שמסדר תכונות שובר את הדף בפריסה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E94">
+    <h3>P25-E94 · הכתובת של Neon — לפני שמדביקים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">try { u = new URL(url) } catch { return ["not-a-url"] }</code>. ‏<code>u.pathname.slice(1)</code> — שם המסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">"'" + value.replaceAll("'", "'\\''") + "'"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E94: הכתובת של Neon — לפני שמדביקים
+export function neonUrlProblems(url: string): string[] {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return ["not-a-url"];
+  }
+  const problems: string[] = [];
+  if (u.protocol !== "postgres:" &amp;&amp; u.protocol !== "postgresql:") problems.push("protocol");
+  if (!u.password) problems.push("password");
+  if (!u.hostname.endsWith(".neon.tech")) problems.push("host");
+  if (!u.pathname.slice(1)) problems.push("database");
+  if (u.searchParams.get("sslmode") !== "require") problems.push("sslmode");
+  return problems;
+}
+
+export function shellQuote(value: string): string {
+  return "'" + value.replaceAll("'", "'\\''") + "'";
+}</code></pre>
+<p>‏<code>shellQuote</code> הוא מה שמאפשר להדביק ב־E88 כל כתובת — גם עם <code>&amp;</code>, ‏<code>$</code> ו־<code>'</code> — בבטחה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מרכאות כפולות "כי זה אותו דבר" — ‏<code>$</code> בסיסמה עדיין מתפרש (E88).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E95">
+    <h3>P25-E95 · ‏JWT_SECRET לפרודקשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">randomBytes(bytes).toString("base64url")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תווים שונים: <code>new Set(secret).size</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E95: JWT_SECRET לפרודקשן
+import { randomBytes } from "node:crypto";
+
+export function generateSecret(bytes = 48): string {
+  if (bytes &lt; 32) throw new RangeError("לפחות 32 בתים");
+  return randomBytes(bytes).toString("base64url");
+}
+
+export function secretProblems(secret: string): string[] {
+  const problems: string[] = [];
+  if (secret.length &lt; 32) problems.push("too-short");
+  if (secret !== secret.trim()) problems.push("whitespace");
+  if (/change-?me|secret|password|example|dev-only/i.test(secret)) problems.push("placeholder");
+  if (new Set(secret).size &lt; 10) problems.push("low-variety");
+  return problems;
+}</code></pre>
+<p>48 בתים אקראיים = 64 תווי base64url, ‏384 ביטים — הרבה מעבר למה ש־HS256 צריך. ו־<code>whitespace</code> — כי העתקה מהטרמינל לממשק של Render מוסיפה לפעמים ירידת שורה, והטוקנים "לא מתאמתים" בין שני שרתים שאחד מהם עם הרווח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> — לא קריפטוגרפי, וקצר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E96">
+    <h3>P25-E96 · ההגדרות ב־Render — מה חסר? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מערך <code>problems</code>, ו־<code>if</code> אחד לכל כלל — עם <code>problems.push(<code>${name}: ...</code>)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>"PORT" in env</code> — כדי לתפוס גם ערך ריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E96: ההגדרות ב־Render — מה חסר?
+export function renderEnvProblems(env: Record&lt;string, string&gt;): string[] {
+  const p: string[] = [];
+  const db = env.DATABASE_URL;
+  if (!db) p.push("DATABASE_URL: חסר");
+  else if (!/[?&amp;]sslmode=require(&amp;|$)/.test(db)) p.push("DATABASE_URL: חסר sslmode=require");
+  if (!env.JWT_SECRET) p.push("JWT_SECRET: חסר");
+  else if (env.JWT_SECRET.length &lt; 32) p.push("JWT_SECRET: קצר מ־32 תווים");
+  const cors = env.CORS_ORIGINS;
+  if (!cors) p.push("CORS_ORIGINS: חסר");
+  else if (cors.split(",").map((s) =&gt; s.trim()).some((o) =&gt; !/^https:\/\/[^/*\s]+$/.test(o))) p.push("CORS_ORIGINS: רק https://host, בלי נתיב");
+  if (env.TRUST_PROXY !== "1") p.push("TRUST_PROXY: ב־Render יש proxy אחד — 1");
+  if ("PORT" in env) p.push("PORT: Render קובע לבד");
+  if ("NODE_ENV" in env &amp;&amp; env.NODE_ENV !== "production") p.push("NODE_ENV: רק production (או לא להגדיר)");
+  if ("RENDER_GIT_COMMIT" in env) p.push("RENDER_GIT_COMMIT: Render קובע לבד");
+  return p;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיר <code>PORT=3000</code> "כי ככה מקומית" — Render מנתב ל־10000, והשרת לא עונה ("No open ports detected").</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25-E97">
+    <h3>P25-E97 · ‏Swagger חי ב־/docs <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה Swagger מספר למי שלא אמור לדעת על ה־API?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בפרק 20 ראית כפתור "Authorize" בממשק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מראיין יכול לראות את כל ה־API, לנסות אותו מהדפדפן, ולהבין את המבנה — בלי להוריד קוד ובלי Postman.</li><li>מפה של המערכת: כל ה־endpoints (גם אלה של admin), השדות, הפורמטים. לא פרצה בפני עצמה — אבל חוסך לתוקף עבודה. ובנוסף: "Try it out" מאפשר לשלוח בקשות אמיתיות לפרודקשן.</li><li>כל מה שמאחורי <code>JwtAuthGuard</code> — עם <code>@ApiBearerAuth()</code>. המראיין: ‏<code>POST /auth/register</code>, ‏<code>POST /auth/login</code>, מעתיק את ה־accessToken ל־"Authorize", ומנסה <code>/tasks</code>.</li><li>‏<code>/docs</code> רק ב־staging, או מאחורי אימות (basic auth / VPN), או ייצוא של ה־OpenAPI JSON לפורטל תיעוד נפרד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכבות את <code>/docs</code> בתיק העבודות "כי בחברות לא עושים את זה" — כאן המטרה הפוכה: שיראו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E98">
+    <h3>P25-E98 · ‏deploy.e2e-spec.ts — מה הוא בודק? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>overrideProvider</code> ב־<code>Test.createTestingModule</code> (פרק 22).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת שלא עולה בגלל הגדרה — בפרודקשן זה deploy שנכשל. בבדיקה זה שנייה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>/health ← 200 גם כשהמסד "נפל"; ‏/ready ← 200 כשהמסד עונה, 503 <code>NOT_READY</code> כשלא (ובזמן קצוב — לא נתקע 30 שניות); ‏/version ← ה־commit מ־<code>GIT_COMMIT</code>, או <code>RENDER_GIT_COMMIT</code>, או "dev"; ו־<code>Cache-Control: no-store</code>.</li><li>מחליפים את ה־PrismaService (או את הפונקציה שבודקת) בכפיל: <code>$queryRaw</code> שזורק — או שמחזיר Promise שלא נגמר, כדי לבדוק את ה־timeout.</li><li>כי שגיאה בהן מתגלה רק בפריסה, כשהשרת לא עולה. מקרה: מישהו "הקל" את ה־regex של CORS, ועכשיו <code>https://a.com/</code> (עם סלאש) עובר — הבדיקה נכשלת ב־PR, ולא ב־deploy.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את /ready רק במצב תקין — הבדיקה עוברת גם אם /ready פשוט תמיד מחזיר 200.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E99">
+    <h3>P25-E99 · ‏Neon ו־Render — באותו אזור <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאילתות ב־N+1 רצות אחת אחרי השנייה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>51 × 90ms.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>~90ms + זמן העבודה. מורגש, אבל בסדר.</li><li>51 שאילתות × 90ms ≈ ‏4.6 שניות. אותו קוד, אותה שאילתה — לא שמיש.</li><li>51 × 0.2ms ≈ ‏10ms. לכן N+1 "עובד" בפיתוח ומתפוצץ בענן. ב־JOIN אחד (או <code>include</code> של Prisma) — שאילתה אחת, ‏90ms, גם מרחוק.</li><li>עלות (תעבורה בין אזורים עולה כסף אצל ספקים רבים), ותלות: אזור אחד שנופל לא מפיל את השני — ועכשיו שני אזורים יכולים להפיל אותך.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף cache לפני שבודקים כמה שאילתות endpoint מריץ — הבעיה היא 51, לא 90ms.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25-E24">
     <h3>P25-E24 · אתגר: linter ל־workflows 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -71,6 +581,98 @@ export function lintWorkflow(text: string): Finding[] {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להיכשל על ה־<code>ci.yml</code> של הפרויקט: למשל, לחשוב ש־<code>needs: [test, docker]</code> הוא מחרוזת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E100">
+    <h3>P25-E100 · ‏healthcheck.mjs ל־Docker 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">await fetch(url, { signal: AbortSignal.timeout(2000) })</code> — ו־top-level await עובד בקובץ <code>.mjs</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>process.exitCode = 1</code> (או <code>process.exit(1)</code>) ב־<code>catch</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P25-E100: healthcheck.mjs ל־Docker
+const port = process.env.PORT || 3000;
+try {
+  const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) });
+  await res.body?.cancel();
+  if (res.status !== 200) {
+    console.error(`health ← ${res.status}`);
+    process.exit(1);
+  }
+} catch (err) {
+  console.error(`health ← ${err.cause?.code ?? err.name}`);
+  process.exit(1);
+}</code></pre>
+<p>‏<code>127.0.0.1</code> — הסקריפט רץ בתוך הקונטיינר, ליד השרת. ו־2 שניות פחות מה־<code>--timeout=3s</code> של Docker — כדי שהסקריפט יכשל "יפה" עם הודעה, ולא ייהרג.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>localhost</code> במקום <code>127.0.0.1</code> — ב־Node חדש <code>localhost</code> יכול להיפתר ל־<code>::1</code> (IPv6), ושרת שמאזין רק על IPv4 לא עונה.</li><li>בלי timeout — שרת תקוע משאיר את ה־HEALTHCHECK תלוי עד ש־Docker הורג אותו, בלי שום הודעה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25-E101">
+    <h3>P25-E101 · למה ה־deploy נכשל? לקרוא את הלוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל שורה: ‏<code>try { JSON.parse }</code> — אם הצליח, המועמדים הם <code>msg</code> ו־<code>err?.message</code>; אחרת — השורה עצמה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const i = text.indexOf(prefix)</code> ← ‏<code class="mid">text.slice(i + prefix.length)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25-E101: למה ה־deploy נכשל? לקרוא את הלוג
+const PREFIXES = ["הגדרות שרת לא תקינות — ", "הגדרות לא תקינות ב־.env — "];
+
+function candidates(line: string): string[] {
+  try {
+    const o = JSON.parse(line) as { msg?: unknown; err?: { message?: unknown } };
+    return [o?.msg, o?.err?.message].filter((x): x is string =&gt; typeof x === "string");
+  } catch {
+    return [line];
+  }
+}
+
+export function configProblemsFromLogs(text: string) {
+  const out: { name: string; message: string }[] = [];
+  const seen = new Set&lt;string&gt;();
+  for (const line of text.split("\n")) {
+    for (const c of candidates(line)) {
+      for (const prefix of PREFIXES) {
+        const i = c.indexOf(prefix);
+        if (i === -1) continue;
+        for (const part of c.slice(i + prefix.length).split("; ")) {
+          const j = part.indexOf(": ");
+          if (j === -1) continue;
+          const name = part.slice(0, j).trim();
+          const message = part.slice(j + 2).trim();
+          if (seen.has(`${name}\n${message}`)) continue;
+          seen.add(`${name}\n${message}`);
+          out.push({ name, message });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+console.log(configProblemsFromLogs(`==&gt; Running 'node dist/main.js'
+Error: הגדרות שרת לא תקינות — DATABASE_URL: חובה בפרודקשן; CORS_ORIGINS: בפרודקשן רק https ובלי * או נתיב: http://localhost:5500
+    at loadServerConfig (/app/dist/server-config.js:31:11)
+{"level":"error","msg":"bootstrap failed","err":{"message":"הגדרות לא תקינות ב־.env — JWT_SECRET: לפחות 32 תווים אקראיים"}}`));</code></pre>
+<pre class="terminal">?</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפצל כל בעיה ב־<code>":"</code> — ההודעה של CORS מכילה <code>http://</code>, ויוצא שם "CORS_ORIGINS" עם הודעה קטועה.</li></ul>
 
 
 </div></details>
