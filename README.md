@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **2672** | **1555** | **1594** |
+| **42** | **196** | **2978** | **1693** | **1605** |
 
 ## מה שונה כאן
 
@@ -279,9 +279,9 @@
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
 | [יחידה 25.5](backend-course/25v-mysql/index.html) | MySQL: מה שונה מ־PostgreSQL | 5 | 100 | 55 | ✔ |
 | [יחידה 25.7](backend-course/25w-mongodb/index.html) | MongoDB: מסד של מסמכים | 5 | 100 | 55 | ✔ |
-| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 33 | 28 | ✔ |
-| [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 28 | 23 | ✔ |
-| [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 28 | 23 | ✔ |
+| [פרק 26](backend-course/26-redis/index.html) | Redis: מטמון, מצב משותף ותורים | 6 | 120 | 67 | ✔ |
+| [יחידה 26.3](backend-course/26c-cloud/index.html) | ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD | 5 | 101 | 56 | ✔ |
+| [יחידה 26.5](backend-course/26w-messaging/index.html) | תורים ואירועים: RabbitMQ, Kafka ו־SQS | 5 | 100 | 55 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -390,7 +390,7 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 28 | 23 | ✔ |
+| [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 102 | 57 | ✔ |
 | [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 28 | 23 | ✔ |
 | [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 28 | 23 | ✔ |
 | [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 28 | 23 | ✔ |
