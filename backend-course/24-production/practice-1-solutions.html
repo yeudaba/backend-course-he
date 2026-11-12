@@ -72,6 +72,95 @@ grep '"level":"error"' app.log | grep -c .</code></pre>
 
 </div></details>
   </div>
+<div class="ex" id="P24-E34">
+    <h3>P24-E34 · שגיאה עם stack — מה מגיע ללוג? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>JSON.stringify</code> מעתיק רק שדות "רגילים" של אובייקט. ‏<code>message</code> ו־<code>stack</code> של Error הם לא כאלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>err.stack</code> יש ירידות שורה. מה <code>JSON.stringify</code> עושה עם ירידת שורה בתוך מחרוזת?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const err = new Error("connect ECONNREFUSED");
+console.log(JSON.stringify({ msg: "db failed", err }));
+console.log(JSON.stringify({ msg: "db failed", error: String(err) }));
+const line = JSON.stringify({ msg: "db failed", error: err.message, stack: err.stack });
+console.log("ירידת שורה ב־stack:", err.stack.includes("\n"), "· בשורת ה־JSON:", line.includes("\n"));</code></pre>
+<pre class="terminal">{"msg":"db failed","err":{}}
+{"msg":"db failed","error":"Error: connect ECONNREFUSED"}
+ירידת שורה ב־stack: true · בשורת ה־JSON: false</pre>
+<ul><li>א — טקסט חופשי, בכמה שורות (שורה לכל frame ב־stack). מערכת הלוגים רואה עשר "אירועים" בלי requestId ובלי רמה.</li><li>ב — <code>{"err":{}}</code>. השגיאה נעלמה לגמרי: <code>message</code> ו־<code>stack</code> לא נספרים ב־<code>JSON.stringify</code>.</li><li>ג — ההודעה בלבד. בלי stack לא יודעים באיזו שורה בקוד זה קרה.</li><li>ד — הכול, בשורה אחת: <code>JSON.stringify</code> הופך ירידת שורה ל־<code>\n</code> (שני תווים). זו הבחירה — או פונקציה שעושה את זה בשבילך (E39).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לראות <code>"err":{}</code> בלוג ולחשוב "לא הייתה שגיאה".</li><li>לכתוב את ה־stack לתשובת ה־HTTP "בשביל הדיבוג" — הלקוח רואה נתיבים, גרסאות וקוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E35">
+    <h3>P24-E35 · מה דלף כאן? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה לכל שדה: אם מישהו שקורא לוגים (מפתח, תמיכה, ספק הלוגים) רואה אותו — מה הוא יכול לעשות איתו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>יש סודות שמסתתרים לא בשדה בשם <code>password</code> אלא בתוך URL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>דלף</strong> — טוקן לאיפוס סיסמה ב־query. מי שקורא את השורה יכול לאפס את הסיסמה. כותבים <code>path</code> בלי query (או עם redact על פרמטרים — E45).</li><li><strong>דלף</strong> — סיסמה, וגם אימייל שאין בו צורך. לא כותבים <code>req.body</code>; כותבים מה שצריך (סיבת הכישלון, <code>userId</code> אם יש).</li><li>תקין — <code>userId</code> הוא מזהה, לא סוד, ובדיוק מה שמאפשר "מה קרה למשתמש 17".</li><li><strong>דלף</strong> — access token. גם ב־debug: debug נדלק בפרודקשן כשמחפשים באג. redact ב־logger על <code>authorization</code>.</li><li><strong>דלף</strong> — מספר כרטיס. לכל היותר 4 ספרות אחרונות, ובדרך כלל — מזהה העסקה אצל ספק התשלומים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה רק ב־debug" — רמת debug נדלקת בדיוק ביום של התקלה, והשורות נשמרות חודשים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E36">
+    <h3>P24-E36 · ‏LOG_LEVEL=debug בפרודקשן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תחשוב על כמות: כמה שורות debug יש לכל בקשה? ומי משלם על אחסון הלוגים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הרמה היא משתנה סביבה — משנים ומפעילים מחדש (או, במערכות מסוימות, משנים בזמן ריצה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) כמות: שורת debug לכל שאילתה וערך ביניים — פי עשרה שורות, ושירותי לוגים גובים לפי נפח. (ב) רעש: השורות החשובות (warn, error) נקברות. (ג) סיכון: ב־debug כותבים פרטים — SQL עם ערכים, headers — ויש יותר סיכוי שמשהו רגיש ייכנס. (ד) ביצועים: כתיבה ל־stdout עולה זמן.</li><li>מדליקים debug לזמן קצוב (משנים את המשתנה, מפעילים מחדש או מחכים לפריסה), משחזרים את הבעיה — עם <code>X-Request-Id</code> ידוע כדי למצוא את השורות — ומחזירים ל־info.</li><li><code>debug</code> (כמו בפרויקט). כשהוא <em>נכשל</em> — warn או error, כמו כל בקשה. 17,280 שורות ביום של "הכול בסדר" לא עוזרות לאף אחד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד את כל הלוגים ל־warn כדי לחסוך — ואז אין שורת request ואין דרך לענות על "מה קרה בבקשה הזו".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E37">
+    <h3>P24-E37 · מזהה בקשה מבחוץ — לקבל או להחליף? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>{1,64}</code> — בין 1 ל־64 תווים. רווח ומרכאות לא בקבוצה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מזהה נכתב לכל שורת לוג, ולפעמים גם מוצג למשתמש ("קוד לתמיכה").</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מתקבל.</li><li>מתקבל — נקודה, קו תחתון ומקף בקבוצה.</li><li>מוחלף — רווח. (ב־URL, בקובץ או ב־grep — רווח שובר.)</li><li>מוחלף. לוג שנכתב בשרשור מחרוזות היה מקבל "שורה" מזויפת עם <code>"level":"error"</code>. ‏<code>JSON.stringify</code> היה מגן — אבל לא כל כלי בדרך משתמש בו.</li><li>מוחלף. 5KB בכל שורת לוג של הבקשה — דרך קלה לנפח את הלוגים ואת החשבון.</li><li>מוחלף — <code>{1,64}</code> דורש לפחות תו אחד.</li></ol>
+<p>המזהה של ה־frontend מופיע אצל הלקוח (בהודעת השגיאה, בכלי הפיתוח של הדפדפן). אם ה־API ממשיך אותו — אותו מזהה עובר בכל המערכת, וממה שהלקוח רואה מגיעים ישר לשורות בשרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקבל כל ערך "כי זה רק מזהה" — כל מה שמגיע מהלקוח הוא קלט, וזה קלט שנכתב לכל שורה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P24-E06">
     <h3>P24-E06 · logger של JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -336,7 +425,284 @@ export function logRequest(logger: ReturnType&lt;typeof createLogger&gt;, req: {
 
 </div></details>
   </div>
+<div class="ex" id="P24-E38">
+    <h3>P24-E38 · השוואת רמות לוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אובייקט שממפה רמה למספר: <code class="mid">{ debug: 10, info: 20, warn: 30, error: 40 }</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כדי לבדוק אם מחרוזת היא רמה מוכרת: <code>v in ORDER</code>, או <code>Object.hasOwn(ORDER, v)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E38: השוואת רמות לוג
+export type Level = "debug" | "info" | "warn" | "error";
+
+const ORDER: Record&lt;Level, number&gt; = { debug: 10, info: 20, warn: 30, error: 40 };
+
+export function parseLevel(value: string | undefined): Level {
+  const v = (value ?? "").trim().toLowerCase();
+  return Object.hasOwn(ORDER, v) ? (v as Level) : "info";
+}
+
+export function isEnabled(level: Level, min: Level): boolean {
+  return ORDER[level] &gt;= ORDER[min]; // מספרים — לא מחרוזות
+}
+
+console.log(parseLevel(" WARN "), parseLevel("verbose"), isEnabled("error", "info"), isEnabled("debug", "info"));</code></pre>
+<pre class="terminal">warn info true false</pre>
+<p>‏<code>Object.hasOwn</code> ולא <code>v in ORDER</code>: עם <code>in</code>, הערך <code>"toString"</code> נחשב "קיים" (הוא בא מ־prototype של כל אובייקט).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>level &gt;= min</code> על המחרוזות עצמן — <code>"error" &gt;= "info"</code> הוא <code>false</code> (לפי סדר אלפביתי), ושגיאות לא נכתבות.</li><li>לזרוק שגיאה על ערך לא מוכר — שרת שלא עולה בגלל <code>LOG_LEVEL=verbose</code>. כאן בחרנו ברירת מחדל; בהגדרות (פרק 25) אפשר להחליט אחרת, אבל במודע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E39">
+    <h3>P24-E39 · ‏Error ללוג, בשורה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>e instanceof Error</code>. ואחר כך: <code class="mid">const x = e as Error &amp; { code?: unknown }</code> כדי לקרוא <code>code</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>רקורסיה: <code>serializeError</code> קוראת לעצמה על <code>e.cause</code>, רק אם <code>e.cause !== undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E39: Error ללוג, בשורה אחת
+export function serializeError(e: unknown): Record&lt;string, unknown&gt; {
+  if (e instanceof Error) {
+    const x = e as Error &amp; { code?: unknown };
+    const out: Record&lt;string, unknown&gt; = { name: x.name, message: x.message, stack: x.stack };
+    if (typeof x.code === "string" || typeof x.code === "number") out.code = x.code;
+    if (x.cause !== undefined) out.cause = serializeError(x.cause);
+    return out;
+  }
+  const message = typeof e === "string" ? e : (JSON.stringify(e) ?? String(e));
+  return { name: "NonError", message };
+}
+
+export function errorLine(msg: string, e: unknown, now: Date): string {
+  return JSON.stringify({ time: now.toISOString(), level: "error", msg, err: serializeError(e) });
+}
+
+const err = new Error("save failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+const line = errorLine("db failed", err, new Date("2026-11-07T15:30:00Z"));
+console.log(line.includes("\n"), JSON.parse(line).err.cause.code);
+console.log(serializeError("oops"), serializeError(undefined));</code></pre>
+<pre class="terminal">false ECONNREFUSED
+{ name: 'NonError', message: 'oops' } { name: 'NonError', message: 'undefined' }</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>{ ...err }</code> — אותה בעיה כמו <code>JSON.stringify</code>: ‏<code>message</code> ו־<code>stack</code> לא מועתקים.</li><li>לשכוח את <code>cause</code> — ואז בלוג רואים "save failed" בלי לדעת שהמסד בכלל לא היה זמין.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P24-E40">
+    <h3>P24-E40 · לוג אחד לשגיאה, לא שלושה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה למדד "כמה שגיאות היו היום" כשכל שגיאה נספרת שלוש פעמים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי היחיד שיודע גם את השגיאה, גם את ה־requestId, וגם מה ה־status שחזר ללקוח?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ספירה: "300 שגיאות" כשהיו 100. רעש: שלוש התראות. ובחיפוש — צריך להבין שזה אותו אירוע.</li><li>מי שמטפל בשגיאה בסוף: ה־filter (או ה־error middleware). רק הוא יודע מה הלקוח קיבל (500 או 404), יש לו requestId, והוא רואה כל שגיאה בדיוק פעם אחת.</li><li>עוטף וזורק הלאה, בלי לכתוב: <code class="mid">throw new Error("create task failed", { cause: err })</code>. בשורה האחת שתיכתב יופיעו שתי ההודעות (E39).</li></ol>
+<p>הכלל: "log or throw, not both". שכבה פנימית שמטפלת בשגיאה עד הסוף (למשל מנסה שוב ומצליחה) — היא כן כותבת, כי השגיאה לא תגיע לאף אחד אחר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבלוע את השגיאה ב־catch שכותב ללוג ומחזיר <code>null</code> — הבקשה "מצליחה" עם תוצאה ריקה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E41">
+    <h3>P24-E41 · איך בודקים לוגים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה לבדיקה כשה־logger עובר לכתוב עם <code>process.stdout.write</code> במקום <code>console.log</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בשורת לוג יש <code>time</code> ו־<code>durationMs</code>. הם זהים בכל ריצה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>3. ה־sink הוא ה"תפר" (seam) שהקוד נתן לבדיקה: לא תלוי באיך ה־logger כותב בפועל, לא נוגע בקבצים, ולא משפיע על בדיקות אחרות שרצות במקביל. 1 נשבר כשמשנים את דרך הכתיבה ומתערבב עם לוגים של דברים אחרים; 2 איטי, משאיר קבצים, ו־<code>"error"</code> יכול להופיע גם בהודעה של שורת info.</p>
+<p>ה־assert — על שדות: <code>JSON.parse</code>, ואז <code>level === "error"</code>, ‏<code>requestId</code> שווה ל־header של התשובה, ‏<code class="mid">typeof durationMs === "number"</code>. לא על המחרוזת המלאה: <code>time</code> ו־<code>durationMs</code> משתנים (אלא אם השעון מוזרק), וסדר השדות הוא לא חלק מהחוזה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק "נכתבה שורה" — ואז שורה ברמת info עם requestId שגוי עוברת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E42">
+    <h3>P24-E42 · לוג לקובץ בתוך קונטיינר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>docker logs</code> מציג את מה שהתהליך כתב ל־stdout ול־stderr. לא קבצים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה קורה למערכת הקבצים של קונטיינר כשמוחקים אותו (בלי volume)?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ריק (או רק מה שנכתב ל־stdout). הלוג "מוסתר" בתוך הקונטיינר.</li><li>נמחקו יחד עם הקונטיינר — אין volume.</li><li>הקובץ גדל עד שהדיסק מתמלא, אם אף אחד לא מסובב (rotate) אותו. ואז גם המסד ושאר השירותים נופלים.</li><li>שלושה קבצים בשלושה מקומות. כדי לעקוב אחרי בקשה צריך להיכנס לכולם.</li></ol>
+<p>כותבים ל־stdout, שורת JSON לאירוע. Docker אוסף, וה־platform (פרק 25) שולח לכלי חיפוש אחד לכל העותקים. האפליקציה לא מתעסקת בקבצים בכלל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפתור עם volume ל־<code>/app/logs</code> — הלוג שורד, אבל כל שאר הבעיות (סיבוב, כמה עותקים, חיפוש) נשארות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E43">
+    <h3>P24-E43 · הסיפור של בקשה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר <code>parse(line)</code>:</p>
+<pre><code class="lang-ts">try { const v = JSON.parse(line); return v &amp;&amp; typeof v === "object" &amp;&amp; !Array.isArray(v) ? v : null } catch { return null }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>sort</code> ב־JavaScript יציב — שווים נשארים בסדר המקורי. ‏<code class="mid">String(a.time).localeCompare(...)</code> לא מתאים כאן; השתמש ב־<code>&lt;</code> ו־<code>&gt;</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E43: הסיפור של בקשה אחת
+type Entry = Record&lt;string, unknown&gt;;
+
+function parse(line: string): Entry | null {
+  try {
+    const v: unknown = JSON.parse(line);
+    return v !== null &amp;&amp; typeof v === "object" &amp;&amp; !Array.isArray(v) ? (v as Entry) : null;
+  } catch {
+    return null;
+  }
+}
+
+const entries = (lines: string[]) =&gt; lines.map(parse).filter((e): e is Entry =&gt; e !== null);
+
+export function requestStory(lines: string[], requestId: string) {
+  const events = entries(lines)
+    .filter((e) =&gt; e.requestId === requestId)
+    .sort((a, b) =&gt; (String(a.time) &lt; String(b.time) ? -1 : String(a.time) &gt; String(b.time) ? 1 : 0));
+  const req = events.find((e) =&gt; e.msg === "request");
+  const summary = req ? `${req.method} ${req.path} → ${req.status} (${req.durationMs}ms)` : null;
+  return { events, summary };
+}
+
+export function requestIdsForUser(lines: string[], userId: number): string[] {
+  const ids = new Set&lt;string&gt;();
+  for (const e of entries(lines)) if (e.userId === userId &amp;&amp; typeof e.requestId === "string") ids.add(e.requestId);
+  return [...ids];
+}
+
+const log = [
+  '{"time":"2026-11-07T15:31:02.503Z","level":"error","msg":"request","requestId":"9d1e","userId":3,"method":"GET","path":"/tasks","status":500,"durationMs":3}',
+  "Error: connect ECONNREFUSED",
+  '{"time":"2026-11-07T15:31:02.501Z","level":"error","msg":"connect ECONNREFUSED","requestId":"9d1e"}',
+];
+const story = requestStory(log, "9d1e");
+console.log(story.events.map((e) =&gt; e.msg), story.summary, requestIdsForUser(log, 3));</code></pre>
+<pre class="terminal">[ 'connect ECONNREFUSED', 'request' ] GET /tasks → 500 (3ms) [ '9d1e' ]</pre>
+<p>שורת ה־request נכתבת <em>בסוף</em> הבקשה, אבל השגיאה קרתה באמצע — לכן ממיינים לפי <code>time</code> ולא לפי הסדר בקובץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>JSON.parse("null")</code> מצליח ומחזיר <code>null</code> — ואז <code>e.requestId</code> זורק. בודקים שזה אובייקט.</li><li>להשוות <code>e.userId == userId</code> — אז גם <code>"3"</code> (מחרוזת) נחשב. בלוג תקין userId הוא מספר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E44">
+    <h3>P24-E44 · ‏error handler עם requestId 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Express מזהה error middleware לפי ארבעה פרמטרים — גם אם לא משתמשים ב־<code>next</code>, הוא חייב להיות בחתימה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const e = err as { status?: unknown; message?: unknown }</code>, ואז <code class="mid">typeof e.status === "number"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E44: error handler עם requestId
+import type { NextFunction, Request, Response } from "express";
+
+export type Log = (level: "warn" | "error", msg: string, fields: Record&lt;string, unknown&gt;) =&gt; void;
+
+export function errorHandler(log: Log) {
+  return (err: unknown, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (res.headersSent) return next(err); // אי אפשר לשנות תשובה שכבר יצאה
+    const requestId = res.locals.requestId ?? null;
+    const e = (err ?? {}) as { status?: unknown; message?: unknown; name?: unknown; stack?: unknown };
+    if (typeof e.status === "number" &amp;&amp; e.status &gt;= 400 &amp;&amp; e.status &lt; 500) {
+      log("warn", "client error", { requestId, status: e.status, message: String(e.message) });
+      res.status(e.status).json({ error: { code: "BAD_REQUEST", message: "בקשה לא תקינה", requestId } });
+      return;
+    }
+    log("error", "unhandled error", { requestId, err: { name: e.name, message: e.message, stack: e.stack } });
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה בשרת", requestId } });
+  };
+}</code></pre>
+<p>הלקוח מקבל רק <code>requestId</code> — וזה כל מה שהוא צריך כדי לפנות לתמיכה. כל השאר (ההודעה, ה־stack) נמצא בלוג, תחת אותו מזהה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">res.status(500).json({ error: err.message })</code> — הודעות של המסד ושל ספריות מגיעות ללקוח, לפעמים עם שמות טבלאות וערכים.</li><li>4xx ברמת error — כל JSON שבור של לקוח מעיר מישהו בלילה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E45">
+    <h3>P24-E45 · ‏URL בלי סודות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>new URL(url, "http://x")</code> — בסיס מדומה, כי <code>originalUrl</code> הוא נתיב יחסי. אחר כך <code>u.pathname</code> ו־<code>u.searchParams</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">for (const [k] of u.searchParams)</code> ו־<code class="mid">u.searchParams.set(k, "***")</code> — ‏<code>set</code> שומר על המקום של הפרמטר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E45: URL בלי סודות
+const DEFAULT_SECRETS = ["token", "password", "code", "key", "secret"];
+
+export function safeUrl(url: string, secretParams: string[] = DEFAULT_SECRETS): string {
+  const secret = new Set(secretParams.map((s) =&gt; s.toLowerCase()));
+  const u = new URL(url, "http://x"); // בסיס מדומה — originalUrl הוא נתיב יחסי
+  for (const [k] of [...u.searchParams]) {
+    if (secret.has(k.toLowerCase())) u.searchParams.set(k, "***");
+  }
+  const query = u.searchParams.toString();
+  return query ? `${u.pathname}?${query}` : u.pathname;
+}
+
+console.log(safeUrl("/reset-password?token=8f3kQ1x&amp;lang=he"));
+console.log(safeUrl("/tasks?page=2&amp;API_KEY=abc#top", ["api_key"]));
+console.log(safeUrl("/search?q=a b"), safeUrl("/health"));</code></pre>
+<pre class="terminal">/reset-password?token=***&amp;lang=he
+/tasks?page=2&amp;API_KEY=***
+/search?q=a+b /health</pre>
+<p>‏<code>[...u.searchParams]</code> — עותק, כי משנים את הרשימה תוך כדי מעבר עליה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">url.replace(/token=[^&amp;]*/, ...)</code> — מפספס <code>TOKEN=</code>, תופס גם <code>mytoken=</code>, ושוכח מפרמטר שמופיע פעמיים.</li><li><code>u.searchParams.delete(k)</code> — הסוד נעלם, אבל גם המידע שהיה פרמטר כזה (שימושי לדיבוג).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-time.html"><small>הבא</small>שיעור 2 — זמן, אזורי זמן ושעון קיץ</a></div>
 </main>
 </body>

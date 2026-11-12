@@ -40,6 +40,106 @@
 
 </div></details>
   </div>
+<div class="ex" id="P24-E109">
+    <h3>P24-E109 · ‏counter אחרי restart <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־counter חי בזיכרון של התהליך. מה קורה לזיכרון ב־restart?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>rate()</code> מזהה ירידה ומניח שהמונה התאפס.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>התהליך החדש התחיל מ־0. "רק עולה" — בתוך חיי התהליך.</li><li>150, ‏150, ולפחות 30 (מה שהתהליך הישן הספיק לספור אחרי ה־scrape האחרון — אבד), ו־150.</li><li><code>rate()</code> ו־<code>increase()</code> מזהים ירידה כאיפוס, ומתייחסים לערך החדש כאילו נוסף על הקודם. זה חלק מהחוזה של counter — ולכן חשוב שהסוג יהיה counter ולא gauge.</li><li>(א) הקצב "בדקה האחרונה" נמדד ברגע שהקוד בחר, לא ברגע ה־scrape — ובין שני scrapes אולי פספסת קפיצה. counter + <code>rate()</code> מחשב לכל חלון שתבקש (דקה, 5 דקות, שעה) מאותו מספר. (ב) עם שלושה שרתים, ממוצע של "קצב לדקה" מכל שרת הוא לא הקצב הכולל; סכום של counters — כן.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להציג גרף של הערך הגולמי של counter ("ירד ב־deploy!") במקום <code>rate()</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E110">
+    <h3>P24-E110 · לקרוא histogram <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הדליים מצטברים: כל <code>le</code> כולל את כל מה שלפניו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>p95 של 1000 בקשות = הבקשה ה־950 בסדר מהמהירה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>850.</li><li>960 − 930 = 30.</li><li>1000 − 990 = 10.</li><li><code>142.7 / 1000</code> = ‏0.1427 שניות, כ־143ms.</li><li>הבקשה ה־950 — בדלי שבין 0.25 (930) ל־0.5 (960). ה־990 — בדיוק בגבול של <code>le="1"</code>, כלומר בין 0.5 ל־1. ‏<code>histogram_quantile</code> מעריך בתוך הדלי בקו ישר (E116).</li><li>לא. רק שיש 10 מעל שנייה. בשביל "הבקשה הכי איטית, ומה היא עשתה" — לוגים או traces.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחבר את כל הדליים (600 + 850 + …) — כל בקשה נספרת בכמה דליים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E111">
+    <h3>P24-E111 · לבחור buckets <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"כמה בקשות לקחו 300ms או פחות" — יש דלי עם <code>le="0.3"</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כל bucket הוא סדרה נפרדת — לכל צירוף של labels.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא בדיוק. יש "עד 0.1" ו"עד 0.5" — ‏300ms באמצע. ההערכה של <code>histogram_quantile</code> בתוך דלי רחב יכולה לטעות במאות מילישניות.</li><li>buckets סביב מה שחשוב: <code class="mid">[0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2.5]</code>. עם <code>0.3</code> בדיוק — ‏<code>bucket{le="0.3"} / count</code> הוא "אחוז הבקשות ביעד", בלי הערכה.</li><li>כל bucket הוא סדרה. 50 buckets × 20 routes × 5 methods = ‏5,000 סדרות למדד אחד, בכל שרת. זה cardinality (סעיף 4) — זיכרון ב־Prometheus, וזמן בכל scrape. 8–12 buckets מספיקים כמעט תמיד.</li><li>מוסכמה של Prometheus: יחידות בסיס (שניות, בתים). כל dashboard מוכן מניח את זה — במילישניות הגרפים מראים "p95 = ‏250 שניות".</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק את ברירת המחדל של ספרייה בלי לחשוב — היא נבחרה לשירות כללי, לא ליעד שלך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E112">
+    <h3>P24-E112 · ‏traceparent — מה ממשיכים, מה מחליפים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־traceId זהה לכל אורך הבקשה. ה־parent-id בהודעה הוא תמיד ה־span של מי ש<em>שלח</em> אותה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הביט הנמוך של הדגלים = sampled.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏traceId: <code class="mid">4bf92f3577b34da6a3ce929d0e0e4736</code>. ההורה: <code>00f067aa0ba902b7</code> — ה־span של מי שקרא לך.</li><li><code class="mid">00-4bf92f3577b34da6a3ce929d0e0e4736-b7ad6b7169203331-01</code>. אותו trace, וה־span <em>שלך</em> כהורה של מה שיקרה ב־payments.</li><li>מתעלמים ממנו ומתחילים trace חדש (בלי הורה). התקן אוסר מזהים של אפסים, ו־header שבור לא אמור להפיל בקשה (E29).</li><li>"לא נדגם" — השולח החליט לא לשמור את ה־trace הזה. ממשיכים את ההחלטה הלאה (שולחים <code>-00</code>), כדי שלא יישמרו חצאי traces.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר הלאה את ה־<code>traceparent</code> שהגיע כמו שהוא — אז payments "תלוי" על ההורה שלך במקום עליך, והעץ ב־Jaeger/Tempo יוצא שטוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E113">
+    <h3>P24-E113 · התראה על סימפטום, או על סיבה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה לכל אחת: האם משתמש מרגיש את זה עכשיו — או יבוא מצב שירגיש בקרוב, בלי שמישהו יפעל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"שקט" יכול להיות סימפטום.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>טובה — משתמשים מקבלים שגיאות.</li><li>לא כדאית. CPU גבוה כשהכול מהיר זה ניצול טוב של שרת. אם זה פוגע — 1 או 3 יתריעו.</li><li>טובה — זה מה שהמשתמש מרגיש, על הפעולה הכי חשובה.</li><li>warning לכל היותר. orchestrator מפעיל מחדש בשביל זה. אם זה קורה כל 5 דקות — אז כן.</li><li>טובה, למרות שזו "סיבה": אין עוד סימפטום, אבל בעוד 4 שעות יהיה, ואי אפשר לתקן את זה ברגע האחרון. (התראה צופה פני עתיד — לא על "90% מלא", אלא על "יתמלא עד".)</li><li>טובה — ושוכחים אותה לעתים קרובות. שירות שנפל לגמרי לא מייצר שגיאות 5xx; הוא פשוט שקט.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>עשרות התראות על כל מדד — אחרי שבוע אף אחד לא מסתכל, וגם ההתראה האמיתית נבלעת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P24-E27">
     <h3>P24-E27 · registry של מדדים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -394,82 +494,244 @@ skipped: 2</pre>
 
 </div></details>
   </div>
-<div class="ex typed" id="P24-E33">
-    <h3>P24-E33 · התראה על שיעור שגיאות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+<div class="ex" id="P24-E114">
+    <h3>P24-E114 · סיכום latency 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>שדה <code class="mid">#events: { at: number; error: boolean }[]</code>. הבקשות נכנסות לפי סדר הזמן, ולכן הישנות תמיד בהתחלה: <code class="long">while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();</code>.</p>
+<p><code class="mid">[...ms].sort((a, b) =&gt; a - b)</code> — עותק, ומיון מספרי.</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>קרא ל־<code>#prune()</code> בתחילת שני ה־getters. ‏<code>shouldAlert</code> משתמש בהם: <code class="mid">this.count &gt;= ... &amp;&amp; this.errorRate &gt;= ...</code>. לבדיקת <code>threshold</code>: ‏<code>!(t &gt; 0 &amp;&amp; t &lt;= 1)</code> תופס גם <code>NaN</code>, ו־<code>t &lt;= 0 || t &gt; 1</code> לא.</p>
+<p><code>Math.round(x * 10) / 10</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P24-E33 — התראה על שיעור שגיאות בחלון זמן
-type Options = { windowMs: number; threshold: number; minRequests: number };
-
-export class ErrorRateAlarm {
-  #events: { at: number; error: boolean }[] = [];
-  #options: Options;
-  #now: () =&gt; number;
-
-  constructor(options: Options, now: () =&gt; number = () =&gt; Date.now()) {
-    if (!(options.threshold &gt; 0 &amp;&amp; options.threshold &lt;= 1)) throw new RangeError("threshold חייב להיות בין 0 ל־1");
-    this.#options = options;
-    this.#now = now;
-  }
-
-  #prune(): void {
-    const from = this.#now() - this.#options.windowMs;
-    while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();
-  }
-
-  record(status: number): void {
-    this.#events.push({ at: this.#now(), error: status &gt;= 500 });
-  }
-
-  get count(): number {
-    this.#prune();
-    return this.#events.length;
-  }
-
-  get errorRate(): number {
-    this.#prune();
-    if (this.#events.length === 0) return 0;
-    const errors = this.#events.filter((e) =&gt; e.error).length;
-    return errors / this.#events.length;
-  }
-
-  shouldAlert(): boolean {
-    return this.count &gt;= this.#options.minRequests &amp;&amp; this.errorRate &gt;= this.#options.threshold;
-  }
+<pre><code class="lang-ts">// P24-E114: סיכום latency
+export function percentile(sortedMs: number[], p: number): number {
+  if (!(p &gt; 0 &amp;&amp; p &lt;= 100) || sortedMs.length === 0) throw new RangeError(`אחוזון לא תקין: ${p}`);
+  return sortedMs[Math.ceil((p / 100) * sortedMs.length) - 1];
 }
 
-let now = 0;
-const alarm = new ErrorRateAlarm({ windowMs: 60_000, threshold: 0.1, minRequests: 20 }, () =&gt; now);
-for (let i = 0; i &lt; 18; i++) alarm.record(200);
-alarm.record(500);
-alarm.record(503);
-console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
-now = 30_000;
-alarm.record(200);
-console.log(alarm.count, alarm.errorRate.toFixed(3), alarm.shouldAlert());
-now = 60_000;
-console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());</code></pre>
-<pre class="terminal">20 0.1 true
-21 0.095 false
-1 0 false</pre>
-<p>שורה 1: עשרים בקשות, שתיים מהן שגיאות. 10% בדיוק, ויש התראה. שורה 2: בקשה תקינה נוספת מורידה את השיעור ל־9.5%. שורה 3: אחרי דקה כל עשרים הבקשות הראשונות יוצאות מהחלון, ונשארה רק אחת. ‏<code>minRequests</code> מונע התראה על בקשה אחת.</p>
-<p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code class="mid">rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
+export function latencySummary(ms: number[]) {
+  if (ms.length === 0) return null;
+  const sorted = [...ms].sort((a, b) =&gt; a - b);
+  const avg = sorted.reduce((a, b) =&gt; a + b, 0) / sorted.length;
+  return {
+    count: sorted.length,
+    avg: Math.round(avg * 10) / 10,
+    p50: percentile(sorted, 50),
+    p95: percentile(sorted, 95),
+    p99: percentile(sorted, 99),
+    max: sorted[sorted.length - 1],
+  };
+}
+
+const ms = [...Array.from({ length: 94 }, (_, i) =&gt; 30 + ((i * 7) % 20)), 1500, 1700, 1900, 2100, 2300, 2500];
+console.log(latencySummary(ms));</code></pre>
+<pre class="terminal">{ count: 100, avg: 157, p50: 40, p95: 1500, p99: 2300, max: 2500 }</pre>
+<p>אותם מספרים כמו בשיעור — והפעם גם <code>max</code>: בקשה אחת של 2.5 שניות, שאף ממוצע לא מראה.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
+<ul><li><code>!(p &gt; 0 &amp;&amp; p &lt;= 100)</code> ולא <code>p &lt;= 0 || p &gt; 100</code> — כדי ש־<code>NaN</code> גם ייכשל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E115">
+    <h3>P24-E115 · לקרוא את /metrics 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שם בעזרת regex בתחילת השורה. אחר כך, אם התו הבא הוא <code>{</code> — לולאה על התווים: שם label עד <code>=</code>, מרכאות, ואז תו־תו עד מרכאה שלא באה אחרי <code>\</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ה־<code>}</code>: ‏<code>rest.trim().split(/\s+/)</code> — הראשון הוא הערך. ‏<code>Number("+Inf")</code> הוא <code>NaN</code>, אז צריך טיפול מיוחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E115: לקרוא את /metrics
+export type Sample = { name: string; labels: Record&lt;string, string&gt;; value: number };
+
+function parseValue(s: string | undefined): number {
+  if (s === "+Inf") return Infinity;
+  if (s === "-Inf") return -Infinity;
+  if (s === "NaN") return NaN;
+  if (s === undefined || !/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) throw new Error(`ערך לא תקין: ${s}`);
+  return Number(s);
+}
+
+function parseLine(line: string): Sample {
+  const m = /^([a-zA-Z_:][a-zA-Z0-9_:]*)/.exec(line);
+  if (!m) throw new Error("שם לא תקין");
+  const name = m[1];
+  let i = name.length;
+  const labels: Record&lt;string, string&gt; = {};
+  if (line[i] === "{") {
+    i++;
+    while (line[i] !== "}") {
+      const lm = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)="/.exec(line.slice(i));
+      if (!lm) throw new Error("label לא תקין");
+      i += lm[0].length;
+      let value = "";
+      while (line[i] !== '"') {
+        if (i &gt;= line.length) throw new Error("מרכאות לא נסגרו");
+        if (line[i] === "\\") {
+          const next = line[i + 1];
+          value += next === "n" ? "\n" : next;
+          i += 2;
+        } else value += line[i++];
+      }
+      labels[lm[1]] = value;
+      i++; // המרכאה הסוגרת
+      if (line[i] === ",") i++;
+      else if (line[i] !== "}") throw new Error("חסר , או }");
+    }
+    i++; // ה־}
+  }
+  const [value] = line.slice(i).trim().split(/\s+/);
+  return { name, labels, value: parseValue(value) };
+}
+
+export function parseMetrics(text: string): Sample[] {
+  const samples: Sample[] = [];
+  text.split("\n").forEach((raw, idx) =&gt; {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) return;
+    try {
+      samples.push(parseLine(line));
+    } catch (err) {
+      throw new SyntaxError(`שורה ${idx + 1}: ${(err as Error).message}`);
+    }
+  });
+  return samples;
+}
+
+export function total(samples: Sample[], name: string, match: Record&lt;string, string&gt; = {}): number {
+  return samples
+    .filter((s) =&gt; s.name === name &amp;&amp; Object.entries(match).every(([k, v]) =&gt; s.labels[k] === v))
+    .reduce((sum, s) =&gt; sum + s.value, 0);
+}
+
+const text = `# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/tasks/:id",status="200"} 2
+http_requests_total{method="POST",route="/tasks",status="201"} 1
+http_requests_total{method="GET",route="/tasks/:id",status="404"} 3 1731000000000`;
+const s = parseMetrics(text);
+console.log(s.length, total(s, "http_requests_total"), total(s, "http_requests_total", { method: "GET" }));</code></pre>
+<pre class="terminal">3 6 5</pre>
+<p>למה לא <code>split(",")</code> על ה־labels? כי ערך של label יכול להכיל פסיק (‏<code>path="/a,b"</code>) ו־<code>}</code>. מעבר תו־תו הוא הדרך היחידה לקרוא נכון ערכים עם escaping.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number("+Inf")</code> — ‏<code>NaN</code>. וכל דלי של <code>+Inf</code> הופך ל"לא מספר".</li><li>regex אחד לכל השורה — נשבר על <code>\"</code> בתוך ערך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E116">
+    <h3>P24-E116 · ‏histogram_quantile ביד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const i = buckets.findIndex((b) =&gt; b.count &gt;= rank)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">lower + (upper - lower) * (rank - prevCount) / (count - prevCount)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E116: histogram_quantile ביד
+export function quantileFromBuckets(buckets: { le: number; count: number }[], q: number): number {
+  if (!(q &gt;= 0 &amp;&amp; q &lt;= 1)) throw new RangeError(`q לא תקין: ${q}`);
+  const total = buckets.at(-1)?.count ?? 0;
+  if (total === 0) return NaN;
+  const rank = q * total;
+  const i = buckets.findIndex((b) =&gt; b.count &gt;= rank);
+  const b = buckets[i];
+  if (b.le === Infinity) return buckets[i - 1]?.le ?? NaN; // אין גבול עליון — הכי טוב שאפשר לומר
+  const lower = i === 0 ? 0 : buckets[i - 1].le;
+  const prevCount = i === 0 ? 0 : buckets[i - 1].count;
+  if (b.count === prevCount) return lower;
+  return lower + ((b.le - lower) * (rank - prevCount)) / (b.count - prevCount);
+}
+
+const buckets = [
+  { le: 0.05, count: 600 }, { le: 0.1, count: 850 }, { le: 0.25, count: 930 },
+  { le: 0.5, count: 960 }, { le: 1, count: 990 }, { le: Infinity, count: 1000 },
+];
+for (const q of [0.5, 0.95, 0.99, 0.999]) console.log(q, quantileFromBuckets(buckets, q).toFixed(4));</code></pre>
+<pre class="terminal">0.5 0.0417
+0.95 0.4167
+0.99 1.0000
+0.999 1.0000</pre>
+<p>ה־p95 "יצא" 0.4167 — אבל זה רק ניחוש בתוך הדלי 0.25–0.5: ההנחה היא שהבקשות מפוזרות בו שווה בשווה. כאן רואים למה בחירת buckets חשובה (E111). וב־p99.9 התשובה היא פשוט "1" — יותר מזה ה־histogram לא יודע.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח שהדליים מצטברים, ולחפש "באיזה דלי יש הכי הרבה".</li></ul>
 
 
 </div></details>
   </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P24-E117">
+    <h3>P24-E117 · ‏requestId או traceId? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי מייצר כל אחד, ומה הוא "מכסה"?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם orders מעביר הלאה גם <code>X-Request-Id</code> — מה ההבדל שנשאר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>requestId — מזהה של בקשה ב<em>שירות</em> (ובדרך כלל גם מוחזר ללקוח). traceId — של כל ה"סיפור": זהה ב־orders וב־payments. כל שירות יכול לייצר requestId משלו; ה־traceId עובר בכל הדרך.</li><li>אחד מהם, בעקביות. נפוץ: requestId, שמגיע ב־header ומוכר לתמיכה. אבל אם כל השורות כוללות גם traceId — הקפיצה ביניהם היא חיפוש אחד.</li><li>בפרויקט עם שירות אחד — requestId מספיק. במערכת עם כמה שירותים — traceId הוא מה שמחבר. יש מערכות שפשוט משתמשות ב־traceId גם כ־requestId.</li><li><code>traceId</code> (ובדרך כלל גם <code>spanId</code>) בכל שורה — מה־AsyncLocalStorage, כמו ה־requestId. ‏Grafana (ודומיו) יודעים לחפש את השורות לפי ה־traceId של ה־trace.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לייצר traceId חדש בכל שירות "כי כך נוח" — ואז אין trace אחד, יש חמישה קטנים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E118">
+    <h3>P24-E118 · מדדים כשיש שלושה עותקים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל scrape דרך ה־LB מגיע לעותק אחר, אקראי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Prometheus מוסיף לכל סדרה label בשם <code>instance</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>רק את הבקשות שהגיעו אליו. אין מונה משותף.</li><li>מספר שקופץ: 4,000, ‏3,800, ‏4,100… — בכל scrape עותק אחר. ‏<code>rate()</code> רואה "ירידות" ומפרש אותן כ־restart, והגרף חסר משמעות.</li><li>Prometheus קורא כל עותק <strong>ישירות</strong> — ברשימה, או ב־service discovery (Docker, Kubernetes, הענן). כל עותק הוא <code>instance</code> אחר.</li><li><code class="mid">sum(rate(http_requests_total[5m]))</code> — קודם קצב לכל עותק, ואז סכום. (ולפי route: <code>sum by (route) (...)</code>.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>rate(sum(...))</code> — סכום ואז קצב. כשעותק אחד עושה restart, הסכום יורד, ו־rate מפרש את זה כאיפוס של הכול.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E119">
+    <h3>P24-E119 · ‏/metrics פתוח לכל העולם <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏routes, גרסאות, קצב בקשות, שיעור שגיאות — מה כל אחד מספר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי צריך לקרוא את <code>/metrics</code>? משתמש, או Prometheus?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>את כל ה־routes (כולל פנימיים, כמו <code>/admin/...</code>), גרסאות של Node וספריות (מ־default metrics) — שמהן מחפשים פגיעויות ידועות, כמה תעבורה יש ומתי השרת הכי עמוס (מתי לתקוף), ואיפה יש שגיאות.</li><li>Prometheus הוא לא משתמש עם JWT. וגם: אם ה־guard נכשל, אתה מאבד את הניטור בדיוק כשצריך אותו.</li><li>(א) לחשוף את <code>/metrics</code> על port פנימי נפרד (למשל 9464), שלא עובר דרך ה־load balancer הציבורי — רק ברשת הפנימית. (ב) לחסום בנתיב ב־proxy (‏<code class="mid">location /metrics { deny all; }</code>) ולתת ל־Prometheus לקרוא ישירות. (ג) אם חייבים דרך האינטרנט — basic auth או טוקן קבוע ש־Prometheus שולח.</li><li>זה כבר דלף של מידע אישי (וגם בעיית cardinality). מוחקים את ה־label, ומוחקים את הסדרות מ־Prometheus — הן נשמרות שם לפי ה־retention.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה רק מספרים" — מספרים עם labels הם מפה של המערכת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P24-E24">
     <h3>P24-E24 · אתגר: API של הזמנות, מוכן לפרודקשן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -593,6 +855,128 @@ export function createApp({ clock = () =&gt; new Date(), logSink = (l) =&gt; pro
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>שגיאה אחת שנכתבת ביד (<code class="mid">res.status(400).json({ error: "..." })</code>) בלי requestId — ודווקא היא זו שהלקוח יתקשר לתמיכה בגללה.</li><li>הגבלת קצב לפני או אחרי idempotency? כאן לפני — כל POST נספר, גם replay. ההפך (replay לא נספר) ידידותי יותר ללקוח ששולח שוב אחרי timeout. שתיהן לגיטימיות; העיקר לבחור במודע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P24-E33">
+    <h3>P24-E33 · התראה על שיעור שגיאות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה <code class="mid">#events: { at: number; error: boolean }[]</code>. הבקשות נכנסות לפי סדר הזמן, ולכן הישנות תמיד בהתחלה: <code class="long">while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קרא ל־<code>#prune()</code> בתחילת שני ה־getters. ‏<code>shouldAlert</code> משתמש בהם: <code class="mid">this.count &gt;= ... &amp;&amp; this.errorRate &gt;= ...</code>. לבדיקת <code>threshold</code>: ‏<code>!(t &gt; 0 &amp;&amp; t &lt;= 1)</code> תופס גם <code>NaN</code>, ו־<code>t &lt;= 0 || t &gt; 1</code> לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E33 — התראה על שיעור שגיאות בחלון זמן
+type Options = { windowMs: number; threshold: number; minRequests: number };
+
+export class ErrorRateAlarm {
+  #events: { at: number; error: boolean }[] = [];
+  #options: Options;
+  #now: () =&gt; number;
+
+  constructor(options: Options, now: () =&gt; number = () =&gt; Date.now()) {
+    if (!(options.threshold &gt; 0 &amp;&amp; options.threshold &lt;= 1)) throw new RangeError("threshold חייב להיות בין 0 ל־1");
+    this.#options = options;
+    this.#now = now;
+  }
+
+  #prune(): void {
+    const from = this.#now() - this.#options.windowMs;
+    while (this.#events.length &gt; 0 &amp;&amp; this.#events[0].at &lt;= from) this.#events.shift();
+  }
+
+  record(status: number): void {
+    this.#events.push({ at: this.#now(), error: status &gt;= 500 });
+  }
+
+  get count(): number {
+    this.#prune();
+    return this.#events.length;
+  }
+
+  get errorRate(): number {
+    this.#prune();
+    if (this.#events.length === 0) return 0;
+    const errors = this.#events.filter((e) =&gt; e.error).length;
+    return errors / this.#events.length;
+  }
+
+  shouldAlert(): boolean {
+    return this.count &gt;= this.#options.minRequests &amp;&amp; this.errorRate &gt;= this.#options.threshold;
+  }
+}
+
+let now = 0;
+const alarm = new ErrorRateAlarm({ windowMs: 60_000, threshold: 0.1, minRequests: 20 }, () =&gt; now);
+for (let i = 0; i &lt; 18; i++) alarm.record(200);
+alarm.record(500);
+alarm.record(503);
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
+now = 30_000;
+alarm.record(200);
+console.log(alarm.count, alarm.errorRate.toFixed(3), alarm.shouldAlert());
+now = 60_000;
+console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());</code></pre>
+<pre class="terminal">20 0.1 true
+21 0.095 false
+1 0 false</pre>
+<p>שורה 1: עשרים בקשות, שתיים מהן שגיאות. 10% בדיוק, ויש התראה. שורה 2: בקשה תקינה נוספת מורידה את השיעור ל־9.5%. שורה 3: אחרי דקה כל עשרים הבקשות הראשונות יוצאות מהחלון, ונשארה רק אחת. ‏<code>minRequests</code> מונע התראה על בקשה אחת.</p>
+<p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code class="mid">rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E120">
+    <h3>P24-E120 · ‏span לכל פעולה, עם AsyncLocalStorage 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const als = new AsyncLocalStorage&lt;{ traceId: string; spanId: string }&gt;()</code></pre>
+<p>בתוך <code>createTracer</code>, ו־<code>als.run(span, fn)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">try { return await als.run(...) } catch (e) { error = true; throw e } finally { onSpan(...) }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E120: span לכל פעולה, עם AsyncLocalStorage
+import { AsyncLocalStorage } from "node:async_hooks";
+
+export type Span = { traceId: string; spanId: string; parentSpanId: string | null; name: string; durationMs: number; error: boolean };
+
+export function createTracer({ onSpan, now, randomHex }: { onSpan: (s: Span) =&gt; void; now: () =&gt; number; randomHex: (bytes: number) =&gt; string }) {
+  const als = new AsyncLocalStorage&lt;{ traceId: string; spanId: string }&gt;();
+  return {
+    async withSpan&lt;T&gt;(name: string, fn: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+      const parent = als.getStore();
+      const traceId = parent?.traceId ?? randomHex(16);
+      const spanId = randomHex(8);
+      const start = now();
+      let error = false;
+      try {
+        return await als.run({ traceId, spanId }, fn); // כל מה שבתוך fn רואה את ה־span הזה כנוכחי
+      } catch (err) {
+        error = true;
+        throw err;
+      } finally {
+        onSpan({ traceId, spanId, parentSpanId: parent?.spanId ?? null, name, durationMs: now() - start, error });
+      }
+    },
+    currentTraceId: () =&gt; als.getStore()?.traceId,
+  };
+}</code></pre>
+<p>שימוש: <code class="mid">tracer.withSpan("db: SELECT tasks", () =&gt; pool.query(...))</code>. זה בדיוק מה ש־OpenTelemetry עושה אוטומטית ל־pg ול־fetch (סעיף 6) — וגם הוא שומר את ה־span הנוכחי ב־AsyncLocalStorage.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>משתנה <code>let current</code> במקום AsyncLocalStorage — שני spans במקביל "דורסים" זה את זה, וילדים נתלים על ההורה הלא נכון.</li><li><code>onSpan</code> רק בהצלחה — ואז דווקא הפעולות שנכשלו לא מופיעות ב־trace.</li></ul>
 
 
 </div></details>

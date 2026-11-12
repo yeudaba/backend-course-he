@@ -1021,6 +1021,7 @@ export function rateLimit({ limit, windowMs, now = () => Date.now() }: { limit: 
 @task
 <p>בקובץ <code>P24-E24.ts</code> כתוב <code>createApp({ clock, logSink, rateLimitPerMinute = 5 })</code> — Express, בזיכרון:</p>
 <ul><li><strong>X-Request-Id</strong> כמו ב־E08, ו<strong>שורת לוג JSON</strong> לכל בקשה דרך <code>logSink</code>: <code>time</code> (מה־clock), <code>level</code> לפי status, <code>msg: "request"</code>, <code>requestId</code>, <code>userId</code> (אם יש), <code>method</code>, <code>path</code> בלי query, <code>status</code>, <code>durationMs</code>.</li><li><strong>שגיאות</strong>: תמיד <code>{ error: { code, message, requestId } }</code> — אותו requestId כמו ב־header.</li><li><code>GET /health</code> ← 200 תמיד. <code>GET /ready</code> ← 200, או 503 <code>DRAINING</code> כש־<code>app.locals.draining</code>.</li><li>"אימות": header <code>x-user-id</code>, חובה ב־<code>/orders</code> (אחרת 401 <code>UNAUTHORIZED</code>).</li><li><code>GET /orders</code> ← ההזמנות של המשתמש.</li><li><code>POST /orders</code> <code>{ item, quantity }</code> (item לא ריק, מקוצץ; quantity שלם 1–100; אחרת 400 <code>VALIDATION_ERROR</code>) ← 201 + Location, <code>{ id, userId, item, quantity, createdAt }</code>.<ul><li><strong>Idempotency-Key חובה</strong> (400 <code>IDEMPOTENCY_KEY_REQUIRED</code>); replay עם <code>Idempotent-Replayed</code>; גוף אחר ← 422 <code>IDEMPOTENCY_KEY_REUSED</code>; בקשה לא תקינה לא "תופסת" את המפתח.</li><li><strong>הגבלת קצב</strong> לכל משתמש: <code>rateLimitPerMinute</code> ב־60 שניות ← 429 <code>TOO_MANY_REQUESTS</code> עם Retry-After.</li></ul></li><li>404 <code>NOT_FOUND</code>, JSON שבור ← 400 <code>INVALID_JSON</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> Express ו־middleware מפרק 15, ‏status codes מפרק 14 — וכל שיעורי הפרק יחד: request ID ולוגים, Idempotency-Key, הגבלת קצב ו־/ready בזמן כיבוי.</p>
 @hint1
 <p>סדר ה־middleware: request id ולוג ← <code>express.json()</code> ← routes (עם auth ← limit ← handler) ← 404 ← error handler. ה־middleware הראשון חייב להיות לפני <code>express.json()</code> — אחרת JSON שבור לא יקבל requestId.</p>
 @hint2
@@ -1592,11 +1593,14 @@ skipped: 2
 <ul><li>ממוצע במקום אחוזון — בקשה אחת של 340ms "נבלעת" בממוצע, ובדיוק היא זו שהמשתמש מרגיש.</li><li><code>.sort()</code> בלי פונקציית השוואה — <code>[100, 9, 12]</code> נשאר בסדר הזה.</li><li><code>Math.round(0.95 * n)</code> במקום <code>Math.ceil(...) - 1</code> — עם 2 ערכים זה האינדקס 2, שלא קיים, וה־p95 יוצא <code>undefined</code>.</li><li><code>/\d+/g</code> בלי עוגנים — <code>/v2/users</code> הופך ל־<code>/v:id/users</code>.</li></ul>
 
 @@ P24-E32 | 3 | בדיקות ל־Retry-After 🤖 | 25 | שיעור 4
+@lesson 4
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על כתיבת בדיקות (פרק 22): <code>node:test</code>, ‏<code>assert</code>, גבולות, טבלת מקרים, ושעון שמוזרק כפרמטר.</strong> כששרת מחזיר 429 (שיעור 4) או 503, הוא שולח <code>Retry-After</code>: מספר שניות (<code>120</code>), או תאריך HTTP (<code>Wed, 21 Oct 2026 07:28:00 GMT</code>). ב־<code>24-production/starter/P24-E32.ts</code> יש <code>parseRetryAfter(value, now)</code>, שמחזירה כמה מילישניות לחכות:</p>
 <ul><li>ספרות בלבד (אפשר רווחים מסביב) ← שניות × 1000. גם <code>"0"</code> תקין.</li><li>תאריך HTTP ← הזמן עד אליו, לפי <code>now</code>. תאריך שכבר עבר ← <code>0</code>.</li><li><code>undefined</code>, או כל דבר אחר (<code>""</code>, ‏<code>"-5"</code>, ‏<code>"1.5"</code>, ‏<code>"5s"</code>, ‏<code>"2026-10-21"</code>) ← <code>null</code>.</li></ul>
 <p>כתוב בדיקות ב־<code>P24-E32.spec.ts</code>, מקובץ ריק (גם ה־imports). הבודק מריץ אותן על הקוד התקין, על שני מימושים תקינים אחרים, ועל 9 גרסאות עם באג. כל באג צריך לגרום לפחות לבדיקה אחת להיכשל. את <code>P24-E32.ts</code> עצמו לא משנים.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> בדיקות עם <code>node:test</code>, טבלת מקרים וגבולות מפרק 22 — והשיעור: ‏<code>Retry-After</code> בתשובת 429.</p>
 ```term
 % node --test 24-production/starter/P24-E32.spec.ts
 % npm run check P24-E32
@@ -1642,10 +1646,13 @@ test("אין header, או header לא תקין ← null", () => {
 <ul><li>לבדוק רק את הדוגמה מהמשימה (<code>"120"</code>) — רוב הבאגים כאן הם בקלט הלא תקין ובגבולות.</li><li><code>assert.ok(parseRetryAfter("abc") == null)</code> — עובר גם על <code>undefined</code>. ‏<code>assert.equal(..., null)</code> מדויק.</li><li>להשוות תאריכים בלי <code>now</code> קבוע — הבדיקה עוברת היום ונכשלת מחר.</li></ul>
 
 @@ P24-E33 | 2 | התראה על שיעור שגיאות 🤖 | 20 | שיעור 6
+@lesson 6
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על <code>class</code> עם שדות ומתודות פרטיים ו־getter (פרק 12), לולאת <code>while</code> (פרק 4) ושעון מוזרק (‏P21-E28)</strong>. התראה "יותר מ־10% שגיאות" צריכה חלון זמן ומינימום בקשות: שתי שגיאות מתוך שלוש בקשות בלילה הן לא תקלה. כתוב וייצא <code>class ErrorRateAlarm</code>:</p>
 <ul><li><code>constructor({ windowMs, threshold, minRequests }, now = () =&gt; Date.now())</code>. ‏<code>threshold</code> הוא שבר: גדול מ־0 ועד 1 כולל. אחרת ← <code>RangeError</code>.</li><li><code>record(status)</code> — רושם בקשה בזמן <code>now()</code>. שגיאה = <code>status &gt;= 500</code>.</li><li>getter ‏<code>count</code> ו־getter ‏<code>errorRate</code> (‏0 כשאין בקשות) — רק על בקשות מהחלון: זמן גדול מ־<code>now() - windowMs</code>. בקשה בדיוק בגבול כבר לא בחלון.</li><li><code>shouldAlert()</code> — ‏<code>count &gt;= minRequests</code> וגם <code>errorRate &gt;= threshold</code>.</li><li>בקשות ישנות נמחקות מהזיכרון (לא רק לא נספרות), במתודה פרטית <code>#prune()</code> עם <code>while</code>. כל השדות פרטיים.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>class</code> עם שדות פרטיים ו־getter מפרק 12 ושעון מוזרק מפרק 21 — והשיעור: התראה על סימפטום (שיעור שגיאות) ולא על סיבה.</p>
 <p>📄 כותבים בקובץ <code>24-production/starter/P24-E33.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 ```term
 % node 24-production/starter/P24-E33.ts
@@ -1718,3 +1725,3078 @@ console.log(alarm.count, alarm.errorRate, alarm.shouldAlert());
 <p>זה מה ש־Prometheus עושה בכלל של התראה: ‏<code>rate(errors[1m]) / rate(requests[1m]) &gt; 0.1</code>, עם תנאי על הנפח. ההבדל: שם החלון מחושב ממונים (שיעור 6), וכאן שומרים כל בקשה. כך אפשר לראות את הלוגיקה, אבל בשרת עמוס מערך כזה גדל מהר. לכן ‏<code>#prune</code> מוחק, ולא רק מסנן.</p>
 @mistakes
 <ul><li><code>filter</code> על כל המערך בכל קריאה במקום מחיקה — נכון בתוצאה, אבל הזיכרון גדל עם כל בקשה לנצח.</li><li><code>at &lt; from</code> במקום <code>&lt;=</code> — בקשה בדיוק לפני דקה עדיין נספרת.</li><li>חלוקה באפס כשאין בקשות — <code>errorRate</code> יוצא <code>NaN</code>, ו־<code>NaN &gt;= 0.1</code> הוא <code>false</code> בשקט.</li><li><code>count()</code> כמתודה במקום <code>get count()</code>.</li></ul>
+
+@@ P24-E34 | 2 | שגיאה עם stack — מה מגיע ללוג? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>בתוך <code>catch (err)</code> אפשר לכתוב את השגיאה בכמה דרכים:</p>
+```ts
+console.error(err);                                                   // א
+logger.error("db failed", { err });                                   // ב
+logger.error("db failed", { error: String(err) });                   // ג
+logger.error("db failed", { error: err.message, stack: err.stack });  // ד
+```
+<p>ה־logger כותב <code>JSON.stringify</code> של השדות, ומערכת הלוגים קוראת "שורה = אירוע". (1) מה מגיע ללוג בכל אחת? (2) באיזו מהן יש stack, ובאיזו הוא שובר את "שורה אחת לאירוע"? (3) איזו היית בוחר?</p>
+@hint1
+<p>‏<code>JSON.stringify</code> מעתיק רק שדות "רגילים" של אובייקט. ‏<code>message</code> ו־<code>stack</code> של Error הם לא כאלה.</p>
+@hint2
+<p>ב־<code>err.stack</code> יש ירידות שורה. מה <code>JSON.stringify</code> עושה עם ירידת שורה בתוך מחרוזת?</p>
+@solution
+```js run
+const err = new Error("connect ECONNREFUSED");
+console.log(JSON.stringify({ msg: "db failed", err }));
+console.log(JSON.stringify({ msg: "db failed", error: String(err) }));
+const line = JSON.stringify({ msg: "db failed", error: err.message, stack: err.stack });
+console.log("ירידת שורה ב־stack:", err.stack.includes("\n"), "· בשורת ה־JSON:", line.includes("\n"));
+```
+```out
+{"msg":"db failed","err":{}}
+{"msg":"db failed","error":"Error: connect ECONNREFUSED"}
+ירידת שורה ב־stack: true · בשורת ה־JSON: false
+```
+<ul><li>א — טקסט חופשי, בכמה שורות (שורה לכל frame ב־stack). מערכת הלוגים רואה עשר "אירועים" בלי requestId ובלי רמה.</li><li>ב — <code>{"err":{}}</code>. השגיאה נעלמה לגמרי: <code>message</code> ו־<code>stack</code> לא נספרים ב־<code>JSON.stringify</code>.</li><li>ג — ההודעה בלבד. בלי stack לא יודעים באיזו שורה בקוד זה קרה.</li><li>ד — הכול, בשורה אחת: <code>JSON.stringify</code> הופך ירידת שורה ל־<code>\n</code> (שני תווים). זו הבחירה — או פונקציה שעושה את זה בשבילך (E39).</li></ul>
+@mistakes
+<ul><li>לראות <code>"err":{}</code> בלוג ולחשוב "לא הייתה שגיאה".</li><li>לכתוב את ה־stack לתשובת ה־HTTP "בשביל הדיבוג" — הלקוח רואה נתיבים, גרסאות וקוד.</li></ul>
+
+@@ P24-E35 | 1 | מה דלף כאן? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>חמש שורות מלוג של פרודקשן. באילו יש מידע שאסור שיהיה שם, ומה היית משנה בקוד שכתב כל אחת?</p>
+```text
+{"level":"info","msg":"request","method":"GET","path":"/reset-password?token=8f3kQ1x","status":200}
+{"level":"warn","msg":"register failed","body":{"email":"dana@example.com","password":"Sunflower!7"}}
+{"level":"info","msg":"request","method":"GET","path":"/tasks","status":200,"userId":17}
+{"level":"debug","msg":"outgoing call","headers":{"authorization":"Bearer eyJhbGciOi..."}}
+{"level":"error","msg":"payment failed","card":"4580123412341234","requestId":"a1b2"}
+```
+@hint1
+<p>שאלה לכל שדה: אם מישהו שקורא לוגים (מפתח, תמיכה, ספק הלוגים) רואה אותו — מה הוא יכול לעשות איתו?</p>
+@hint2
+<p>יש סודות שמסתתרים לא בשדה בשם <code>password</code> אלא בתוך URL.</p>
+@solution
+<ol><li><strong>דלף</strong> — טוקן לאיפוס סיסמה ב־query. מי שקורא את השורה יכול לאפס את הסיסמה. כותבים <code>path</code> בלי query (או עם redact על פרמטרים — E45).</li><li><strong>דלף</strong> — סיסמה, וגם אימייל שאין בו צורך. לא כותבים <code>req.body</code>; כותבים מה שצריך (סיבת הכישלון, <code>userId</code> אם יש).</li><li>תקין — <code>userId</code> הוא מזהה, לא סוד, ובדיוק מה שמאפשר "מה קרה למשתמש 17".</li><li><strong>דלף</strong> — access token. גם ב־debug: debug נדלק בפרודקשן כשמחפשים באג. redact ב־logger על <code>authorization</code>.</li><li><strong>דלף</strong> — מספר כרטיס. לכל היותר 4 ספרות אחרונות, ובדרך כלל — מזהה העסקה אצל ספק התשלומים.</li></ol>
+@mistakes
+<ul><li>"זה רק ב־debug" — רמת debug נדלקת בדיוק ביום של התקלה, והשורות נשמרות חודשים.</li></ul>
+
+@@ P24-E36 | 1 | ‏LOG_LEVEL=debug בפרודקשן | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>יש תקלה, ומישהו מציע: "בוא נשאיר <code>LOG_LEVEL=debug</code> בפרודקשן קבוע, ככה תמיד יהיה לנו הכול". (1) תן שלוש סיבות למה לא. (2) איך עובדים נכון כשבאמת צריך debug כדי למצוא באג? (3) ומה הרמה הנכונה לשורת request של <code>GET /health</code> שמגיעה כל 5 שניות ומצליחה?</p>
+@hint1
+<p>תחשוב על כמות: כמה שורות debug יש לכל בקשה? ומי משלם על אחסון הלוגים?</p>
+@hint2
+<p>הרמה היא משתנה סביבה — משנים ומפעילים מחדש (או, במערכות מסוימות, משנים בזמן ריצה).</p>
+@solution
+<ol><li>(א) כמות: שורת debug לכל שאילתה וערך ביניים — פי עשרה שורות, ושירותי לוגים גובים לפי נפח. (ב) רעש: השורות החשובות (warn, error) נקברות. (ג) סיכון: ב־debug כותבים פרטים — SQL עם ערכים, headers — ויש יותר סיכוי שמשהו רגיש ייכנס. (ד) ביצועים: כתיבה ל־stdout עולה זמן.</li><li>מדליקים debug לזמן קצוב (משנים את המשתנה, מפעילים מחדש או מחכים לפריסה), משחזרים את הבעיה — עם <code>X-Request-Id</code> ידוע כדי למצוא את השורות — ומחזירים ל־info.</li><li><code>debug</code> (כמו בפרויקט). כשהוא <em>נכשל</em> — warn או error, כמו כל בקשה. 17,280 שורות ביום של "הכול בסדר" לא עוזרות לאף אחד.</li></ol>
+@mistakes
+<ul><li>להוריד את כל הלוגים ל־warn כדי לחסוך — ואז אין שורת request ואין דרך לענות על "מה קרה בבקשה הזו".</li></ul>
+
+@@ P24-E37 | 2 | מזהה בקשה מבחוץ — לקבל או להחליף? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>השרת מקבל <code>X-Request-Id</code> מבחוץ רק אם הוא מתאים ל־<code>/^[A-Za-z0-9._-]{1,64}$/</code>. לכל ערך — יתקבל או יוחלף במזהה חדש? ומה הנזק אם היינו מקבלים אותו?</p>
+<ol><li><code>support-ticket-4512</code></li><li><code>web.7f3a_retry-2</code></li><li><code>abc def</code></li><li><code>a"}{"level":"error","msg":"hacked</code></li><li>מחרוזת של 5,000 תווים <code>x</code></li><li>ריק (<code>X-Request-Id:</code> בלי ערך)</li></ol>
+<p>ושאלה נוספת: ה־frontend וגם ה־API מייצרים מזהה משלהם לכל בקשה. למה עדיף שה־API יקבל את המזהה של ה־frontend?</p>
+@hint1
+<p><code>{1,64}</code> — בין 1 ל־64 תווים. רווח ומרכאות לא בקבוצה.</p>
+@hint2
+<p>מזהה נכתב לכל שורת לוג, ולפעמים גם מוצג למשתמש ("קוד לתמיכה").</p>
+@solution
+<ol><li>מתקבל.</li><li>מתקבל — נקודה, קו תחתון ומקף בקבוצה.</li><li>מוחלף — רווח. (ב־URL, בקובץ או ב־grep — רווח שובר.)</li><li>מוחלף. לוג שנכתב בשרשור מחרוזות היה מקבל "שורה" מזויפת עם <code>"level":"error"</code>. ‏<code>JSON.stringify</code> היה מגן — אבל לא כל כלי בדרך משתמש בו.</li><li>מוחלף. 5KB בכל שורת לוג של הבקשה — דרך קלה לנפח את הלוגים ואת החשבון.</li><li>מוחלף — <code>{1,64}</code> דורש לפחות תו אחד.</li></ol>
+<p>המזהה של ה־frontend מופיע אצל הלקוח (בהודעת השגיאה, בכלי הפיתוח של הדפדפן). אם ה־API ממשיך אותו — אותו מזהה עובר בכל המערכת, וממה שהלקוח רואה מגיעים ישר לשורות בשרת.</p>
+@mistakes
+<ul><li>לקבל כל ערך "כי זה רק מזהה" — כל מה שמגיע מהלקוח הוא קלט, וזה קלט שנכתב לכל שורה.</li></ul>
+
+@@ P24-E38 | 2 | השוואת רמות לוג 🤖 | 10 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>חימום. בקובץ <code>24-production/starter/P24-E38.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Level = "debug" | "info" | "warn" | "error";
+export function parseLevel(value: string | undefined): Level
+export function isEnabled(level: Level, min: Level): boolean
+```
+<ul><li><code>parseLevel</code> — מה שמגיע מ־<code>LOG_LEVEL</code>: מורידים רווחים מסביב ומשווים בלי תלות באותיות גדולות (<code>" WARN "</code> ← <code>"warn"</code>). ‏<code>undefined</code>, מחרוזת ריקה או ערך לא מוכר ← <code>"info"</code>.</li><li><code>isEnabled(level, min)</code> — האם שורה ברמה <code>level</code> נכתבת כשהרמה המינימלית היא <code>min</code>. הסדר: debug &lt; info &lt; warn &lt; error.</li></ul>
+```term
+% node 24-production/starter/P24-E38.ts
+% npm run check P24-E38
+```
+@hint1
+<p>אובייקט שממפה רמה למספר: <code>{ debug: 10, info: 20, warn: 30, error: 40 }</code>.</p>
+@hint2
+<p>כדי לבדוק אם מחרוזת היא רמה מוכרת: <code>v in ORDER</code>, או <code>Object.hasOwn(ORDER, v)</code>.</p>
+@solution
+```ts run save=solutions/P24-E38.ts
+// P24-E38: השוואת רמות לוג
+export type Level = "debug" | "info" | "warn" | "error";
+
+const ORDER: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+
+export function parseLevel(value: string | undefined): Level {
+  const v = (value ?? "").trim().toLowerCase();
+  return Object.hasOwn(ORDER, v) ? (v as Level) : "info";
+}
+
+export function isEnabled(level: Level, min: Level): boolean {
+  return ORDER[level] >= ORDER[min]; // מספרים — לא מחרוזות
+}
+
+console.log(parseLevel(" WARN "), parseLevel("verbose"), isEnabled("error", "info"), isEnabled("debug", "info"));
+```
+```out
+warn info true false
+```
+<p>‏<code>Object.hasOwn</code> ולא <code>v in ORDER</code>: עם <code>in</code>, הערך <code>"toString"</code> נחשב "קיים" (הוא בא מ־prototype של כל אובייקט).</p>
+@mistakes
+<ul><li><code>level &gt;= min</code> על המחרוזות עצמן — <code>"error" &gt;= "info"</code> הוא <code>false</code> (לפי סדר אלפביתי), ושגיאות לא נכתבות.</li><li>לזרוק שגיאה על ערך לא מוכר — שרת שלא עולה בגלל <code>LOG_LEVEL=verbose</code>. כאן בחרנו ברירת מחדל; בהגדרות (פרק 25) אפשר להחליט אחרת, אבל במודע.</li></ul>
+
+@@ P24-E39 | 2 | ‏Error ללוג, בשורה אחת 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>E34 הראה ש־<code>JSON.stringify</code> מאבד שגיאות. בקובץ <code>24-production/starter/P24-E39.ts</code> כתוב וייצא:</p>
+```ts
+export function serializeError(e: unknown): Record<string, unknown>
+export function errorLine(msg: string, e: unknown, now: Date): string
+```
+<ul><li>‏<code>Error</code> (גם תת־מחלקה, כמו <code>TypeError</code>) ← <code>{ name, message, stack }</code>. אם יש לשגיאה שדה <code>code</code> (מחרוזת או מספר, למשל <code>"ECONNREFUSED"</code>) — מוסיפים גם אותו. אם יש <code>cause</code> — מוסיפים <code>cause: serializeError(e.cause)</code>.</li><li>כל דבר אחר שנזרק (<code>throw "oops"</code>, ‏<code>throw 42</code>, ‏<code>throw { a: 1 }</code>) ← <code>{ name: "NonError", message }</code>: מחרוזת — כמו שהיא; אחרת — <code>JSON.stringify</code> שלו (ואם הוא מחזיר <code>undefined</code> — <code>String(e)</code>).</li><li><code>errorLine</code> ← שורת JSON אחת: <code>{ time, level: "error", msg, err }</code>, ‏<code>time</code> ב־ISO.</li></ul>
+<p>(<code>cause</code>: ‏<code>new Error("save failed", { cause: err })</code> — שגיאה שעוטפת שגיאה אחרת בלי לאבד אותה.)</p>
+```term
+% node 24-production/starter/P24-E39.ts
+% npm run check P24-E39
+```
+@hint1
+<p><code>e instanceof Error</code>. ואחר כך: <code>const x = e as Error &amp; { code?: unknown }</code> כדי לקרוא <code>code</code>.</p>
+@hint2
+<p>רקורסיה: <code>serializeError</code> קוראת לעצמה על <code>e.cause</code>, רק אם <code>e.cause !== undefined</code>.</p>
+@solution
+```ts run save=solutions/P24-E39.ts
+// P24-E39: Error ללוג, בשורה אחת
+export function serializeError(e: unknown): Record<string, unknown> {
+  if (e instanceof Error) {
+    const x = e as Error & { code?: unknown };
+    const out: Record<string, unknown> = { name: x.name, message: x.message, stack: x.stack };
+    if (typeof x.code === "string" || typeof x.code === "number") out.code = x.code;
+    if (x.cause !== undefined) out.cause = serializeError(x.cause);
+    return out;
+  }
+  const message = typeof e === "string" ? e : (JSON.stringify(e) ?? String(e));
+  return { name: "NonError", message };
+}
+
+export function errorLine(msg: string, e: unknown, now: Date): string {
+  return JSON.stringify({ time: now.toISOString(), level: "error", msg, err: serializeError(e) });
+}
+
+const err = new Error("save failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+const line = errorLine("db failed", err, new Date("2026-11-07T15:30:00Z"));
+console.log(line.includes("\n"), JSON.parse(line).err.cause.code);
+console.log(serializeError("oops"), serializeError(undefined));
+```
+```out
+false ECONNREFUSED
+{ name: 'NonError', message: 'oops' } { name: 'NonError', message: 'undefined' }
+```
+@mistakes
+<ul><li><code>{ ...err }</code> — אותה בעיה כמו <code>JSON.stringify</code>: ‏<code>message</code> ו־<code>stack</code> לא מועתקים.</li><li>לשכוח את <code>cause</code> — ואז בלוג רואים "save failed" בלי לדעת שהמסד בכלל לא היה זמין.</li></ul>
+
+@@ P24-E40 | 2 | לוג אחד לשגיאה, לא שלושה | 10 | פרק 15, פרק 20, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>שגיאה אחת במסד הופיעה בלוג שלוש פעמים:</p>
+```ts
+// repository
+catch (err) { logger.error("query failed", { err: serializeError(err) }); throw err; }
+// service
+catch (err) { logger.error("create task failed", { err: serializeError(err) }); throw err; }
+// exception filter של Nest (פרק 20) / error middleware של Express (פרק 15)
+catch(exception) { logger.error("unhandled", { err: serializeError(exception) }); /* 500 */ }
+```
+<p>(1) למה שלוש שורות זה רע, גם אם כל אחת "נכונה"? (2) מי צריך לכתוב את השורה, ולמה דווקא הוא? (3) ומה עושה ה־service אם הוא רוצה להוסיף הקשר ("בזמן יצירת משימה")?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> error middleware מפרק 15 ו־exception filter מפרק 20 — והשיעור: שורת לוג אחת לאירוע, עם requestId.</p>
+@hint1
+<p>מה קורה למדד "כמה שגיאות היו היום" כשכל שגיאה נספרת שלוש פעמים?</p>
+@hint2
+<p>מי היחיד שיודע גם את השגיאה, גם את ה־requestId, וגם מה ה־status שחזר ללקוח?</p>
+@solution
+<ol><li>ספירה: "300 שגיאות" כשהיו 100. רעש: שלוש התראות. ובחיפוש — צריך להבין שזה אותו אירוע.</li><li>מי שמטפל בשגיאה בסוף: ה־filter (או ה־error middleware). רק הוא יודע מה הלקוח קיבל (500 או 404), יש לו requestId, והוא רואה כל שגיאה בדיוק פעם אחת.</li><li>עוטף וזורק הלאה, בלי לכתוב: <code>throw new Error("create task failed", { cause: err })</code>. בשורה האחת שתיכתב יופיעו שתי ההודעות (E39).</li></ol>
+<p>הכלל: "log or throw, not both". שכבה פנימית שמטפלת בשגיאה עד הסוף (למשל מנסה שוב ומצליחה) — היא כן כותבת, כי השגיאה לא תגיע לאף אחד אחר.</p>
+@mistakes
+<ul><li>לבלוע את השגיאה ב־catch שכותב ללוג ומחזיר <code>null</code> — הבקשה "מצליחה" עם תוצאה ריקה.</li></ul>
+
+@@ P24-E41 | 2 | איך בודקים לוגים? | 10 | פרק 22, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>אתה רוצה לבדוק שבקשה שנכשלה עם 500 כותבת שורת לוג ברמת <code>error</code>, עם <code>requestId</code>. שלוש הצעות:</p>
+<ol><li>להחליף את <code>console.log</code> ב־<code>mock.fn</code> ולבדוק שנקרא.</li><li>לכתוב את הלוג לקובץ, ובבדיקה לקרוא את הקובץ ולחפש <code>"error"</code>.</li><li>ה־logger מקבל <code>sink</code> בבנאי (כמו E06). בבדיקה — <code>sink = (l) =&gt; lines.push(l)</code>, ואז <code>JSON.parse</code> על כל שורה.</li></ol>
+<p>איזו תבחר, ולמה? ועל מה בדיוק תעשה <code>assert</code> — על השורה כמחרוזת, או על שדות?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כפילים והזרקת תלויות מפרק 22 — והשיעור: logger עם sink ושעון.</p>
+@hint1
+<p>מה קורה לבדיקה כשה־logger עובר לכתוב עם <code>process.stdout.write</code> במקום <code>console.log</code>?</p>
+@hint2
+<p>בשורת לוג יש <code>time</code> ו־<code>durationMs</code>. הם זהים בכל ריצה?</p>
+@solution
+<p>3. ה־sink הוא ה"תפר" (seam) שהקוד נתן לבדיקה: לא תלוי באיך ה־logger כותב בפועל, לא נוגע בקבצים, ולא משפיע על בדיקות אחרות שרצות במקביל. 1 נשבר כשמשנים את דרך הכתיבה ומתערבב עם לוגים של דברים אחרים; 2 איטי, משאיר קבצים, ו־<code>"error"</code> יכול להופיע גם בהודעה של שורת info.</p>
+<p>ה־assert — על שדות: <code>JSON.parse</code>, ואז <code>level === "error"</code>, ‏<code>requestId</code> שווה ל־header של התשובה, ‏<code>typeof durationMs === "number"</code>. לא על המחרוזת המלאה: <code>time</code> ו־<code>durationMs</code> משתנים (אלא אם השעון מוזרק), וסדר השדות הוא לא חלק מהחוזה.</p>
+@mistakes
+<ul><li>לבדוק רק "נכתבה שורה" — ואז שורה ברמת info עם requestId שגוי עוברת.</li></ul>
+
+@@ P24-E42 | 1 | לוג לקובץ בתוך קונטיינר | 10 | פרק 23, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>מפתח הוסיף ל־logger כתיבה ל־<code>/app/logs/app.log</code> (בתוך הקונטיינר), "כדי שיהיה תיעוד". מה יקרה בכל מקרה?</p>
+<ol><li><code>docker compose logs api</code>.</li><li><code>docker compose down</code> ואז <code>up</code> — איפה הלוגים של אתמול?</li><li>השרת רץ שלושה חודשים בלי הפסקה.</li><li>יש שלושה עותקים של ה־api.</li></ol>
+<p>ומה הפתרון "הנכון" לפי השיעור?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> containers, volumes ו־<code>docker logs</code> מפרק 23 — והשיעור: הלוגים הולכים ל־stdout.</p>
+@hint1
+<p><code>docker logs</code> מציג את מה שהתהליך כתב ל־stdout ול־stderr. לא קבצים.</p>
+@hint2
+<p>מה קורה למערכת הקבצים של קונטיינר כשמוחקים אותו (בלי volume)?</p>
+@solution
+<ol><li>ריק (או רק מה שנכתב ל־stdout). הלוג "מוסתר" בתוך הקונטיינר.</li><li>נמחקו יחד עם הקונטיינר — אין volume.</li><li>הקובץ גדל עד שהדיסק מתמלא, אם אף אחד לא מסובב (rotate) אותו. ואז גם המסד ושאר השירותים נופלים.</li><li>שלושה קבצים בשלושה מקומות. כדי לעקוב אחרי בקשה צריך להיכנס לכולם.</li></ol>
+<p>כותבים ל־stdout, שורת JSON לאירוע. Docker אוסף, וה־platform (פרק 25) שולח לכלי חיפוש אחד לכל העותקים. האפליקציה לא מתעסקת בקבצים בכלל.</p>
+@mistakes
+<ul><li>לפתור עם volume ל־<code>/app/logs</code> — הלוג שורד, אבל כל שאר הבעיות (סיבוב, כמה עותקים, חיפוש) נשארות.</li></ul>
+
+@@ P24-E43 | 2 | הסיפור של בקשה אחת 🤖 | 20 | פרק 6, פרק 7, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>במקום <code>grep</code> (E02) — קוד. בקובץ <code>24-production/starter/P24-E43.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function requestStory(lines: string[], requestId: string): { events: Record<string, unknown>[]; summary: string | null }
+export function requestIdsForUser(lines: string[], userId: number): string[]
+```
+<ul><li>שורה שהיא לא JSON תקין של אובייקט (טקסט חופשי, <code>null</code>, מערך, שורה ריקה) — מדלגים.</li><li><code>events</code> — כל השורות עם ה־<code>requestId</code> הזה, ממוינות לפי <code>time</code> (מחרוזות ISO — אפשר להשוות כטקסט). שורות עם אותו <code>time</code> — לפי הסדר בקובץ.</li><li><code>summary</code> — מהשורה עם <code>msg: "request"</code> של הבקשה: <code>"GET /tasks/999 → 404 (6ms)"</code> (‏<code>method path → status (durationMs ms)</code>). אין שורה כזו ← <code>null</code>.</li><li><code>requestIdsForUser</code> — המזהים של כל השורות עם <code>userId</code> הזה, בלי כפילויות, לפי סדר ההופעה הראשונה.</li></ul>
+```term
+% node 24-production/starter/P24-E43.ts
+% npm run check P24-E43
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>filter</code>, ‏<code>sort</code> ו־<code>Set</code> מפרקים 6–7, ‏<code>try/catch</code> מפרק 8 — והשיעור: requestId שמחבר שורות של אותה בקשה.</p>
+@hint1
+<p>פונקציית עזר <code>parse(line)</code>:</p>
+```ts
+try { const v = JSON.parse(line); return v && typeof v === "object" && !Array.isArray(v) ? v : null } catch { return null }
+```
+@hint2
+<p><code>sort</code> ב־JavaScript יציב — שווים נשארים בסדר המקורי. ‏<code>String(a.time).localeCompare(...)</code> לא מתאים כאן; השתמש ב־<code>&lt;</code> ו־<code>&gt;</code>.</p>
+@solution
+```ts run save=solutions/P24-E43.ts
+// P24-E43: הסיפור של בקשה אחת
+type Entry = Record<string, unknown>;
+
+function parse(line: string): Entry | null {
+  try {
+    const v: unknown = JSON.parse(line);
+    return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Entry) : null;
+  } catch {
+    return null;
+  }
+}
+
+const entries = (lines: string[]) => lines.map(parse).filter((e): e is Entry => e !== null);
+
+export function requestStory(lines: string[], requestId: string) {
+  const events = entries(lines)
+    .filter((e) => e.requestId === requestId)
+    .sort((a, b) => (String(a.time) < String(b.time) ? -1 : String(a.time) > String(b.time) ? 1 : 0));
+  const req = events.find((e) => e.msg === "request");
+  const summary = req ? `${req.method} ${req.path} → ${req.status} (${req.durationMs}ms)` : null;
+  return { events, summary };
+}
+
+export function requestIdsForUser(lines: string[], userId: number): string[] {
+  const ids = new Set<string>();
+  for (const e of entries(lines)) if (e.userId === userId && typeof e.requestId === "string") ids.add(e.requestId);
+  return [...ids];
+}
+
+const log = [
+  '{"time":"2026-11-07T15:31:02.503Z","level":"error","msg":"request","requestId":"9d1e","userId":3,"method":"GET","path":"/tasks","status":500,"durationMs":3}',
+  "Error: connect ECONNREFUSED",
+  '{"time":"2026-11-07T15:31:02.501Z","level":"error","msg":"connect ECONNREFUSED","requestId":"9d1e"}',
+];
+const story = requestStory(log, "9d1e");
+console.log(story.events.map((e) => e.msg), story.summary, requestIdsForUser(log, 3));
+```
+```out
+[ 'connect ECONNREFUSED', 'request' ] GET /tasks → 500 (3ms) [ '9d1e' ]
+```
+<p>שורת ה־request נכתבת <em>בסוף</em> הבקשה, אבל השגיאה קרתה באמצע — לכן ממיינים לפי <code>time</code> ולא לפי הסדר בקובץ.</p>
+@mistakes
+<ul><li><code>JSON.parse("null")</code> מצליח ומחזיר <code>null</code> — ואז <code>e.requestId</code> זורק. בודקים שזה אובייקט.</li><li>להשוות <code>e.userId == userId</code> — אז גם <code>"3"</code> (מחרוזת) נחשב. בלוג תקין userId הוא מספר.</li></ul>
+
+@@ P24-E44 | 3 | ‏error handler עם requestId 🤖 | 20 | פרק 15, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>בקובץ <code>24-production/starter/P24-E44.ts</code> (יש בו רק הערה) כתוב וייצא error middleware של Express:</p>
+```ts
+export type Log = (level: "warn" | "error", msg: string, fields: Record<string, unknown>) => void;
+export function errorHandler(log: Log): (err: unknown, req: Request, res: Response, next: NextFunction) => void
+```
+<ul><li><code>requestId</code> — מ־<code>res.locals.requestId</code> (או <code>null</code> אם אין).</li><li>שגיאה עם <code>status</code> מספרי בין 400 ל־499 (למשל JSON שבור — ‏<code>express.json()</code> זורק שגיאה עם <code>status: 400</code>) ← התשובה באותו status, עם הגוף והלוג שלמטה (‏<code>message</code> בלוג — של השגיאה).</li><li>כל שגיאה אחרת ← 500, עם הגוף והלוג שלמטה. ההודעה המקורית <strong>לא</strong> נשלחת ללקוח.</li><li>אם התשובה כבר התחילה (<code>res.headersSent</code>) ← <code>next(err)</code> ולא נוגעים בה.</li></ul>
+```ts
+// 4xx
+{ error: { code: "BAD_REQUEST", message: "בקשה לא תקינה", requestId } }
+log("warn", "client error", { requestId, status, message })
+// כל השאר — 500
+{ error: { code: "INTERNAL", message: "שגיאה בשרת", requestId } }
+log("error", "unhandled error", { requestId, err: { name, message, stack } })
+```
+```term
+% npm run check P24-E44
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> error middleware עם ארבעה פרמטרים מפרק 15 — והשיעור: requestId בתשובה ובלוג, ורמה לפי מי אשם.</p>
+@hint1
+<p>Express מזהה error middleware לפי ארבעה פרמטרים — גם אם לא משתמשים ב־<code>next</code>, הוא חייב להיות בחתימה.</p>
+@hint2
+<p><code>const e = err as { status?: unknown; message?: unknown }</code>, ואז <code>typeof e.status === "number"</code>.</p>
+@solution
+```ts save=solutions/P24-E44.ts
+// P24-E44: error handler עם requestId
+import type { NextFunction, Request, Response } from "express";
+
+export type Log = (level: "warn" | "error", msg: string, fields: Record<string, unknown>) => void;
+
+export function errorHandler(log: Log) {
+  return (err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err); // אי אפשר לשנות תשובה שכבר יצאה
+    const requestId = res.locals.requestId ?? null;
+    const e = (err ?? {}) as { status?: unknown; message?: unknown; name?: unknown; stack?: unknown };
+    if (typeof e.status === "number" && e.status >= 400 && e.status < 500) {
+      log("warn", "client error", { requestId, status: e.status, message: String(e.message) });
+      res.status(e.status).json({ error: { code: "BAD_REQUEST", message: "בקשה לא תקינה", requestId } });
+      return;
+    }
+    log("error", "unhandled error", { requestId, err: { name: e.name, message: e.message, stack: e.stack } });
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה בשרת", requestId } });
+  };
+}
+```
+<p>הלקוח מקבל רק <code>requestId</code> — וזה כל מה שהוא צריך כדי לפנות לתמיכה. כל השאר (ההודעה, ה־stack) נמצא בלוג, תחת אותו מזהה.</p>
+@mistakes
+<ul><li><code>res.status(500).json({ error: err.message })</code> — הודעות של המסד ושל ספריות מגיעות ללקוח, לפעמים עם שמות טבלאות וערכים.</li><li>4xx ברמת error — כל JSON שבור של לקוח מעיר מישהו בלילה.</li></ul>
+
+@@ P24-E45 | 2 | ‏URL בלי סודות 🤖 | 15 | פרק 14, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>במקום להוריד את כל ה־query (ואיתו <code>?page=2</code> השימושי) — להסתיר רק את הסודות. בקובץ <code>24-production/starter/P24-E45.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function safeUrl(url: string, secretParams?: string[]): string
+```
+<ul><li><code>url</code> הוא <code>req.originalUrl</code> — נתיב עם query אופציונלי: <code>"/reset?token=abc&amp;lang=he"</code>.</li><li>מחזיר נתיב + query, שבו הערך של כל פרמטר ששמו ב־<code>secretParams</code> (בלי תלות באותיות גדולות) הוא <code>***</code>. ברירת מחדל: <code>["token", "password", "code", "key", "secret"]</code>.</li><li>שאר הפרמטרים — כמו שהם, באותו סדר. בלי query ← הנתיב בלבד (בלי <code>?</code>). ‏<code>#</code> ומה שאחריו — נעלם.</li><li>הקידוד — כמו של <code>URLSearchParams</code>: ‏<code>/search?q=a b</code> ← <code>/search?q=a+b</code>.</li></ul>
+```term
+% node 24-production/starter/P24-E45.ts
+% npm run check P24-E45
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>URL</code> ו־<code>URLSearchParams</code> מפרק 14 — והשיעור: סודות מסתתרים ב־query string.</p>
+@hint1
+<p><code>new URL(url, "http://x")</code> — בסיס מדומה, כי <code>originalUrl</code> הוא נתיב יחסי. אחר כך <code>u.pathname</code> ו־<code>u.searchParams</code>.</p>
+@hint2
+<p>‏<code>for (const [k] of u.searchParams)</code> ו־<code>u.searchParams.set(k, "***")</code> — ‏<code>set</code> שומר על המקום של הפרמטר.</p>
+@solution
+```ts run save=solutions/P24-E45.ts
+// P24-E45: URL בלי סודות
+const DEFAULT_SECRETS = ["token", "password", "code", "key", "secret"];
+
+export function safeUrl(url: string, secretParams: string[] = DEFAULT_SECRETS): string {
+  const secret = new Set(secretParams.map((s) => s.toLowerCase()));
+  const u = new URL(url, "http://x"); // בסיס מדומה — originalUrl הוא נתיב יחסי
+  for (const [k] of [...u.searchParams]) {
+    if (secret.has(k.toLowerCase())) u.searchParams.set(k, "***");
+  }
+  const query = u.searchParams.toString();
+  return query ? `${u.pathname}?${query}` : u.pathname;
+}
+
+console.log(safeUrl("/reset-password?token=8f3kQ1x&lang=he"));
+console.log(safeUrl("/tasks?page=2&API_KEY=abc#top", ["api_key"]));
+console.log(safeUrl("/search?q=a b"), safeUrl("/health"));
+```
+```out
+/reset-password?token=***&lang=he
+/tasks?page=2&API_KEY=***
+/search?q=a+b /health
+```
+<p>‏<code>[...u.searchParams]</code> — עותק, כי משנים את הרשימה תוך כדי מעבר עליה.</p>
+@mistakes
+<ul><li><code>url.replace(/token=[^&amp;]*/, ...)</code> — מפספס <code>TOKEN=</code>, תופס גם <code>mytoken=</code>, ושוכח מפרמטר שמופיע פעמיים.</li><li><code>u.searchParams.delete(k)</code> — הסוד נעלם, אבל גם המידע שהיה פרמטר כזה (שימושי לדיבוג).</li></ul>
+
+@@ P24-E46 | 1 | רגע, תאריך, או שעה ואזור? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>לכל שדה — איזה מהשלושה הוא (רגע / תאריך מקומי / שעה על השעון + אזור), איזה טיפוס ב־PostgreSQL, ואיך הוא נראה ב־JSON של ה־API?</p>
+<ol><li>מתי נוצרה ההזמנה.</li><li>יום ההולדת של המשתמש.</li><li>מתי פג תוקף טוקן האיפוס.</li><li>"החנות נפתחת ב־09:00" (חנות בתל אביב).</li><li>תאריך היעד של משימה.</li><li>"פגישת צוות כל יום שני ב־10:00 שעון ישראל" — וחלק מהצוות בניו יורק.</li><li>מתי המשתמש נכנס בפעם האחרונה.</li></ol>
+@hint1
+<p>שאלה: אם המשתמש טס ללונדון, האם הערך צריך "לזוז"?</p>
+@hint2
+<p>יום הולדת לא קורה "ברגע" — הוא יום שלם בלוח השנה, איפה שאתה נמצא.</p>
+@solution
+<ol><li>רגע · <code>timestamptz</code> · <code>"2026-11-04T22:30:00.000Z"</code>.</li><li>תאריך מקומי · <code>date</code> · <code>"1990-05-17"</code>. שמירה כ־timestamptz בחצות UTC — ובניו יורק יום ההולדת "זז" יום אחורה.</li><li>רגע · <code>timestamptz</code>.</li><li>שעה + אזור · <code>time</code> + <code>text</code> (<code>"09:00"</code>, ‏<code>"Asia/Jerusalem"</code>). הרגע המדויק משתנה פעמיים בשנה (שעון קיץ).</li><li>תאריך מקומי · <code>date</code> · <code>"2026-11-05"</code>. "באיחור" — לפי "היום" באזור של המשתמש.</li><li>שעה + אזור + חוק חזרה. האזור הוא של הפגישה (ישראל), לא של המשתתף: בניו יורק השעה על השעון שלהם תזוז כשאחד הצדדים עובר לשעון קיץ והשני עוד לא — וזה נכון.</li><li>רגע · <code>timestamptz</code>.</li></ol>
+@mistakes
+<ul><li>"הכול timestamptz, ליתר ביטחון" — ואז יום הולדת ותאריך יעד תלויים באזור של מי שקורא אותם.</li></ul>
+
+@@ P24-E47 | 2 | ‏+02:00 או Asia/Jerusalem? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בהרשמה, בנובמבר, האפליקציה שמרה למשתמש <code>offset: "+02:00"</code> במקום <code>timeZone: "Asia/Jerusalem"</code>. יש לו תזכורת יומית ב־08:00. (1) מה יקרה ביולי? (2) ומה אם הוא שמר את התזכורת ביולי (<code>+03:00</code>) — מה יקרה בדצמבר? (3) משתמש אחר בחר "Asia/Jerusalem", ובשנה הבאה הממשלה מבטלת את שעון הקיץ. מה צריך לעשות כדי שהתזכורות שלו ימשיכו להגיע ב־08:00?</p>
+@hint1
+<p>‏+02:00 הוא תשובה לשאלה "מה ההפרש <em>עכשיו</em>". הוא לא יודע מה יהיה ההפרש בעוד חצי שנה.</p>
+@hint2
+<p>מאיפה Node יודע את חוקי שעון הקיץ של ישראל?</p>
+@solution
+<ol><li>ביולי ההפרש האמיתי הוא +03:00. השרת מחשב 08:00 לפי +02:00 = ‏06:00Z — ובישראל זה 09:00. התזכורת מאחרת בשעה, כל הקיץ.</li><li>הפוך: 08:00 לפי +03:00 = ‏05:00Z — ובדצמבר זה 07:00. שעה מוקדם.</li><li>כלום בקוד. החוקים נמצאים במסד הנתונים של IANA, שמגיע עם Node (ועם מערכת ההפעלה). מעדכנים Node (או את ה־image) — והחישוב של "08:00 ב־Asia/Jerusalem" משתנה לבד. בגלל זה שומרים את שם האזור.</li></ol>
+<p>(שים לב: ב־Node 24, ‏<code>"+02:00"</code> הוא <code>timeZone</code> חוקי ל־<code>Intl</code> — אזור עם הפרש קבוע. לכן "הוא עבר בדיקת תקינות" לא אומר שהוא מה שרצית.)</p>
+@mistakes
+<ul><li>לשמור את ה־offset "בשביל ביצועים" — החישוב עם שם אזור זול, והבאג עולה כל חצי שנה.</li></ul>
+
+@@ P24-E48 | 2 | מחר באותה שעה — עם 86,400,000 | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>נחש מה יודפס, ואז הרץ:</p>
+```js
+const il = (d) => d.toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+const DAY = 86_400_000;
+const a = new Date("2026-10-24T06:00:00Z");
+console.log(il(a), "→", il(new Date(a.getTime() + DAY)));
+const b = new Date("2026-03-26T07:00:00Z");
+console.log(il(b), "→", il(new Date(b.getTime() + DAY)));
+const c = new Date("2026-11-10T07:00:00Z");
+console.log(il(c), "→", il(new Date(c.getTime() + DAY)));
+```
+<p>באילו מהשלושה "מחר באותה שעה" יצא נכון, ולמה דווקא בהם?</p>
+@hint1
+<p>בלילה שבין 24 ל־25 באוקטובר 2026 השעון בישראל חוזר שעה אחורה. בין 26 ל־27 במרץ — קופץ קדימה.</p>
+@hint2
+<p>‏<code>+ DAY</code> מוסיף 24 שעות של זמן אמיתי. כמה שעות יש ביום של מעבר שעון?</p>
+@solution
+```js run
+const il = (d) => d.toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+const DAY = 86_400_000;
+const a = new Date("2026-10-24T06:00:00Z");
+console.log(il(a), "→", il(new Date(a.getTime() + DAY)));
+const b = new Date("2026-03-26T07:00:00Z");
+console.log(il(b), "→", il(new Date(b.getTime() + DAY)));
+const c = new Date("2026-11-10T07:00:00Z");
+console.log(il(c), "→", il(new Date(c.getTime() + DAY)));
+```
+```out
+2026-10-24 09:00:00 → 2026-10-25 08:00:00
+2026-03-26 09:00:00 → 2026-03-27 10:00:00
+2026-11-10 09:00:00 → 2026-11-11 09:00:00
+```
+<p>רק השלישי נכון — כי ביום הזה אין מעבר שעון. ב־25 באוקטובר יש 25 שעות, אז 24 שעות אחרי 09:00 הן 08:00. ב־27 במרץ יש 23 שעות, אז 24 שעות אחרי 09:00 הן 10:00. "מחר באותה שעה" הוא חשבון של לוח שנה ושעון — מוסיפים יום לתאריך, ומחשבים מחדש את הרגע של 09:00 (E13).</p>
+@mistakes
+<ul><li>לבדוק רק בנובמבר — ואז הבדיקה ירוקה, והבאג מופיע פעמיים בשנה.</li></ul>
+
+@@ P24-E49 | 2 | הבדיקה שעוברת ב־CI ונכשלת אצלך | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>הבדיקה הזו עוברת ב־CI (שרץ ב־UTC), ונכשלת ב־Mac שלך (ישראל):</p>
+```ts
+const d = new Date("2026-11-04T23:00:00Z");
+assert.equal(d.toLocaleDateString("en-CA"), "2026-11-04");
+assert.equal(new Date("2026-11-05T00:00").toISOString(), "2026-11-05T00:00:00.000Z");
+```
+<p>(1) למה כל אחת מהשתיים תלויה במחשב? (2) תקן כל אחת כך שתעבור בכל מקום, ובלי לשנות את מה שהיא בודקת. (3) איך מריצים את כל הבדיקות "כאילו" במחשב בניו יורק, כדי לגלות בעיות כאלה מראש?</p>
+@hint1
+<p>בלי <code>timeZone</code>, ‏<code>toLocale...</code> משתמש באזור של המחשב. ומחרוזת עם שעה ובלי <code>Z</code> — גם.</p>
+@hint2
+<p>Node קורא את משתנה הסביבה <code>TZ</code>.</p>
+@solution
+<ol><li>הראשונה: ב־UTC זה 4.11, בישראל כבר 5.11. השנייה: <code>"2026-11-05T00:00"</code> בלי <code>Z</code> מתפרש כשעון מקומי — בישראל זה 22:00Z של היום הקודם.</li><li><code>d.toLocaleDateString("en-CA", { timeZone: "UTC" })</code>, ו־<code>new Date("2026-11-05T00:00Z")</code>. (ובקוד עצמו — אותו תיקון: תמיד <code>timeZone</code> מפורש, ותמיד מחרוזות עם offset.)</li><li><code>TZ=America/New_York npm test</code>. כדאי להוסיף ל־CI שלב שמריץ את הבדיקות גם עם <code>TZ=Asia/Jerusalem</code> — אז בדיקה שתלויה במחשב נכשלת שם, ולא אצל משתמש.</li></ol>
+@mistakes
+<ul><li>"לתקן" את הבדיקה כך שתעבור אצלך — ואז היא נכשלת ב־CI. הבעיה היא התלות, לא הערך.</li></ul>
+
+@@ P24-E50 | 2 | שעה שלא קיימת, שעה שקורית פעמיים | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בישראל, 2026. לכל שעה מקומית — כמה פעמים היא קורית (0, 1 או 2)?</p>
+<ol><li>27 במרץ, 02:15.</li><li>27 במרץ, 03:15.</li><li>25 באוקטובר, 01:30.</li><li>25 באוקטובר, 02:30.</li><li>24 באוקטובר, 01:30.</li></ol>
+<p>ועכשיו: יש לך job של גיבוי שמוגדר "כל יום ב־02:30 שעון ישראל". מה יקרה ב־27 במרץ? ומה עם job שמוגדר ל־01:30 — ב־25 באוקטובר? מה היית מחליט, ואיך היית נמנע מכל הבעיה?</p>
+@hint1
+<p>מרץ: 02:00 ← 03:00. אוקטובר: 02:00 ← 01:00.</p>
+@hint2
+<p>ב־cron של לינוקס (שמשתמש באזור של המחשב), התנהגות ב־DST תלויה במימוש. רוב השרתים רצים ב־UTC — למה?</p>
+@solution
+<ol><li>0 — השעון קופץ מ־01:59:59 ל־03:00.</li><li>1.</li><li>2 — פעם ב־+03:00 (‏22:30Z ב־24.10) ופעם ב־+02:00 (‏23:30Z).</li><li>1 — אחרי החזרה, 02:30 קורית רק פעם אחת.</li><li>1.</li></ol>
+<p>job ב־02:30 ב־27.3: אין רגע כזה. יש מתזמנים שידלגו (אין גיבוי באותו יום!), ויש שיריצו ב־03:30. job ב־01:30 ב־25.10: יכול לרוץ פעמיים. ההחלטה (כמו בשיעור): שעה שלא קיימת ← קדימה; כפולה ← פעם אחת, במופע הראשון. הדרך להימנע: jobs טכניים (גיבוי, ניקוי) — בשעות UTC, ששם אין מעברים. רק דברים שהמשתמש מרגיש ("תזכורת ב־09:00") צריכים אזור.</p>
+@mistakes
+<ul><li>לקבוע jobs לילה בדיוק בחלון 01:00–03:00 שעון מקומי — "כי אז אין עומס". זה גם החלון של מעברי השעון.</li></ul>
+
+@@ P24-E51 | 3 | שעון מקומי עם offset 🤖 | 20 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>לפעמים רוצים להציג רגע כמו שהוא נראה באזור, אבל עם ה־offset — שאפשר לפרסר חזרה בלי לאבד מידע: <code>"2026-11-05T00:30:00+02:00"</code>. בקובץ <code>24-production/starter/P24-E51.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function toLocalIso(instant: Date, tz: string): string
+```
+<ul><li>פורמט: <code>YYYY-MM-DDTHH:mm:ss±HH:MM</code>. שעות 00–23. בלי מילישניות.</li><li>ה־offset — באותו רגע, באותו אזור: ישראל בחורף <code>+02:00</code>, בקיץ <code>+03:00</code>; ניו יורק בחורף <code>-05:00</code>; הודו <code>+05:30</code>; ‏UTC — ‏<code>+00:00</code> (לא <code>Z</code>).</li><li><code>new Date(toLocalIso(d, tz))</code> חייב להחזיר את אותו רגע (בדיוק של שנייה).</li></ul>
+```term
+% node 24-production/starter/P24-E51.ts
+% npm run check P24-E51
+```
+@hint1
+```ts
+new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(instant)
+```
+<p>מערך של <code>{ type, value }</code>.</p>
+@hint2
+<p>ה־offset: בונים מהחלקים "כאילו ב־UTC" עם <code>Date.UTC(...)</code>, ומחסירים את הרגע עצמו (אחרי שמורידים ממנו את המילישניות). התוצאה, חלקי 60,000 — דקות.</p>
+@solution
+```ts run save=solutions/P24-E51.ts
+// P24-E51: שעון מקומי עם offset
+export function toLocalIso(instant: Date, tz: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(instant);
+  const p: Record<string, string> = {};
+  for (const { type, value } of parts) p[type] = value;
+  // השעון באזור "כאילו" היה UTC, פחות הרגע עצמו = ה־offset
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const seconds = Math.floor(instant.getTime() / 1000) * 1000;
+  const offset = Math.round((asUtc - seconds) / 60_000);
+  const sign = offset < 0 ? "-" : "+";
+  const abs = Math.abs(offset);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${sign}${hh}:${mm}`;
+}
+
+for (const [iso, tz] of [["2026-11-04T22:30:00Z", "Asia/Jerusalem"], ["2026-07-01T09:15:42.999Z", "Asia/Jerusalem"], ["2026-01-15T12:00:00Z", "America/New_York"], ["2026-01-15T12:00:00Z", "Asia/Kolkata"]]) {
+  console.log(toLocalIso(new Date(iso), tz));
+}
+```
+```out
+2026-11-05T00:30:00+02:00
+2026-07-01T12:15:42+03:00
+2026-01-15T07:00:00-05:00
+2026-01-15T17:30:00+05:30
+```
+@mistakes
+<ul><li><code>instant.getTimezoneOffset()</code> — זה ה־offset של <em>המחשב</em>, לא של האזור המבוקש. (וגם בסימן הפוך: בישראל הוא −120.)</li><li>לא להוריד מילישניות לפני החיסור — ואז offset של "120.0166" דקות.</li></ul>
+
+@@ P24-E52 | 2 | גיל לפי תאריך לידה 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>24-production/starter/P24-E52.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function ageOn(birthDate: string, today: string): number
+export function ageAt(birthDate: string, instant: Date, tz: string): number
+```
+<ul><li>שני התאריכים הם <code>"YYYY-MM-DD"</code> — תאריכים מקומיים, בלי שעה. הגיל — שנים שלמות.</li><li>יום ההולדת עצמו כבר נספר. מי שנולד ב־29 בפברואר — בשנה שאינה מעוברת "מגיע" לגיל החדש ב־1 במרץ.</li><li>תאריך לא תקין (פורמט אחר, או תאריך שלא קיים כמו <code>2026-02-30</code>) ← <code>RangeError</code>. תאריך לידה אחרי <code>today</code> ← <code>RangeError</code>.</li><li><code>ageAt</code> — הגיל ברגע <code>instant</code>, לפי "היום" באזור <code>tz</code>.</li></ul>
+```term
+% node 24-production/starter/P24-E52.ts
+% npm run check P24-E52
+```
+@hint1
+<p>לא צריך <code>Date</code> בשביל החישוב: שנה, חודש ויום כמספרים. גיל = הפרש השנים, פחות 1 אם (חודש, יום) של היום עוד לפני (חודש, יום) של הלידה.</p>
+@hint2
+<p>"תאריך קיים": <code>new Date(Date.UTC(y, m - 1, d))</code> — ואם <code>getUTCDate() !== d</code>, הוא "גלש" לחודש הבא.</p>
+@solution
+```ts run save=solutions/P24-E52.ts
+// P24-E52: גיל לפי תאריך לידה
+function parse(s: string): [number, number, number] {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) throw new RangeError(`תאריך לא תקין: ${s}`);
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  const check = new Date(Date.UTC(y, mo - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) throw new RangeError(`תאריך לא קיים: ${s}`);
+  return [y, mo, d];
+}
+
+export function ageOn(birthDate: string, today: string): number {
+  const [by, bm, bd] = parse(birthDate);
+  const [ty, tm, td] = parse(today);
+  if (birthDate > today) throw new RangeError("תאריך הלידה אחרי היום");
+  const beforeBirthday = tm < bm || (tm === bm && td < bd); // 28.2 < 29.2, ו־1.3 כבר אחרי
+  return ty - by - (beforeBirthday ? 1 : 0);
+}
+
+export function ageAt(birthDate: string, instant: Date, tz: string): number {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+  return ageOn(birthDate, today);
+}
+
+console.log(ageOn("1990-05-17", "2026-05-16"), ageOn("1990-05-17", "2026-05-17"));
+console.log(ageOn("2004-02-29", "2026-02-28"), ageOn("2004-02-29", "2026-03-01"));
+console.log(ageAt("2000-11-05", new Date("2026-11-04T22:30:00Z"), "Asia/Jerusalem"), ageAt("2000-11-05", new Date("2026-11-04T22:30:00Z"), "UTC"));
+```
+```out
+35 36
+21 22
+26 25
+```
+<p>ההשוואה (חודש, יום) פותרת את 29 בפברואר לבד: 28.2 עוד "לפני", ו־1.3 כבר "אחרי". והשוואת מחרוזות <code>birthDate &gt; today</code> נכונה רק כי הפורמט קבוע (<code>YYYY-MM-DD</code>) — כמו ב־ISO.</p>
+@mistakes
+<ul><li><code>Math.floor((today - birth) / (365.25 * 86_400_000))</code> — טועה בימים סביב יום ההולדת, ותלוי בשעה ובאזור.</li></ul>
+
+@@ P24-E53 | 3 | ימי עבודה עד היעד 🤖 | 20 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>"המשלוח מגיע תוך 3 ימי עבודה". בישראל — שישי ושבת לא נחשבים. בקובץ <code>24-production/starter/P24-E53.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function addBusinessDays(from: string, n: number, weekend?: number[]): string
+export function businessDaysBetween(from: string, to: string, weekend?: number[]): number
+```
+<ul><li>תאריכים מקומיים <code>"YYYY-MM-DD"</code>. ‏<code>weekend</code> — ימים בשבוע (0 = ראשון … 6 = שבת), ברירת מחדל <code>[5, 6]</code>.</li><li><code>addBusinessDays</code> — התאריך של יום העבודה ה־<code>n</code> <strong>אחרי</strong> <code>from</code> (‏<code>from</code> עצמו לא נספר). ‏<code>n</code> שלם ≥ 0; ‏<code>n = 0</code> ← ‏<code>from</code>. אחרת ← <code>RangeError</code>.</li><li><code>businessDaysBetween</code> — כמה ימי עבודה יש אחרי <code>from</code> ועד <code>to</code> כולל. ‏<code>to &lt;= from</code> ← ‏0.</li><li>החישוב לפי לוח השנה — בלי קשר לאזור הזמן של המחשב (הבודק מריץ גם עם <code>TZ</code> אחר).</li></ul>
+```term
+% node 24-production/starter/P24-E53.ts
+% npm run check P24-E53
+```
+@hint1
+<p>כל החשבון ב־UTC: <code>new Date(Date.UTC(y, m - 1, d))</code>, ‏<code>setUTCDate(getUTCDate() + 1)</code>, ‏<code>getUTCDay()</code>. ב־UTC אין שעון קיץ, ו"יום" הוא תמיד יום.</p>
+@hint2
+<p>בחזרה למחרוזת: <code>d.toISOString().slice(0, 10)</code> — כאן זה נכון, כי התאריך נבנה בחצות UTC.</p>
+@solution
+```ts run save=solutions/P24-E53.ts
+// P24-E53: ימי עבודה עד היעד
+const toDate = (s: string) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)); // "תאריך" = חצות UTC; ב־UTC אין שעון קיץ
+};
+const toStr = (d: Date) => d.toISOString().slice(0, 10);
+
+export function addBusinessDays(from: string, n: number, weekend: number[] = [5, 6]): string {
+  if (!Number.isInteger(n) || n < 0) throw new RangeError(`n לא תקין: ${n}`);
+  const d = toDate(from);
+  let left = n;
+  while (left > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (!weekend.includes(d.getUTCDay())) left--;
+  }
+  return toStr(d);
+}
+
+export function businessDaysBetween(from: string, to: string, weekend: number[] = [5, 6]): number {
+  const d = toDate(from);
+  const end = toDate(to);
+  let count = 0;
+  while (d < end) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (!weekend.includes(d.getUTCDay())) count++;
+  }
+  return count;
+}
+
+console.log(addBusinessDays("2026-11-05", 3), businessDaysBetween("2026-11-05", "2026-11-10"));
+console.log(addBusinessDays("2026-03-26", 1), addBusinessDays("2026-11-06", 0), addBusinessDays("2026-11-05", 1, [0, 6]));
+```
+```out
+2026-11-10 3
+2026-03-29 2026-11-06 2026-11-06
+```
+<p>5.11.2026 הוא יום חמישי: שישי ושבת לא נספרים, ושלושה ימי עבודה אחריו הם ראשון, שני ושלישי — ‏10.11.</p>
+@mistakes
+<ul><li><code>new Date("2026-11-05")</code> ו־<code>getDay()</code> — ‏<code>getDay</code> לפי אזור המחשב. בניו יורק, חצות UTC הוא עוד היום הקודם, ו"חמישי" הופך ל"רביעי".</li><li>לחבר <code>86_400_000</code> — ב־UTC זה דווקא בסדר, אבל רק אם התחלת בחצות UTC. ה־setUTCDate ברור יותר.</li></ul>
+
+@@ P24-E54 | 2 | ‏timestamptz מול חיבור עם אזור אחר | 10 | פרק 16, פרק 19, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>נחש מה יוחזר, ואז הרץ ב־psql:</p>
+```sql
+CREATE TEMP TABLE t (created_at timestamptz);
+INSERT INTO t VALUES ('2026-11-04T22:30:00Z');
+SET TIME ZONE 'UTC';
+SELECT created_at, created_at::date AS day FROM t;
+SET TIME ZONE 'Asia/Jerusalem';
+SELECT created_at, created_at::date AS day FROM t;
+SELECT (created_at AT TIME ZONE 'Asia/Jerusalem')::date AS il_day,
+       (created_at AT TIME ZONE 'UTC')::date AS utc_day FROM t;
+```
+<p>(1) האם הערך השמור השתנה בין שתי השאילתות? (2) למה <code>::date</code> מסוכן בשאילתות של דוחות? (3) למה בפרק 19 הגדרנו <code>timezone=UTC</code> בחיבור של Prisma?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>timestamptz</code> ו־<code>date</code> מפרק 16, החיבור של Prisma מפרק 19 — והשיעור: רגע מול תאריך מקומי.</p>
+@hint1
+<p>‏<code>timestamptz</code> שומר רגע. ההצגה — לפי ה־<code>TimeZone</code> של החיבור.</p>
+@hint2
+<p>‏<code>::date</code> על timestamptz "חותך" לפי האזור של החיבור — לא לפי מה שאתה מתכוון.</p>
+@solution
+```sql run
+CREATE TEMP TABLE t (created_at timestamptz);
+INSERT INTO t VALUES ('2026-11-04T22:30:00Z');
+SET TIME ZONE 'UTC';
+SELECT created_at, created_at::date AS day FROM t;
+SET TIME ZONE 'Asia/Jerusalem';
+SELECT created_at, created_at::date AS day FROM t;
+SELECT (created_at AT TIME ZONE 'Asia/Jerusalem')::date AS il_day,
+       (created_at AT TIME ZONE 'UTC')::date AS utc_day FROM t;
+```
+```out
+CREATE TABLE
+INSERT 0 1
+SET
+       created_at       |    day
+------------------------+------------
+ 2026-11-04 22:30:00+00 | 2026-11-04
+(1 row)
+
+SET
+       created_at       |    day
+------------------------+------------
+ 2026-11-05 00:30:00+02 | 2026-11-05
+(1 row)
+
+   il_day   |  utc_day
+------------+------------
+ 2026-11-05 | 2026-11-04
+(1 row)
+```
+<ol><li>לא. אותו רגע, מוצג פעם ב־<code>+00</code> ופעם ב־<code>+02</code>.</li><li>התוצאה תלויה בהגדרה של החיבור — שאילתה זהה, דוח שונה, לפי מי שהריץ. בדוח כותבים את האזור במפורש: <code>AT TIME ZONE 'Asia/Jerusalem'</code> (או פרמטר — E57).</li><li>כדי שלא יהיו הפתעות בצד של Node: הערכים חוזרים כ־UTC, ואת ההמרה לאזור עושים במקום אחד, במפורש — בקוד (שיעור 2) או ב־SQL עם <code>AT TIME ZONE</code>.</li></ol>
+@mistakes
+<ul><li>"לתקן" את הדוח בשינוי ה־timezone של כל השרת — ואז דוח של לקוח בניו יורק שבור.</li></ul>
+
+@@ P24-E55 | 2 | ‏dueDate עם z.coerce.date() | 10 | פרק 15, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>ב־schema של משימה כתוב <code>dueDate: z.coerce.date()</code>. הלקוח שולח <code>"2026-11-05"</code>. (1) מה יש ב־<code>dueDate</code> אחרי הפרסור, ואיזה רגע זה? (2) השרת שומר אותו ב־<code>timestamptz</code>, ומחזיר <code>dueDate.toISOString()</code>. מה יראה משתמש בניו יורק שה־frontend שלו מציג את התאריך לפי השעון המקומי? (3) איך היית כותב את השדה ב־zod, ובאיזה טיפוס במסד?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> Zod מפרק 15 ועמודות <code>date</code> מפרק 16 — והשיעור: תאריך מקומי הוא לא רגע.</p>
+@hint1
+<p>‏<code>new Date("2026-11-05")</code> — בלי שעה — הוא חצות UTC (E03).</p>
+@hint2
+<p>בניו יורק, חצות UTC הוא 19:00 של היום הקודם.</p>
+@solution
+<ol><li><code>Date</code> של <code>2026-11-05T00:00:00.000Z</code> — רגע, חצות UTC.</li><li>ה־frontend מקבל <code>"2026-11-05T00:00:00.000Z"</code> ומציג לפי השעון המקומי — 4 בנובמבר. המשימה "זזה" יום אחורה.</li><li><code>dueDate: z.iso.date()</code> — מחרוזת <code>YYYY-MM-DD</code> שנשארת מחרוזת; במסד <code>date</code>; וב־API חוזרת אותה מחרוזת. אף אחד בדרך לא ממיר לרגע.</li></ol>
+@mistakes
+<ul><li><code>coerce</code> "כי זה נוח" — הוא מקבל גם <code>"5"</code> ו־<code>""</code> (שהופך ל־Invalid Date או לשנת 2001, תלוי בערך).</li></ul>
+
+@@ P24-E56 | 2 | אילו רגעים לבדוק? | 10 | פרק 22, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>כתבת <code>isOverdue(dueDate, now, tz)</code>: ‏<code>true</code> אם התאריך המקומי של <code>now</code> באזור <code>tz</code> כבר אחרי <code>dueDate</code>. אתה כותב בדיקות עם שעון מוזרק, ל־<code>dueDate = "2026-11-05"</code> ו־<code>tz = "Asia/Jerusalem"</code>. אילו ערכים של <code>now</code> תבדוק (כתוב אותם כ־ISO עם <code>Z</code>), ומה התוצאה הצפויה לכל אחד? ואיזה מקרה נוסף צריך בשביל משימה שה־<code>dueDate</code> שלה בסוף מרץ?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> בדיקות גבול ושעון מוזרק מפרק 22 — והשיעור: "היום" לפי אזור.</p>
+@hint1
+<p>הגבול הוא חצות בישראל — באיזו שעה ב־UTC זה בנובמבר?</p>
+@hint2
+<p>שני צדדים של כל גבול: רגע אחד לפני, והרגע עצמו.</p>
+@solution
+<ul><li><code>2026-11-05T21:59:59.999Z</code> ← ‏<code>false</code> (‏23:59:59.999 ב־5.11 בישראל).</li><li><code>2026-11-05T22:00:00.000Z</code> ← ‏<code>true</code> (חצות, 6.11).</li><li><code>2026-11-05T10:00:00Z</code> ← ‏<code>false</code> (יום היעד עצמו — עוד לא באיחור).</li><li><code>2026-11-04T22:30:00Z</code> ← ‏<code>false</code> — כבר 5.11 בישראל, ב־UTC עוד 4.11. מקרה שבודק שבאמת משתמשים באזור.</li></ul>
+<p>בסוף מרץ — הגבול זז: עם <code>dueDate = "2026-03-27"</code>, חצות של 28.3 בישראל הוא <code>2026-03-27T21:00:00Z</code> (‏+03:00), לא 22:00. בדיקה שמניחה +2 תמיד — תתפוס את הבאג.</p>
+@mistakes
+<ul><li>לבדוק רק עם <code>new Date()</code> של עכשיו — הבדיקה עוברת או נכשלת לפי השעה שבה הרצת אותה.</li></ul>
+
+@@ P24-E57 | 3 | הזמנות לפי יום — באזור של הדוח 🤖 | 20 | פרק 17, פרק 18, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>בקובץ <code>24-production/files/orders-tz.sql</code> יש טבלת <code>orders(id, created_at timestamptz, total_cents int)</code>, עם הזמנות סביב חצות. בקובץ <code>24-production/starter/P24-E57.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function ordersPerDay(pool: Pool, tz: string): Promise<{ day: string; orders: number; totalCents: number }[]>
+```
+<ul><li>יום — לפי <code>tz</code>, לא לפי ה־timezone של החיבור. ‏<code>day</code> כמחרוזת <code>"YYYY-MM-DD"</code>.</li><li>ממוין לפי יום. רק ימים שיש בהם הזמנות.</li><li>‏<code>tz</code> עובר כ<strong>פרמטר</strong> (<code>$1</code>), לא בשרשור מחרוזות. אזור לא קיים ← השגיאה של PostgreSQL עוברת הלאה.</li></ul>
+```term
+% npm run check P24-E57
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>GROUP BY</code> מפרק 17 ו־<code>pg</code> עם פרמטרים מפרק 18 — והשיעור: "איזה יום" תלוי באזור.</p>
+@hint1
+<p><code>to_char((created_at AT TIME ZONE $1)::date, 'YYYY-MM-DD')</code> — ‏<code>AT TIME ZONE</code> על timestamptz מחזיר את השעה על השעון באזור.</p>
+@hint2
+<p>‏<code>COUNT(*)</code> ו־<code>SUM</code> — ב־<code>GROUP BY 1</code> ו־<code>ORDER BY 1</code>. שמות שדות ב־camelCase — עם <code>AS "totalCents"</code>.</p>
+@solution
+```ts save=solutions/P24-E57.ts
+// P24-E57: הזמנות לפי יום — באזור של הדוח
+import type { Pool } from "pg";
+
+export async function ordersPerDay(pool: Pool, tz: string) {
+  const { rows } = await pool.query(
+    `SELECT to_char((created_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS day,
+            COUNT(*)::int AS orders,
+            SUM(total_cents)::int AS "totalCents"
+       FROM orders
+      GROUP BY 1
+      ORDER BY 1`,
+    [tz],
+  );
+  return rows as { day: string; orders: number; totalCents: number }[];
+}
+```
+<p>הזמנה של <code>22:30Z</code> ב־4.11 נספרת ב־4.11 בדוח של UTC וב־5.11 בדוח של ישראל — אותה שאילתה, פרמטר אחר. ‏<code>::int</code> — כי <code>COUNT</code> מחזיר <code>bigint</code>, ו־<code>pg</code> מחזיר bigint כמחרוזת (אם לא הוגדר אחרת).</p>
+@mistakes
+<ul><li><code>created_at::date</code> — לפי האזור של החיבור. בבודק החיבור ב־<code>Asia/Jerusalem</code> — והדוח של UTC יוצא שגוי.</li><li><code>`... AT TIME ZONE '${tz}'`</code> — SQL injection דרך פרמטר "תמים".</li></ul>
+
+@@ P24-E58 | 2 | ‏zod: פרופיל עם אזור, יום הולדת ושעת תזכורת 🤖 | 15 | פרק 15, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>בקובץ <code>24-production/starter/P24-E58.ts</code> (יש בו רק הערה) כתוב וייצא <code>profileSchema</code> (zod) ל־<code>PATCH /auth/me</code>:</p>
+<ul><li>אובייקט קשוח (<code>z.strictObject</code>) — שדה לא מוכר ← שגיאה.</li><li><code>timeZone</code> — חובה; מחרוזת שהיא אזור שקיים לפי <code>Intl</code>. אחרת ← הודעה <code>"אזור זמן לא מוכר"</code>.</li><li><code>birthDate</code> — אופציונלי; תאריך <code>YYYY-MM-DD</code> קיים (<code>z.iso.date()</code>).</li><li><code>reminderTime</code> — אופציונלי; <code>HH:mm</code> בין <code>00:00</code> ל־<code>23:59</code> (‏<code>"9:00"</code> ו־<code>"24:00"</code> לא תקינים).</li><li>התוצאה של <code>parse</code> — מחרוזות כמו שהן (בלי המרה ל־<code>Date</code>).</li></ul>
+```term
+% npm run check P24-E58
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> Zod ו־<code>refine</code> מפרק 15 — והשיעור: אזור הוא שם, יום הולדת הוא תאריך מקומי, ותזכורת היא שעה על השעון.</p>
+@hint1
+<p><code>z.string().refine(isValidTimeZone, "אזור זמן לא מוכר")</code> — עם הפונקציה מ־E11 (העתק אותה לקובץ).</p>
+@hint2
+<p>שעה: <code>z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)</code>.</p>
+@solution
+```ts run save=solutions/P24-E58.ts
+// P24-E58: zod — פרופיל עם אזור, יום הולדת ושעת תזכורת
+import { z } from "zod";
+
+function isValidTimeZone(tz: string): boolean {
+  if (tz === "") return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const profileSchema = z.strictObject({
+  timeZone: z.string().refine(isValidTimeZone, "אזור זמן לא מוכר"),
+  birthDate: z.iso.date().optional(),
+  reminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "שעה בפורמט HH:mm").optional(),
+});
+
+console.log(profileSchema.parse({ timeZone: "Asia/Jerusalem", birthDate: "1990-05-17", reminderTime: "08:30" }));
+console.log(profileSchema.safeParse({ timeZone: "Mars/Olympus" }).error?.issues[0].message);
+```
+```out
+{
+  timeZone: 'Asia/Jerusalem',
+  birthDate: '1990-05-17',
+  reminderTime: '08:30'
+}
+אזור זמן לא מוכר
+```
+@mistakes
+<ul><li><code>z.coerce.date()</code> ל־birthDate — E55.</li><li><code>/^\d{2}:\d{2}$/</code> — מקבל <code>"99:99"</code>.</li></ul>
+
+@@ P24-E59 | 2 | ‏GET /today ב־Express 🤖 | 15 | פרק 15, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>בקובץ <code>24-production/starter/P24-E59.ts</code> (יש בו רק הערה) כתוב וייצא <code>todayRouter({ now })</code> — Router של Express:</p>
+<ul><li><code>GET /today?tz=Asia/Jerusalem</code> ← 200 <code>{ tz, date, time }</code>: ‏<code>date</code> = <code>"YYYY-MM-DD"</code> ו־<code>time</code> = <code>"HH:mm"</code> (00–23) באזור, ברגע <code>now()</code>.</li><li>‏<code>tz</code> בתשובה — השם הקנוני, כמו ש־<code>Intl</code> מחזיר אותו: <code>?tz=asia/jerusalem</code> ← <code>"Asia/Jerusalem"</code>. בלי <code>tz</code> ← <code>"UTC"</code>.</li><li>אזור לא קיים (או ריק) ← 400 <code>{ error: { code: "INVALID_TIME_ZONE", message } }</code>.</li><li>‏<code>now</code> — פונקציה שמחזירה <code>Date</code>; ברירת מחדל <code>() =&gt; new Date()</code>.</li></ul>
+```term
+% npm run check P24-E59
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>Router</code> ו־<code>req.query</code> מפרק 15, שעון מוזרק מפרק 21 — והשיעור: "היום" של המשתמש.</p>
+@hint1
+```ts
+new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions().timeZone
+```
+<p>השם הקנוני. ואם האזור לא קיים — הבנאי זורק <code>RangeError</code>.</p>
+@hint2
+<p>‏<code>req.query.tz</code> יכול להיות גם מערך (<code>?tz=a&amp;tz=b</code>). ‏<code>typeof tz === "string"</code>.</p>
+@solution
+```ts save=solutions/P24-E59.ts
+// P24-E59: GET /today ב־Express
+import { Router } from "express";
+
+export function todayRouter({ now = () => new Date() }: { now?: () => Date } = {}) {
+  const router = Router();
+  router.get("/today", (req, res) => {
+    const raw = req.query.tz === undefined ? "UTC" : req.query.tz;
+    let tz: string;
+    try {
+      if (typeof raw !== "string" || raw === "") throw new RangeError("empty");
+      tz = new Intl.DateTimeFormat("en", { timeZone: raw }).resolvedOptions().timeZone;
+    } catch {
+      res.status(400).json({ error: { code: "INVALID_TIME_ZONE", message: `אזור זמן לא מוכר: ${String(raw)}` } });
+      return;
+    }
+    const at = now();
+    const date = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+    const time = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+    res.json({ tz, date, time });
+  });
+  return router;
+}
+```
+@mistakes
+<ul><li>להחזיר את <code>req.query.tz</code> כמו שהוא — ואז "asia/jerusalem" ו־"Asia/Jerusalem" הם שני ערכים שונים בכל מקום שמשווה אותם.</li></ul>
+
+@@ P24-E60 | 2 | איך הופכים פעולה ל־idempotent? | 15 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>לכל פעולה: האם היא idempotent כמו שהיא כתובה? ואם לא — איך היית משנה אותה (או את ה־API) כדי ששליחה חוזרת לא תזיק? יש יותר מדרך אחת.</p>
+<ol><li><code>POST /cart/items</code> ‏<code>{"productId": 7, "quantity": 1}</code> — "הוסף לעגלה".</li><li>שליחת מייל "ברוך הבא" אחרי הרשמה.</li><li><code>POST /articles/9/views</code> — "ספור צפייה".</li><li><code>PATCH /notifications/3</code> ‏<code>{"read": true}</code>.</li><li><code>POST /transfers</code> ‏<code>{"from": 1, "to": 2, "amount": 100}</code>.</li><li><code>POST /users</code> ‏<code>{"email": "dana@example.com"}</code>.</li></ol>
+@hint1
+<p>שלוש טכניקות: (א) לנסח כ"קבע ל־X" במקום "שנה ב־X"; (ב) מזהה ייחודי (מהלקוח, או אילוץ UNIQUE) שהמסד דוחה פעם שנייה; (ג) Idempotency-Key.</p>
+@hint2
+<p>לפעמים "כמעט נכון" מספיק — ספירת צפיות לא חייבת להיות מדויקת. ולפעמים לא — העברת כסף.</p>
+@solution
+<ol><li>לא — פעמיים = כמות 2. אפשר <code>PUT /cart/items/7</code> ‏<code>{"quantity": 1}</code> ("הכמות היא 1"), או Idempotency-Key.</li><li>לא. שומרים <code>welcome_sent_at</code> במשתמש ושולחים רק אם הוא ריק — בעדכון אטומי (<code>UPDATE ... WHERE welcome_sent_at IS NULL RETURNING</code>), כדי ששני workers לא ישלחו יחד.</li><li>לא — אבל אולי זה בסדר: צפייה כפולה נדירה לא שווה מנגנון. אם כן חשוב — מזהה צפייה מהלקוח עם UNIQUE.</li><li>כן — "קבע ל־true".</li><li>לא, וזה הכי מסוכן. Idempotency-Key חובה (או <code>transferId</code> מהלקוח עם UNIQUE).</li><li>כמעט: ה־UNIQUE על email מונע כפילות — אבל הניסיון השני מקבל 409 "כבר קיים" במקום ה־201 שהלקוח מחכה לו. Idempotency-Key נותן את אותה תשובה בדיוק.</li></ol>
+@mistakes
+<ul><li>"אוסיף UNIQUE על כל הטבלה" — לפעמים שתי פעולות זהות הן באמת שתי פעולות (שתי העברות של 100 לאותו אדם).</li></ul>
+
+@@ P24-E61 | 2 | מפתח חדש בכל ניסיון | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>הקוד ב־frontend "שולח שוב אם נכשל":</p>
+```js
+async function pay(body) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await fetch("/payments", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID(), "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      await sleep(1000 * attempt);
+    }
+  }
+}
+```
+<p>(1) מה הבאג, ומה התוצאה אם הניסיון הראשון הגיע לשרת והתשובה אבדה? (2) תקן. (3) המשתמש לוחץ על "שלם" פעמיים מהר. האם התיקון שלך מגן גם על זה? מה צריך בשביל זה?</p>
+@hint1
+<p>המפתח מזהה את <em>הפעולה</em>. כמה פעולות יש כאן — אחת או שלוש?</p>
+@hint2
+<p>לחיצה שנייה = קריאה שנייה ל־<code>pay</code>.</p>
+@solution
+<ol><li>מפתח חדש בכל ניסיון — לשרת זה נראה כמו שלושה תשלומים שונים. הניסיון הראשון בוצע, התשובה אבדה, השני מבצע שוב — חיוב כפול. המנגנון כולו לא עושה כלום.</li><li><code>const key = crypto.randomUUID()</code> פעם אחת לפני הלולאה, ובכל ניסיון — אותו <code>key</code> (E67).</li><li>לא — כל קריאה ל־<code>pay</code> מייצרת מפתח חדש. צריך שהמפתח יהיה של "הטופס": נוצר כשהטופס נפתח (או בלחיצה הראשונה), ומתחלף רק אחרי הצלחה. ובנוסף, ב־UI — לנטרל את הכפתור בזמן שליחה (E102).</li></ol>
+@mistakes
+<ul><li>לחשוב שהשרת "יזהה" שזה אותו תשלום לפי הסכום — שני תשלומים זהים יכולים להיות לגיטימיים.</li></ul>
+
+@@ P24-E62 | 2 | למה לא שומרים תשובת 5xx? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>נניח שהשרת שומר כל תשובה למפתח — גם 503 ("המסד לא זמין"). תאר מה קורה בסדר הזה: הלקוח שולח <code>POST /orders</code> עם מפתח <code>k1</code>; המסד נפל לשנייה ← 503; המסד חזר; הלקוח שולח שוב עם <code>k1</code>. ולמה דווקא תשובות 4xx <em>כן</em> שומרים?</p>
+@hint1
+<p>בשביל מה הלקוח שולח שוב בכלל?</p>
+@hint2
+<p>בקשה לא תקינה (422) — האם שליחה חוזרת שלה יכולה להצליח?</p>
+@solution
+<p>הניסיון השני מקבל replay של 503 — לנצח (או עד שהמפתח פג). הלקוח עשה בדיוק את מה שהמנגנון נועד לו, והוא תקוע. (זו אחת התקלות של P24-E22.) 5xx אומר "לא הצלחנו לבצע" — אז המפתח משתחרר (release), והניסיון הבא מבצע באמת.</p>
+<p>4xx (למשל 422 על <code>dueDate</code> בעבר) — אותה בקשה תיכשל שוב בכל מקרה, אז אפשר לשמור. ובפרויקט בחרנו release גם לשגיאה עסקית, כדי שהלקוח יוכל לתקן את הבקשה ולשלוח עם אותו מפתח (E92) — שתי הגישות קיימות בעולם.</p>
+@mistakes
+<ul><li>לשמור "רק 2xx" ולשכוח את המצב "בטיפול" — ואז אחרי קריסה באמצע, המפתח תקוע ב־409 לנצח. צריך תוקף גם לרשומה בטיפול.</li></ul>
+
+@@ P24-E63 | 2 | ‏409 IN_PROGRESS — ומה עכשיו? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>לקוח שלח <code>POST /payments</code> עם מפתח, לא קיבל תשובה אחרי 5 שניות (timeout אצלו), ושלח שוב. הבקשה הראשונה עדיין רצה בשרת (הספק של כרטיסי האשראי איטי היום). (1) מה השרת עונה לניסיון השני, ולמה לא פשוט "לחכות" בשרת עד שהראשונה תסתיים ואז להחזיר replay? (2) מה לקוח טוב עושה עם התשובה הזו? (3) מה קורה אם השרת קרס באמצע הבקשה הראשונה — ואיך זה נפתר?</p>
+@hint1
+<p>חיבור שמחכה תופס משאבים בשרת. כמה ניסיונות כאלה יכולים להצטבר?</p>
+@hint2
+<p>רשומה "בטיפול" שאף אחד כבר לא מטפל בה.</p>
+@solution
+<ol><li>409 <code>IDEMPOTENCY_IN_PROGRESS</code>. לחכות בשרת = חיבור פתוח וזיכרון לכל ניסיון; לקוח עם timeout קצר יכול לייצר עשרות כאלה. פשוט יותר ובטוח יותר: לענות מיד, ולתת ללקוח להחליט.</li><li>מחכה קצת (backoff) ושולח שוב <strong>עם אותו מפתח</strong>. בסוף יקבל replay של התוצאה האמיתית. (409 הוא בין התשובות ששווה לנסות עליהן שוב — E67.)</li><li>הרשומה נשארת "בטיפול". לכן יש תוקף: אחרי ה־TTL הרשומה נחשבת לא קיימת, והניסיון הבא מבצע. (יש מערכות שנותנות לרשומה "בטיפול" תוקף קצר בהרבה מ־24 שעות — דקות.)</li></ol>
+@mistakes
+<ul><li>להחזיר 500 ל"בטיפול" — הלקוח חושב שנכשל, ואולי מייצר מפתח חדש.</li></ul>
+
+@@ P24-E64 | 2 | מה נכנס לטביעת האצבע? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>הטביעה מחושבת כ־sha256 של משהו. לכל זוג בקשות עם אותו מפתח — האם הן "אותה בקשה" (replay), או "תוכן אחר" (422)? ומה זה אומר על איך מחשבים את הטביעה?</p>
+<ol><li><code>{"title":"חלב","priority":1}</code> ו־<code>{"priority":1,"title":"חלב"}</code></li><li><code>{"title":" חלב "}</code> ו־<code>{"title":"חלב"}</code> (ה־schema עושה trim)</li><li><code>POST /tasks</code> ו־<code>POST /projects</code>, עם אותו גוף</li><li>אותו גוף, אבל header אחר: <code>User-Agent</code></li><li><code>{"tags":["a","b"]}</code> ו־<code>{"tags":["b","a"]}</code></li></ol>
+@hint1
+<p>מה שקובע הוא "האם השרת היה עושה אותו דבר".</p>
+@hint2
+<p><code>JSON.stringify</code> שומר על סדר המפתחות כמו שהגיעו.</p>
+@solution
+<ol><li>אותה בקשה — אבל <code>JSON.stringify</code> נותן מחרוזות שונות. צריך JSON <strong>קנוני</strong>: מפתחות ממוינים (E65).</li><li>אותה בקשה, אם מחשבים את הטביעה <em>אחרי</em> ה־validation (כמו בפרויקט). לפני — הן "שונות", והלקוח מקבל 422 בלי סיבה.</li><li>שונות — פעולות שונות לגמרי. לכן גם method ונתיב נכנסים לטביעה (או להיקף של המפתח).</li><li>אותה בקשה. headers כמו User-Agent ו־Date לא משנים את הפעולה ולא נכנסים.</li><li>שונות — במערך, הסדר הוא חלק מהתוכן. מיון מפתחות — כן; מיון מערכים — לא.</li></ol>
+@mistakes
+<ul><li>טביעה על הגוף הגולמי (המחרוזת שהגיעה) — רווח או ירידת שורה אחרת = 422.</li></ul>
+
+@@ P24-E65 | 2 | טביעת אצבע קנונית 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>בקובץ <code>24-production/starter/P24-E65.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function canonicalJson(value: unknown): string
+export function fingerprint(method: string, path: string, body: unknown): string
+```
+<ul><li><code>canonicalJson</code> — כמו <code>JSON.stringify</code>, אבל המפתחות של כל אובייקט, בכל עומק, ממוינים. מערכים — באותו סדר. שדה שערכו <code>undefined</code> — לא מופיע (כמו ב־<code>JSON.stringify</code>).</li><li><code>fingerprint</code> — sha256 (hex) של המחרוזת <code>`${METHOD} ${path}\n${canonicalJson(body)}`</code>, כש־METHOD באותיות גדולות.</li></ul>
+```term
+% node 24-production/starter/P24-E65.ts
+% npm run check P24-E65
+```
+@hint1
+<p>רקורסיה: מערך ← <code>"[" + items.map(canonicalJson).join(",") + "]"</code>; אובייקט ← מפתחות ממוינים; כל השאר ← <code>JSON.stringify(value)</code>.</p>
+@hint2
+<p><code>createHash("sha256").update(text).digest("hex")</code> מ־<code>node:crypto</code> (פרק 21).</p>
+@solution
+```ts run save=solutions/P24-E65.ts
+// P24-E65: טביעת אצבע קנונית
+import { createHash } from "node:crypto";
+
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((v) => (v === undefined ? "null" : canonicalJson(v))).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function fingerprint(method: string, path: string, body: unknown): string {
+  return createHash("sha256").update(`${method.toUpperCase()} ${path}\n${canonicalJson(body)}`).digest("hex");
+}
+
+console.log(canonicalJson({ b: 1, a: { d: [3, { z: 1, y: 2 }], c: undefined } }));
+console.log(fingerprint("post", "/tasks", { title: "חלב", priority: 1 }) === fingerprint("POST", "/tasks", { priority: 1, title: "חלב" }));
+```
+```out
+{"a":{"d":[3,{"y":2,"z":1}]},"b":1}
+true
+```
+<p>מערך עם <code>undefined</code> בתוכו — <code>JSON.stringify</code> כותב <code>null</code>, וגם אנחנו. (באובייקט — השדה נעלם.) ‏<code>JSON.stringify(k)</code> על המפתח — כדי שמפתח עם מרכאות יקבל escaping.</p>
+@mistakes
+<ul><li><code>JSON.stringify(obj, Object.keys(obj).sort())</code> — הרשימה השנייה היא "אילו מפתחות לכלול" בכל העומקים, ומפתחות פנימיים שלא ברשימה נעלמים.</li><li>למיין גם מערכים — ואז <code>["b","a"]</code> ו־<code>["a","b"]</code> נחשבים אותה בקשה.</li></ul>
+
+@@ P24-E66 | 2 | מה עושים עם הבקשה? 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>האיור של מחזור החיים של מפתח (שיעור 3, איור 2) — כפונקציה אחת, בלי מאגר ובלי HTTP. בקובץ <code>24-production/starter/P24-E66.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Entry = { fingerprint: string; status: number | null; body?: unknown; createdAt: number };
+export type Decision =
+  | { action: "execute" }
+  | { action: "replay"; status: number; body: unknown }
+  | { action: "reject"; status: 409 | 422; code: string };
+export function decide(entry: Entry | undefined, fp: string, now: number, ttlMs: number): Decision
+export function shouldStore(status: number): boolean
+```
+<ul><li>אין רשומה, או שהיא בת <code>ttlMs</code> ומעלה ← <code>execute</code>.</li><li>טביעה שונה ← 422 <code>IDEMPOTENCY_KEY_REUSED</code> (גם כשהרשומה בטיפול).</li><li><code>status === null</code> (בטיפול) ← 409 <code>IDEMPOTENCY_IN_PROGRESS</code>.</li><li>אחרת ← <code>replay</code> עם ה־status וה־body השמורים.</li><li><code>shouldStore</code> — האם לשמור תשובה עם הסטטוס הזה: כן ל־2xx ול־4xx, לא ל־5xx.</li></ul>
+```term
+% npm run check P24-E66
+```
+@hint1
+<p>הסדר של ה־<code>if</code>ים חשוב: קודם תוקף, אחר כך טביעה, ורק אז "בטיפול".</p>
+@hint2
+<p>‏<code>now - entry.createdAt &gt;= ttlMs</code> — "בת ttlMs ומעלה".</p>
+@solution
+```ts save=solutions/P24-E66.ts
+// P24-E66: מה עושים עם הבקשה?
+export type Entry = { fingerprint: string; status: number | null; body?: unknown; createdAt: number };
+export type Decision =
+  | { action: "execute" }
+  | { action: "replay"; status: number; body: unknown }
+  | { action: "reject"; status: 409 | 422; code: string };
+
+export function decide(entry: Entry | undefined, fp: string, now: number, ttlMs: number): Decision {
+  if (!entry || now - entry.createdAt >= ttlMs) return { action: "execute" }; // פג תוקף = כאילו לא קיים
+  if (entry.fingerprint !== fp) return { action: "reject", status: 422, code: "IDEMPOTENCY_KEY_REUSED" };
+  if (entry.status === null) return { action: "reject", status: 409, code: "IDEMPOTENCY_IN_PROGRESS" };
+  return { action: "replay", status: entry.status, body: entry.body };
+}
+
+export function shouldStore(status: number): boolean {
+  return status >= 200 && status < 500; // 5xx = "לא הצלחנו" ← release, כדי שאפשר יהיה לנסות שוב
+}
+```
+@mistakes
+<ul><li>לבדוק "בטיפול" לפני הטביעה — לקוח ששלח תוכן אחר מקבל 409, מחכה ומנסה שוב, ורק אחרי סיבוב מיותר מגלה שהבקשה שלו שגויה. ההודעה הנכונה (422) צריכה להגיע מיד.</li></ul>
+
+@@ P24-E67 | 3 | לקוח שמנסה שוב — עם אותו מפתח 🤖 | 20 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>הצד של הלקוח. בקובץ <code>24-production/starter/P24-E67.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Send = (body: unknown, key: string) => Promise<{ status: number; body: unknown }>;
+export async function sendWithRetry(
+  send: Send, body: unknown,
+  opts: { retries: number; sleep: (ms: number) => Promise<void>; newKey: () => string },
+): Promise<{ status: number; body: unknown; attempts: number; key: string }>
+```
+<ul><li>המפתח נוצר <strong>פעם אחת</strong> (<code>newKey()</code>), ונשלח בכל ניסיון.</li><li>מנסים שוב אם <code>send</code> זרק (שגיאת רשת), או שה־status הוא 5xx, או 409. על כל תשובה אחרת (2xx, ‏4xx אחרים) — מחזירים מיד.</li><li>בסך הכול לכל היותר <code>retries + 1</code> ניסיונות. לפני ניסיון מספר <em>n</em> (מ־2) — <code>sleep(200 * 2 ** (n - 2))</code>: ‏200, 400, 800…</li><li>נגמרו הניסיונות: אם הניסיון האחרון זרק ← זורקים את השגיאה שלו; אחרת ← מחזירים את התשובה האחרונה.</li><li><code>attempts</code> — כמה ניסיונות נעשו.</li></ul>
+```term
+% npm run check P24-E67
+```
+@hint1
+<p>לולאת <code>for (let attempt = 1; attempt &lt;= retries + 1; attempt++)</code>, עם <code>try/catch</code> סביב <code>await send(...)</code>.</p>
+@hint2
+<p>שמור <code>lastError</code> ו־<code>lastResponse</code>. בכל סיבוב מאפסים את מה שלא קרה.</p>
+@solution
+```ts save=solutions/P24-E67.ts
+// P24-E67: לקוח שמנסה שוב — עם אותו מפתח
+export type Send = (body: unknown, key: string) => Promise<{ status: number; body: unknown }>;
+
+const retryable = (status: number) => status >= 500 || status === 409;
+
+export async function sendWithRetry(
+  send: Send,
+  body: unknown,
+  { retries, sleep, newKey }: { retries: number; sleep: (ms: number) => Promise<void>; newKey: () => string },
+) {
+  const key = newKey(); // מפתח אחד לפעולה — לא לניסיון
+  let lastError: unknown;
+  let lastResponse: { status: number; body: unknown } | undefined;
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    if (attempt > 1) await sleep(200 * 2 ** (attempt - 2));
+    try {
+      lastResponse = await send(body, key);
+      lastError = undefined;
+      if (!retryable(lastResponse.status)) return { ...lastResponse, attempts: attempt, key };
+    } catch (err) {
+      lastError = err;
+      lastResponse = undefined;
+    }
+    if (attempt === retries + 1) {
+      if (lastResponse) return { ...lastResponse, attempts: attempt, key };
+      throw lastError;
+    }
+  }
+  throw new Error("unreachable");
+}
+```
+<p>אותו מפתח בכל ניסיון — זה כל הסוד. השרת רואה פעולה אחת: הניסיון הראשון ביצע, והבאים מקבלים 409 (בזמן שהוא רץ) או replay (אחרי).</p>
+@mistakes
+<ul><li>לנסות שוב על 400 או 422 — הבקשה לא תקינה, היא תיכשל שוב בכל ניסיון.</li><li>לא לנסות שוב על 409 — ואז הלקוח מוותר בדיוק כשהבקשה הראשונה עוד רצה.</li></ul>
+
+@@ P24-E68 | 2 | למצוא חיובים כפולים 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>לפני שהוספתם Idempotency-Key, היו חיובים כפולים. צריך למצוא אותם בנתונים. בקובץ <code>24-production/starter/P24-E68.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Payment = { id: number; userId: number; amountCents: number; createdAt: string };
+export function suspectedDuplicates(payments: Payment[], windowMs: number): number[][]
+```
+<ul><li>"חשוד" = אותו <code>userId</code>, אותו <code>amountCents</code>, ו־<code>createdAt</code> (ISO) במרחק של <strong>פחות</strong> מ־<code>windowMs</code> מהתשלום הקודם באותה קבוצה.</li><li>מחזיר קבוצות של מזהים (2 ומעלה), כל קבוצה ממוינת לפי זמן. שרשרת נחשבת קבוצה אחת: ‏0s, ‏40s, ‏80s עם חלון של 60 שניות ← קבוצה אחת של 3.</li><li>הקבוצות ממוינות לפי הזמן של התשלום הראשון בכל אחת. הקלט לא בהכרח ממוין, ולא משנים אותו.</li></ul>
+```term
+% node 24-production/starter/P24-E68.ts
+% npm run check P24-E68
+```
+@hint1
+<p>‏<code>Map</code> לפי <code>`${userId}:${amountCents}`</code>, ובכל אחד — מערך ממוין לפי זמן.</p>
+@hint2
+<p>עוברים על המערך הממוין: אם המרחק מהקודם קטן מהחלון — לאותה קבוצה; אחרת — קבוצה חדשה. בסוף משאירים רק קבוצות עם 2 ומעלה.</p>
+@solution
+```ts run save=solutions/P24-E68.ts
+// P24-E68: למצוא חיובים כפולים
+export type Payment = { id: number; userId: number; amountCents: number; createdAt: string };
+
+export function suspectedDuplicates(payments: Payment[], windowMs: number): number[][] {
+  const byKey = new Map<string, Payment[]>();
+  for (const p of payments) {
+    const k = `${p.userId}:${p.amountCents}`;
+    byKey.set(k, [...(byKey.get(k) ?? []), p]);
+  }
+  const groups: Payment[][] = [];
+  for (const list of byKey.values()) {
+    const sorted = [...list].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    let current: Payment[] = [];
+    for (const p of sorted) {
+      const prev = current.at(-1);
+      if (prev && Date.parse(p.createdAt) - Date.parse(prev.createdAt) < windowMs) current.push(p);
+      else {
+        if (current.length >= 2) groups.push(current);
+        current = [p];
+      }
+    }
+    if (current.length >= 2) groups.push(current);
+  }
+  return groups
+    .sort((a, b) => Date.parse(a[0].createdAt) - Date.parse(b[0].createdAt))
+    .map((g) => g.map((p) => p.id));
+}
+
+const t = (s: number) => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString();
+console.log(suspectedDuplicates([
+  { id: 1, userId: 1, amountCents: 4990, createdAt: t(0) },
+  { id: 2, userId: 1, amountCents: 4990, createdAt: t(40) },
+  { id: 3, userId: 2, amountCents: 4990, createdAt: t(41) },
+  { id: 4, userId: 1, amountCents: 4990, createdAt: t(59) },
+], 60_000));
+```
+```out
+[ [ 1, 2, 4 ] ]
+```
+<p>זו שאילתה שמריצים פעם אחת אחרי תקלה — ובמסד היא נראית כמו</p>
+```sql
+LAG(created_at) OVER (PARTITION BY user_id, amount_cents ORDER BY created_at)
+```
+<p>(פרק 17). ה־Idempotency-Key הוא מה שמונע את הצורך בה.</p>
+@mistakes
+<ul><li><code>payments.sort(...)</code> על הקלט עצמו — משנה את המערך של מי שקרא לפונקציה.</li><li>להשוות לתשלום <em>הראשון</em> בקבוצה במקום לקודם — ואז שרשרת של 0, 40, 80 נשברת לשתיים.</li></ul>
+
+@@ P24-E69 | 2 | ‏P2002 במקום SELECT לפני INSERT | 10 | פרק 19, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>שתי גרסאות של <code>reserve</code> ב־Prisma:</p>
+```ts
+// א
+const existing = await prisma.idempotencyKey.findUnique({ where: { userId_key: { userId, key } } });
+if (existing) return decide(existing);
+await prisma.idempotencyKey.create({ data: { userId, key, fingerprint } });
+return { kind: "new" };
+
+// ב
+try {
+  await prisma.idempotencyKey.create({ data: { userId, key, fingerprint } });
+  return { kind: "new" };
+} catch (e) {
+  if (e.code !== "P2002") throw e;
+  const existing = await prisma.idempotencyKey.findUnique({ where: { userId_key: { userId, key } } });
+  return decide(existing);
+}
+```
+<p>(1) מה קורה בכל גרסה כששתי בקשות עם אותו מפתח מגיעות באותו רגע? (2) מה בדיוק "תופס" את המרוץ בגרסה ב׳? (3) ב־ב׳, למה <code>throw e</code> אם הקוד הוא לא P2002?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> שגיאות Prisma ו־<code>@@unique</code> מפרק 19, מרוצים מפרק 18 — והשיעור: קודם תופסים את המפתח, באופן אטומי.</p>
+@hint1
+<p>בין <code>findUnique</code> ל־<code>create</code> יש "חור" בזמן.</p>
+@hint2
+<p>P2002 = ‏"Unique constraint failed".</p>
+@solution
+<ol><li>א: שתיהן לא מוצאות, שתיהן יוצרות — אחת מקבלת שגיאת unique <em>לא מטופלת</em> (500), ואם הבדיקה לא הייתה ב־DB אלא בזיכרון — שתיהן מבצעות. ב: אחת יוצרת, השנייה מקבלת P2002 וקוראת את הרשומה — "בטיפול" ← 409.</li><li>האינדקס הייחודי על <code>(user_id, key)</code> במסד. רק אחת יכולה להכניס; המסד מתאם — לא הקוד.</li><li>שגיאה אחרת (המסד לא זמין, timeout) היא לא "מישהו תפס לפניי". לבלוע אותה = לחשוב שהמפתח קיים כשהוא לא, ולהחזיר תשובה לא נכונה.</li></ol>
+@mistakes
+<ul><li>לעטוף את א׳ בטרנזקציה ולחשוב שזה פותר — ב־READ COMMITTED שתי הטרנזקציות עדיין לא רואות את השורה של השנייה. מה שפותר הוא האילוץ.</li></ul>
+
+@@ P24-E70 | 2 | המפתח נשמר אחרי ה־COMMIT | 10 | פרק 18, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>מישהו כתב:</p>
+```ts
+const payment = await db.transaction(async (tx) => tx.insertPayment(userId, amount)); // COMMIT
+await keys.save(userId, key, { status: 201, body: payment });                           // בנפרד
+return payment;
+```
+<p>(1) התהליך קרס בדיוק בין שתי השורות. הלקוח שולח שוב עם אותו מפתח. מה קורה? (2) מה קורה אם דווקא <code>keys.save</code> נכשל (המסד החזיר שגיאה)? (3) איך היית מסדר את זה, ומה זה דורש מהמקום שבו המפתחות נשמרים?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> טרנזקציות ו־ROLLBACK מפרק 18 — והשיעור: תשלום ומפתח, ביחד או כלום.</p>
+@hint1
+<p>"שתי פעולות שחייבות לקרות יחד" — איפה ראית את זה בפרק 18?</p>
+@hint2
+<p>אם המפתחות ב־Map בזיכרון ותשלומים ב־PostgreSQL, אפשר בכלל טרנזקציה אחת?</p>
+@solution
+<ol><li>התשלום במסד, המפתח לא. הניסיון החוזר לא מוצא מפתח ← מבצע שוב ← חיוב כפול. בדיוק התרחיש שהמנגנון אמור למנוע.</li><li>הלקוח מקבל 500, למרות שהתשלום בוצע. הוא ינסה שוב — שוב כפול.</li><li>תפיסת המפתח, התשלום, ושמירת התשובה — באותה טרנזקציה (כמו ב־E16): <code>INSERT</code> למפתח, <code>INSERT</code> לתשלום, <code>UPDATE</code> למפתח, ‏<code>COMMIT</code>. קריסה באמצע ← ROLLBACK של הכול, והניסיון הבא מתחיל נקי. זה דורש שהמפתחות יהיו <strong>באותו מסד</strong> כמו הנתונים — לכן בפרויקט הם טבלה ב־PostgreSQL.</li></ol>
+@mistakes
+<ul><li>"אחליף את הסדר — קודם מפתח ואז תשלום" — עכשיו קריסה באמצע משאירה מפתח "הושלם" בלי תשלום, והלקוח מקבל replay של הצלחה שלא קרתה.</li></ul>
+
+@@ P24-E71 | 2 | ‏webhook שמגיע פעמיים | 10 | פרק 14, פרק 18, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>ספק התשלומים שולח אליך <code>POST /webhooks/payments</code> כשתשלום הצליח: <code>{"eventId":"evt_91","orderId":42,"amount":4990}</code>. בתיעוד שלו כתוב: "אם לא קיבלנו 2xx תוך 10 שניות, נשלח שוב — עד 3 ימים".</p>
+<p>(1) כאן <em>אתה</em> השרת שמקבל ניסיונות חוזרים. מה ישמש כ"מפתח"? (2) הקוד שלך מעדכן את ההזמנה ל־paid ושולח מייל אישור. מה קורה אם אותו אירוע מגיע פעמיים? (3) מה תחזיר לאירוע כפול — 200 או 409? (4) הטיפול לקח 12 שניות. מה יקרה, ואיך מונעים?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> status codes מפרק 14 ו־UNIQUE וטרנזקציות מפרק 18 — והשיעור: idempotency מהצד שמקבל.</p>
+@hint1
+<p>לספק כבר יש מזהה ייחודי לכל אירוע.</p>
+@hint2
+<p>הספק לא מבין "כפול". הוא מבין רק 2xx = "קיבלת".</p>
+@solution
+<ol><li><code>eventId</code>. טבלה <code>processed_events(event_id PRIMARY KEY)</code>.</li><li>בלי הגנה — שני מיילים, ואולי חישוב כפול (נקודות, מלאי). עם הגנה: <code>INSERT ... ON CONFLICT DO NOTHING</code> ועדכון ההזמנה באותה טרנזקציה; אם לא נכנסה שורה — כבר טופל (E72).</li><li>200. מבחינת הספק — הוא צריך להפסיק לשלוח. 409 יגרום לו לנסות שוב שלושה ימים.</li><li>הספק שולח שוב בזמן שהראשון עוד רץ — ואם אין הגנה, שניהם מטפלים. עם ה־PRIMARY KEY השני ממתין לראשון ומקבל DO NOTHING. ובכלל: עונים 200 מהר — שומרים את האירוע ומעבדים ברקע (תורים — פרק 26).</li></ol>
+@mistakes
+<ul><li>להשתמש ב־<code>orderId</code> כמפתח — אבל לאותה הזמנה יכולים להגיע כמה אירועים שונים (שולם, הוחזר).</li></ul>
+
+@@ P24-E72 | 3 | ‏webhook פעם אחת — במסד 🤖 | 25 | פרק 18, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>בקובץ <code>24-production/files/webhooks.sql</code> יש <code>orders(id, status, paid_cents)</code> ו־<code>processed_events(event_id PRIMARY KEY, processed_at)</code>. בקובץ <code>24-production/starter/P24-E72.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function handlePaymentEvent(
+  pool: Pool, event: { id: string; orderId: number; amountCents: number },
+): Promise<"processed" | "duplicate">
+```
+<ul><li>בטרנזקציה אחת: רושמים את האירוע ב־<code>processed_events</code>. אם הוא כבר שם ← <code>"duplicate"</code>, בלי לגעת בהזמנה.</li><li>אירוע חדש ← <code>status = 'paid'</code> ו־<code>paid_cents = paid_cents + amountCents</code>, ו־<code>"processed"</code>.</li><li>הזמנה לא קיימת ← <code>Error("ORDER_NOT_FOUND")</code>, ו<strong>האירוע לא נרשם</strong> (כדי שאפשר יהיה לטפל בו אחרי תיקון).</li><li>10 קריאות במקביל עם אותו אירוע ← <code>"processed"</code> אחת, ‏<code>paid_cents</code> גדל פעם אחת. כל החיבורים חוזרים ל־pool.</li></ul>
+```term
+% npm run check P24-E72
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> טרנזקציה עם <code>pool.connect()</code>, ‏<code>ON CONFLICT</code> ו־<code>RETURNING</code> מפרק 18 — והשיעור: קודם תופסים את המפתח, ורק מי שתפס מבצע.</p>
+@hint1
+```sql
+INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING event_id
+```
+<p>‏<code>rowCount === 0</code> אומר "כבר טופל".</p>
+@hint2
+<p>‏<code>UPDATE ... WHERE id = $2</code> עם <code>rowCount === 0</code> ← ההזמנה לא קיימת ← <code>throw</code>, וה־<code>catch</code> עושה ROLLBACK. ‏<code>client.release()</code> ב־<code>finally</code>.</p>
+@solution
+```ts save=solutions/P24-E72.ts
+// P24-E72: webhook פעם אחת — במסד
+import type { Pool } from "pg";
+
+export async function handlePaymentEvent(pool: Pool, event: { id: string; orderId: number; amountCents: number }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const claimed = await client.query(
+      "INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING event_id",
+      [event.id],
+    );
+    if (claimed.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return "duplicate" as const;
+    }
+    const updated = await client.query(
+      "UPDATE orders SET status = 'paid', paid_cents = paid_cents + $2 WHERE id = $1",
+      [event.orderId, event.amountCents],
+    );
+    if (updated.rowCount === 0) throw new Error("ORDER_NOT_FOUND");
+    await client.query("COMMIT");
+    return "processed" as const;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>במקביל: הראשון מכניס את השורה ומחזיק אותה עד COMMIT. התשעה האחרים מחכים על ה־PRIMARY KEY, ואחרי ה־COMMIT מקבלים DO NOTHING. ואם הראשון עשה ROLLBACK (הזמנה לא קיימת) — אחד מהם "זוכה" ומנסה בעצמו.</p>
+@mistakes
+<ul><li>לעדכן את ההזמנה ואז לרשום את האירוע — בין שתי הפעולות, ניסיון שני מעדכן שוב.</li><li><code>pool.query("BEGIN")</code> — כל <code>pool.query</code> יכול לרוץ בחיבור אחר, והטרנזקציה לא באמת עוטפת כלום (פרק 18).</li></ul>
+
+@@ P24-E73 | 3 | ‏PUT עם מזהה מהלקוח 🤖 | 20 | פרק 15, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>דרך אחרת ליצירה בטוחה: הלקוח בוחר את המזהה (UUID) ושולח <code>PUT</code>. בקובץ <code>24-production/starter/P24-E73.ts</code> (יש בו רק הערה) כתוב וייצא <code>notesRouter()</code> — Router של Express, בזיכרון (<code>Map</code> משלו לכל קריאה ל־<code>notesRouter</code>):</p>
+<ul><li><code>PUT /notes/:id</code> ‏<code>{ text }</code>:<ul><li><code>id</code> חייב להיות UUID באותיות קטנות (8-4-4-4-12 תווי hex, למשל <code>3f1c9a7e-0b5d-4c2a-9e11-7a6b5c4d3e2f</code>). אחרת ← 400 <code>INVALID_ID</code>.</li><li><code>text</code> — מחרוזת לא ריקה אחרי <code>trim</code> (נשמרת אחרי trim). אחרת ← 400 <code>VALIDATION_ERROR</code>.</li><li>לא קיים ← 201, ‏<code>{ id, text, version: 1 }</code>, ו־<code>Location: /notes/:id</code>.</li><li>קיים עם אותו <code>text</code> ← 200 עם הפתק כמו שהוא (‏<code>version</code> לא עולה).</li><li>קיים עם <code>text</code> אחר ← 200, ‏<code>text</code> חדש ו־<code>version + 1</code>.</li></ul></li><li><code>GET /notes/:id</code> ← 200 עם הפתק, או 404 <code>NOT_FOUND</code>.</li><li>שגיאות בצורה <code>{ error: { code, message } }</code>. האפליקציה של הבודק כבר עושה <code>express.json()</code>.</li></ul>
+```term
+% npm run check P24-E73
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>Router</code>, ‏<code>PUT</code> ו־status codes מפרקים 14–15 — והשיעור: PUT הוא idempotent, ואם הלקוח בוחר את המזהה — גם יצירה היא.</p>
+@hint1
+<p><code>const notes = new Map&lt;string, Note&gt;()</code> <em>בתוך</em> <code>notesRouter</code> — כדי שכל אפליקציה תקבל מאגר נקי.</p>
+@hint2
+<p>‏<code>typeof req.body?.text === "string"</code> לפני <code>trim</code>.</p>
+@solution
+```ts save=solutions/P24-E73.ts
+// P24-E73: PUT עם מזהה מהלקוח
+import { Router } from "express";
+
+type Note = { id: string; text: string; version: number };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function notesRouter() {
+  const notes = new Map<string, Note>();
+  const router = Router();
+  const fail = (code: string, message: string) => ({ error: { code, message } });
+
+  router.put("/notes/:id", (req, res) => {
+    const { id } = req.params;
+    if (!UUID.test(id)) {
+      res.status(400).json(fail("INVALID_ID", "המזהה חייב להיות UUID"));
+      return;
+    }
+    const raw = req.body?.text;
+    const text = typeof raw === "string" ? raw.trim() : "";
+    if (!text) {
+      res.status(400).json(fail("VALIDATION_ERROR", "text חייב להיות מחרוזת לא ריקה"));
+      return;
+    }
+    const existing = notes.get(id);
+    if (!existing) {
+      const note = { id, text, version: 1 };
+      notes.set(id, note);
+      res.status(201).location(`/notes/${id}`).json(note);
+      return;
+    }
+    if (existing.text !== text) {
+      existing.text = text;
+      existing.version += 1;
+    }
+    res.json(existing); // אותו תוכן ← אותו מצב, בלי שינוי
+  });
+
+  router.get("/notes/:id", (req, res) => {
+    const note = notes.get(req.params.id);
+    if (!note) {
+      res.status(404).json(fail("NOT_FOUND", "הפתק לא נמצא"));
+      return;
+    }
+    res.json(note);
+  });
+  return router;
+}
+```
+<p>שליחה חוזרת של אותו PUT לא יוצרת כפילות ולא משנה <code>version</code> — בלי טבלת מפתחות, בלי טביעות. המחיר: הלקוח צריך לייצר מזהים (<code>crypto.randomUUID()</code>), וה־API חושף אותם.</p>
+@mistakes
+<ul><li>להעלות <code>version</code> בכל PUT — אז שליחה חוזרת "משנה" משהו, ולקוח שבודק גרסאות יחשוב שמישהו אחר ערך.</li><li><code>const notes = new Map()</code> מחוץ לפונקציה — שתי אפליקציות (או שתי בדיקות) חולקות את אותו מאגר.</li></ul>
+
+@@ P24-E74 | 3 | ‏single flight: אותה פעולה, ריצה אחת 🤖 | 20 | פרק 10, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>בזיכרון, בתוך תהליך אחד: כמה קריאות עם אותו מפתח באותו זמן צריכות לחכות לאותה ריצה. בקובץ <code>24-production/starter/P24-E74.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createSingleFlight<T>(): {
+  run(key: string, fn: () => Promise<T>): Promise<T>;
+  forget(key: string): void;
+}
+```
+<ul><li><code>run</code> — אם אין ריצה ולא נשמרה תוצאה למפתח ← קורא ל־<code>fn</code>. אם יש ריצה באמצע ← מחזיר את <strong>אותה Promise</strong> (בלי לקרוא ל־<code>fn</code> שוב).</li><li>הצלחה ← התוצאה נשמרת: <code>run</code> הבא עם המפתח מחזיר אותה בלי לקרוא ל־<code>fn</code>.</li><li>כישלון ← כל מי שחיכה מקבל את השגיאה, ו<strong>שום דבר לא נשמר</strong>: <code>run</code> הבא מנסה מחדש.</li><li><code>forget(key)</code> — מוחק תוצאה שמורה.</li></ul>
+```term
+% npm run check P24-E74
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> Promises ו־<code>async/await</code> מפרק 10 — והשיעור: "בטיפול" ו־replay, בלי מסד.</p>
+@hint1
+<p>שתי מפות: <code>inFlight: Map&lt;string, Promise&lt;T&gt;&gt;</code> ו־<code>done: Map&lt;string, T&gt;</code>.</p>
+@hint2
+<p>שומרים את ה־Promise ב־<code>inFlight</code> <em>לפני</em> ה־<code>await</code> — ומוחקים אותה כשהיא נגמרת (גם בכישלון).</p>
+@solution
+```ts save=solutions/P24-E74.ts
+// P24-E74: single flight — אותה פעולה, ריצה אחת
+export function createSingleFlight<T>() {
+  const inFlight = new Map<string, Promise<T>>();
+  const done = new Map<string, T>();
+  return {
+    run(key: string, fn: () => Promise<T>): Promise<T> {
+      if (done.has(key)) return Promise.resolve(done.get(key) as T); // replay
+      const running = inFlight.get(key);
+      if (running) return running; // "בטיפול" — מחכים לאותה ריצה
+      const p = (async () => {
+        try {
+          const value = await fn();
+          done.set(key, value);
+          return value;
+        } finally {
+          inFlight.delete(key); // גם בכישלון — כדי שהבא ינסה שוב
+        }
+      })();
+      inFlight.set(key, p);
+      return p;
+    },
+    forget(key: string) {
+      done.delete(key);
+    },
+  };
+}
+```
+<p>זה המנגנון של שיעור 3 בקטן — "בטיפול" (ה־Promise ב־<code>inFlight</code>), "הושלם" (ב־<code>done</code>), ושחרור בכישלון. הוא עובד רק בתהליך אחד; עם שני שרתים — שוב צריך מסד (או Redis).</p>
+@mistakes
+<ul><li>לשמור ב־<code>done</code> גם שגיאות — ואז תקלה רגעית "ננעלת" לתמיד (כמו 5xx שנשמר, E62).</li><li><code>inFlight.set</code> אחרי <code>await</code> — עד שהוא קורה, קריאה שנייה כבר התחילה ריצה משלה.</li></ul>
+
+@@ P24-E75 | 1 | בקשה שנדחתה — לספור אותה? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>מגבלה: 10 בקשות ב־60 שניות (חלון נע). לקוח שלח 10 בקשות ב־12:00:00, ומ־12:00:01 הוא שולח בקשה <strong>כל שנייה</strong>, ומקבל 429 (הוא לא מכבד <code>Retry-After</code>). (1) אם השרת סופר גם את הבקשות שנדחו — מתי הלקוח יקבל שוב 200? (2) ואם לא סופר? (3) מישהו טוען: "אם לא סופרים את הנדחות, תוקף יכול להציף אותנו בבקשות שנדחות". מה התשובה?</p>
+@hint1
+<p>בחלון נע, בקשה "יוצאת" מהחלון 60 שניות אחרי שנכנסה.</p>
+@hint2
+<p>כמה עולה לשרת לדחות בקשה, לעומת לטפל בה?</p>
+@solution
+<ol><li>אף פעם. בכל שנייה נכנסת לחלון בקשה חדשה (שנדחתה), ותמיד יש בו 60 בקשות ומעלה. הלקוח נעול כל עוד הוא מנסה.</li><li>ב־12:01:00 הבקשות של 12:00:00 יוצאות מהחלון, והבקשה של 12:01:00 עוברת.</li><li>דחייה זולה מאוד — בדיקה ב־Map ותשובת 429, בלי מסד ובלי bcrypt. הצפה "גולמית" של בקשות היא בעיה של שכבה אחרת (חומת אש, CDN, ה־load balancer) — לא של ה־rate limiter של האפליקציה.</li></ol>
+@mistakes
+<ul><li>לחשוב ש"להעניש" לקוח שלא מכבד Retry-After זה רעיון טוב — לרוב זה באג ב־frontend של <em>המשתמשים שלך</em>, והם נעולים.</li></ul>
+
+@@ P24-E76 | 2 | ‏trust proxy — מה יהיה req.ip? | 15 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>הלקוח האמיתי בכתובת <code>203.0.113.7</code>. לכל מקרה — מה יהיה <code>req.ip</code>, ומה הבעיה (אם יש)?</p>
+<ol><li>אין proxy. ‏<code>trust proxy</code> כבוי. הלקוח שולח בעצמו <code>X-Forwarded-For: 1.2.3.4</code>.</li><li>אין proxy, אבל מישהו הגדיר <code>app.set("trust proxy", 1)</code>. אותו header.</li><li>nginx אחד (בכתובת <code>10.0.0.5</code>) לפני השרת. ‏<code>trust proxy</code> כבוי.</li><li>nginx אחד, ‏<code>trust proxy</code> = 1. הלקוח שולח <code>X-Forwarded-For: 6.6.6.6</code>, ו־nginx מוסיף את הכתובת האמיתית בסוף: <code>6.6.6.6, 203.0.113.7</code>.</li><li>CDN ואחריו nginx (שני proxies), ‏<code>trust proxy</code> = 1.</li></ol>
+@hint1
+<p>‏<code>trust proxy</code> = N אומר: "N התחנות האחרונות בשרשרת הן שלי, ואני סומך על מה שהן הוסיפו". הולכים מימין לשמאל.</p>
+@hint2
+<p>ב־X-Forwarded-For כל proxy <em>מוסיף בסוף</em> את מי שפנה אליו. מה שבהתחלה — מי שכתב אותו קודם, כולל הלקוח עצמו.</p>
+@solution
+<ol><li><code>203.0.113.7</code> — הכתובת של החיבור. ה־header מתעלמים ממנו. נכון.</li><li><code>1.2.3.4</code> — Express "סומך" על header שהלקוח כתב. כל בקשה עם כתובת אחרת = הגבלת הקצב לא קיימת (P24-E23).</li><li><code>10.0.0.5</code> לכל המשתמשים. כל העולם הוא "לקוח אחד", ואחרי 10 בקשות כולם חסומים.</li><li><code>203.0.113.7</code> — לוקחים את הכתובת שה־proxy שלנו הוסיף (הימנית), והמזויפת נשארת בצד. נכון.</li><li>הכתובת של ה־CDN — זה מה ש־nginx ראה. כל המשתמשים שמגיעים דרך אותו שרת CDN — "לקוח אחד". צריך <code>trust proxy</code> = 2 (את החישוב עצמו תכתוב בפרק 25, P25-E18).</li></ol>
+@mistakes
+<ul><li><code>app.set("trust proxy", true)</code> — "סומך על כולם", כלומר לוקח את הכתובת השמאלית ביותר — שהלקוח כתב. זה מקרה 2.</li></ul>
+
+@@ P24-E77 | 2 | את מי מגבילים ב־login? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>שלוש אפשרויות להגבלה על <code>POST /auth/login</code>: (א) לפי IP; (ב) לפי האימייל שמנסים להיכנס אליו; (ג) שתיהן. לכל תרחיש — מה עוצר אותו, ומה הנזק הצדדי?</p>
+<ol><li>סקריפט מנחש סיסמאות לחשבון של דנה, מ־IP אחד.</li><li>רשת של 10,000 מחשבים, כל אחד מנסה סיסמה אחת לחשבון של דנה.</li><li>סקריפט מנסה סיסמה נפוצה אחת (<code>123456</code>) על 10,000 חשבונות שונים, מ־IP אחד.</li><li>200 עובדים במשרד, מאחורי NAT (אותה כתובת IP), מתחברים ב־09:00.</li><li>מישהו שונא את דנה ומנסה להיכנס לחשבון שלה 5 פעמים כל רבע שעה — כדי שהיא לא תוכל להיכנס.</li></ol>
+@hint1
+<p>הגבלה לפי IP לא רואה התקפה מהרבה כתובות. הגבלה לפי חשבון לא רואה התקפה על הרבה חשבונות.</p>
+@hint2
+<p>תרחיש 5 הוא התקפה על הזמינות, לא על הסיסמה.</p>
+@solution
+<ol><li>(א) עוצר. גם (ב).</li><li>רק (ב) — כל IP שולח בקשה אחת.</li><li>רק (א) — כל חשבון מקבל ניסיון אחד.</li><li>(א) עם מגבלה נמוכה חוסם את המשרד. לכן המגבלה לפי IP גבוהה יותר (למשל 20–50 לדקה), והקשוחה — לפי חשבון.</li><li>(ב) "נועל" את דנה — זה מה שהתוקף רוצה. מקטינים את הנזק: סופרים לפי חשבון רק <em>כישלונות</em>, מאפסים בהצלחה, חוסמים לזמן קצר ולא "עד שתפנה לתמיכה", ומוסיפים CAPTCHA במקום חסימה.</li></ol>
+<p>לכן בפועל — (ג): IP עם מגבלה נדיבה, ואימייל עם מגבלה על כישלונות (E87).</p>
+@mistakes
+<ul><li>להגביל לפי האימייל כמו שהגיע — <code>Dana@Example.com</code> ו־<code>dana@example.com </code> הם "חשבונות שונים" ועוקפים את המגבלה. מנרמלים כמו בהרשמה.</li></ul>
+
+@@ P24-E78 | 2 | ‏SIGTERM — מה קודם למה? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>סדר את הצעדים של כיבוי מסודר, והסבר מה יקרה אם מחליפים בין שני צעדים סמוכים (לכל זוג):</p>
+<ul><li>(א) לסגור את ה־pool של המסד.</li><li>(ב) <code>/ready</code> מתחיל להחזיר 503.</li><li>(ג) <code>process.exit(0)</code>.</li><li>(ד) <code>server.close()</code> — להפסיק לקבל חיבורים חדשים, ולחכות לבקשות שבאמצע (עם גבול זמן).</li></ul>
+<p>ולמה <code>/health</code> (liveness) ממשיך להחזיר 200 כל הזמן הזה?</p>
+@hint1
+<p>ה־load balancer בודק את <code>/ready</code> כל כמה שניות. מה קורה עם בקשות שהוא שולח בינתיים?</p>
+@hint2
+<p>מה קורה לבקשה שבאמצע, שעוד צריכה את המסד, אם המסד כבר סגור?</p>
+@solution
+<p>ב ← ד ← א ← ג.</p>
+<ul><li>ב לפני ד: קודם אומרים ל־load balancer "אל תשלח לי", ורק אחר כך מפסיקים לקבל. הפוך — בקשות שה־LB כבר שלח נתקלות בחיבור סגור.</li><li>ד לפני א: הבקשות שבאמצע עוד צריכות את המסד. הפוך — הן נכשלות עם 500 (בדיוק המלכודת של <code>onModuleDestroy</code> בשיעור).</li><li>א לפני ג: סוגרים חיבורים בצורה מסודרת — אחרת המסד רואה חיבורים שנקטעו. ו־<code>exit</code> רק בסוף, אחרת שום דבר מהשאר לא קורה.</li></ul>
+<p>‏<code>/health</code> = "התהליך חי". אם הוא יחזיר 503, ה־orchestrator יחשוב שהתהליך תקוע ויהרוג אותו מיד — בדיוק באמצע הכיבוי המסודר.</p>
+@mistakes
+<ul><li>לכבות בלי גבול זמן — בקשה אחת שלא נגמרת (stream, long polling) תשאיר את התהליך עד ה־SIGKILL.</li></ul>
+
+@@ P24-E79 | 2 | ‏Map שרק גדל | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>הגבלת קצב לפי IP, עם <code>Map&lt;string, number[]&gt;</code> של זמני בקשות. השרת רץ חודש. (1) כמה מפתחות יהיו ב־Map אם אף אחד לא מוחק? (2) הוצע: "בכל <code>hit</code>, נמחק מהמערך של הלקוח הזה את הזמנים הישנים". למה זה לא מספיק? (3) תן שתי דרכים לנקות, ומה המחיר של כל אחת. (4) ולמה כל זה נעלם כשהמונים ב־Redis (פרק 26)?</p>
+@hint1
+<p>כל IP שביקר פעם אחת — ולא חזר.</p>
+@hint2
+<p>‏<code>setInterval</code>, או ניקוי "על הדרך" כל N בקשות. וב־Redis — <code>EXPIRE</code>.</p>
+@solution
+<ol><li>מפתח לכל IP שביקר אי פעם — מיליונים בשרת ציבורי. הזיכרון רק עולה, עד שהתהליך נופל (או עד ה־restart הבא, שמאפס את ההגבלה).</li><li>הוא מנקה רק לקוחות שחוזרים. מי שביקר פעם אחת נשאר לתמיד — עם מערך ריק או עם זמן אחד ישן.</li><li>(א) <code>setInterval</code> שעובר על כל ה־Map ומוחק מפתחות בלי זמנים בחלון — פשוט; עולה מעבר על הכול, וצריך לזכור <code>clearInterval</code> בכיבוי (ו־<code>unref()</code>, כדי שלא ישאיר את התהליך חי). (ב) כל 1,000 בקשות — סריקה קטנה; בלי טיימר, אבל עבודה "קופצת" בבקשה מסוימת.</li><li>ב־Redis לכל מפתח יש תוקף (<code>EXPIRE</code>), והוא נמחק לבד. וזה גם משותף לכל השרתים.</li></ol>
+@mistakes
+<ul><li><code>setInterval</code> בלי <code>unref</code> — בבדיקות, התהליך לא נגמר ("הבדיקות תקועות").</li></ul>
+
+@@ P24-E80 | 2 | ‏fixed window 🤖 | 15 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>האלגוריתם הפשוט מבין השלושה. בקובץ <code>24-production/starter/P24-E80.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createFixedWindow(opts: { limit: number; windowMs: number; now: () => number }): {
+  hit(key: string): { allowed: boolean; remaining: number; resetSeconds: number };
+  size(): number;
+  sweep(): number;
+}
+```
+<ul><li>החלונות "עגולים": מתחילים ב־<code>Math.floor(now / windowMs) * windowMs</code>. מונה לכל מפתח, שמתאפס כשמתחיל חלון חדש.</li><li><code>hit</code> — אם המונה קטן מ־<code>limit</code>: מעלה, <code>allowed: true</code>. אחרת <code>allowed: false</code> — ו<strong>לא סופרים</strong>.</li><li><code>remaining</code> — כמה נשארו בחלון אחרי הבקשה הזו (לא פחות מ־0). <code>resetSeconds</code> — שניות עד סוף החלון, מעוגל למעלה.</li><li><code>size()</code> — כמה מפתחות שמורים. <code>sweep()</code> — מוחק מפתחות שהחלון שלהם נגמר, ומחזיר כמה נמחקו.</li></ul>
+```term
+% npm run check P24-E80
+```
+@hint1
+<p><code>Map&lt;string, { start: number; count: number }&gt;</code>. ב־<code>hit</code>: אם <code>entry.start !== windowStart</code> — מתחילים מחדש.</p>
+@hint2
+<p><code>resetSeconds = Math.ceil((start + windowMs - now()) / 1000)</code>.</p>
+@solution
+```ts save=solutions/P24-E80.ts
+// P24-E80: fixed window
+export function createFixedWindow({ limit, windowMs, now }: { limit: number; windowMs: number; now: () => number }) {
+  const counters = new Map<string, { start: number; count: number }>();
+  return {
+    hit(key: string) {
+      const t = now();
+      const start = Math.floor(t / windowMs) * windowMs;
+      let entry = counters.get(key);
+      if (!entry || entry.start !== start) {
+        entry = { start, count: 0 };
+        counters.set(key, entry);
+      }
+      const allowed = entry.count < limit;
+      if (allowed) entry.count++; // בקשה שנדחתה לא נספרת
+      return { allowed, remaining: Math.max(0, limit - entry.count), resetSeconds: Math.ceil((start + windowMs - t) / 1000) };
+    },
+    size: () => counters.size,
+    sweep() {
+      const start = Math.floor(now() / windowMs) * windowMs;
+      let removed = 0;
+      for (const [key, entry] of counters) {
+        if (entry.start < start) {
+          counters.delete(key);
+          removed++;
+        }
+      }
+      return removed;
+    },
+  };
+}
+```
+<p>שימו לב לחולשה (E05): עם limit 10 בדקה, 10 בקשות ב־12:00:59 ו־10 ב־12:01:00 — כולן עוברות. בתמורה: מספר אחד לכל לקוח, וזה כל הזיכרון.</p>
+@mistakes
+<ul><li>להתחיל חלון מהבקשה הראשונה של הלקוח (<code>start = now()</code>) — זה כבר לא "fixed", וגם <code>resetSeconds</code> שונה לכל לקוח (שזה בסדר — אבל זה אלגוריתם אחר).</li></ul>
+
+@@ P24-E81 | 2 | ‏headers של הגבלת קצב 🤖 | 10 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>חימום. בקובץ <code>24-production/starter/P24-E81.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function rateLimitHeaders(r: { allowed: boolean; limit: number; remaining: number; resetMs: number }): Record<string, string>
+```
+<ul><li>תמיד: <code>RateLimit-Limit</code>, ‏<code>RateLimit-Remaining</code> (לא פחות מ־0), ‏<code>RateLimit-Reset</code> — שניות, מעוגל למעלה, ולפחות 1.</li><li>רק כש־<code>allowed</code> הוא <code>false</code>: גם <code>Retry-After</code> — אותו מספר כמו <code>RateLimit-Reset</code>.</li><li>כל הערכים — מחרוזות של מספרים שלמים.</li></ul>
+```term
+% npm run check P24-E81
+```
+@hint1
+<p><code>Math.max(1, Math.ceil(resetMs / 1000))</code>.</p>
+@hint2
+<p>‏<code>String(n)</code> לכל ערך. ‏<code>remaining</code> יכול להגיע שלילי מקוד אחר — <code>Math.max(0, ...)</code>.</p>
+@solution
+```ts save=solutions/P24-E81.ts
+// P24-E81: headers של הגבלת קצב
+export function rateLimitHeaders({ allowed, limit, remaining, resetMs }: { allowed: boolean; limit: number; remaining: number; resetMs: number }) {
+  const reset = String(Math.max(1, Math.ceil(resetMs / 1000))); // שניות — לא מילישניות (P24-E23)
+  const headers: Record<string, string> = {
+    "RateLimit-Limit": String(limit),
+    "RateLimit-Remaining": String(Math.max(0, remaining)),
+    "RateLimit-Reset": reset,
+  };
+  if (!allowed) headers["Retry-After"] = reset;
+  return headers;
+}
+```
+@mistakes
+<ul><li><code>Math.round</code> — 400ms הופך ל־0, ולקוח שמחכה 0 שניות מקבל 429 שוב.</li></ul>
+
+@@ P24-E82 | 3 | כמה בקשות באמצע? 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>כיבוי מסודר צריך לדעת מתי הבקשות שבאמצע נגמרו — עם גבול זמן. בקובץ <code>24-production/starter/P24-E82.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createInflight(): {
+  start(): () => void;   // בתחילת בקשה; מחזיר פונקציה שקוראים לה בסוף הבקשה
+  count(): number;
+  drained(timeoutMs: number): Promise<boolean>;
+}
+```
+<ul><li><code>start()</code> מעלה את המונה, ומחזיר <code>end</code> שמוריד אותו. קריאה שנייה לאותו <code>end</code> — לא עושה כלום (בקשה נגמרת פעם אחת, גם אם גם <code>finish</code> וגם <code>close</code> קרו).</li><li><code>drained(timeoutMs)</code> ← <code>true</code> ברגע שהמונה מגיע ל־0 (מיד, אם הוא כבר 0); ‏<code>false</code> אם עברו <code>timeoutMs</code> לפני כן.</li><li>כמה קריאות ל־<code>drained</code> במקביל — כולן מקבלות תשובה. ו־<code>drained</code> שהסתיים לא משאיר טיימר פעיל.</li></ul>
+```term
+% npm run check P24-E82
+```
+@hint1
+<p>מערך של "מחכים": כל <code>drained</code> מוסיף פונקציה <code>resolve</code>. כשהמונה יורד ל־0 — קוראים לכולן ומרוקנים.</p>
+@hint2
+<p><code>const timer = setTimeout(() =&gt; finish(false), timeoutMs)</code>, ובתוך <code>finish</code> — <code>clearTimeout(timer)</code>. פונקציה <code>finish</code> שמוודאת שהיא רצה רק פעם אחת.</p>
+@solution
+```ts save=solutions/P24-E82.ts
+// P24-E82: כמה בקשות באמצע?
+export function createInflight() {
+  let active = 0;
+  let waiters: Array<() => void> = [];
+  const notify = () => {
+    if (active !== 0) return;
+    const list = waiters;
+    waiters = [];
+    for (const w of list) w();
+  };
+  return {
+    start() {
+      active++;
+      let ended = false;
+      return () => {
+        if (ended) return; // finish וגם close — נספר פעם אחת
+        ended = true;
+        active--;
+        notify();
+      };
+    },
+    count: () => active,
+    drained(timeoutMs: number): Promise<boolean> {
+      if (active === 0) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        let done = false;
+        const finish = (ok: boolean) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve(ok);
+        };
+        const timer = setTimeout(() => finish(false), timeoutMs);
+        waiters.push(() => finish(true));
+      });
+    },
+  };
+}
+```
+<p>ב־Express: <code>const end = inflight.start(); res.on("finish", end); res.on("close", end);</code> — ‏<code>close</code> קורה גם כשהלקוח ניתק באמצע, ובלעדיו המונה היה "תקוע" על 1 לנצח. ובכיבוי: <code>const ok = await inflight.drained(10_000)</code> — ואם <code>false</code>, סוגרים בכוח.</p>
+@mistakes
+<ul><li>להוריד את המונה גם ב־<code>finish</code> וגם ב־<code>close</code> — בקשה רגילה מורידה פעמיים, והמונה שלילי.</li><li>לא לבטל את הטיימר — התהליך מחכה עוד <code>timeoutMs</code> אחרי שהכול נגמר, רק בגלל טיימר שאף אחד לא צריך.</li></ul>
+
+@@ P24-E83 | 3 | סדר הכיבוי 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>בלי שרת אמיתי — רק הסדר וההחלטות (E78). בקובץ <code>24-production/starter/P24-E83.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createShutdown(deps: {
+  setReady(ready: boolean): void;
+  closeServer(): Promise<void>;
+  closeDb(): Promise<void>;
+  exit(code: number): void;
+  log(msg: string): void;
+  timeoutMs: number;
+  delay?: (ms: number) => Promise<void>;
+}): (signal: string) => Promise<void>
+```
+<ul><li>בקריאה הראשונה: ‏<code>log(`${signal} received`)</code>, ‏<code>setReady(false)</code>, ואז <code>closeServer()</code> — אבל לא יותר מ־<code>timeoutMs</code> (‏<code>delay</code>; ברירת מחדל עם <code>setTimeout</code>). אם הזמן נגמר — <code>log("timeout")</code> וממשיכים.</li><li>אחר כך <code>closeDb()</code>. אם הוא זרק — <code>log("db close failed")</code>.</li><li>בסוף <code>exit</code>: ‏0 אם הכול הצליח בזמן; ‏1 אם היה timeout או ש־closeDb נכשל.</li><li>קריאה נוספת (SIGTERM שני, או SIGINT) — מחזירה את אותה Promise, ושום צעד לא קורה פעמיים.</li></ul>
+```term
+% npm run check P24-E83
+```
+@hint1
+```ts
+Promise.race([closeServer().then(() => "closed"), delay(timeoutMs).then(() => "timeout")])
+```
+@hint2
+<p>משתנה <code>let running: Promise&lt;void&gt; | undefined</code> מחוץ לפונקציה המוחזרת. אם הוא קיים — מחזירים אותו.</p>
+@solution
+```ts save=solutions/P24-E83.ts
+// P24-E83: סדר הכיבוי
+type Deps = {
+  setReady(ready: boolean): void;
+  closeServer(): Promise<void>;
+  closeDb(): Promise<void>;
+  exit(code: number): void;
+  log(msg: string): void;
+  timeoutMs: number;
+  delay?: (ms: number) => Promise<void>;
+};
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
+
+export function createShutdown({ setReady, closeServer, closeDb, exit, log, timeoutMs, delay = sleep }: Deps) {
+  let running: Promise<void> | undefined;
+  const run = async (signal: string) => {
+    log(`${signal} received`);
+    setReady(false); // קודם: ה־load balancer מפסיק לשלוח
+    let ok = true;
+    const result = await Promise.race([closeServer().then(() => "closed"), delay(timeoutMs).then(() => "timeout")]);
+    if (result === "timeout") {
+      log("timeout");
+      ok = false;
+    }
+    try {
+      await closeDb(); // רק אחרי שהבקשות סיימו
+    } catch {
+      log("db close failed");
+      ok = false;
+    }
+    exit(ok ? 0 : 1);
+  };
+  return (signal: string) => (running ??= run(signal));
+}
+```
+<p>‏<code>??=</code> — "אם עדיין אין, תשים". הקריאה השנייה מקבלת את אותה Promise. ו־<code>unref()</code> על הטיימר — כדי שהוא לא ישאיר את התהליך חי אם הכול נסגר קודם.</p>
+@mistakes
+<ul><li>לסגור את המסד במקביל ל־<code>closeServer</code> ("יותר מהר") — הבקשות שבאמצע נכשלות.</li><li>לקרוא ל־<code>exit</code> מתוך ה־timeout ישירות — ואז המסד לא נסגר כלל.</li></ul>
+
+@@ P24-E84 | 1 | ‏429 או 503? | 10 | פרק 14, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>לכל מצב — 429 או 503, האם לשלוח <code>Retry-After</code>, ומה לקוח טוב עושה?</p>
+<ol><li>הלקוח שלח יותר מ־100 בקשות בדקה.</li><li>השרת באמצע כיבוי מסודר, ובקשה הגיעה ל־<code>/ready</code>.</li><li>המסד לא זמין.</li><li>השרת עמוס (event loop מאחר בשנייה), והוא מחליט לדחות חלק מהבקשות כדי לא לקרוס.</li><li>10 ניסיונות כניסה כושלים לחשבון.</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> קבוצות status codes מפרק 14 — והשיעור: 429 שלקוח יכול לעבוד איתו, ו־/ready בזמן כיבוי.</p>
+@hint1
+<p>429 = "אתה (הלקוח) שלחת יותר מדי". 503 = "אני (השרת) לא יכול עכשיו".</p>
+@hint2
+<p>‏<code>Retry-After</code> מוגדר בתקן לשניהם.</p>
+@solution
+<ol><li>429 + Retry-After (ו־RateLimit-*). הלקוח מחכה בדיוק את הזמן הזה.</li><li>503 — ה־load balancer מוציא את השרת מהרשימה. Retry-After לא רלוונטי ל־LB.</li><li>503 (אפשר עם Retry-After קצר). הלקוח מנסה שוב עם backoff — עם אותו Idempotency-Key אם זה POST.</li><li>503 + Retry-After. זה "load shedding" — לא אשמת הלקוח.</li><li>429 + Retry-After, עם הודעה ברורה. (יש מערכות שמחזירות 401 רגיל כדי לא לגלות שהחשבון נחסם — החלטה של אבטחה מול נוחות.)</li></ol>
+@mistakes
+<ul><li>500 על "עמוס" — לקוחות לא יודעים שכדאי לנסות שוב בעוד רגע, ובניטור זה נראה כמו באג.</li></ul>
+
+@@ P24-E85 | 2 | הגבלה לפני bcrypt | 10 | פרק 20, פרק 21, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>ב־Nest, ‏<code>AuthRateLimitGuard</code> רץ על <code>POST /auth/login</code>. (1) guards רצים לפני pipes (פרק 20). מה זה אומר על בקשה עם body לא תקין — היא נספרת? האם זה טוב? (2) למה ההגבלה חייבת לרוץ <em>לפני</em> <code>bcrypt.compare</code> — מה קורה בשרת אם היא רצה אחריו? (3) מישהו הציע: "נספור רק ניסיונות שנכשלו, אז נשים את הספירה ב־service, אחרי compare". מה המחיר?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> סדר ה־guards וה־pipes מפרק 20, ‏bcrypt מפרק 21 — והשיעור: למה מגבילים קצב.</p>
+@hint1
+<p>‏bcrypt עם cost 12 — כמה זמן מעבד הוא לוקח לכל ניסיון?</p>
+@hint2
+<p>אפשר להפריד: מה <em>בודקים</em> לפני, ומה <em>סופרים</em> אחרי.</p>
+@solution
+<ol><li>כן, היא נספרת — ה־guard רץ ראשון. זה בסדר, ואפילו טוב: גם הצפה בבקשות לא תקינות היא עומס.</li><li>bcrypt בכוונה איטי ותופס מעבד (פרק 21). אם ההגבלה אחריו — התוקף כבר "שילם" את המעבד שלך על כל ניסיון, וההגבלה לא מגינה על השרת, רק על הסיסמה.</li><li>אם <em>גם הבדיקה</em> עוברת לשם — כל ניסיון מריץ bcrypt לפני שבודקים אם הוא חסום. הפתרון: לבדוק "חסום?" לפני (guard), ולרשום כישלון אחרי (service) — בדיוק ההפרדה של E87.</li></ol>
+@mistakes
+<ul><li>להחזיר 429 רק אחרי שהסיסמה נבדקה — וגם לגלות בדרך אם היא הייתה נכונה.</li></ul>
+
+@@ P24-E86 | 2 | ‏SIGTERM שלא מגיע ל־Node | 10 | פרק 23, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>כתבת טיפול מסודר ב־SIGTERM (שיעור 4) ובדקת מקומית — עובד. ב־Docker: <code>docker compose stop api</code> לוקח בדיוק 10 שניות, הלוג "SIGTERM received" לא מופיע, ובקשות באמצע נקטעות. ב־Dockerfile כתוב:</p>
+```dockerfile
+CMD npm start
+```
+<p>(1) מה קורה כאן? מי מקבל את ה־SIGTERM? (2) למה בדיוק 10 שניות? (3) תקן. (4) ואם בכל זאת צריך סקריפט shell לפני העלייה (למשל migrations) — איך מוודאים שה־SIGTERM מגיע ל־Node?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> CMD בצורת מחרוזת ומערך, ו־<code>docker stop</code> מפרק 23 — והשיעור: כיבוי מסודר.</p>
+@hint1
+<p>CMD בצורת מחרוזת = <code>/bin/sh -c "npm start"</code>. מי PID 1?</p>
+@hint2
+<p>‏<code>exec</code> ב־shell מחליף את התהליך הנוכחי בפקודה.</p>
+@solution
+<ol><li>PID 1 בקונטיינר הוא <code>sh</code>, שמריץ את npm, שמריץ את node. ה־SIGTERM מגיע ל־<code>sh</code> — והוא לא מעביר אותו הלאה. Node לא יודע שמכבים אותו.</li><li><code>docker stop</code> מחכה 10 שניות (ברירת מחדל) ואז שולח SIGKILL — לכולם, בלי לשאול.</li><li><code>CMD ["node", "dist/main.js"]</code> — צורת מערך, בלי shell ובלי npm באמצע. Node הוא PID 1 ומקבל את האות.</li><li>בסוף הסקריפט: <code>exec node dist/main.js</code> — ה־shell "הופך" ל־Node, שמקבל את ה־PID ואת האותות.</li></ol>
+@mistakes
+<ul><li>להגדיל את <code>stop_grace_period</code> ל־60 שניות "כדי שיספיק" — האות עדיין לא מגיע, ועכשיו כל פריסה תקועה דקה.</li></ul>
+
+@@ P24-E87 | 3 | הגבלה ל־login: לפי IP ולפי חשבון 🤖 | 25 | פרק 21, שיעור 4
+@lesson 4
+@part 2
+@task
+<p>הגרסה של E77 (ג). בקובץ <code>24-production/starter/P24-E87.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+type Rule = { limit: number; windowMs: number };
+export function createLoginLimiter(opts: { now: () => number; perIp?: Rule; perEmail?: Rule }): {
+  check(ip: string, email: string): { allowed: true } | { allowed: false; reason: "ip" | "email"; retryAfterSeconds: number };
+  fail(email: string): void;
+  succeed(email: string): void;
+}
+```
+<ul><li>ברירות מחדל: <code>perIp</code> — ‏20 ב־60 שניות; ‏<code>perEmail</code> — ‏5 ב־15 דקות.</li><li><code>check</code> רץ <em>לפני</em> בדיקת הסיסמה. בודקים קודם את ה־IP: אם יש כבר <code>limit</code> ניסיונות בחלון ← נדחה (<code>reason: "ip"</code>). אחר כך את החשבון: אם יש <code>limit</code> <strong>כישלונות</strong> בחלון ← נדחה (<code>"email"</code>). אם עבר — הניסיון נספר ל־IP. ניסיון שנדחה לא נספר.</li><li><code>fail(email)</code> — רושם כישלון לחשבון. ‏<code>succeed(email)</code> — מאפס את הכישלונות שלו.</li><li>אימייל — אחרי <code>trim</code> ו־<code>toLowerCase</code> (כמו בהרשמה, פרק 21).</li><li><code>retryAfterSeconds</code> — עד שהרשומה הוותיקה בחלון יוצאת ממנו, מעוגל למעלה.</li></ul>
+```term
+% npm run check P24-E87
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> נרמול אימייל ו־login מפרק 21 — והשיעור: חלון נע, ו"את מי מגבילים".</p>
+@hint1
+<p>פונקציית עזר אחת לחלון נע: <code>recent(list, windowMs)</code> שמחזירה רק זמנים ש־<code>now - t &lt; windowMs</code>. ושתי מפות: <code>byIp</code> ו־<code>failures</code>.</p>
+@hint2
+```ts
+retryAfterSeconds = Math.ceil((oldest + windowMs - now) / 1000)
+```
+@solution
+```ts save=solutions/P24-E87.ts
+// P24-E87: הגבלה ל־login — לפי IP ולפי חשבון
+type Rule = { limit: number; windowMs: number };
+
+export function createLoginLimiter({
+  now,
+  perIp = { limit: 20, windowMs: 60_000 },
+  perEmail = { limit: 5, windowMs: 15 * 60_000 },
+}: { now: () => number; perIp?: Rule; perEmail?: Rule }) {
+  const byIp = new Map<string, number[]>();
+  const failures = new Map<string, number[]>();
+  const norm = (email: string) => email.trim().toLowerCase();
+  const recent = (map: Map<string, number[]>, key: string, windowMs: number) => {
+    const t = now();
+    const list = (map.get(key) ?? []).filter((x) => t - x < windowMs);
+    if (list.length) map.set(key, list);
+    else map.delete(key); // לא משאירים מפתחות ריקים (E79)
+    return list;
+  };
+  const wait = (list: number[], windowMs: number) => Math.ceil((list[0] + windowMs - now()) / 1000);
+
+  return {
+    check(ip: string, email: string) {
+      const ips = recent(byIp, ip, perIp.windowMs);
+      if (ips.length >= perIp.limit) return { allowed: false as const, reason: "ip" as const, retryAfterSeconds: wait(ips, perIp.windowMs) };
+      const fails = recent(failures, norm(email), perEmail.windowMs);
+      if (fails.length >= perEmail.limit) return { allowed: false as const, reason: "email" as const, retryAfterSeconds: wait(fails, perEmail.windowMs) };
+      byIp.set(ip, [...ips, now()]); // רק ניסיון שעבר נספר
+      return { allowed: true as const };
+    },
+    fail(email: string) {
+      const key = norm(email);
+      failures.set(key, [...recent(failures, key, perEmail.windowMs), now()]);
+    },
+    succeed(email: string) {
+      failures.delete(norm(email));
+    },
+  };
+}
+```
+<p>בשימוש: <code>check</code> ב־guard; אם הסיסמה שגויה — <code>fail</code>; אם נכונה — <code>succeed</code>. דנה, שהתוקף "נועל", נעולה רק 15 דקות מהכישלון הוותיק — ולא לתמיד.</p>
+@mistakes
+<ul><li>לספור לחשבון גם ניסיונות מוצלחים — משתמש שנכנס ויוצא 5 פעמים נחסם.</li><li>בלי נרמול — <code>Dana@Example.com</code> ו־<code>dana@example.com</code> נספרים בנפרד, והתוקף מקבל פי כמה ניסיונות.</li></ul>
+
+@@ P24-E88 | 3 | לקוח שמכבד Retry-After 🤖 | 20 | פרק 10, פרק 14, שיעור 4
+@lesson 4
+@part 2
+@task
+<p>הצד של הלקוח. בקובץ <code>24-production/starter/P24-E88.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function fetchPolitely(
+  fetchFn: typeof fetch, url: string, init: RequestInit,
+  opts: { sleep: (ms: number) => Promise<void>; maxRetries?: number; maxWaitSeconds?: number },
+): Promise<Response>
+```
+<ul><li>תשובה 429 או 503 עם <code>Retry-After</code> שהוא מספר שניות שלם (ספרות בלבד) ← <code>sleep(שניות × 1000)</code> ושולחים שוב את אותה בקשה.</li><li>לא מחכים אם: אין <code>Retry-After</code>, הוא לא מספר שלם, או שהוא גדול מ־<code>maxWaitSeconds</code> (ברירת מחדל 60) — מחזירים את התשובה כמו שהיא.</li><li>לכל היותר <code>maxRetries</code> (ברירת מחדל 2) ניסיונות נוספים. אחר כך — מחזירים את התשובה האחרונה.</li><li>כל תשובה אחרת — מחזירים מיד.</li></ul>
+```term
+% npm run check P24-E88
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>fetch</code> ו־<code>res.headers.get</code> מפרק 14, ‏<code>await</code> בלולאה מפרק 10 — והשיעור: 429 שלקוח יכול לעבוד איתו.</p>
+@hint1
+<p><code>const ra = res.headers.get("retry-after")</code>, ואז <code>/^\d+$/.test(ra)</code>.</p>
+@hint2
+<p>לולאה: <code>for (let attempt = 0; ; attempt++)</code> — יוצאים עם <code>return res</code> בכל מקרה שלא מחכים.</p>
+@solution
+```ts save=solutions/P24-E88.ts
+// P24-E88: לקוח שמכבד Retry-After
+export async function fetchPolitely(
+  fetchFn: typeof fetch,
+  url: string,
+  init: RequestInit,
+  { sleep, maxRetries = 2, maxWaitSeconds = 60 }: { sleep: (ms: number) => Promise<void>; maxRetries?: number; maxWaitSeconds?: number },
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchFn(url, init);
+    if (res.status !== 429 && res.status !== 503) return res;
+    const ra = res.headers.get("retry-after");
+    if (ra === null || !/^\d+$/.test(ra)) return res;
+    const seconds = Number(ra);
+    if (seconds > maxWaitSeconds || attempt >= maxRetries) return res;
+    await res.body?.cancel(); // לא קוראים את הגוף — משחררים את החיבור
+    await sleep(seconds * 1000);
+  }
+}
+```
+<p>‏<code>res.body?.cancel()</code> — תשובה שלא קראו את הגוף שלה מחזיקה את החיבור פתוח. (‏<code>await res.text()</code> גם עובד.)</p>
+@mistakes
+<ul><li><code>sleep(Number(ra))</code> — 57 מילישניות במקום 57 שניות, והלקוח "מציף" את השרת בדיוק כשהוא ביקש להאט.</li><li>לחכות כל זמן שהשרת אומר — ‏<code>Retry-After: 86400</code> והאפליקציה "תקועה" יום.</li></ul>
+
+@@ P24-E89 | 2 | למה request-id נרשם ראשון? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>ב־<code>configureApp</code> של הפרויקט, ה־middleware של <code>X-Request-Id</code> נרשם <strong>לפני</strong> ה־body parser (‏<code>express.json()</code>). מישהו "סידר" את הקוד והעביר אותו אחרי. (1) מה ישתנה בבקשה עם JSON שבור — בתשובה, וב־header, ובלוג? (2) ובבקשה תקינה? (3) כלל אצבע: אילו middlewares צריכים לרוץ הכי מוקדם, ולמה?</p>
+@hint1
+<p>‏<code>express.json()</code> שנכשל קורא ל־<code>next(err)</code> — ומדלג על כל ה־middlewares הרגילים שאחריו.</p>
+@hint2
+<p>שורת ה־request נכתבת ב־<code>res.on("finish")</code> — אבל רק אם ה־middleware שמאזין הספיק לרוץ.</p>
+@solution
+<ol><li>הבקשה נכשלת ב־parser, וה־middleware של request-id לא רץ בכלל: התשובה (400) יוצאת בלי <code>X-Request-Id</code>, ואין שורת request בלוג. הלקוח מקבל שגיאה בלי "קוד לתמיכה", ואנחנו לא רואים אותה.</li><li>אין הבדל — הבקשה עוברת את שניהם.</li><li>מה ש"עוטף" את כל הבקשה — request-id, הקשר (AsyncLocalStorage), לוג ומדדים — ראשון: הם צריכים לראות גם בקשות שנכשלות מוקדם. אחריהם parsing, אימות, ובסוף ה־routes.</li></ol>
+@mistakes
+<ul><li>לבדוק רק בקשות תקינות — ואז הבאג מתגלה רק כשלקוח מתלונן על 400 "בלי קוד".</li></ul>
+
+@@ P24-E90 | 2 | ‏bufferLogs ו־useLogger | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>ב־<code>main.ts</code> של הפרויקט:</p>
+```ts
+const app = await NestFactory.create(AppModule, { bufferLogs: true });
+app.useLogger(app.get(AppLogger));
+```
+<p>(1) מה היה נכתב ללוג בעלייה בלי שתי השורות האלה? (2) למה צריך את <code>bufferLogs: true</code> — מה קורה עם הודעות שנכתבות לפני ש־<code>useLogger</code> נקרא? (3) למה אי אפשר פשוט לכתוב <code>new AppLogger()</code> ולהעביר אותו ישר ל־<code>create</code>?</p>
+@hint1
+<p>Nest כותב הודעות בזמן שהוא בונה את המודולים — עוד לפני ש־<code>create</code> חזר.</p>
+@hint2
+<p>ל־AppLogger יש תלויות: <code>LOG_SINK</code>, ‏<code>CONFIG</code>, ‏<code>CLOCK</code>.</p>
+@solution
+<ol><li>ה־logger הצבעוני של Nest: <code>[Nest] 41 - 11/07/2026 ... LOG [RoutesResolver] ...</code> — טקסט, לא JSON. כלי הלוגים רואה שורות בלי רמה ובלי שדות, מעורבבות עם ה־JSON שלנו.</li><li>הודעות העלייה (טעינת מודולים, routes) נכתבות בזמן <code>create</code>. עם <code>bufferLogs</code> הן נשמרות בצד, ונכתבות דרך ה־logger שלנו ברגע ש־<code>useLogger</code> נקרא — כ־JSON.</li><li>AppLogger מקבל את ההגדרות (רמה) ואת השעון דרך DI. ‏<code>app.get(AppLogger)</code> נותן את המופע ש־Nest בנה עם התלויות — אותו מופע שה־middleware והשירותים מקבלים.</li></ol>
+@mistakes
+<ul><li><code>logger: false</code> "כדי שיהיה שקט" — ואז גם השגיאה "Nest can't resolve dependencies" בעלייה לא נכתבת לשום מקום.</li></ul>
+
+@@ P24-E91 | 2 | למה הטביעה אחרי ה־pipe? | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>ב־<code>tasks.controller.ts</code> הטביעה מחושבת מה־<code>body</code> אחרי <code>ZodValidationPipe</code>. שלוש בקשות עם אותו <code>Idempotency-Key</code>, אחת אחרי השנייה:</p>
+```text
+1) {"title":" חלב "}
+2) {"title":"חלב","priority":"medium"}
+3) {"title":"חלב","description":null}
+```
+<p>ה־schema עושה <code>trim</code> ל־title, ‏<code>priority</code> ברירת מחדל <code>"medium"</code>, ו־<code>description</code> ברירת מחדל <code>null</code>. (1) מה מקבלת כל אחת? (2) ומה היה קורה אם הטביעה הייתה מחושבת מהגוף הגולמי (המחרוזת שהגיעה ברשת)? (3) יש גם חיסרון לחישוב אחרי ה־pipe — מתי שתי בקשות "שונות" באמת ייחשבו זהות?</p>
+@hint1
+<p>אחרי ה־pipe שלושתן הופכות לאותו אובייקט בדיוק.</p>
+@hint2
+<p>מה אם ה־schema מתעלם בשקט משדה לא מוכר?</p>
+@solution
+<ol><li>1 — 201 (נוצרה). 2 ו־3 — replay של אותה משימה, עם <code>Idempotent-Replayed: true</code>: אחרי ה־pipe הן זהות לראשונה.</li><li>2 ו־3 היו מקבלות 422 <code>IDEMPOTENCY_KEY_REUSED</code> — למרות שהן אותה בקשה בדיוק מבחינת התוצאה. (וגם רווח אחר ב־JSON, או סדר מפתחות — E64.)</li><li>אם ה־schema <em>מוריד</em> שדות לא מוכרים: <code>{"title":"חלב","urgent":true}</code> — ה־<code>urgent</code> נעלם, והבקשה "זהה". זה בסדר, כי השרת באמת עושה אותו דבר. לכן ב־schemas של הפרויקט — <code>strictObject</code>: שדה לא מוכר הוא שגיאה, ולא נבלע.</li></ol>
+@mistakes
+<ul><li>לחשב טביעה ב־middleware של Express "כדי שזה יהיה כללי" — הוא רץ לפני ה־pipe, ורואה את הגוף הגולמי.</li></ul>
+
+@@ P24-E92 | 2 | ‏release אחרי DUE_DATE_IN_PAST | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>ב־<code>IdempotencyService.run</code>: הצלחה ← <code>complete(201, task)</code>; כל שגיאה ← <code>release</code>. תאר מה הלקוח חווה בכל רצף (אותו מפתח בכל הבקשות):</p>
+<ol><li><code>dueDate</code> בעבר ← 422 <code>DUE_DATE_IN_PAST</code>. המשתמש מתקן את התאריך ושולח שוב.</li><li>אותו דבר, אבל נניח שהשירות היה שומר גם את ה־422 (<code>complete(422, error)</code>).</li><li>המסד נפל באמצע ← 500. אחרי דקה הלקוח שולח שוב, בלי שינוי.</li><li>התהליך קרס באמצע (לפני release). אחרי דקה הלקוח שולח שוב.</li></ol>
+@hint1
+<p>‏<code>release</code> מוחק את המפתח רק אם הוא עדיין "בטיפול".</p>
+@hint2
+<p>קריסה = אף שורת קוד לא רצה, גם לא catch.</p>
+@solution
+<ol><li>המפתח שוחרר. הבקשה המתוקנת (תוכן אחר!) עם אותו מפתח — מתבצעת: 201. זה מה שה־frontend של הפרויקט עושה: המפתח נמחק רק אחרי הצלחה.</li><li>הבקשה המתוקנת מקבלת 422 <code>IDEMPOTENCY_KEY_REUSED</code> (תוכן אחר). ה־frontend צריך לייצר מפתח חדש אחרי כל 4xx. גם זה עובד — אבל צריך לזכור.</li><li>שוחרר ← הניסיון השני מתבצע. בדיוק בשביל זה המנגנון קיים.</li><li>הרשומה נשארה "בטיפול" ← 409 <code>IDEMPOTENCY_IN_PROGRESS</code>, עד שהיא פגה (<code>IDEMPOTENCY_TTL_HOURS</code>, 24 שעות). זה החיסרון של TTL אחד לכל המצבים — ויש מערכות שנותנות ל"בטיפול" תוקף קצר בהרבה.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>release</code> בתוך <code>catch</code> מכסה את כל המקרים — קריסה, SIGKILL ו־OOM לא עוברים דרך <code>catch</code>.</li></ul>
+
+@@ P24-E93 | 2 | ‏onModuleDestroy מול onApplicationShutdown | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>בשלב ז׳ שינית ב־<code>PrismaService</code> את <code>onModuleDestroy</code> ל־<code>onApplicationShutdown</code>. (1) מה ראינו בניסוי של שיעור 4 עם בקשה של 300ms באמצע הכיבוי — בכל אחת מהגרסאות? (2) למה הבדיקות של שלב ה׳ (Jest + supertest) לא תפסו את הבעיה? (3) מה עוד, מלבד המסד, צריך להיסגר ב־<code>onApplicationShutdown</code> ולא לפני?</p>
+@hint1
+<p>הסדר של Nest: ‏onModuleDestroy ← סגירת שרת ה־HTTP ← onApplicationShutdown.</p>
+@hint2
+<p>בבדיקה, מתי נקרא <code>app.close()</code> ביחס לבקשות?</p>
+@solution
+<ol><li>עם <code>onModuleDestroy</code> — הלקוח קיבל 500: המסד נסגר כשהבקשה עוד הייתה צריכה אותו. עם <code>onApplicationShutdown</code> — 200, והמסד נסגר אחרי שהשרת סיים.</li><li>בבדיקות, <code>app.close()</code> נקרא ב־<code>afterAll</code>, כשאין בקשות באמצע. הבאג מופיע רק כשיש תעבורה בזמן כיבוי — כלומר בכל deploy בפרודקשן.</li><li>כל משאב שבקשות משתמשות בו: חיבור ל־Redis (פרק 26), לקוח של תור הודעות, ה־exporter של OpenTelemetry (שולח את מה שנשאר — שיעור 6). ו"השעון" של משימות רקע — לעצור אותן לפני, ולא לתת להן להתחיל עבודה חדשה.</li></ol>
+@mistakes
+<ul><li>להעתיק <code>onModuleDestroy</code> ממדריך — רוב המדריכים כותבים אותו, ורובם לא בדקו כיבוי עם תעבורה.</li></ul>
+
+@@ P24-E94 | 2 | ‏x-request-id מחזיר null בדפדפן | 10 | שיעור 5
+@lesson 5
+@part 1
+@kind understand
+@task
+<p>בדף של הפרויקט (פורט 5500), אחרי 500: ‏<code>res.headers.get("x-request-id")</code> מחזיר <code>null</code> — למרות שב־DevTools, בלשונית Network, ה־header מופיע בתשובה. (1) למה? מה מוסיפים ל־<code>enableCors</code>? (2) הדף שולח header חדש, <code>Idempotency-Key</code> — וזה עבד בלי לשנות שום הגדרה. מה הדפדפן שאל את השרת לפני הבקשה, ולמה השרת אישר? (3) מישהו "הידק" את ההגדרות וכתב <code>allowedHeaders: ["authorization", "content-type"]</code>. מה יקרה ליצירת משימה מהדף?</p>
+@hint1
+<p>שני כיוונים: ה־headers שהדפדפן <em>שולח</em> (‏preflight, ‏<code>Access-Control-Allow-Headers</code>) וה־headers ש־JavaScript <em>קורא</em> מהתשובה (‏<code>Access-Control-Expose-Headers</code>).</p>
+@hint2
+<p>בלי <code>allowedHeaders</code>, ספריית <code>cors</code> (שמאחורי <code>enableCors</code>) מחזירה ב־preflight את מה שהדפדפן ביקש.</p>
+@solution
+<ol><li>הדפדפן מקבל את ה־header, אבל חושף ל־JavaScript של אתר אחר רק headers "בטוחים" (כמו <code>Content-Type</code>) — אלא אם השרת שלח <code>Access-Control-Expose-Headers</code>. בפרויקט — <code>exposedHeaders</code> עם שלושה: ‏<code>X-Request-Id</code>, ‏<code>Retry-After</code> ו־<code>Idempotent-Replayed</code>.</li><li>header לא סטנדרטי גורם ל־preflight (‏<code>OPTIONS</code> עם <code>Access-Control-Request-Headers</code> שמפרט אותו). בלי <code>allowedHeaders</code>, ‏<code>cors</code> פשוט מחזיר את הרשימה שהתבקשה — לכן בפלט של השיעור ראינו ב־<code>Access-Control-Allow-Headers</code> את <code>authorization,content-type,idempotency-key</code>.</li><li>ה־preflight נכשל (‏<code>idempotency-key</code> לא ברשימה), והדפדפן לא שולח את ה־POST בכלל. בקונסול: שגיאת CORS; בשרת — רק OPTIONS בלוג. מי שמגדיר <code>allowedHeaders</code> צריך לזכור להוסיף כל header חדש.</li></ol>
+@mistakes
+<ul><li><code>origin: "*"</code> "כדי שיעבוד" — זה לא קשור לבעיה, ופותח את ה־API לכל אתר (יחידה 15.5).</li></ul>
+
+@@ P24-E95 | 2 | ההגדרות של שלב ז׳ 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>24-production/starter/P24-E95.ts</code> (יש בו רק הערה) כתוב וייצא, עם zod:</p>
+```ts
+export function loadProductionConfig(env: Record<string, string | undefined>): {
+  logLevel: "debug" | "info" | "warn" | "error";
+  authRateLimitPerMinute: number;
+  idempotencyTtlHours: number;
+  trustProxy: number;
+}
+```
+<ul><li><code>LOG_LEVEL</code> — אחד מארבעה; ברירת מחדל <code>info</code>.</li><li><code>AUTH_RATE_LIMIT_PER_MINUTE</code> — שלם ≥ 1 (מגיע כמחרוזת); ברירת מחדל 10.</li><li><code>IDEMPOTENCY_TTL_HOURS</code> — שלם ≥ 1; ברירת מחדל 24.</li><li><code>TRUST_PROXY</code> — שלם ≥ 0; ברירת מחדל 0.</li><li>משתנים אחרים ב־env — מתעלמים.</li><li>משהו לא תקין ← <code>Error</code> שההודעה שלו מתחילה ב־<code>"הגדרות לא תקינות: "</code>, ואחריה <strong>כל</strong> הבעיות, כל אחת <code>NAME: message</code>, מופרדות ב־<code>"; "</code>.</li></ul>
+```term
+% node 24-production/starter/P24-E95.ts
+% npm run check P24-E95
+```
+@hint1
+<p><code>z.coerce.number().int().min(1).default(10)</code> — כמו ב־<code>src/config.ts</code> של הפרויקט.</p>
+@hint2
+<p><code>safeParse</code>, ואז</p>
+```ts
+result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`)
+```
+@solution
+```ts run save=solutions/P24-E95.ts
+// P24-E95: ההגדרות של שלב ז׳
+import { z } from "zod";
+
+const schema = z.object({
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+  IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1).default(24),
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+});
+
+export function loadProductionConfig(env: Record<string, string | undefined>) {
+  const result = schema.safeParse(env);
+  if (!result.success) {
+    const problems = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`הגדרות לא תקינות: ${problems}`);
+  }
+  const e = result.data;
+  return {
+    logLevel: e.LOG_LEVEL,
+    authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
+    idempotencyTtlHours: e.IDEMPOTENCY_TTL_HOURS,
+    trustProxy: e.TRUST_PROXY,
+  };
+}
+
+console.log(loadProductionConfig({ TRUST_PROXY: "1", HOME: "/root" }));
+try {
+  loadProductionConfig({ LOG_LEVEL: "verbose", AUTH_RATE_LIMIT_PER_MINUTE: "0" });
+} catch (err) {
+  console.log((err as Error).message.split("; ").length, "בעיות");
+}
+```
+```out
+{
+  logLevel: 'info',
+  authRateLimitPerMinute: 10,
+  idempotencyTtlHours: 24,
+  trustProxy: 1
+}
+2 בעיות
+```
+<p>כאן, בניגוד ל־E38, ‏<code>LOG_LEVEL=verbose</code> מפיל את העלייה. בהגדרות של שרת זה עדיף: טעות הקלדה בפריסה מתגלה מיד, ולא אחרי שבוע בלי לוגים של debug כשהיית צריך אותם.</p>
+@mistakes
+<ul><li><code>Number(env.TRUST_PROXY) || 0</code> — ‏<code>"abc"</code> הופך בשקט ל־0, ו־<code>"1.5"</code> עובר.</li><li>לזרוק על הבעיה הראשונה בלבד — מתקנים, מפריסים, ונופלים על השנייה.</li></ul>
+
+@@ P24-E96 | 2 | שורת ה־request של הפרויקט 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>הלב של <code>request-id.middleware.ts</code>, בלי Express. בקובץ <code>24-production/starter/P24-E96.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function requestLogEntry(input: {
+  method: string; originalUrl: string; status: number; durationMs: number; requestId: string; userId?: number;
+}): { level: "debug" | "info" | "warn" | "error"; msg: "request"; fields: Record<string, unknown> }
+```
+<ul><li><code>fields</code>: <code>method</code>, ‏<code>path</code> (בלי query), ‏<code>status</code>, ‏<code>durationMs</code> (מעוגל), ‏<code>requestId</code>, ו־<code>userId</code> — רק אם הוא מספר.</li><li>רמה: 5xx ← <code>error</code>; ‏4xx ← <code>warn</code>; ‏<code>/health</code> מוצלח ← <code>debug</code> (רעש של healthcheck); כל השאר ← <code>info</code>.</li></ul>
+```term
+% npm run check P24-E96
+```
+@hint1
+<p><code>originalUrl.split("?")[0]</code>.</p>
+@hint2
+<p>הסדר של ה־if חשוב: <code>/health</code> שנכשל עם 503 — ‏<code>error</code>, לא <code>debug</code>.</p>
+@solution
+```ts save=solutions/P24-E96.ts
+// P24-E96: שורת ה־request של הפרויקט
+type Level = "debug" | "info" | "warn" | "error";
+
+export function requestLogEntry(input: { method: string; originalUrl: string; status: number; durationMs: number; requestId: string; userId?: number }) {
+  const path = input.originalUrl.split("?")[0];
+  const { status } = input;
+  const level: Level = status >= 500 ? "error" : status >= 400 ? "warn" : path === "/health" ? "debug" : "info";
+  return {
+    level,
+    msg: "request" as const,
+    fields: {
+      method: input.method,
+      path,
+      status,
+      durationMs: Math.round(input.durationMs),
+      requestId: input.requestId,
+      ...(typeof input.userId === "number" ? { userId: input.userId } : {}),
+    },
+  };
+}
+```
+@mistakes
+<ul><li><code>...(input.userId ? { userId } : {})</code> — משתמש עם מזהה 0 נעלם. כאן זה לא קורה (מזהים מתחילים ב־1), אבל <code>typeof</code> מדויק יותר.</li></ul>
+
+@@ P24-E97 | 3 | ‏logger של JSON בשביל Nest 🤖 | 20 | פרק 20, שיעור 5
+@lesson 5
+@part 1
+@task
+<p>כמו <code>AppLogger</code> של הפרויקט — כך גם ההודעות של Nest עצמו יוצאות כ־JSON. בקובץ <code>24-production/starter/P24-E97.ts</code> (יש בו רק הערה) כתוב וייצא <code>class JsonLogger</code>:</p>
+<ul><li><code>constructor({ sink, now, level })</code> — ‏<code>sink(line)</code>, ‏<code>now()</code> מחזיר <code>Date</code>, ‏<code>level</code> מינימלי (‏debug/info/warn/error).</li><li>המתודות ש־Nest קורא להן: <code>log(message, context?)</code> ← info · <code>warn(message, context?)</code> ← warn · <code>debug</code> ו־<code>verbose</code> ← debug · <code>fatal(message, context?)</code> ← error · <code>error(message, stack?, context?)</code> ← error.</li><li>כל קריאה מעל הרמה ← <code>sink</code> עם שורת JSON: <code>{ time, level, msg, context?, stack? }</code>. ‏<code>context</code> ו־<code>stack</code> — רק אם הם מחרוזות לא ריקות.</li><li><code>message</code> שהוא <code>Error</code> ← ‏<code>msg</code> = ההודעה שלו, ו־<code>stack</code> שלו (אם לא הגיע stack בנפרד). מחרוזת ← כמו שהיא. כל דבר אחר ← <code>JSON.stringify</code>.</li></ul>
+<p>הבודק מחבר אותו ל־Nest: <code>Logger.overrideLogger(new JsonLogger(...))</code>, ואז <code>new Logger("Tasks").log("hi")</code> אמור להגיע אליך.</p>
+```term
+% npm run check P24-E97
+```
+@hint1
+<p>‏Nest קורא <code>error(message, stack, context)</code> — שלושה פרמטרים — וכל השאר עם שניים.</p>
+@hint2
+<p>מתודה פרטית אחת <code>#write(level, message, context, stack)</code>, וכל המתודות הציבוריות קוראות לה.</p>
+@solution
+```ts save=solutions/P24-E97.ts
+// P24-E97: logger של JSON בשביל Nest
+type Level = "debug" | "info" | "warn" | "error";
+const ORDER: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+
+export class JsonLogger {
+  #sink: (line: string) => void;
+  #now: () => Date;
+  #level: Level;
+
+  constructor({ sink, now, level }: { sink: (line: string) => void; now: () => Date; level: Level }) {
+    this.#sink = sink;
+    this.#now = now;
+    this.#level = level;
+  }
+
+  #write(level: Level, message: unknown, context?: unknown, stack?: unknown) {
+    if (ORDER[level] < ORDER[this.#level]) return;
+    const err = message instanceof Error ? message : undefined;
+    const msg = err ? err.message : typeof message === "string" ? message : JSON.stringify(message);
+    const st = typeof stack === "string" && stack ? stack : err?.stack;
+    this.#sink(JSON.stringify({
+      time: this.#now().toISOString(),
+      level,
+      msg,
+      ...(typeof context === "string" && context ? { context } : {}),
+      ...(st ? { stack: st } : {}),
+    }));
+  }
+
+  log(message: unknown, context?: string) { this.#write("info", message, context); }
+  warn(message: unknown, context?: string) { this.#write("warn", message, context); }
+  debug(message: unknown, context?: string) { this.#write("debug", message, context); }
+  verbose(message: unknown, context?: string) { this.#write("debug", message, context); }
+  fatal(message: unknown, context?: string) { this.#write("error", message, context); }
+  error(message: unknown, stack?: string, context?: string) { this.#write("error", message, context, stack); }
+}
+```
+<p>‏<code>context</code> הוא השם שהעברת ל־<code>new Logger("Tasks")</code> — כאן הוא הופך לשדה, ואפשר לסנן לפיו ("כל ההודעות של RoutesResolver").</p>
+@mistakes
+<ul><li><code>error(message, context)</code> — עם שני פרמטרים, כמו האחרות. ‏Nest מעביר את ה־stack במקום השני, וה־stack נכתב כ־context.</li></ul>
+
+@@ P24-E98 | 2 | ‏"היום" של המשתמש ב־TasksService 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בקובץ <code>24-production/starter/P24-E98.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type UsersRepo = { findById(id: number): Promise<{ id: number; timeZone: string } | null> };
+export function createTodayFor(users: UsersRepo, now: () => Date): (userId: number) => Promise<string>
+export function countOverdue(tasks: { status: string; dueDate: string | null }[], today: string): number
+```
+<ul><li><code>createTodayFor</code> — מחזיר פונקציה שמחזירה את התאריך (<code>YYYY-MM-DD</code>) ברגע <code>now()</code>, באזור של המשתמש. משתמש שלא נמצא ← ‏UTC.</li><li><code>countOverdue</code> — כמה משימות עם <code>dueDate</code> לפני <code>today</code> (לא כולל היום עצמו), שה־<code>status</code> שלהן הוא לא <code>"done"</code>. בלי <code>dueDate</code> — לא באיחור.</li></ul>
+```term
+% npm run check P24-E98
+```
+@hint1
+<p>‏<code>localDate</code> מ־E11:</p>
+```ts
+Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+```
+@hint2
+<p>תאריכים בפורמט <code>YYYY-MM-DD</code> אפשר להשוות כמחרוזות: <code>dueDate &lt; today</code>.</p>
+@solution
+```ts save=solutions/P24-E98.ts
+// P24-E98: "היום" של המשתמש ב־TasksService
+export type UsersRepo = { findById(id: number): Promise<{ id: number; timeZone: string } | null> };
+
+const localDate = (at: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+
+export function createTodayFor(users: UsersRepo, now: () => Date) {
+  return async (userId: number) => {
+    const user = await users.findById(userId);
+    return localDate(now(), user?.timeZone ?? "UTC");
+  };
+}
+
+export function countOverdue(tasks: { status: string; dueDate: string | null }[], today: string): number {
+  return tasks.filter((t) => t.status !== "done" && t.dueDate !== null && t.dueDate < today).length;
+}
+```
+<p>זה בדיוק השינוי של שלב ז׳: במקום <code>clock.now().toISOString().slice(0, 10)</code> ("היום של השרת") — היום של המשתמש. ו־<code>now</code> מוזרק, כדי שבדיקה תוכל לקבוע "00:30 בישראל".</p>
+@mistakes
+<ul><li>לקרוא ל־<code>now()</code> פעם אחת בבנאי — ואז "היום" נתקע על היום שבו השרת עלה.</li></ul>
+
+@@ P24-E99 | 3 | ‏reserve עם P2002 🤖 | 25 | פרק 19, שיעור 5
+@lesson 5
+@part 1
+@task
+<p>הלוגיקה של <code>PrismaIdempotencyRepository.reserve</code>, מול "מסד" מדומה. בקובץ <code>24-production/starter/P24-E99.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Row = { id: number; fingerprint: string; status: number | null; body: unknown; createdAt: Date };
+export type Db = {
+  create(data: { userId: number; key: string; fingerprint: string; createdAt: Date }): Promise<void>; // כפול ← זורק { code: "P2002" }
+  findUnique(userId: number, key: string): Promise<Row | null>;
+  deleteById(id: number): Promise<void>;
+};
+export type Reservation = { kind: "new" } | { kind: "in_progress" } | { kind: "mismatch" } | { kind: "replay"; status: number; body: unknown };
+export async function reserve(db: Db, userId: number, key: string, fingerprint: string, now: Date, ttlHours: number): Promise<Reservation>
+```
+<ul><li>מנסים <code>create</code>. הצליח ← <code>new</code>. שגיאה עם <code>code</code> שאינו <code>"P2002"</code> ← זורקים אותה הלאה.</li><li>P2002 ← <code>findUnique</code>. לא נמצא (נמחק בינתיים) ← מנסים שוב מההתחלה. פג תוקף (‏<code>createdAt</code> לפני <code>ttlHours</code> שעות או יותר) ← <code>deleteById</code> ומנסים שוב.</li><li>אחרת: טביעה אחרת ← <code>mismatch</code>; ‏<code>status</code> ריק ← <code>in_progress</code>; אחרת ← <code>replay</code>.</li><li>לכל היותר 2 סיבובים. אם גם השני לא הסתיים ← <code>in_progress</code>.</li></ul>
+```term
+% npm run check P24-E99
+```
+@hint1
+```ts
+for (let attempt = 0; attempt < 2; attempt++) { try { ...; return { kind: "new" } } catch (err) { if (code !== "P2002") throw err } ... }
+```
+@hint2
+<p>‏"פג תוקף":</p>
+```ts
+row.createdAt.getTime() <= now.getTime() - ttlHours * 3_600_000
+```
+@solution
+```ts save=solutions/P24-E99.ts
+// P24-E99: reserve עם P2002
+export type Row = { id: number; fingerprint: string; status: number | null; body: unknown; createdAt: Date };
+export type Db = {
+  create(data: { userId: number; key: string; fingerprint: string; createdAt: Date }): Promise<void>;
+  findUnique(userId: number, key: string): Promise<Row | null>;
+  deleteById(id: number): Promise<void>;
+};
+export type Reservation = { kind: "new" } | { kind: "in_progress" } | { kind: "mismatch" } | { kind: "replay"; status: number; body: unknown };
+
+const isUniqueViolation = (err: unknown) => typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2002";
+
+export async function reserve(db: Db, userId: number, key: string, fingerprint: string, now: Date, ttlHours: number): Promise<Reservation> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await db.create({ userId, key, fingerprint, createdAt: now }); // האילוץ במסד מחליט מי "זוכה"
+      return { kind: "new" };
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err; // תקלה אמיתית — לא "מישהו תפס"
+    }
+    const row = await db.findUnique(userId, key);
+    if (!row) continue; // נמחק בין ה־create ל־find — עוד סיבוב
+    if (row.createdAt.getTime() <= now.getTime() - ttlHours * 3_600_000) {
+      await db.deleteById(row.id); // פג תוקף — כאילו לא קיים
+      continue;
+    }
+    if (row.fingerprint !== fingerprint) return { kind: "mismatch" };
+    if (row.status === null) return { kind: "in_progress" };
+    return { kind: "replay", status: row.status, body: row.body };
+  }
+  return { kind: "in_progress" };
+}
+```
+<p>למה לכל היותר 2? כי כל סיבוב "נכשל" רק אם מישהו אחר שינה את השורה באמצע. אחרי שניים — הנחה סבירה שיש מרוץ פעיל, ו־409 אומר ללקוח לנסות שוב בעוד רגע.</p>
+@mistakes
+<ul><li><code>catch {}</code> בלי לבדוק את הקוד — המסד לא זמין, וכל בקשה מקבלת "in_progress".</li><li>לולאה בלי גבול — שני תהליכים שמוחקים ויוצרים זה לזה יכולים להסתובב לנצח.</li></ul>
+
+@@ P24-E100 | 3 | ‏guard של הגבלת קצב ב־Nest 🤖 | 20 | פרק 20, שיעור 5
+@lesson 5
+@part 1
+@task
+<p>כמו <code>AuthRateLimitGuard</code> של הפרויקט. בקובץ <code>24-production/starter/P24-E100.ts</code> (יש בו רק הערה) כתוב וייצא <code>class LoginRateLimitGuard</code> (בלי decorators — הבודק יוצר אותו בעצמו):</p>
+<ul><li><code>constructor(limitPerMinute: number, clock: { now(): Date })</code>.</li><li><code>canActivate(context)</code> — ‏<code>context.switchToHttp().getRequest()</code> ← ‏<code>req.ip</code> הוא המפתח; ‏<code>getResponse()</code> ← ‏<code>res.setHeader</code>. חלון נע של 60 שניות.</li><li>מותר ← <code>true</code>, ו־headers: <code>RateLimit-Limit</code>, ‏<code>RateLimit-Remaining</code> (אחרי הבקשה הזו), ‏<code>RateLimit-Reset</code> (שניות עד שהוותיקה יוצאת).</li><li>חסום ← אותם headers (‏Remaining = 0) ועוד <code>Retry-After</code>, וזורקים <code>HttpException</code> מ־<code>@nestjs/common</code> עם status 429 והגוף <code>{ error: { code, message } }</code> — ‏<code>code: "TOO_MANY_REQUESTS"</code>, וההודעה כוללת את מספר השניות. בקשה חסומה לא נספרת.</li><li>כל ערכי ה־headers — מחרוזות.</li></ul>
+```term
+% npm run check P24-E100
+```
+@hint1
+```ts
+import { HttpException, type CanActivate, type ExecutionContext } from "@nestjs/common"
+```
+@hint2
+<p>שדה פרטי <code>#hits = new Map&lt;string, number[]&gt;()</code>, ו־<code>filter((t) =&gt; t &gt; now - 60_000)</code>.</p>
+@solution
+```ts save=solutions/P24-E100.ts
+// P24-E100: guard של הגבלת קצב ב־Nest
+import { HttpException, type CanActivate, type ExecutionContext } from "@nestjs/common";
+
+const WINDOW_MS = 60_000;
+
+export class LoginRateLimitGuard implements CanActivate {
+  #hits = new Map<string, number[]>();
+  #limit: number;
+  #clock: { now(): Date };
+
+  constructor(limitPerMinute: number, clock: { now(): Date }) {
+    this.#limit = limitPerMinute;
+    this.#clock = clock;
+  }
+
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest<{ ip?: string }>();
+    const res = context.switchToHttp().getResponse<{ setHeader(name: string, value: string): void }>();
+    const now = this.#clock.now().getTime();
+    const key = String(req.ip);
+    const recent = (this.#hits.get(key) ?? []).filter((t) => t > now - WINDOW_MS);
+    const blocked = recent.length >= this.#limit;
+    if (!blocked) recent.push(now); // בקשה חסומה לא נספרת
+    this.#hits.set(key, recent);
+    const reset = String(Math.ceil((recent[0] + WINDOW_MS - now) / 1000));
+    res.setHeader("RateLimit-Limit", String(this.#limit));
+    res.setHeader("RateLimit-Remaining", String(this.#limit - recent.length));
+    res.setHeader("RateLimit-Reset", reset);
+    if (blocked) {
+      res.setHeader("Retry-After", reset);
+      throw new HttpException({ error: { code: "TOO_MANY_REQUESTS", message: `יותר מדי ניסיונות. נסה שוב בעוד ${reset} שניות` } }, 429);
+    }
+    return true;
+  }
+}
+```
+<p>ב־Nest אמיתי מוסיפים <code>@Injectable()</code> ומקבלים את ההגדרות והשעון ב־<code>@Inject</code> (כמו בפרויקט). הלוגיקה זהה — ובגלל שה־guard מקבל את השעון מבחוץ, הבדיקה יכולה "לקפוץ" 60 שניות בלי לחכות.</p>
+@mistakes
+<ul><li><code>return false</code> במקום לזרוק — ‏Nest מחזיר 403 Forbidden, והלקוח לא יודע שצריך לחכות.</li></ul>
+
+@@ P24-E101 | 2 | ‏request() של הדף — עם קוד לתמיכה 🤖 | 15 | יחידה 15.5, שיעור 5
+@lesson 5
+@part 1
+@task
+<p>הפונקציה <code>request</code> מ־<code>web/app.js</code> (בלי refresh). בקובץ <code>24-production/starter/P24-E101.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function createApiClient(opts: { fetchFn: typeof fetch; base: string; getToken: () => string | null }):
+  (path: string, options?: { method?: string; body?: string; headers?: Record<string, string> }) => Promise<unknown>
+```
+<ul><li>headers: ‏<code>Content-Type: application/json</code> — רק אם יש <code>body</code>; ‏<code>Authorization: Bearer …</code> — רק אם יש טוקן; ואחריהם <code>options.headers</code> (שיכולים לדרוס).</li><li>204 ← <code>undefined</code>. תשובה תקינה אחרת ← ה־JSON שלה.</li><li>תשובה לא תקינה ← <code>Error</code> עם <code>error.message</code> מגוף התשובה (או <code>`HTTP ${status}`</code> אם אין). אם ה־status הוא 5xx — מוסיפים בסוף <code>` · קוד לתמיכה: ${requestId}`</code> מה־header <code>X-Request-Id</code>.</li></ul>
+```term
+% npm run check P24-E101
+```
+@hint1
+```ts
+{ ...(options.body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
+```
+@hint2
+<p>גוף של שגיאה יכול להיות לא JSON (‏502 מ־nginx הוא HTML). ‏<code>await res.json().catch(() =&gt; ({}))</code>.</p>
+@solution
+```ts save=solutions/P24-E101.ts
+// P24-E101: request() של הדף — עם קוד לתמיכה
+type Options = { method?: string; body?: string; headers?: Record<string, string> };
+
+export function createApiClient({ fetchFn, base, getToken }: { fetchFn: typeof fetch; base: string; getToken: () => string | null }) {
+  return async (path: string, options: Options = {}) => {
+    const token = getToken();
+    const headers = {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    };
+    const res = await fetchFn(base + path, { ...options, headers });
+    if (res.status === 204) return undefined;
+    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    if (!res.ok) {
+      const message = data.error?.message ?? `HTTP ${res.status}`;
+      throw new Error(res.status >= 500 ? `${message} · קוד לתמיכה: ${res.headers.get("x-request-id")}` : message);
+    }
+    return data;
+  };
+}
+```
+<p>‏"קוד לתמיכה" רק ב־5xx: ב־4xx ההודעה מספיקה ("תאריך היעד עבר"), וזו בעיה שהמשתמש מתקן בעצמו. ב־5xx — זה הקוד שהתמיכה מחפשת בלוגים (E02).</p>
+@mistakes
+<ul><li>להציג קוד לתמיכה רק אם <code>exposedHeaders</code> הוגדר — ואם לא, להציג "קוד לתמיכה: null" (E94).</li></ul>
+
+@@ P24-E102 | 3 | מפתח אחד לטופס 🤖 | 15 | שיעור 3, שיעור 5
+@lesson 5
+@part 1
+@task
+<p>ב־<code>web/app.js</code>: ‏<code>form.dataset.key ??= crypto.randomUUID()</code> לפני השליחה, ו־<code>delete form.dataset.key</code> אחרי הצלחה. בקובץ <code>24-production/starter/P24-E102.ts</code> (יש בו רק הערה) כתוב וייצא את אותו רעיון, בלי DOM:</p>
+```ts
+export function createFormSubmitter<T>(opts: { send: (body: unknown, key: string) => Promise<T>; newKey: () => string }): {
+  submit(body: unknown): Promise<T>;
+  currentKey(): string | null;
+}
+```
+<ul><li>אין מפתח שמור ← <code>newKey()</code> ושומרים אותו. יש ← משתמשים בו.</li><li>הצלחה ← המפתח נמחק (השליחה הבאה היא פעולה חדשה). כישלון — מכל סוג ← המפתח נשאר, והשגיאה עוברת הלאה.</li><li>לחיצה כפולה: אם יש שליחה באמצע ← <code>submit</code> מחזיר את <strong>אותה Promise</strong>, ולא קורא ל־<code>send</code> שוב.</li><li><code>currentKey()</code> — המפתח השמור, או <code>null</code>.</li></ul>
+```term
+% npm run check P24-E102
+```
+@hint1
+<p>שני משתנים בתוך הפונקציה: <code>let key: string | null</code> ו־<code>let pending: Promise&lt;T&gt; | null</code>.</p>
+@hint2
+<p><code>finally { pending = null }</code> — גם בכישלון.</p>
+@solution
+```ts save=solutions/P24-E102.ts
+// P24-E102: מפתח אחד לטופס
+export function createFormSubmitter<T>({ send, newKey }: { send: (body: unknown, key: string) => Promise<T>; newKey: () => string }) {
+  let key: string | null = null;
+  let pending: Promise<T> | null = null;
+  return {
+    submit(body: unknown): Promise<T> {
+      if (pending) return pending; // לחיצה כפולה — אותה שליחה
+      key ??= newKey();
+      const k = key;
+      pending = (async () => {
+        try {
+          const result = await send(body, k);
+          key = null; // הצליח — הפעולה הבאה תקבל מפתח חדש
+          return result;
+        } finally {
+          pending = null;
+        }
+      })();
+      return pending;
+    },
+    currentKey: () => key,
+  };
+}
+```
+<p>ב־UI אמיתי מוסיפים גם <code>button.disabled = true</code> בזמן שליחה — אבל הקוד לא סומך רק על זה: אפשר לשלוח טופס גם ב־Enter.</p>
+@mistakes
+<ul><li>למחוק את המפתח בכל כישלון — אחרי timeout (התשובה אבדה, אבל הבקשה בוצעה) השליחה הבאה יוצרת משימה כפולה. זה בדיוק המקרה שהמפתח נועד לו.</li></ul>
+
+@@ P24-E103 | 2 | הבדיקות של שלב ה׳ נשברו | 10 | פרק 22, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>אחרי שלב ז׳, ‏<code>npm test</code> נכשל: <code>TasksService</code> מקבל עכשיו עוד פרמטר בבנאי (‏users repository), ו־<code>new TasksService(repo, clock)</code> בבדיקות כבר לא מתקמפל. (1) האם זה "רע" שהבדיקות נשברו? (2) מה התיקון המינימלי בבדיקות? (3) איזו בדיקה <em>חדשה</em> חייבת להיכתב עכשיו, ובאיזה שעון היא תשתמש? (4) איך builder (פרק 22) היה מקטין את מספר הבדיקות שצריך לשנות?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כפילים, שעון מוזרק ו־builders מפרק 22 — והשיעור: ‏<code>todayFor</code> ב־TasksService.</p>
+@hint1
+<p>בדיקה שנשברת כשהחוזה של הקוד משתנה — זה בדיוק התפקיד שלה.</p>
+@hint2
+<p>כפיל של users repository — מה הוא צריך לדעת לעשות?</p>
+@solution
+<ol><li>לא. התלות השתנתה (TasksService צריך לדעת את אזור הזמן), והבדיקות מכריחות אותך לחשוב על זה. רע היה אם הן היו עוברות.</li><li>כפיל קטן: <code>{ findById: async () =&gt; ({ id: 1, timeZone: "UTC" }) }</code>. עם UTC, ההתנהגות של כל הבדיקות הקיימות לא משתנה.</li><li>הבאג של שיעור 2: משתמש ב־<code>Asia/Jerusalem</code>, שעון קבוע על <code>2026-11-04T22:30:00Z</code> (‏00:30 בישראל), ו־<code>dueDate: "2026-11-05"</code> — חייב להתקבל (לא "בעבר"). ובאותו רגע, משתמש ב־UTC עם אותו תאריך — גם תקין. ועוד אחת עם <code>"2026-11-04"</code> לישראלי — באיחור.</li><li>אם כל הבדיקות יוצרות את השירות דרך <code>buildTasksService({ ... })</code> עם ברירות מחדל — משנים מקום אחד, ולא עשרים.</li></ol>
+@mistakes
+<ul><li>"לתקן" עם <code>as any</code> במקום הפרמטר החדש — הבדיקות עוברות, ו־TasksService קורס על <code>undefined.findById</code>.</li></ul>
+
+@@ P24-E104 | 2 | עמודה חדשה NOT NULL בטבלה גדולה | 10 | פרק 19, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>ה־migration של שלב ז׳:</p>
+```sql
+ALTER TABLE "users" ADD COLUMN "time_zone" TEXT NOT NULL DEFAULT 'UTC';
+```
+<p>(1) מה יש ב־<code>time_zone</code> של משתמשים שנרשמו לפני ה־migration? האם זה נכון בשבילם? (2) מה היה קורה עם <code>NOT NULL</code> <em>בלי</em> <code>DEFAULT</code>, בטבלה שיש בה משתמשים? (3) בזמן הפריסה, הגרסה הישנה של השרת עוד רצה כמה שניות אחרי ה־migration (פרק 25). מה קורה כשהיא מוסיפה משתמש — בלי לדעת על העמודה? (4) איך היית מתקן את הערך למשתמשים הקיימים?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> migrations של Prisma מפרק 19 — והשיעור: ‏<code>users.time_zone</code> של שלב ז׳.</p>
+@hint1
+<p>‏<code>DEFAULT</code> חל גם על השורות הקיימות ברגע ההוספה, וגם על כל <code>INSERT</code> שלא מזכיר את העמודה.</p>
+@hint2
+<p>מי יודע מה אזור הזמן של משתמש ישן? הדפדפן שלו.</p>
+@solution
+<ol><li><code>'UTC'</code>. לא נכון למשתמשים בישראל — אבל זה בדיוק ההתנהגות של לפני שלב ז׳ ("היום של השרת"), אז שום דבר לא נשבר להם.</li><li>ה־migration נכשל: <code>column "time_zone" of relation "users" contains null values</code> — אי אפשר להוסיף NOT NULL לשורות קיימות בלי ערך.</li><li>ה־INSERT של הגרסה הישנה לא מזכיר את העמודה ← ה־DEFAULT ממלא <code>'UTC'</code>. זה מה שהופך את ה־migration ל"תואם לאחור" (פרק 25: expand ואז contract).</li><li>לא לנחש מה־IP. בכניסה הבאה, ה־frontend שולח <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code> ב־<code>PATCH /auth/me</code> אם הערך השמור הוא UTC (או שואלים את המשתמש בהגדרות).</li></ol>
+@mistakes
+<ul><li>להוסיף עמודה NOT NULL בלי DEFAULT ולהריץ <code>UPDATE</code> בנפרד "אחר כך" — ה־migration נכשל בשלב הראשון.</li></ul>
+
+@@ P24-E105 | 1 | ‏LOG_LEVEL ב־compose | 10 | פרק 23, שיעור 5
+@lesson 5
+@part 2
+@kind understand
+@task
+<p>ב־<code>compose.yaml</code> של שלב ז׳: <code>LOG_LEVEL: ${LOG_LEVEL:-info}</code> בשירות <code>api</code>. (1) מה יהיה <code>LOG_LEVEL</code> בתוך הקונטיינר בכל מקרה: אין כלום; <code>LOG_LEVEL=debug</code> בקובץ <code>.env</code> שליד compose.yaml; ‏<code>LOG_LEVEL=debug docker compose up -d</code>; ‏<code>LOG_LEVEL=</code> (ריק) ב־.env? (2) הרצת <code>LOG_LEVEL=debug docker compose up -d</code> כשהשירות כבר רץ. מה קורה? (3) ואם אחר כך מריצים <code>docker compose up -d</code> רגיל?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> משתנים ו־<code>${VAR:-default}</code> ב־compose מפרק 23 — והשיעור: הרמה של הלוג מה־env.</p>
+@hint1
+<p><code>:-</code> — ברירת מחדל גם כשהמשתנה <em>ריק</em>, לא רק כשאינו מוגדר.</p>
+@hint2
+<p>compose יוצר מחדש קונטיינר רק כשההגדרה שלו השתנתה.</p>
+@solution
+<ol><li><code>info</code> · ‏<code>debug</code> · ‏<code>debug</code> (משתנה מה־shell קודם ל־.env) · ‏<code>info</code> (בגלל <code>:-</code>; עם <code>-</code> בלבד הוא היה ריק — ו־zod היה מפיל את השרת).</li><li>ההגדרה השתנתה ← compose יוצר מחדש את הקונטיינר של <code>api</code> עם <code>debug</code>. (זה restart — עם כיבוי מסודר, שיעור 4.)</li><li>שוב השתנה (חזרה ל־info) ← עוד יצירה מחדש. ה־debug "נכבה לבד" — וזה טוב (E36).</li></ol>
+@mistakes
+<ul><li>לשנות את <code>.env</code> ולצפות שהקונטיינר הרץ "יקרא מחדש" — משתני סביבה נקבעים כשהתהליך מתחיל.</li></ul>
+
+@@ P24-E106 | 3 | בדיקת עשן ל־Idempotency-Key 🤖 | 20 | פרק 14, פרק 21, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>אחרי deploy רוצים לבדוק בשנייה שה־Idempotency עובד בשרת אמיתי. בקובץ <code>24-production/starter/P24-E106.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function idempotencySmoke(base: string, token: string, key: string): Promise<{
+  first: number; second: number; replayed: boolean; sameId: boolean; reused: number; ok: boolean;
+}>
+```
+<ul><li>שלוש בקשות <code>POST {base}/tasks</code>, עם <code>Authorization: Bearer {token}</code>, ‏<code>Content-Type: application/json</code> ו־<code>Idempotency-Key: {key}</code>:<ol><li><code>{"title":"smoke"}</code> ← ‏<code>first</code> = ה־status.</li><li>אותו גוף ← ‏<code>second</code>; ‏<code>replayed</code> = האם ה־header <code>Idempotent-Replayed</code> הוא <code>"true"</code>; ‏<code>sameId</code> = האם ה־<code>id</code> בתשובה זהה לראשונה.</li><li><code>{"title":"smoke-2"}</code> ← ‏<code>reused</code> = ה־status.</li></ol></li><li><code>ok</code> — ‏<code>first</code> ו־<code>second</code> הם 201, ‏<code>replayed</code> ו־<code>sameId</code>, ו־<code>reused</code> הוא 422.</li><li>לא זורקים על status לא צפוי — מחזירים את מה שהיה, עם <code>ok: false</code>.</li></ul>
+<p>הבודק מריץ את הפונקציה מול שרת תקין, ומול שני שרתים שבורים.</p>
+```term
+% npm run check P24-E106
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>fetch</code> עם headers מפרק 14 ו־Bearer token מפרק 21 — והשיעור: replay, ‏Idempotent-Replayed ו־422.</p>
+@hint1
+<p>פונקציית עזר <code>post(body)</code> שמחזירה <code>{ status, headers, json }</code> — ‏<code>json</code> עם <code>.catch(() =&gt; null)</code>.</p>
+@hint2
+<p>‏<code>sameId</code>: ‏<code>a.json?.id !== undefined &amp;&amp; a.json.id === b.json?.id</code>.</p>
+@solution
+```ts save=solutions/P24-E106.ts
+// P24-E106: בדיקת עשן ל־Idempotency-Key
+export async function idempotencySmoke(base: string, token: string, key: string) {
+  const post = async (body: unknown) => {
+    const res = await fetch(`${base}/tasks`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => null)) as { id?: unknown } | null;
+    return { status: res.status, headers: res.headers, json };
+  };
+  const a = await post({ title: "smoke" });
+  const b = await post({ title: "smoke" });
+  const c = await post({ title: "smoke-2" });
+  const replayed = b.headers.get("idempotent-replayed") === "true";
+  const sameId = a.json?.id !== undefined && a.json.id === b.json?.id;
+  const ok = a.status === 201 && b.status === 201 && replayed && sameId && c.status === 422;
+  return { first: a.status, second: b.status, replayed, sameId, reused: c.status, ok };
+}
+```
+<p>בשימוש: ב־pipeline של ה־deploy (פרק 25), עם משתמש בדיקה ומפתח חדש בכל הרצה (<code>smoke-${Date.now()}</code>).</p>
+@mistakes
+<ul><li>מפתח קבוע בכל הרצה (<code>"smoke-key"</code>) — מההרצה השנייה, כבר הבקשה הראשונה היא replay של משימה ישנה. הבדיקה "עוברת" בלי ליצור כלום, ולא בודקת שיצירה חדשה עובדת.</li></ul>
+
+@@ P24-E107 | 3 | משימות באיחור — לפי האזור של כל משתמש 🤖 | 25 | פרק 16, פרק 17, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>בקובץ <code>24-production/files/tz-tasks.sql</code> יש <code>users(id, email, time_zone)</code> ו־<code>tasks(id, owner_id, title, status, due_date date)</code>. בקובץ <code>24-production/starter/P24-E107.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export async function overdueByUser(pool: Pool, now: Date): Promise<{ userId: number; overdue: number }[]>
+```
+<ul><li>לכל משתמש (גם בלי משימות באיחור — 0), ממוין לפי <code>userId</code>.</li><li>באיחור = <code>status</code> שאינו <code>'done'</code>, ו־<code>due_date</code> לפני "היום" של המשתמש: התאריך של <code>now</code> באזור שלו (<code>users.time_zone</code>).</li><li><code>now</code> עובר כפרמטר (<code>$1</code>) — לא <code>now()</code> של המסד.</li></ul>
+```term
+% npm run check P24-E107
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>LEFT JOIN</code>, ‏<code>COUNT</code> עם <code>FILTER</code> ו־<code>GROUP BY</code> מפרקים 16–17 — והשיעור: <code>users.time_zone</code>.</p>
+@hint1
+<p><code>($1::timestamptz AT TIME ZONE u.time_zone)::date</code> — האזור יכול להיות עמודה, לא רק קבוע.</p>
+@hint2
+<p><code>COUNT(t.id) FILTER (WHERE ...)</code> עם <code>LEFT JOIN</code> — כדי שמשתמש בלי משימות יקבל 0.</p>
+@solution
+```ts save=solutions/P24-E107.ts
+// P24-E107: משימות באיחור — לפי האזור של כל משתמש
+import type { Pool } from "pg";
+
+export async function overdueByUser(pool: Pool, now: Date) {
+  const { rows } = await pool.query(
+    `SELECT u.id AS "userId",
+            COUNT(t.id) FILTER (
+              WHERE t.status <> 'done'
+                AND t.due_date < ($1::timestamptz AT TIME ZONE u.time_zone)::date
+            )::int AS overdue
+       FROM users u
+       LEFT JOIN tasks t ON t.owner_id = u.id
+      GROUP BY u.id
+      ORDER BY u.id`,
+    [now],
+  );
+  return rows as { userId: number; overdue: number }[];
+}
+```
+<p>אותו רגע, "היום" שונה לכל שורה — לפי העמודה. זה בדיוק מה ש־<code>/tasks/stats</code> צריך כשיש הרבה משתמשים, בלי לולאה ב־Node.</p>
+@mistakes
+<ul><li><code>due_date &lt; CURRENT_DATE</code> — "היום" של החיבור (ושל השעון של המסד, לא של הבדיקה).</li><li><code>INNER JOIN</code> — משתמש בלי משימות נעלם מהתוצאה.</li></ul>
+
+@@ P24-E108 | 3 | ‏exception filter עם requestId 🤖 | 20 | פרק 20, שיעור 5
+@lesson 5
+@part 2
+@task
+<p>בפרויקט, ב־500 הלקוח מקבל <code>{"error":{"code":"INTERNAL",...}}</code> — אבל בלי requestId בגוף (רק ב־header). בקובץ <code>24-production/starter/P24-E108.ts</code> (יש בו רק הערה) כתוב וייצא <code>class RequestIdErrorFilter</code> (בלי decorators):</p>
+<ul><li><code>constructor(log)</code> — ‏<code>log(level, msg, fields)</code>, ‏<code>level</code> הוא <code>"warn"</code> או <code>"error"</code>.</li><li><code>catch(exception, host)</code> — ‏<code>res = host.switchToHttp().getResponse()</code>, ‏<code>requestId = res.getHeader("X-Request-Id") ?? null</code> (ה־middleware כבר קבע אותו).</li><li><code>HttpException</code> ← אותו status, ‏<code>{ error: { code, message: exception.message, requestId } }</code>. ‏<code>code</code>: ‏400 <code>BAD_REQUEST</code>, ‏401 <code>UNAUTHORIZED</code>, ‏403 <code>FORBIDDEN</code>, ‏404 <code>NOT_FOUND</code>, ‏429 <code>TOO_MANY_REQUESTS</code>, אחרת <code>ERROR</code>. ‏<code>log("warn", "http error", { status, requestId })</code> — רק ל־4xx.</li><li>כל דבר אחר ← 500, עם <code>code: "INTERNAL"</code> ו־<code>message: "שגיאה פנימית"</code> (ו־requestId), ו־<code>log("error", "unhandled", { requestId, message })</code> — ההודעה של השגיאה רק בלוג.</li></ul>
+```term
+% npm run check P24-E108
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>ExceptionFilter</code>, ‏<code>ArgumentsHost</code> ו־<code>HttpException</code> מפרק 20 — והשיעור: אותו requestId בתשובה, ב־header ובלוג.</p>
+@hint1
+<p>‏<code>exception instanceof HttpException</code> ו־<code>exception.getStatus()</code>.</p>
+@hint2
+<p>‏<code>res.status(s).json(body)</code> — ה־response הוא של Express.</p>
+@solution
+```ts save=solutions/P24-E108.ts
+// P24-E108: exception filter עם requestId
+import { HttpException, type ArgumentsHost, type ExceptionFilter } from "@nestjs/common";
+import type { Response } from "express";
+
+type Log = (level: "warn" | "error", msg: string, fields: Record<string, unknown>) => void;
+const CODES: Record<number, string> = { 400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN", 404: "NOT_FOUND", 429: "TOO_MANY_REQUESTS" };
+
+export class RequestIdErrorFilter implements ExceptionFilter {
+  #log: Log;
+  constructor(log: Log) {
+    this.#log = log;
+  }
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse<Response>();
+    const requestId = res.getHeader("X-Request-Id") ?? null;
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      if (status < 500) this.#log("warn", "http error", { status, requestId });
+      res.status(status).json({ error: { code: CODES[status] ?? "ERROR", message: exception.message, requestId } });
+      return;
+    }
+    this.#log("error", "unhandled", { requestId, message: exception instanceof Error ? exception.message : String(exception) });
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית", requestId } });
+  }
+}
+```
+<p>‏requestId בגוף — כי לפעמים מה שמגיע לתמיכה הוא צילום מסך של הודעת השגיאה, לא ה־headers.</p>
+@mistakes
+<ul><li><code>message: exception.message</code> גם ב־500 — ההודעה של Prisma או של <code>pg</code> מגיעה ללקוח.</li></ul>
+
+@@ P24-E109 | 2 | ‏counter אחרי restart | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>‏Prometheus קורא את <code>http_requests_total</code> מהשרת כל 15 שניות. הערכים שהוא קיבל: <code>1200, 1350, 1500, 30, 180</code> — בין השלישי לרביעי היה deploy. (1) למה המספר "ירד", אם counter "רק עולה"? (2) כמה בקשות היו בפועל בכל מרווח? (3) למה זה לא שובר את <code>rate()</code>? (4) מישהו מציע: "במקום counter, נחשב בקוד כמה בקשות היו בדקה האחרונה ונחשוף gauge". תן שתי סיבות למה לא.</p>
+@hint1
+<p>ה־counter חי בזיכרון של התהליך. מה קורה לזיכרון ב־restart?</p>
+@hint2
+<p>‏<code>rate()</code> מזהה ירידה ומניח שהמונה התאפס.</p>
+@solution
+<ol><li>התהליך החדש התחיל מ־0. "רק עולה" — בתוך חיי התהליך.</li><li>150, ‏150, ולפחות 30 (מה שהתהליך הישן הספיק לספור אחרי ה־scrape האחרון — אבד), ו־150.</li><li><code>rate()</code> ו־<code>increase()</code> מזהים ירידה כאיפוס, ומתייחסים לערך החדש כאילו נוסף על הקודם. זה חלק מהחוזה של counter — ולכן חשוב שהסוג יהיה counter ולא gauge.</li><li>(א) הקצב "בדקה האחרונה" נמדד ברגע שהקוד בחר, לא ברגע ה־scrape — ובין שני scrapes אולי פספסת קפיצה. counter + <code>rate()</code> מחשב לכל חלון שתבקש (דקה, 5 דקות, שעה) מאותו מספר. (ב) עם שלושה שרתים, ממוצע של "קצב לדקה" מכל שרת הוא לא הקצב הכולל; סכום של counters — כן.</li></ol>
+@mistakes
+<ul><li>להציג גרף של הערך הגולמי של counter ("ירד ב־deploy!") במקום <code>rate()</code>.</li></ul>
+
+@@ P24-E110 | 2 | לקרוא histogram | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>מ־<code>/metrics</code> (‏<code>route="/tasks"</code>, labels אחרים הורדו):</p>
+```text
+http_request_duration_seconds_bucket{le="0.05"} 600
+http_request_duration_seconds_bucket{le="0.1"} 850
+http_request_duration_seconds_bucket{le="0.25"} 930
+http_request_duration_seconds_bucket{le="0.5"} 960
+http_request_duration_seconds_bucket{le="1"} 990
+http_request_duration_seconds_bucket{le="+Inf"} 1000
+http_request_duration_seconds_sum 142.7
+http_request_duration_seconds_count 1000
+```
+<p>(1) כמה בקשות לקחו 100ms או פחות? (2) כמה לקחו בין 0.25 ל־0.5 שניות? (3) כמה לקחו יותר משנייה? (4) מה הממוצע? (5) בין אילו שני ערכים נמצא ה־p95, ובין אילו ה־p99? (6) אפשר לדעת מכאן מה הבקשה האיטית ביותר?</p>
+@hint1
+<p>הדליים מצטברים: כל <code>le</code> כולל את כל מה שלפניו.</p>
+@hint2
+<p>p95 של 1000 בקשות = הבקשה ה־950 בסדר מהמהירה.</p>
+@solution
+<ol><li>850.</li><li>960 − 930 = 30.</li><li>1000 − 990 = 10.</li><li><code>142.7 / 1000</code> = ‏0.1427 שניות, כ־143ms.</li><li>הבקשה ה־950 — בדלי שבין 0.25 (930) ל־0.5 (960). ה־990 — בדיוק בגבול של <code>le="1"</code>, כלומר בין 0.5 ל־1. ‏<code>histogram_quantile</code> מעריך בתוך הדלי בקו ישר (E116).</li><li>לא. רק שיש 10 מעל שנייה. בשביל "הבקשה הכי איטית, ומה היא עשתה" — לוגים או traces.</li></ol>
+@mistakes
+<ul><li>לחבר את כל הדליים (600 + 850 + …) — כל בקשה נספרת בכמה דליים.</li></ul>
+
+@@ P24-E111 | 2 | לבחור buckets | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>היעד (SLO) של הצוות: "95% מהבקשות ל־API — תוך 300ms". ה־histogram מוגדר עם <code>buckets: [0.1, 0.5, 1, 5]</code>. (1) האם אפשר לדעת מהמדד אם עומדים ביעד? (2) אילו buckets היית בוחר, ולמה? (3) מישהו מציע 50 buckets, מ־1ms עד 10 שניות, "כדי שיהיה מדויק". מה המחיר? (4) למה זמנים בשניות ולא במילישניות?</p>
+@hint1
+<p>"כמה בקשות לקחו 300ms או פחות" — יש דלי עם <code>le="0.3"</code>?</p>
+@hint2
+<p>כל bucket הוא סדרה נפרדת — לכל צירוף של labels.</p>
+@solution
+<ol><li>לא בדיוק. יש "עד 0.1" ו"עד 0.5" — ‏300ms באמצע. ההערכה של <code>histogram_quantile</code> בתוך דלי רחב יכולה לטעות במאות מילישניות.</li><li>buckets סביב מה שחשוב: <code>[0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2.5]</code>. עם <code>0.3</code> בדיוק — ‏<code>bucket{le="0.3"} / count</code> הוא "אחוז הבקשות ביעד", בלי הערכה.</li><li>כל bucket הוא סדרה. 50 buckets × 20 routes × 5 methods = ‏5,000 סדרות למדד אחד, בכל שרת. זה cardinality (סעיף 4) — זיכרון ב־Prometheus, וזמן בכל scrape. 8–12 buckets מספיקים כמעט תמיד.</li><li>מוסכמה של Prometheus: יחידות בסיס (שניות, בתים). כל dashboard מוכן מניח את זה — במילישניות הגרפים מראים "p95 = ‏250 שניות".</li></ol>
+@mistakes
+<ul><li>להעתיק את ברירת המחדל של ספרייה בלי לחשוב — היא נבחרה לשירות כללי, לא ליעד שלך.</li></ul>
+
+@@ P24-E112 | 2 | ‏traceparent — מה ממשיכים, מה מחליפים? | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>השירות שלך (orders) קיבל בקשה עם:</p>
+```text
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+```
+<p>במהלך הטיפול הוא קורא לשירות payments. (1) מה ה־<code>traceId</code> של ה־span שלך, ומי ההורה שלו? (2) נניח שה־span שלך קיבל מזהה <code>b7ad6b7169203331</code>. מה בדיוק ה־<code>traceparent</code> שתשלח ל־payments? (3) מה תעשה אם הגיע <code>traceparent: 00-0000…0000-00f067aa0ba902b7-01</code> (‏traceId של אפסים), או ערך בפורמט שבור? (4) מה המשמעות של <code>-00</code> בסוף במקום <code>-01</code>?</p>
+@hint1
+<p>ה־traceId זהה לכל אורך הבקשה. ה־parent-id בהודעה הוא תמיד ה־span של מי ש<em>שלח</em> אותה.</p>
+@hint2
+<p>הביט הנמוך של הדגלים = sampled.</p>
+@solution
+<ol><li>‏traceId: <code>4bf92f3577b34da6a3ce929d0e0e4736</code>. ההורה: <code>00f067aa0ba902b7</code> — ה־span של מי שקרא לך.</li><li><code>00-4bf92f3577b34da6a3ce929d0e0e4736-b7ad6b7169203331-01</code>. אותו trace, וה־span <em>שלך</em> כהורה של מה שיקרה ב־payments.</li><li>מתעלמים ממנו ומתחילים trace חדש (בלי הורה). התקן אוסר מזהים של אפסים, ו־header שבור לא אמור להפיל בקשה (E29).</li><li>"לא נדגם" — השולח החליט לא לשמור את ה־trace הזה. ממשיכים את ההחלטה הלאה (שולחים <code>-00</code>), כדי שלא יישמרו חצאי traces.</li></ol>
+@mistakes
+<ul><li>להעביר הלאה את ה־<code>traceparent</code> שהגיע כמו שהוא — אז payments "תלוי" על ההורה שלך במקום עליך, והעץ ב־Jaeger/Tempo יוצא שטוח.</li></ul>
+
+@@ P24-E113 | 1 | התראה על סימפטום, או על סיבה? | 10 | שיעור 6
+@lesson 6
+@part 1
+@kind understand
+@task
+<p>לכל התראה — טובה (מעירים מישהו), סבירה רק כ־warning בלי להעיר, או לא כדאית? ולמה?</p>
+<ol><li>שיעור שגיאות 5xx מעל 2% במשך 5 דקות.</li><li>CPU מעל 80% במשך 5 דקות.</li><li>p95 של <code>POST /orders</code> מעל 1 שנייה במשך 10 דקות.</li><li>קונטיינר עשה restart פעם אחת.</li><li>הדיסק של המסד יתמלא בתוך 4 שעות, לפי הקצב הנוכחי.</li><li>אין אף בקשה מוצלחת ל־<code>POST /orders</code> ב־15 הדקות האחרונות, בשעות היום.</li></ol>
+@hint1
+<p>שאלה לכל אחת: האם משתמש מרגיש את זה עכשיו — או יבוא מצב שירגיש בקרוב, בלי שמישהו יפעל?</p>
+@hint2
+<p>"שקט" יכול להיות סימפטום.</p>
+@solution
+<ol><li>טובה — משתמשים מקבלים שגיאות.</li><li>לא כדאית. CPU גבוה כשהכול מהיר זה ניצול טוב של שרת. אם זה פוגע — 1 או 3 יתריעו.</li><li>טובה — זה מה שהמשתמש מרגיש, על הפעולה הכי חשובה.</li><li>warning לכל היותר. orchestrator מפעיל מחדש בשביל זה. אם זה קורה כל 5 דקות — אז כן.</li><li>טובה, למרות שזו "סיבה": אין עוד סימפטום, אבל בעוד 4 שעות יהיה, ואי אפשר לתקן את זה ברגע האחרון. (התראה צופה פני עתיד — לא על "90% מלא", אלא על "יתמלא עד".)</li><li>טובה — ושוכחים אותה לעתים קרובות. שירות שנפל לגמרי לא מייצר שגיאות 5xx; הוא פשוט שקט.</li></ol>
+@mistakes
+<ul><li>עשרות התראות על כל מדד — אחרי שבוע אף אחד לא מסתכל, וגם ההתראה האמיתית נבלעת.</li></ul>
+
+@@ P24-E114 | 2 | סיכום latency 🤖 | 15 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>חימום — הקוד של סעיף 3, כפונקציה. בקובץ <code>24-production/starter/P24-E114.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function percentile(sortedMs: number[], p: number): number
+export function latencySummary(ms: number[]): { count: number; avg: number; p50: number; p95: number; p99: number; max: number } | null
+```
+<ul><li><code>percentile</code> — nearest rank על מערך <strong>ממוין</strong>: האיבר במקום <code>Math.ceil(p / 100 * n) - 1</code>. ‏<code>p</code> לא בין 0 (לא כולל) ל־100 (כולל), או מערך ריק ← <code>RangeError</code>.</li><li><code>latencySummary</code> — מקבל מערך לא ממוין (ולא משנה אותו). ריק ← <code>null</code>. ‏<code>avg</code> — מעוגל לספרה אחת אחרי הנקודה.</li></ul>
+```term
+% node 24-production/starter/P24-E114.ts
+% npm run check P24-E114
+```
+@hint1
+<p><code>[...ms].sort((a, b) =&gt; a - b)</code> — עותק, ומיון מספרי.</p>
+@hint2
+<p><code>Math.round(x * 10) / 10</code>.</p>
+@solution
+```ts run save=solutions/P24-E114.ts
+// P24-E114: סיכום latency
+export function percentile(sortedMs: number[], p: number): number {
+  if (!(p > 0 && p <= 100) || sortedMs.length === 0) throw new RangeError(`אחוזון לא תקין: ${p}`);
+  return sortedMs[Math.ceil((p / 100) * sortedMs.length) - 1];
+}
+
+export function latencySummary(ms: number[]) {
+  if (ms.length === 0) return null;
+  const sorted = [...ms].sort((a, b) => a - b);
+  const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
+  return {
+    count: sorted.length,
+    avg: Math.round(avg * 10) / 10,
+    p50: percentile(sorted, 50),
+    p95: percentile(sorted, 95),
+    p99: percentile(sorted, 99),
+    max: sorted[sorted.length - 1],
+  };
+}
+
+const ms = [...Array.from({ length: 94 }, (_, i) => 30 + ((i * 7) % 20)), 1500, 1700, 1900, 2100, 2300, 2500];
+console.log(latencySummary(ms));
+```
+```out
+{ count: 100, avg: 157, p50: 40, p95: 1500, p99: 2300, max: 2500 }
+```
+<p>אותם מספרים כמו בשיעור — והפעם גם <code>max</code>: בקשה אחת של 2.5 שניות, שאף ממוצע לא מראה.</p>
+@mistakes
+<ul><li><code>!(p &gt; 0 &amp;&amp; p &lt;= 100)</code> ולא <code>p &lt;= 0 || p &gt; 100</code> — כדי ש־<code>NaN</code> גם ייכשל.</li></ul>
+
+@@ P24-E115 | 3 | לקרוא את /metrics 🤖 | 25 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>הכיוון ההפוך מ־E27: מטקסט של Prometheus לנתונים — למשל לבדיקת עשן שבודקת ש־<code>/metrics</code> באמת סופר. בקובץ <code>24-production/starter/P24-E115.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Sample = { name: string; labels: Record<string, string>; value: number };
+export function parseMetrics(text: string): Sample[]
+export function total(samples: Sample[], name: string, match?: Record<string, string>): number
+```
+<ul><li>שורה ריקה, או שמתחילה ב־<code>#</code> — מדלגים.</li><li>שורה: <code>name value</code> או <code>name{a="x",b="y"} value</code>, ואחרי הערך אולי timestamp (מתעלמים). שם: <code>[a-zA-Z_:][a-zA-Z0-9_:]*</code>.</li><li>ערכי labels — במרכאות, עם escaping: <code>\"</code> ← <code>"</code>, ‏<code>\\</code> ← <code>\</code>, ‏<code>\n</code> ← ירידת שורה. בתוך ערך יכולים להיות פסיק ו־<code>}</code>.</li><li>ערך: מספר, <code>+Inf</code>, ‏<code>-Inf</code> או <code>NaN</code>.</li><li>שורה לא תקינה ← <code>SyntaxError</code> עם מספר השורה (מ־1): <code>"שורה 3: ..."</code>.</li><li><code>total</code> — סכום הערכים של כל הדגימות עם השם הזה, שה־labels שלהן מכילים את כל מה שב־<code>match</code>.</li></ul>
+```term
+% node 24-production/starter/P24-E115.ts
+% npm run check P24-E115
+```
+@hint1
+<p>שם בעזרת regex בתחילת השורה. אחר כך, אם התו הבא הוא <code>{</code> — לולאה על התווים: שם label עד <code>=</code>, מרכאות, ואז תו־תו עד מרכאה שלא באה אחרי <code>\</code>.</p>
+@hint2
+<p>אחרי ה־<code>}</code>: ‏<code>rest.trim().split(/\s+/)</code> — הראשון הוא הערך. ‏<code>Number("+Inf")</code> הוא <code>NaN</code>, אז צריך טיפול מיוחד.</p>
+@solution
+```ts run save=solutions/P24-E115.ts
+// P24-E115: לקרוא את /metrics
+export type Sample = { name: string; labels: Record<string, string>; value: number };
+
+function parseValue(s: string | undefined): number {
+  if (s === "+Inf") return Infinity;
+  if (s === "-Inf") return -Infinity;
+  if (s === "NaN") return NaN;
+  if (s === undefined || !/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) throw new Error(`ערך לא תקין: ${s}`);
+  return Number(s);
+}
+
+function parseLine(line: string): Sample {
+  const m = /^([a-zA-Z_:][a-zA-Z0-9_:]*)/.exec(line);
+  if (!m) throw new Error("שם לא תקין");
+  const name = m[1];
+  let i = name.length;
+  const labels: Record<string, string> = {};
+  if (line[i] === "{") {
+    i++;
+    while (line[i] !== "}") {
+      const lm = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)="/.exec(line.slice(i));
+      if (!lm) throw new Error("label לא תקין");
+      i += lm[0].length;
+      let value = "";
+      while (line[i] !== '"') {
+        if (i >= line.length) throw new Error("מרכאות לא נסגרו");
+        if (line[i] === "\\") {
+          const next = line[i + 1];
+          value += next === "n" ? "\n" : next;
+          i += 2;
+        } else value += line[i++];
+      }
+      labels[lm[1]] = value;
+      i++; // המרכאה הסוגרת
+      if (line[i] === ",") i++;
+      else if (line[i] !== "}") throw new Error("חסר , או }");
+    }
+    i++; // ה־}
+  }
+  const [value] = line.slice(i).trim().split(/\s+/);
+  return { name, labels, value: parseValue(value) };
+}
+
+export function parseMetrics(text: string): Sample[] {
+  const samples: Sample[] = [];
+  text.split("\n").forEach((raw, idx) => {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) return;
+    try {
+      samples.push(parseLine(line));
+    } catch (err) {
+      throw new SyntaxError(`שורה ${idx + 1}: ${(err as Error).message}`);
+    }
+  });
+  return samples;
+}
+
+export function total(samples: Sample[], name: string, match: Record<string, string> = {}): number {
+  return samples
+    .filter((s) => s.name === name && Object.entries(match).every(([k, v]) => s.labels[k] === v))
+    .reduce((sum, s) => sum + s.value, 0);
+}
+
+const text = `# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/tasks/:id",status="200"} 2
+http_requests_total{method="POST",route="/tasks",status="201"} 1
+http_requests_total{method="GET",route="/tasks/:id",status="404"} 3 1731000000000`;
+const s = parseMetrics(text);
+console.log(s.length, total(s, "http_requests_total"), total(s, "http_requests_total", { method: "GET" }));
+```
+```out
+3 6 5
+```
+<p>למה לא <code>split(",")</code> על ה־labels? כי ערך של label יכול להכיל פסיק (‏<code>path="/a,b"</code>) ו־<code>}</code>. מעבר תו־תו הוא הדרך היחידה לקרוא נכון ערכים עם escaping.</p>
+@mistakes
+<ul><li><code>Number("+Inf")</code> — ‏<code>NaN</code>. וכל דלי של <code>+Inf</code> הופך ל"לא מספר".</li><li>regex אחד לכל השורה — נשבר על <code>\"</code> בתוך ערך.</li></ul>
+
+@@ P24-E116 | 3 | ‏histogram_quantile ביד 🤖 | 20 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>איך Prometheus מעריך p95 מדליים (E110)? בקובץ <code>24-production/starter/P24-E116.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export function quantileFromBuckets(buckets: { le: number; count: number }[], q: number): number
+```
+<ul><li><code>buckets</code> — מצטברים, ממוינים לפי <code>le</code>, והאחרון הוא <code>le: Infinity</code>. הסך הכול = ה־count של האחרון.</li><li><code>rank = q × total</code>. מוצאים את הדלי הראשון שה־count שלו ≥ ‏rank, ומעריכים בקו ישר בתוכו: מהגבול התחתון (ה־<code>le</code> של הדלי הקודם, או 0 לדלי הראשון) עד ה־<code>le</code> שלו, לפי מקום ה־rank בין ה־count הקודם לנוכחי.</li><li>אם הדלי שנמצא הוא <code>Infinity</code> ← מחזירים את ה־<code>le</code> הסופי הגבוה ביותר.</li><li>‏total = 0 ← <code>NaN</code>. ‏<code>q</code> לא בין 0 ל־1 (כולל) ← <code>RangeError</code>.</li></ul>
+```term
+% node 24-production/starter/P24-E116.ts
+% npm run check P24-E116
+```
+@hint1
+<p><code>const i = buckets.findIndex((b) =&gt; b.count &gt;= rank)</code>.</p>
+@hint2
+```ts
+lower + (upper - lower) * (rank - prevCount) / (count - prevCount)
+```
+@solution
+```ts run save=solutions/P24-E116.ts
+// P24-E116: histogram_quantile ביד
+export function quantileFromBuckets(buckets: { le: number; count: number }[], q: number): number {
+  if (!(q >= 0 && q <= 1)) throw new RangeError(`q לא תקין: ${q}`);
+  const total = buckets.at(-1)?.count ?? 0;
+  if (total === 0) return NaN;
+  const rank = q * total;
+  const i = buckets.findIndex((b) => b.count >= rank);
+  const b = buckets[i];
+  if (b.le === Infinity) return buckets[i - 1]?.le ?? NaN; // אין גבול עליון — הכי טוב שאפשר לומר
+  const lower = i === 0 ? 0 : buckets[i - 1].le;
+  const prevCount = i === 0 ? 0 : buckets[i - 1].count;
+  if (b.count === prevCount) return lower;
+  return lower + ((b.le - lower) * (rank - prevCount)) / (b.count - prevCount);
+}
+
+const buckets = [
+  { le: 0.05, count: 600 }, { le: 0.1, count: 850 }, { le: 0.25, count: 930 },
+  { le: 0.5, count: 960 }, { le: 1, count: 990 }, { le: Infinity, count: 1000 },
+];
+for (const q of [0.5, 0.95, 0.99, 0.999]) console.log(q, quantileFromBuckets(buckets, q).toFixed(4));
+```
+```out
+0.5 0.0417
+0.95 0.4167
+0.99 1.0000
+0.999 1.0000
+```
+<p>ה־p95 "יצא" 0.4167 — אבל זה רק ניחוש בתוך הדלי 0.25–0.5: ההנחה היא שהבקשות מפוזרות בו שווה בשווה. כאן רואים למה בחירת buckets חשובה (E111). וב־p99.9 התשובה היא פשוט "1" — יותר מזה ה־histogram לא יודע.</p>
+@mistakes
+<ul><li>לשכוח שהדליים מצטברים, ולחפש "באיזה דלי יש הכי הרבה".</li></ul>
+
+@@ P24-E117 | 2 | ‏requestId או traceId? | 10 | שיעור 1, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>בשיעור 1 כל שורת לוג קיבלה <code>requestId</code>. עכשיו יש גם <code>traceId</code>. (1) מה ההבדל ביניהם כשבקשה אחת עוברת ב־orders וב־payments? (2) איזה מהם תציג למשתמש כ"קוד לתמיכה"? (3) אפשר לוותר על אחד? (4) מה צריך לכתוב בכל שורת לוג כדי לקפוץ מ־trace איטי ב־Grafana לשורות הלוג שלו?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> request ID ו־AsyncLocalStorage משיעור 1 — והשיעור: traceparent ו־span.</p>
+@hint1
+<p>מי מייצר כל אחד, ומה הוא "מכסה"?</p>
+@hint2
+<p>אם orders מעביר הלאה גם <code>X-Request-Id</code> — מה ההבדל שנשאר?</p>
+@solution
+<ol><li>requestId — מזהה של בקשה ב<em>שירות</em> (ובדרך כלל גם מוחזר ללקוח). traceId — של כל ה"סיפור": זהה ב־orders וב־payments. כל שירות יכול לייצר requestId משלו; ה־traceId עובר בכל הדרך.</li><li>אחד מהם, בעקביות. נפוץ: requestId, שמגיע ב־header ומוכר לתמיכה. אבל אם כל השורות כוללות גם traceId — הקפיצה ביניהם היא חיפוש אחד.</li><li>בפרויקט עם שירות אחד — requestId מספיק. במערכת עם כמה שירותים — traceId הוא מה שמחבר. יש מערכות שפשוט משתמשות ב־traceId גם כ־requestId.</li><li><code>traceId</code> (ובדרך כלל גם <code>spanId</code>) בכל שורה — מה־AsyncLocalStorage, כמו ה־requestId. ‏Grafana (ודומיו) יודעים לחפש את השורות לפי ה־traceId של ה־trace.</li></ol>
+@mistakes
+<ul><li>לייצר traceId חדש בכל שירות "כי כך נוח" — ואז אין trace אחד, יש חמישה קטנים.</li></ul>
+
+@@ P24-E118 | 2 | מדדים כשיש שלושה עותקים | 10 | פרק 23, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>ב־compose (או בענן) ה־api רץ בשלושה עותקים מאחורי load balancer. (1) לכל עותק יש <code>/metrics</code> משלו. מה בדיוק כל אחד סופר? (2) הגדרת את Prometheus לקרוא את <code>http://lb/metrics</code> — דרך ה־load balancer. מה תראה בגרף של <code>http_requests_total</code>? (3) איך עושים נכון? (4) ואיך מקבלים "סה״כ בקשות בשנייה בכל השירות" ב־PromQL?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כמה עותקים של שירות ב־compose מפרק 23 — והשיעור: מדדים חיים בזיכרון של כל תהליך.</p>
+@hint1
+<p>כל scrape דרך ה־LB מגיע לעותק אחר, אקראי.</p>
+@hint2
+<p>Prometheus מוסיף לכל סדרה label בשם <code>instance</code>.</p>
+@solution
+<ol><li>רק את הבקשות שהגיעו אליו. אין מונה משותף.</li><li>מספר שקופץ: 4,000, ‏3,800, ‏4,100… — בכל scrape עותק אחר. ‏<code>rate()</code> רואה "ירידות" ומפרש אותן כ־restart, והגרף חסר משמעות.</li><li>Prometheus קורא כל עותק <strong>ישירות</strong> — ברשימה, או ב־service discovery (Docker, Kubernetes, הענן). כל עותק הוא <code>instance</code> אחר.</li><li><code>sum(rate(http_requests_total[5m]))</code> — קודם קצב לכל עותק, ואז סכום. (ולפי route: <code>sum by (route) (...)</code>.)</li></ol>
+@mistakes
+<ul><li><code>rate(sum(...))</code> — סכום ואז קצב. כשעותק אחד עושה restart, הסכום יורד, ו־rate מפרש את זה כאיפוס של הכול.</li></ul>
+
+@@ P24-E119 | 2 | ‏/metrics פתוח לכל העולם | 10 | פרק 21, שיעור 6
+@lesson 6
+@part 2
+@kind understand
+@task
+<p>אחרי deploy גילית ש־<code>https://api.example.com/metrics</code> פתוח לכולם, בלי טוקן. (1) מה תוקף יכול ללמוד מהמדדים (גם בלי מידע אישי)? (2) למה לא פשוט לשים עליו את ה־<code>JwtAuthGuard</code> של המשתמשים? (3) תן שתי דרכים נכונות להגן עליו. (4) ואם בטעות שמת <code>email</code> כ־label?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> אבטחה ו־OWASP מפרק 21 — והשיעור: ‏<code>/metrics</code> ו־labels.</p>
+@hint1
+<p>‏routes, גרסאות, קצב בקשות, שיעור שגיאות — מה כל אחד מספר?</p>
+@hint2
+<p>מי צריך לקרוא את <code>/metrics</code>? משתמש, או Prometheus?</p>
+@solution
+<ol><li>את כל ה־routes (כולל פנימיים, כמו <code>/admin/...</code>), גרסאות של Node וספריות (מ־default metrics) — שמהן מחפשים פגיעויות ידועות, כמה תעבורה יש ומתי השרת הכי עמוס (מתי לתקוף), ואיפה יש שגיאות.</li><li>Prometheus הוא לא משתמש עם JWT. וגם: אם ה־guard נכשל, אתה מאבד את הניטור בדיוק כשצריך אותו.</li><li>(א) לחשוף את <code>/metrics</code> על port פנימי נפרד (למשל 9464), שלא עובר דרך ה־load balancer הציבורי — רק ברשת הפנימית. (ב) לחסום בנתיב ב־proxy (‏<code>location /metrics { deny all; }</code>) ולתת ל־Prometheus לקרוא ישירות. (ג) אם חייבים דרך האינטרנט — basic auth או טוקן קבוע ש־Prometheus שולח.</li><li>זה כבר דלף של מידע אישי (וגם בעיית cardinality). מוחקים את ה־label, ומוחקים את הסדרות מ־Prometheus — הן נשמרות שם לפי ה־retention.</li></ol>
+@mistakes
+<ul><li>"זה רק מספרים" — מספרים עם labels הם מפה של המערכת.</li></ul>
+
+@@ P24-E120 | 3 | ‏span לכל פעולה, עם AsyncLocalStorage 🤖 | 25 | שיעור 1, פרק 10, שיעור 6
+@lesson 6
+@part 2
+@task
+<p>E29 יצר span לכל בקשת HTTP. בתוך הבקשה יש פעולות — שאילתה, קריאה לשירות אחר — וכל אחת צריכה span משלה, "תלוי" על הנוכחי. בקובץ <code>24-production/starter/P24-E120.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Span = { traceId: string; spanId: string; parentSpanId: string | null; name: string; durationMs: number; error: boolean };
+export function createTracer(opts: { onSpan: (s: Span) => void; now: () => number; randomHex: (bytes: number) => string }): {
+  withSpan<T>(name: string, fn: () => Promise<T>): Promise<T>;
+  currentTraceId(): string | undefined;
+}
+```
+<ul><li><code>withSpan</code> מחוץ לכל span ← trace חדש: ‏<code>traceId = randomHex(16)</code>, ‏<code>parentSpanId: null</code>. בתוך span ← אותו <code>traceId</code>, וההורה הוא ה־span הנוכחי.</li><li><code>spanId = randomHex(8)</code>. ‏<code>fn</code> רצה כך שכל מה שבתוכה (גם אחרי <code>await</code>) רואה את ה־span החדש כנוכחי.</li><li>כש־<code>fn</code> נגמרת — <code>onSpan</code> עם <code>durationMs = now() - start</code> ו־<code>error</code> (‏<code>true</code> אם היא זרקה). התוצאה / השגיאה עוברת הלאה.</li><li>spans שרצים במקביל באותו הורה — כל אחד עם ההורה הנכון. ‏<code>currentTraceId()</code> — מחוץ ל־span ← <code>undefined</code>.</li><li>כל קריאה ל־<code>createTracer</code> — עם <code>AsyncLocalStorage</code> משלה.</li></ul>
+```term
+% npm run check P24-E120
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> AsyncLocalStorage משיעור 1, ‏Promises ו־<code>finally</code> מפרק 10 — והשיעור: spans, הורים ו־traceId.</p>
+@hint1
+```ts
+const als = new AsyncLocalStorage<{ traceId: string; spanId: string }>()
+```
+<p>בתוך <code>createTracer</code>, ו־<code>als.run(span, fn)</code>.</p>
+@hint2
+```ts
+try { return await als.run(...) } catch (e) { error = true; throw e } finally { onSpan(...) }
+```
+@solution
+```ts save=solutions/P24-E120.ts
+// P24-E120: span לכל פעולה, עם AsyncLocalStorage
+import { AsyncLocalStorage } from "node:async_hooks";
+
+export type Span = { traceId: string; spanId: string; parentSpanId: string | null; name: string; durationMs: number; error: boolean };
+
+export function createTracer({ onSpan, now, randomHex }: { onSpan: (s: Span) => void; now: () => number; randomHex: (bytes: number) => string }) {
+  const als = new AsyncLocalStorage<{ traceId: string; spanId: string }>();
+  return {
+    async withSpan<T>(name: string, fn: () => Promise<T>): Promise<T> {
+      const parent = als.getStore();
+      const traceId = parent?.traceId ?? randomHex(16);
+      const spanId = randomHex(8);
+      const start = now();
+      let error = false;
+      try {
+        return await als.run({ traceId, spanId }, fn); // כל מה שבתוך fn רואה את ה־span הזה כנוכחי
+      } catch (err) {
+        error = true;
+        throw err;
+      } finally {
+        onSpan({ traceId, spanId, parentSpanId: parent?.spanId ?? null, name, durationMs: now() - start, error });
+      }
+    },
+    currentTraceId: () => als.getStore()?.traceId,
+  };
+}
+```
+<p>שימוש: <code>tracer.withSpan("db: SELECT tasks", () =&gt; pool.query(...))</code>. זה בדיוק מה ש־OpenTelemetry עושה אוטומטית ל־pg ול־fetch (סעיף 6) — וגם הוא שומר את ה־span הנוכחי ב־AsyncLocalStorage.</p>
+@mistakes
+<ul><li>משתנה <code>let current</code> במקום AsyncLocalStorage — שני spans במקביל "דורסים" זה את זה, וילדים נתלים על ההורה הלא נכון.</li><li><code>onSpan</code> רק בהצלחה — ואז דווקא הפעולות שנכשלו לא מופיעות ב־trace.</li></ul>

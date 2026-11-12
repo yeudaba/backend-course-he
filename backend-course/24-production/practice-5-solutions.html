@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 5 — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ פתרונות שיעור 5</div>
+  <h1>🔒 פתרונות — תרגול שיעור 5</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>24-production/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P24-E89">
+    <h3>P24-E89 · למה request-id נרשם ראשון? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>express.json()</code> שנכשל קורא ל־<code>next(err)</code> — ומדלג על כל ה־middlewares הרגילים שאחריו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורת ה־request נכתבת ב־<code>res.on("finish")</code> — אבל רק אם ה־middleware שמאזין הספיק לרוץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הבקשה נכשלת ב־parser, וה־middleware של request-id לא רץ בכלל: התשובה (400) יוצאת בלי <code>X-Request-Id</code>, ואין שורת request בלוג. הלקוח מקבל שגיאה בלי "קוד לתמיכה", ואנחנו לא רואים אותה.</li><li>אין הבדל — הבקשה עוברת את שניהם.</li><li>מה ש"עוטף" את כל הבקשה — request-id, הקשר (AsyncLocalStorage), לוג ומדדים — ראשון: הם צריכים לראות גם בקשות שנכשלות מוקדם. אחריהם parsing, אימות, ובסוף ה־routes.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק בקשות תקינות — ואז הבאג מתגלה רק כשלקוח מתלונן על 400 "בלי קוד".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E90">
+    <h3>P24-E90 · ‏bufferLogs ו־useLogger <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Nest כותב הודעות בזמן שהוא בונה את המודולים — עוד לפני ש־<code>create</code> חזר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־AppLogger יש תלויות: <code>LOG_SINK</code>, ‏<code>CONFIG</code>, ‏<code>CLOCK</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ה־logger הצבעוני של Nest: <code class="mid">[Nest] 41 - 11/07/2026 ... LOG [RoutesResolver] ...</code> — טקסט, לא JSON. כלי הלוגים רואה שורות בלי רמה ובלי שדות, מעורבבות עם ה־JSON שלנו.</li><li>הודעות העלייה (טעינת מודולים, routes) נכתבות בזמן <code>create</code>. עם <code>bufferLogs</code> הן נשמרות בצד, ונכתבות דרך ה־logger שלנו ברגע ש־<code>useLogger</code> נקרא — כ־JSON.</li><li>AppLogger מקבל את ההגדרות (רמה) ואת השעון דרך DI. ‏<code>app.get(AppLogger)</code> נותן את המופע ש־Nest בנה עם התלויות — אותו מופע שה־middleware והשירותים מקבלים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>logger: false</code> "כדי שיהיה שקט" — ואז גם השגיאה "Nest can't resolve dependencies" בעלייה לא נכתבת לשום מקום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E91">
+    <h3>P24-E91 · למה הטביעה אחרי ה־pipe? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחרי ה־pipe שלושתן הופכות לאותו אובייקט בדיוק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה אם ה־schema מתעלם בשקט משדה לא מוכר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>1 — 201 (נוצרה). 2 ו־3 — replay של אותה משימה, עם <code>Idempotent-Replayed: true</code>: אחרי ה־pipe הן זהות לראשונה.</li><li>2 ו־3 היו מקבלות 422 <code>IDEMPOTENCY_KEY_REUSED</code> — למרות שהן אותה בקשה בדיוק מבחינת התוצאה. (וגם רווח אחר ב־JSON, או סדר מפתחות — E64.)</li><li>אם ה־schema <em>מוריד</em> שדות לא מוכרים: <code class="mid">{"title":"חלב","urgent":true}</code> — ה־<code>urgent</code> נעלם, והבקשה "זהה". זה בסדר, כי השרת באמת עושה אותו דבר. לכן ב־schemas של הפרויקט — <code>strictObject</code>: שדה לא מוכר הוא שגיאה, ולא נבלע.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשב טביעה ב־middleware של Express "כדי שזה יהיה כללי" — הוא רץ לפני ה־pipe, ורואה את הגוף הגולמי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E92">
+    <h3>P24-E92 · ‏release אחרי DUE_DATE_IN_PAST <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>release</code> מוחק את המפתח רק אם הוא עדיין "בטיפול".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קריסה = אף שורת קוד לא רצה, גם לא catch.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>המפתח שוחרר. הבקשה המתוקנת (תוכן אחר!) עם אותו מפתח — מתבצעת: 201. זה מה שה־frontend של הפרויקט עושה: המפתח נמחק רק אחרי הצלחה.</li><li>הבקשה המתוקנת מקבלת 422 <code>IDEMPOTENCY_KEY_REUSED</code> (תוכן אחר). ה־frontend צריך לייצר מפתח חדש אחרי כל 4xx. גם זה עובד — אבל צריך לזכור.</li><li>שוחרר ← הניסיון השני מתבצע. בדיוק בשביל זה המנגנון קיים.</li><li>הרשומה נשארה "בטיפול" ← 409 <code>IDEMPOTENCY_IN_PROGRESS</code>, עד שהיא פגה (<code>IDEMPOTENCY_TTL_HOURS</code>, 24 שעות). זה החיסרון של TTL אחד לכל המצבים — ויש מערכות שנותנות ל"בטיפול" תוקף קצר בהרבה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>release</code> בתוך <code>catch</code> מכסה את כל המקרים — קריסה, SIGKILL ו־OOM לא עוברים דרך <code>catch</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E93">
+    <h3>P24-E93 · ‏onModuleDestroy מול onApplicationShutdown <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הסדר של Nest: ‏onModuleDestroy ← סגירת שרת ה־HTTP ← onApplicationShutdown.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בבדיקה, מתי נקרא <code>app.close()</code> ביחס לבקשות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>עם <code>onModuleDestroy</code> — הלקוח קיבל 500: המסד נסגר כשהבקשה עוד הייתה צריכה אותו. עם <code>onApplicationShutdown</code> — 200, והמסד נסגר אחרי שהשרת סיים.</li><li>בבדיקות, <code>app.close()</code> נקרא ב־<code>afterAll</code>, כשאין בקשות באמצע. הבאג מופיע רק כשיש תעבורה בזמן כיבוי — כלומר בכל deploy בפרודקשן.</li><li>כל משאב שבקשות משתמשות בו: חיבור ל־Redis (פרק 26), לקוח של תור הודעות, ה־exporter של OpenTelemetry (שולח את מה שנשאר — שיעור 6). ו"השעון" של משימות רקע — לעצור אותן לפני, ולא לתת להן להתחיל עבודה חדשה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעתיק <code>onModuleDestroy</code> ממדריך — רוב המדריכים כותבים אותו, ורובם לא בדקו כיבוי עם תעבורה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E94">
+    <h3>P24-E94 · ‏x-request-id מחזיר null בדפדפן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני כיוונים: ה־headers שהדפדפן <em>שולח</em> (‏preflight, ‏<code class="mid">Access-Control-Allow-Headers</code>) וה־headers ש־JavaScript <em>קורא</em> מהתשובה (‏<code class="mid">Access-Control-Expose-Headers</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי <code>allowedHeaders</code>, ספריית <code>cors</code> (שמאחורי <code>enableCors</code>) מחזירה ב־preflight את מה שהדפדפן ביקש.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הדפדפן מקבל את ה־header, אבל חושף ל־JavaScript של אתר אחר רק headers "בטוחים" (כמו <code>Content-Type</code>) — אלא אם השרת שלח <code class="mid">Access-Control-Expose-Headers</code>. בפרויקט — <code>exposedHeaders</code> עם שלושה: ‏<code>X-Request-Id</code>, ‏<code>Retry-After</code> ו־<code>Idempotent-Replayed</code>.</li><li>header לא סטנדרטי גורם ל־preflight (‏<code>OPTIONS</code> עם <code class="mid">Access-Control-Request-Headers</code> שמפרט אותו). בלי <code>allowedHeaders</code>, ‏<code>cors</code> פשוט מחזיר את הרשימה שהתבקשה — לכן בפלט של השיעור ראינו ב־<code class="mid">Access-Control-Allow-Headers</code> את <code class="mid">authorization,content-type,idempotency-key</code>.</li><li>ה־preflight נכשל (‏<code>idempotency-key</code> לא ברשימה), והדפדפן לא שולח את ה־POST בכלל. בקונסול: שגיאת CORS; בשרת — רק OPTIONS בלוג. מי שמגדיר <code>allowedHeaders</code> צריך לזכור להוסיף כל header חדש.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>origin: "*"</code> "כדי שיעבוד" — זה לא קשור לבעיה, ופותח את ה־API לכל אתר (יחידה 15.5).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E95">
+    <h3>P24-E95 · ההגדרות של שלב ז׳ 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">z.coerce.number().int().min(1).default(10)</code> — כמו ב־<code>src/config.ts</code> של הפרויקט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>safeParse</code>, ואז</p>
+<pre><code class="lang-ts">result.error.issues.map((i) =&gt; `${i.path.join(".")}: ${i.message}`)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E95: ההגדרות של שלב ז׳
+import { z } from "zod";
+
+const schema = z.object({
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+  IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1).default(24),
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+});
+
+export function loadProductionConfig(env: Record&lt;string, string | undefined&gt;) {
+  const result = schema.safeParse(env);
+  if (!result.success) {
+    const problems = result.error.issues.map((i) =&gt; `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`הגדרות לא תקינות: ${problems}`);
+  }
+  const e = result.data;
+  return {
+    logLevel: e.LOG_LEVEL,
+    authRateLimitPerMinute: e.AUTH_RATE_LIMIT_PER_MINUTE,
+    idempotencyTtlHours: e.IDEMPOTENCY_TTL_HOURS,
+    trustProxy: e.TRUST_PROXY,
+  };
+}
+
+console.log(loadProductionConfig({ TRUST_PROXY: "1", HOME: "/root" }));
+try {
+  loadProductionConfig({ LOG_LEVEL: "verbose", AUTH_RATE_LIMIT_PER_MINUTE: "0" });
+} catch (err) {
+  console.log((err as Error).message.split("; ").length, "בעיות");
+}</code></pre>
+<pre class="terminal">{
+  logLevel: 'info',
+  authRateLimitPerMinute: 10,
+  idempotencyTtlHours: 24,
+  trustProxy: 1
+}
+2 בעיות</pre>
+<p>כאן, בניגוד ל־E38, ‏<code>LOG_LEVEL=verbose</code> מפיל את העלייה. בהגדרות של שרת זה עדיף: טעות הקלדה בפריסה מתגלה מיד, ולא אחרי שבוע בלי לוגים של debug כשהיית צריך אותם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Number(env.TRUST_PROXY) || 0</code> — ‏<code>"abc"</code> הופך בשקט ל־0, ו־<code>"1.5"</code> עובר.</li><li>לזרוק על הבעיה הראשונה בלבד — מתקנים, מפריסים, ונופלים על השנייה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E96">
+    <h3>P24-E96 · שורת ה־request של הפרויקט 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>originalUrl.split("?")[0]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הסדר של ה־if חשוב: <code>/health</code> שנכשל עם 503 — ‏<code>error</code>, לא <code>debug</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E96: שורת ה־request של הפרויקט
+type Level = "debug" | "info" | "warn" | "error";
+
+export function requestLogEntry(input: { method: string; originalUrl: string; status: number; durationMs: number; requestId: string; userId?: number }) {
+  const path = input.originalUrl.split("?")[0];
+  const { status } = input;
+  const level: Level = status &gt;= 500 ? "error" : status &gt;= 400 ? "warn" : path === "/health" ? "debug" : "info";
+  return {
+    level,
+    msg: "request" as const,
+    fields: {
+      method: input.method,
+      path,
+      status,
+      durationMs: Math.round(input.durationMs),
+      requestId: input.requestId,
+      ...(typeof input.userId === "number" ? { userId: input.userId } : {}),
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">...(input.userId ? { userId } : {})</code> — משתמש עם מזהה 0 נעלם. כאן זה לא קורה (מזהים מתחילים ב־1), אבל <code>typeof</code> מדויק יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E97">
+    <h3>P24-E97 · ‏logger של JSON בשביל Nest 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏Nest קורא <code class="mid">error(message, stack, context)</code> — שלושה פרמטרים — וכל השאר עם שניים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מתודה פרטית אחת <code class="mid">#write(level, message, context, stack)</code>, וכל המתודות הציבוריות קוראות לה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E97: logger של JSON בשביל Nest
+type Level = "debug" | "info" | "warn" | "error";
+const ORDER: Record&lt;Level, number&gt; = { debug: 10, info: 20, warn: 30, error: 40 };
+
+export class JsonLogger {
+  #sink: (line: string) =&gt; void;
+  #now: () =&gt; Date;
+  #level: Level;
+
+  constructor({ sink, now, level }: { sink: (line: string) =&gt; void; now: () =&gt; Date; level: Level }) {
+    this.#sink = sink;
+    this.#now = now;
+    this.#level = level;
+  }
+
+  #write(level: Level, message: unknown, context?: unknown, stack?: unknown) {
+    if (ORDER[level] &lt; ORDER[this.#level]) return;
+    const err = message instanceof Error ? message : undefined;
+    const msg = err ? err.message : typeof message === "string" ? message : JSON.stringify(message);
+    const st = typeof stack === "string" &amp;&amp; stack ? stack : err?.stack;
+    this.#sink(JSON.stringify({
+      time: this.#now().toISOString(),
+      level,
+      msg,
+      ...(typeof context === "string" &amp;&amp; context ? { context } : {}),
+      ...(st ? { stack: st } : {}),
+    }));
+  }
+
+  log(message: unknown, context?: string) { this.#write("info", message, context); }
+  warn(message: unknown, context?: string) { this.#write("warn", message, context); }
+  debug(message: unknown, context?: string) { this.#write("debug", message, context); }
+  verbose(message: unknown, context?: string) { this.#write("debug", message, context); }
+  fatal(message: unknown, context?: string) { this.#write("error", message, context); }
+  error(message: unknown, stack?: string, context?: string) { this.#write("error", message, context, stack); }
+}</code></pre>
+<p>‏<code>context</code> הוא השם שהעברת ל־<code>new Logger("Tasks")</code> — כאן הוא הופך לשדה, ואפשר לסנן לפיו ("כל ההודעות של RoutesResolver").</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>error(message, context)</code> — עם שני פרמטרים, כמו האחרות. ‏Nest מעביר את ה־stack במקום השני, וה־stack נכתב כ־context.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E98">
+    <h3>P24-E98 · ‏"היום" של המשתמש ב־TasksService 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>localDate</code> מ־E11:</p>
+<pre><code class="lang-ts">Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תאריכים בפורמט <code>YYYY-MM-DD</code> אפשר להשוות כמחרוזות: <code>dueDate &lt; today</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E98: "היום" של המשתמש ב־TasksService
+export type UsersRepo = { findById(id: number): Promise&lt;{ id: number; timeZone: string } | null&gt; };
+
+const localDate = (at: Date, timeZone: string) =&gt;
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+
+export function createTodayFor(users: UsersRepo, now: () =&gt; Date) {
+  return async (userId: number) =&gt; {
+    const user = await users.findById(userId);
+    return localDate(now(), user?.timeZone ?? "UTC");
+  };
+}
+
+export function countOverdue(tasks: { status: string; dueDate: string | null }[], today: string): number {
+  return tasks.filter((t) =&gt; t.status !== "done" &amp;&amp; t.dueDate !== null &amp;&amp; t.dueDate &lt; today).length;
+}</code></pre>
+<p>זה בדיוק השינוי של שלב ז׳: במקום <code class="mid">clock.now().toISOString().slice(0, 10)</code> ("היום של השרת") — היום של המשתמש. ו־<code>now</code> מוזרק, כדי שבדיקה תוכל לקבוע "00:30 בישראל".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code>now()</code> פעם אחת בבנאי — ואז "היום" נתקע על היום שבו השרת עלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E99">
+    <h3>P24-E99 · ‏reserve עם P2002 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">for (let attempt = 0; attempt &lt; 2; attempt++) { try { ...; return { kind: "new" } } catch (err) { if (code !== "P2002") throw err } ... }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏"פג תוקף":</p>
+<pre><code class="lang-ts">row.createdAt.getTime() &lt;= now.getTime() - ttlHours * 3_600_000</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E99: reserve עם P2002
+export type Row = { id: number; fingerprint: string; status: number | null; body: unknown; createdAt: Date };
+export type Db = {
+  create(data: { userId: number; key: string; fingerprint: string; createdAt: Date }): Promise&lt;void&gt;;
+  findUnique(userId: number, key: string): Promise&lt;Row | null&gt;;
+  deleteById(id: number): Promise&lt;void&gt;;
+};
+export type Reservation = { kind: "new" } | { kind: "in_progress" } | { kind: "mismatch" } | { kind: "replay"; status: number; body: unknown };
+
+const isUniqueViolation = (err: unknown) =&gt; typeof err === "object" &amp;&amp; err !== null &amp;&amp; (err as { code?: unknown }).code === "P2002";
+
+export async function reserve(db: Db, userId: number, key: string, fingerprint: string, now: Date, ttlHours: number): Promise&lt;Reservation&gt; {
+  for (let attempt = 0; attempt &lt; 2; attempt++) {
+    try {
+      await db.create({ userId, key, fingerprint, createdAt: now }); // האילוץ במסד מחליט מי "זוכה"
+      return { kind: "new" };
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err; // תקלה אמיתית — לא "מישהו תפס"
+    }
+    const row = await db.findUnique(userId, key);
+    if (!row) continue; // נמחק בין ה־create ל־find — עוד סיבוב
+    if (row.createdAt.getTime() &lt;= now.getTime() - ttlHours * 3_600_000) {
+      await db.deleteById(row.id); // פג תוקף — כאילו לא קיים
+      continue;
+    }
+    if (row.fingerprint !== fingerprint) return { kind: "mismatch" };
+    if (row.status === null) return { kind: "in_progress" };
+    return { kind: "replay", status: row.status, body: row.body };
+  }
+  return { kind: "in_progress" };
+}</code></pre>
+<p>למה לכל היותר 2? כי כל סיבוב "נכשל" רק אם מישהו אחר שינה את השורה באמצע. אחרי שניים — הנחה סבירה שיש מרוץ פעיל, ו־409 אומר ללקוח לנסות שוב בעוד רגע.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>catch {}</code> בלי לבדוק את הקוד — המסד לא זמין, וכל בקשה מקבלת "in_progress".</li><li>לולאה בלי גבול — שני תהליכים שמוחקים ויוצרים זה לזה יכולים להסתובב לנצח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E100">
+    <h3>P24-E100 · ‏guard של הגבלת קצב ב־Nest 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">import { HttpException, type CanActivate, type ExecutionContext } from "@nestjs/common"</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שדה פרטי <code class="mid">#hits = new Map&lt;string, number[]&gt;()</code>, ו־<code class="mid">filter((t) =&gt; t &gt; now - 60_000)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E100: guard של הגבלת קצב ב־Nest
+import { HttpException, type CanActivate, type ExecutionContext } from "@nestjs/common";
+
+const WINDOW_MS = 60_000;
+
+export class LoginRateLimitGuard implements CanActivate {
+  #hits = new Map&lt;string, number[]&gt;();
+  #limit: number;
+  #clock: { now(): Date };
+
+  constructor(limitPerMinute: number, clock: { now(): Date }) {
+    this.#limit = limitPerMinute;
+    this.#clock = clock;
+  }
+
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest&lt;{ ip?: string }&gt;();
+    const res = context.switchToHttp().getResponse&lt;{ setHeader(name: string, value: string): void }&gt;();
+    const now = this.#clock.now().getTime();
+    const key = String(req.ip);
+    const recent = (this.#hits.get(key) ?? []).filter((t) =&gt; t &gt; now - WINDOW_MS);
+    const blocked = recent.length &gt;= this.#limit;
+    if (!blocked) recent.push(now); // בקשה חסומה לא נספרת
+    this.#hits.set(key, recent);
+    const reset = String(Math.ceil((recent[0] + WINDOW_MS - now) / 1000));
+    res.setHeader("RateLimit-Limit", String(this.#limit));
+    res.setHeader("RateLimit-Remaining", String(this.#limit - recent.length));
+    res.setHeader("RateLimit-Reset", reset);
+    if (blocked) {
+      res.setHeader("Retry-After", reset);
+      throw new HttpException({ error: { code: "TOO_MANY_REQUESTS", message: `יותר מדי ניסיונות. נסה שוב בעוד ${reset} שניות` } }, 429);
+    }
+    return true;
+  }
+}</code></pre>
+<p>ב־Nest אמיתי מוסיפים <code>@Injectable()</code> ומקבלים את ההגדרות והשעון ב־<code>@Inject</code> (כמו בפרויקט). הלוגיקה זהה — ובגלל שה־guard מקבל את השעון מבחוץ, הבדיקה יכולה "לקפוץ" 60 שניות בלי לחכות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return false</code> במקום לזרוק — ‏Nest מחזיר 403 Forbidden, והלקוח לא יודע שצריך לחכות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E101">
+    <h3>P24-E101 · ‏request() של הדף — עם קוד לתמיכה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">{ ...(options.body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>גוף של שגיאה יכול להיות לא JSON (‏502 מ־nginx הוא HTML). ‏<code class="mid">await res.json().catch(() =&gt; ({}))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E101: request() של הדף — עם קוד לתמיכה
+type Options = { method?: string; body?: string; headers?: Record&lt;string, string&gt; };
+
+export function createApiClient({ fetchFn, base, getToken }: { fetchFn: typeof fetch; base: string; getToken: () =&gt; string | null }) {
+  return async (path: string, options: Options = {}) =&gt; {
+    const token = getToken();
+    const headers = {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    };
+    const res = await fetchFn(base + path, { ...options, headers });
+    if (res.status === 204) return undefined;
+    const data = (await res.json().catch(() =&gt; ({}))) as { error?: { message?: string } };
+    if (!res.ok) {
+      const message = data.error?.message ?? `HTTP ${res.status}`;
+      throw new Error(res.status &gt;= 500 ? `${message} · קוד לתמיכה: ${res.headers.get("x-request-id")}` : message);
+    }
+    return data;
+  };
+}</code></pre>
+<p>‏"קוד לתמיכה" רק ב־5xx: ב־4xx ההודעה מספיקה ("תאריך היעד עבר"), וזו בעיה שהמשתמש מתקן בעצמו. ב־5xx — זה הקוד שהתמיכה מחפשת בלוגים (E02).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להציג קוד לתמיכה רק אם <code>exposedHeaders</code> הוגדר — ואם לא, להציג "קוד לתמיכה: null" (E94).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E102">
+    <h3>P24-E102 · מפתח אחד לטופס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני משתנים בתוך הפונקציה: <code>let key: string | null</code> ו־<code class="mid">let pending: Promise&lt;T&gt; | null</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>finally { pending = null }</code> — גם בכישלון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E102: מפתח אחד לטופס
+export function createFormSubmitter&lt;T&gt;({ send, newKey }: { send: (body: unknown, key: string) =&gt; Promise&lt;T&gt;; newKey: () =&gt; string }) {
+  let key: string | null = null;
+  let pending: Promise&lt;T&gt; | null = null;
+  return {
+    submit(body: unknown): Promise&lt;T&gt; {
+      if (pending) return pending; // לחיצה כפולה — אותה שליחה
+      key ??= newKey();
+      const k = key;
+      pending = (async () =&gt; {
+        try {
+          const result = await send(body, k);
+          key = null; // הצליח — הפעולה הבאה תקבל מפתח חדש
+          return result;
+        } finally {
+          pending = null;
+        }
+      })();
+      return pending;
+    },
+    currentKey: () =&gt; key,
+  };
+}</code></pre>
+<p>ב־UI אמיתי מוסיפים גם <code>button.disabled = true</code> בזמן שליחה — אבל הקוד לא סומך רק על זה: אפשר לשלוח טופס גם ב־Enter.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק את המפתח בכל כישלון — אחרי timeout (התשובה אבדה, אבל הבקשה בוצעה) השליחה הבאה יוצרת משימה כפולה. זה בדיוק המקרה שהמפתח נועד לו.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P24-E103">
+    <h3>P24-E103 · הבדיקות של שלב ה׳ נשברו <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקה שנשברת כשהחוזה של הקוד משתנה — זה בדיוק התפקיד שלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כפיל של users repository — מה הוא צריך לדעת לעשות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא. התלות השתנתה (TasksService צריך לדעת את אזור הזמן), והבדיקות מכריחות אותך לחשוב על זה. רע היה אם הן היו עוברות.</li><li>כפיל קטן: <code class="mid">{ findById: async () =&gt; ({ id: 1, timeZone: "UTC" }) }</code>. עם UTC, ההתנהגות של כל הבדיקות הקיימות לא משתנה.</li><li>הבאג של שיעור 2: משתמש ב־<code>Asia/Jerusalem</code>, שעון קבוע על <code>2026-11-04T22:30:00Z</code> (‏00:30 בישראל), ו־<code>dueDate: "2026-11-05"</code> — חייב להתקבל (לא "בעבר"). ובאותו רגע, משתמש ב־UTC עם אותו תאריך — גם תקין. ועוד אחת עם <code>"2026-11-04"</code> לישראלי — באיחור.</li><li>אם כל הבדיקות יוצרות את השירות דרך <code>buildTasksService({ ... })</code> עם ברירות מחדל — משנים מקום אחד, ולא עשרים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>as any</code> במקום הפרמטר החדש — הבדיקות עוברות, ו־TasksService קורס על <code>undefined.findById</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E104">
+    <h3>P24-E104 · עמודה חדשה NOT NULL בטבלה גדולה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>DEFAULT</code> חל גם על השורות הקיימות ברגע ההוספה, וגם על כל <code>INSERT</code> שלא מזכיר את העמודה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי יודע מה אזור הזמן של משתמש ישן? הדפדפן שלו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>'UTC'</code>. לא נכון למשתמשים בישראל — אבל זה בדיוק ההתנהגות של לפני שלב ז׳ ("היום של השרת"), אז שום דבר לא נשבר להם.</li><li>ה־migration נכשל: <code class="mid">column "time_zone" of relation "users" contains null values</code> — אי אפשר להוסיף NOT NULL לשורות קיימות בלי ערך.</li><li>ה־INSERT של הגרסה הישנה לא מזכיר את העמודה ← ה־DEFAULT ממלא <code>'UTC'</code>. זה מה שהופך את ה־migration ל"תואם לאחור" (פרק 25: expand ואז contract).</li><li>לא לנחש מה־IP. בכניסה הבאה, ה־frontend שולח <code class="mid">Intl.DateTimeFormat().resolvedOptions().timeZone</code> ב־<code>PATCH /auth/me</code> אם הערך השמור הוא UTC (או שואלים את המשתמש בהגדרות).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף עמודה NOT NULL בלי DEFAULT ולהריץ <code>UPDATE</code> בנפרד "אחר כך" — ה־migration נכשל בשלב הראשון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E105">
+    <h3>P24-E105 · ‏LOG_LEVEL ב־compose <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>:-</code> — ברירת מחדל גם כשהמשתנה <em>ריק</em>, לא רק כשאינו מוגדר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>compose יוצר מחדש קונטיינר רק כשההגדרה שלו השתנתה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>info</code> · ‏<code>debug</code> · ‏<code>debug</code> (משתנה מה־shell קודם ל־.env) · ‏<code>info</code> (בגלל <code>:-</code>; עם <code>-</code> בלבד הוא היה ריק — ו־zod היה מפיל את השרת).</li><li>ההגדרה השתנתה ← compose יוצר מחדש את הקונטיינר של <code>api</code> עם <code>debug</code>. (זה restart — עם כיבוי מסודר, שיעור 4.)</li><li>שוב השתנה (חזרה ל־info) ← עוד יצירה מחדש. ה־debug "נכבה לבד" — וזה טוב (E36).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשנות את <code>.env</code> ולצפות שהקונטיינר הרץ "יקרא מחדש" — משתני סביבה נקבעים כשהתהליך מתחיל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E106">
+    <h3>P24-E106 · בדיקת עשן ל־Idempotency-Key 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר <code>post(body)</code> שמחזירה <code>{ status, headers, json }</code> — ‏<code>json</code> עם <code>.catch(() =&gt; null)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>sameId</code>: ‏<code class="mid">a.json?.id !== undefined &amp;&amp; a.json.id === b.json?.id</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E106: בדיקת עשן ל־Idempotency-Key
+export async function idempotencySmoke(base: string, token: string, key: string) {
+  const post = async (body: unknown) =&gt; {
+    const res = await fetch(`${base}/tasks`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() =&gt; null)) as { id?: unknown } | null;
+    return { status: res.status, headers: res.headers, json };
+  };
+  const a = await post({ title: "smoke" });
+  const b = await post({ title: "smoke" });
+  const c = await post({ title: "smoke-2" });
+  const replayed = b.headers.get("idempotent-replayed") === "true";
+  const sameId = a.json?.id !== undefined &amp;&amp; a.json.id === b.json?.id;
+  const ok = a.status === 201 &amp;&amp; b.status === 201 &amp;&amp; replayed &amp;&amp; sameId &amp;&amp; c.status === 422;
+  return { first: a.status, second: b.status, replayed, sameId, reused: c.status, ok };
+}</code></pre>
+<p>בשימוש: ב־pipeline של ה־deploy (פרק 25), עם משתמש בדיקה ומפתח חדש בכל הרצה (<code>smoke-${Date.now()}</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מפתח קבוע בכל הרצה (<code>"smoke-key"</code>) — מההרצה השנייה, כבר הבקשה הראשונה היא replay של משימה ישנה. הבדיקה "עוברת" בלי ליצור כלום, ולא בודקת שיצירה חדשה עובדת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E107">
+    <h3>P24-E107 · משימות באיחור — לפי האזור של כל משתמש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">($1::timestamptz AT TIME ZONE u.time_zone)::date</code> — האזור יכול להיות עמודה, לא רק קבוע.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">COUNT(t.id) FILTER (WHERE ...)</code> עם <code>LEFT JOIN</code> — כדי שמשתמש בלי משימות יקבל 0.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E107: משימות באיחור — לפי האזור של כל משתמש
+import type { Pool } from "pg";
+
+export async function overdueByUser(pool: Pool, now: Date) {
+  const { rows } = await pool.query(
+    `SELECT u.id AS "userId",
+            COUNT(t.id) FILTER (
+              WHERE t.status &lt;&gt; 'done'
+                AND t.due_date &lt; ($1::timestamptz AT TIME ZONE u.time_zone)::date
+            )::int AS overdue
+       FROM users u
+       LEFT JOIN tasks t ON t.owner_id = u.id
+      GROUP BY u.id
+      ORDER BY u.id`,
+    [now],
+  );
+  return rows as { userId: number; overdue: number }[];
+}</code></pre>
+<p>אותו רגע, "היום" שונה לכל שורה — לפי העמודה. זה בדיוק מה ש־<code>/tasks/stats</code> צריך כשיש הרבה משתמשים, בלי לולאה ב־Node.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>due_date &lt; CURRENT_DATE</code> — "היום" של החיבור (ושל השעון של המסד, לא של הבדיקה).</li><li><code>INNER JOIN</code> — משתמש בלי משימות נעלם מהתוצאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E108">
+    <h3>P24-E108 · ‏exception filter עם requestId 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">exception instanceof HttpException</code> ו־<code>exception.getStatus()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>res.status(s).json(body)</code> — ה־response הוא של Express.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E108: exception filter עם requestId
+import { HttpException, type ArgumentsHost, type ExceptionFilter } from "@nestjs/common";
+import type { Response } from "express";
+
+type Log = (level: "warn" | "error", msg: string, fields: Record&lt;string, unknown&gt;) =&gt; void;
+const CODES: Record&lt;number, string&gt; = { 400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN", 404: "NOT_FOUND", 429: "TOO_MANY_REQUESTS" };
+
+export class RequestIdErrorFilter implements ExceptionFilter {
+  #log: Log;
+  constructor(log: Log) {
+    this.#log = log;
+  }
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const requestId = res.getHeader("X-Request-Id") ?? null;
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      if (status &lt; 500) this.#log("warn", "http error", { status, requestId });
+      res.status(status).json({ error: { code: CODES[status] ?? "ERROR", message: exception.message, requestId } });
+      return;
+    }
+    this.#log("error", "unhandled", { requestId, message: exception instanceof Error ? exception.message : String(exception) });
+    res.status(500).json({ error: { code: "INTERNAL", message: "שגיאה פנימית", requestId } });
+  }
+}</code></pre>
+<p>‏requestId בגוף — כי לפעמים מה שמגיע לתמיכה הוא צילום מסך של הודעת השגיאה, לא ה־headers.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>message: exception.message</code> גם ב־500 — ההודעה של Prisma או של <code>pg</code> מגיעה ללקוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="lesson-06-observability.html"><small>הבא</small>שיעור 6 — Observability: מדדים, אחוזונים ו־tracing</a></div>
+</main>
+</body>
+</html>
