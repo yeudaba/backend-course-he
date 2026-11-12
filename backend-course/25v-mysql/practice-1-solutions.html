@@ -95,6 +95,99 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E29">
+    <h3>P25.5-E29 · למה המפתח הזר לא נוצר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>INT</code> ו־<code>INT UNSIGNED</code> — אותו גודל, טווחים שונים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם יש UNSIGNED ב־PostgreSQL?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE authors (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+CREATE TABLE books (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  author_id INT NOT NULL,
+  FOREIGN KEY (author_id) REFERENCES authors (id)
+);
+CREATE TABLE books (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  author_id INT UNSIGNED NOT NULL,
+  FOREIGN KEY (author_id) REFERENCES authors (id)
+);
+SELECT 'ok' AS created;</code></pre>
+<pre class="terminal">ERROR 3780 (HY000): Referencing column 'author_id' and referenced column 'id' in foreign key constraint 'books_ibfk_1' are incompatible.
++---------+
+| created |
++---------+
+| ok      |
++---------+</pre>
+<ol><li>המפתח הזר והעמודה שהוא מצביע עליה חייבים להיות <em>בדיוק</em> אותו טיפוס — כולל UNSIGNED. ‏<code>INT</code> מול <code>INT UNSIGNED</code> — לא תואמים.</li><li><code>author_id INT UNSIGNED</code> (ובדרך כלל גם ה־id של books — לעקביות).</li><li>ב־PostgreSQL אין UNSIGNED — יש <code>integer</code> אחד, אז אין במה לטעות. (ומגבלה של "לא שלילי" עושים שם עם CHECK.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם <code>SET FOREIGN_KEY_CHECKS = 0</code> — הטבלה נוצרת, והמסד לא שומר על שום קשר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E30">
+    <h3>P25.5-E30 · ‏utf8mb3 בטבלה ישנה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>information_schema.COLUMNS</code> — יש בו <code>CHARACTER_SET_NAME</code> לכל עמודה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>utf8mb4 = עד 4 בתים לתו. ‏255 × 4 = ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הטבלה (או העמודה) ב־<code>utf8</code> הישן = <code>utf8mb3</code>: ‏🔥 הוא 4 בתים ונדחה (‏<code>Incorrect string value</code>).</li><li>שאילתה אחת:</li></ol>
+<pre><code class="lang-sql">SELECT TABLE_NAME, COLUMN_NAME, CHARACTER_SET_NAME
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND CHARACTER_SET_NAME = 'utf8mb3';</code></pre>
+<ol start="3"><li><code class="mid">ALTER TABLE reviews CONVERT TO CHARACTER SET utf8mb4</code> (עם הקולציה הרצויה; בונה את הטבלה מחדש — בטבלה גדולה זה זמן, ונועל). גם החיבור: אם ה־driver מתחבר ב־utf8mb3, התו נפגם בדרך — ב־mysql2 ברירת המחדל היא utf8mb4.</li><li>באינדקסים ישנים (‏InnoDB עם row format ישן) — מגבלה של 767 בתים למפתח. ‏<code>VARCHAR(255)</code> ב־utf8mb4 = עד 1020 בתים. ב־8.x עם DYNAMIC ‏(ברירת מחדל) המגבלה 3072, ובדרך כלל זה עובר.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשנות רק את ה־database (<code class="mid">ALTER DATABASE … CHARACTER SET utf8mb4</code>) — זה משפיע רק על טבלאות <em>חדשות</em>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E31">
+    <h3>P25.5-E31 · השוואות שקטות — נבא <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקולציה של MySQL 8 היא <code>NO PAD</code> — רווח בסוף הוא תו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>&lt;=&gt;</code> הוא "שווה, גם ל־NULL".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT 'abc' = 'abc ' AS trailing_space,
+       'Ä' = 'a' AS umlaut,
+       'Ö' = 'o' COLLATE utf8mb4_bin AS umlaut_bin,
+       1 = '1abc' AS num_vs_text,
+       NULL = NULL AS null_eq,
+       NULL &lt;=&gt; NULL AS null_safe;</code></pre>
+<pre class="terminal">+----------------+--------+------------+-------------+---------+-----------+
+| trailing_space | umlaut | umlaut_bin | num_vs_text | null_eq | null_safe |
++----------------+--------+------------+-------------+---------+-----------+
+|              0 |      1 |          0 |           1 |    NULL |         1 |
++----------------+--------+------------+-------------+---------+-----------+</pre>
+<ul><li><code>trailing_space</code> — ב־<code>utf8mb4_0900_ai_ci</code> (‏NO PAD) רווח בסוף נחשב. (בקולציות הישנות, ‏PAD SPACE — הוא לא היה נחשב.)</li><li><code>umlaut</code> — ‏<code>ai</code> = accent-insensitive: ‏Ä שווה ל־a. ‏<code>umlaut_bin</code> — בקולציה בינארית, לא.</li><li><code>num_vs_text</code> — ‏<code>'1abc'</code> מומר למספר 1 (עם warning) — ההשוואה "מצליחה". זו שהייתי רוצה כשגיאה: ב־PostgreSQL היא שגיאה.</li><li><code>null_eq</code> — NULL (לא ידוע), כמו ב־PostgreSQL. ‏<code>&lt;=&gt;</code> הוא המקבילה של <code>IS NOT DISTINCT FROM</code>.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות מזהה שמגיע מ־URL (מחרוזת) לעמודה מספרית ולסמוך על זה — <code>'7abc'</code> מוצא את רשומה 7.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.5-E06">
     <h3>P25.5-E06 · טבלה ב־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -160,6 +253,278 @@ CREATE TABLE members (
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E32">
+    <h3>P25.5-E32 · טבלת קודי הנחה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קולציה לעמודה אחת: <code class="mid">code VARCHAR(20) COLLATE utf8mb4_0900_bin NOT NULL</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>product_id</code> חייב להיות <code>INT UNSIGNED</code> — כמו <code>products.id</code> (E29).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E32: טבלת קודי הנחה
+CREATE TABLE promo_codes (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code        VARCHAR(20) COLLATE utf8mb4_0900_bin NOT NULL,
+  percent     TINYINT UNSIGNED NOT NULL,
+  uses_left   INT UNSIGNED NOT NULL DEFAULT 1,
+  valid_until DATE NULL,
+  product_id  INT UNSIGNED NULL,
+  UNIQUE KEY uq_promo_codes_code (code),
+  CONSTRAINT chk_promo_percent CHECK (percent BETWEEN 1 AND 90),
+  CONSTRAINT fk_promo_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;</code></pre>
+<p>‏<code>UNSIGNED</code> על <code>uses_left</code> עושה את עבודת ה־"לא שלילי": במצב STRICT, ‏<code>-1</code> נדחה עם "Out of range". וה־UNIQUE "יורש" את הקולציה של העמודה — לכן הוא רגיש לרישיות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר את <code>code</code> בקולציה של הטבלה — ואז <code>save10</code> נדחה כ"כפול" של <code>SAVE10</code> (והקוד של לקוח אחר "תפוס").</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E33">
+    <h3>P25.5-E33 · מחיר עם מע״מ, וקרטונים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־MySQL ‏<code>/</code> מחזיר עשרוני גם בין שלמים. חילוק שלם — <code>DIV</code>; שארית — <code>MOD</code> (או <code>%</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>ROUND(price * 1.18, 2)</code>. ‏price הוא DECIMAL, אז החישוב מדויק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E33: מחיר עם מע״מ, וקרטונים
+SELECT name, price, ROUND(price * 1.18, 2) AS price_with_vat,
+       stock DIV 6 AS full_boxes, stock MOD 6 AS loose
+FROM products
+WHERE category = 'beans'
+ORDER BY price DESC;</code></pre>
+<pre class="terminal">+--------------------+-------+----------------+------------+-------+
+| name               | price | price_with_vat | full_boxes | loose |
++--------------------+-------+----------------+------------+-------+
+| Ethiopia Beans 1kg | 89.90 |         106.08 |          6 |     4 |
+| Colombia Beans 1kg | 84.90 |         100.18 |          0 |     0 |
+| Brazil Beans 250g  | 29.90 |          35.28 |         20 |     0 |
++--------------------+-------+----------------+------------+-------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>FLOOR(stock / 6)</code> — עובד, אבל <code>DIV</code> אומר בדיוק מה שהתכוונת. ו־<code>stock / 6</code> לבד מחזיר <code>6.6667</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E34">
+    <h3>P25.5-E34 · שורת משלוח — CONCAT ו־GROUP_CONCAT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>||</code> הוא OR ב־MySQL (שיעור 1). שרשור: <code>CONCAT(a, b, c)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">GROUP_CONCAT(expr ORDER BY … SEPARATOR ', ')</code> — המקבילה של <code>string_agg</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E34: שורת משלוח
+SELECT o.id,
+       CONCAT('#', o.id, ' · ', c.name, ' · ', c.city) AS line,
+       GROUP_CONCAT(CONCAT(oi.quantity, '× ', p.name) ORDER BY p.name SEPARATOR ', ') AS items
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+WHERE o.status IN ('paid', 'shipped')
+GROUP BY o.id
+ORDER BY o.id;</code></pre>
+<pre class="terminal">+----+-------------------------------+------------------------------------------+
+| id | line                          | items                                    |
++----+-------------------------------+------------------------------------------+
+|  1 | #1 · Dana Levi · Haifa        | 1× Ethiopia Beans 1kg, 1× Hand Grinder   |
+|  2 | #2 · Yossi Cohen · Tel Aviv   | 1× Electric Grinder Pro                  |
+|  4 | #4 · Noa Mizrahi · Tel Aviv   | 2× French Press 1L                       |
+|  5 | #5 · Avi Peretz · Jerusalem   | 1× French Press 1L                       |
++----+-------------------------------+------------------------------------------+</pre>
+<p>‏<code>c.name</code> ו־<code>c.city</code> לא ב־GROUP BY, ובכל זאת אין error 1055: ‏MySQL מבין ש־<code>o.id</code> (מפתח ראשי) קובע את <code>o.customer_id</code>, ו־<code>c.id = o.customer_id</code> קובע את כל השורה של הלקוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>'#' || o.id</code> — מחזיר 0 או 1 (OR לוגי), בלי שגיאה.</li><li>‏<code>GROUP_CONCAT</code> חותך בשקט ב־1024 תווים (‏<code>group_concat_max_len</code>) — בדוחות עם הרבה פריטים, להגדיל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E35">
+    <h3>P25.5-E35 · קוד קופון — בדיוק או בערך? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>code = 'save10'</code> כביטוי ב־SELECT מחזיר 1 או 0.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">code = 'save10' COLLATE utf8mb4_0900_bin</code> — בינארי, ו־NO PAD (רווח בסוף נחשב).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E35: קוד קופון — בדיוק או בערך?
+SELECT code, discount,
+       code = 'save10' AS ci_match,
+       code = 'save10' COLLATE utf8mb4_0900_bin AS exact_match
+FROM coupons
+ORDER BY id;</code></pre>
+<pre class="terminal">+--------+----------+----------+-------------+
+| code   | discount | ci_match | exact_match |
++--------+----------+----------+-------------+
+| SAVE10 |       10 |        1 |           0 |
+| save10 |       15 |        1 |           1 |
+| Save10 |       20 |        1 |           0 |
+| SAVE20 |       20 |        0 |           0 |
+| Café   |        5 |        0 |           0 |
+| CAFE   |        7 |        0 |           0 |
++--------+----------+----------+-------------+</pre>
+<p>באפליקציה, קוד קופון שהמשתמש מקליד — כדאי דווקא <em>לא</em> רגיש לרישיות (נוח). אבל אז גם ה־UNIQUE צריך להיות לא רגיש, כדי שלא יהיו שני קודים שמתנגשים. טוקנים, מזהים אקראיים ו־hashes — תמיד בינארי.</p>
+<p>ולמה <code>utf8mb4_0900_bin</code> ולא <code>utf8mb4_bin</code> הוותיק? הוותיק הוא PAD SPACE: בו <code>'save10 '</code> (עם רווח בסוף) "שווה" ל־<code>'save10'</code>. הבודק מוסיף קופון כזה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>BINARY code = 'save10'</code> — עובד, אבל מיושן (deprecated מ־8.0.27). ‏<code>COLLATE</code> ברור יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E36">
+    <h3>P25.5-E36 · ‏DATETIME מול TIMESTAMP — בפועל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>SET time_zone = '+02:00';</code> — משפיע על החיבור הנוכחי בלבד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏TIMESTAMP ממיר מאזור החיבור ל־UTC בכתיבה, ובחזרה בקריאה. ‏DATETIME — שומר את מה שכתבת, כמו שהוא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E36: DATETIME מול TIMESTAMP
+SET time_zone = '+00:00';
+INSERT INTO events (name, at_datetime, at_timestamp) VALUES ('launch', '2026-11-04 22:30:00', '2026-11-04 22:30:00');
+SET time_zone = '+02:00';
+INSERT INTO events (name, at_datetime, at_timestamp) VALUES ('israel', '2026-11-05 00:30:00', '2026-11-05 00:30:00');
+SET time_zone = '+00:00';
+SELECT name, at_datetime, at_timestamp FROM events ORDER BY id;</code></pre>
+<pre class="terminal">+--------+---------------------+---------------------+
+| name   | at_datetime         | at_timestamp        |
++--------+---------------------+---------------------+
+| launch | 2026-11-04 22:30:00 | 2026-11-04 22:30:00 |
+| israel | 2026-11-05 00:30:00 | 2026-11-04 22:30:00 |
++--------+---------------------+---------------------+</pre>
+<p>שני האירועים הם <em>אותו רגע</em> (‏22:30 UTC = 00:30 בישראל). ‏TIMESTAMP יודע את זה — שניהם יוצאים זהים ב־UTC. ‏DATETIME לא יודע: הוא שומר "מה שעל השעון", וה־israel נראה כאילו קרה שעתיים אחר כך. לכן עם DATETIME — האפליקציה כותבת תמיד UTC, ומתעדת את זה (שיעור 1, הטבלה).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>חיבורים עם <code>time_zone</code> שונה (שרת אחד ב־UTC, סקריפט מה־Mac בשעון ישראל) שכותבים לאותה עמודת TIMESTAMP — כל אחד "מתרגם" אחרת, ותוצאות שאילתות לפי טווח זמן יוצאות מוזרות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E37">
+    <h3>P25.5-E37 · ‏CREATE TABLE מ־PostgreSQL ל־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>customers.id</code> ב־MySQL הוא <code>INT UNSIGNED</code>. ‏<code>text</code> עם מגבלה ← <code>VARCHAR(200)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ברירת מחדל ל־JSON חייבת להיות ביטוי בסוגריים: <code>DEFAULT (JSON_ARRAY())</code>. ‏timestamptz ← <code>DATETIME(3)</code> עם <code>CURRENT_TIMESTAMP(3)</code> (והאפליקציה כותבת UTC).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E37: CREATE TABLE מ־PostgreSQL ל־MySQL
+CREATE TABLE tasks (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  owner_id   INT UNSIGNED NOT NULL,
+  title      VARCHAR(200) NOT NULL,
+  done       BOOLEAN NOT NULL DEFAULT FALSE,
+  due_date   DATE NULL,
+  tags       JSON NOT NULL DEFAULT (JSON_ARRAY()),
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_tasks_owner FOREIGN KEY (owner_id) REFERENCES customers (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+INSERT INTO tasks (owner_id, title) VALUES (1, 'לקנות פילטרים');
+SELECT id, owner_id, title, done, due_date, tags, created_at IS NOT NULL AS has_created_at FROM tasks;</code></pre>
+<pre class="terminal">+----+----------+---------------------------+------+----------+------+----------------+
+| id | owner_id | title                     | done | due_date | tags | has_created_at |
++----+----------+---------------------------+------+----------+------+----------------+
+|  1 |        1 | לקנות פילטרים             |    0 | NULL     | []   |              1 |
++----+----------+---------------------------+------+----------+------+----------------+</pre>
+<p>‏<code>VARCHAR(200)</code> מגביל ב<em>תווים</em> (לא בבתים) — בדיוק כמו <code>char_length</code>. ובמצב STRICT, כותרת ארוכה נדחית ("Data too long") ולא נחתכת בשקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>owner_id INT</code> — ה־FK לא נוצר (E29).</li><li><code>tags JSON DEFAULT '[]'</code> — ‏MySQL לא מקבל ברירת מחדל מילולית ל־JSON/TEXT/BLOB, רק ביטוי בסוגריים.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.5-E38">
+    <h3>P25.5-E38 · ‏UNIQUE על email — עם הנרמול מפרק 21 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־MySQL, ‏<code class="mid">'Dana@x.com' = 'dana@x.com'</code> הוא 1 — גם בשביל UNIQUE.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה רואה מי שמשווה בקוד, או בשירות אחר, או בלוג?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ב־MySQL: UNIQUE עדיין חוסם <code>Dana@…</code> אחרי <code>dana@…</code> (הקולציה), וגם <code>WHERE email = ?</code> בכניסה מוצא אותו — "עובד". ב־PostgreSQL היו נוצרים שני משתמשים.</li><li>לא. הערך השמור עדיין מופיע כמו שהוקלד, ובכל מקום שמשווה בקוד (‏<code>===</code>), בשירות אחר, או במסד אחר (מעבר חזרה ל־PostgreSQL) — הם שונים. ונרמול הוא גם ה־trim.</li><li>‏<code>ai</code> = accent-insensitive: הם "שווים", והשני נחסם. בדרך כלל לא רוצים את זה לאימייל — אלה כתובות שונות באמת (נדיר, אבל קיים). לעמודת email מתאים יותר <code>utf8mb4_0900_as_ci</code> (רגיש לניקוד, לא לרישיות), עם הנרמול בקוד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על "המסד יטפל בזה" — ההתנהגות משתנה עם הקולציה, ומישהו יום אחד ישנה אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E39">
+    <h3>P25.5-E39 · ‏CHECK שלא נאכף — נתונים ישנים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לפני 8.0.16, MySQL קרא את ה־CHECK — ופשוט התעלם ממנו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏UPDATE בודק את האילוץ על השורה כולה אחרי השינוי — גם על עמודות שלא שינית.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ב־5.7 ה־CHECK היה "קישוט" — נשמר בהגדרה, לא נאכף. 37 שורות שליליות נכנסו, וההעברה ל־8.4 לא בדקה אותן מחדש.</li><li>נכשל: ה־UPDATE נוגע ב־37 שורות שמפרות את ה־CHECK, ו־8.4 אוכף אותו על כל שורה שמשתנה (‏"Check constraint … is violated"). פעולה לגמרי לא קשורה למלאי נכשלת.</li><li>(א) לברר מה המשמעות של מלאי שלילי (באג? הזמנות מראש?) — עם מי שמכיר את העסק. (ב) לתקן את הנתונים (<code class="mid">UPDATE … SET stock = 0 WHERE stock &lt; 0</code>, או מה שהוחלט), ולתעד. (ג) לוודא שהשאילתה מחזירה 0. (ד) בפעם הבאה: בודקים אילוצים אחרי העברה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד את ה־CHECK "כי הוא מפריע" — הבעיה היא הנתונים, והאילוץ הוא מה שגילה אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E40">
+    <h3>P25.5-E40 · ‏timestamptz מפרק 24 ← DATETIME <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>mysql2 ממיר <code>Date</code> למחרוזת לפי אזור הזמן שהוגדר לו (‏<code>timezone</code>), וברירת המחדל היא "local".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הטווח של TIMESTAMP — עד 2038.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>DATETIME(3)</code> — עם כלל: האפליקציה כותבת וקוראת UTC בלבד (mysql2 עם <code>timezone: "Z"</code>). TIMESTAMP אפשרי, אבל תלוי בהגדרה של כל חיבור — ועם טווח עד 2038.</li><li>‏<code>DATE</code> — יום בלוח השנה, בלי אזור.</li><li><code>2026-11-05 00:30:00</code> — השעה <em>המקומית</em> של התהליך. ושרת אחר (ב־UTC) יקרא את זה כ־00:30 UTC — שעתיים "אחרי" מה שקרה. לכן <code>timezone: "Z"</code> (שיעור 4).</li><li>לא נכנס: TIMESTAMP הוא שניות מאז 1970 ב־32 ביט, והטווח נגמר ב־19 בינואר 2038. ‏<code>valid_until</code> של מנוי ל־15 שנה — נכשל היום.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק על ה־Mac — שם התהליך ושעון ה־Mac באותו אזור, והבאג נראה רק בשרת.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P25.5-E28">
     <h3>P25.5-E28 · שאילתה מ־PostgreSQL ל־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -212,7 +577,76 @@ RangeError $3 — אין פרמטר כזה (יש 2)</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E41">
+    <h3>P25.5-E41 · הכנסות לפי חודש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">DATE_FORMAT(created_at, '%Y-%m')</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>GROUP BY month</code> — ב־MySQL אפשר לקבץ לפי alias.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E41: הכנסות לפי חודש
+SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,
+       COUNT(*) AS orders,
+       SUM(total) AS revenue,
+       ROUND(AVG(total), 2) AS avg_order
+FROM orders
+WHERE status IN ('paid', 'shipped')
+GROUP BY month
+ORDER BY month;</code></pre>
+<pre class="terminal">+---------+--------+---------+-----------+
+| month   | orders | revenue | avg_order |
++---------+--------+---------+-----------+
+| 2026-03 |      4 | 1284.90 |    321.23 |
++---------+--------+---------+-----------+</pre>
+<p>בנתונים של היחידה כל ההזמנות במרץ — הבודק מוסיף הזמנות בחודשים אחרים. ומחרוזת <code>'2026-03'</code> ממוינת נכון כטקסט, כי הפורמט קבוע (שנה קודם, עם אפסים).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>MONTH(created_at)</code> לבד — מרץ 2026 ומרץ 2027 באותה קבוצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E42">
+    <h3>P25.5-E42 · יכנס לעמודה? תווים, בתים ו־utf8mb3 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>"🔥".length</code> הוא 2 (שני UTF-16 code units). <code>[..."🔥"].length</code> הוא 1.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתים: <code class="mid">Buffer.byteLength(value, "utf8")</code>. תו של 4 בתים = code point מעל <code>0xFFFF</code>: ‏<code>c.codePointAt(0)! &gt; 0xffff</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E42: יכנס לעמודה? תווים, בתים ו־utf8mb3
+export function mysqlLength(value: string) {
+  return { chars: [...value].length, bytes: Buffer.byteLength(value, "utf8") };
+}
+
+export function columnProblems(value: string, { maxChars, charset }: { maxChars: number; charset: "utf8mb3" | "utf8mb4" }): string[] {
+  const problems: string[] = [];
+  if (mysqlLength(value).chars &gt; maxChars) problems.push("too-long");
+  if (charset === "utf8mb3" &amp;&amp; [...value].some((c) =&gt; c.codePointAt(0)! &gt; 0xffff)) problems.push("needs-utf8mb4");
+  return problems;
+}
+
+console.log(mysqlLength("חם 🔥"), "חם 🔥".length);
+console.log(columnProblems("קפה ☕", { maxChars: 5, charset: "utf8mb3" }), columnProblems("חם 🔥!", { maxChars: 5, charset: "utf8mb3" }));</code></pre>
+<pre class="terminal">{ chars: 4, bytes: 9 } 5
+[] [ 'needs-utf8mb4' ]</pre>
+<p>‏☕ (‏U+2615) הוא 3 בתים — נכנס ל־utf8mb3. ‏🔥 (‏U+1F525) — 4 בתים, לא. וכותרת של 200 תווים בעברית היא 400 בתים — ‏<code>VARCHAR(200)</code> סופר תווים, אז היא נכנסת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>value.length &gt; maxChars</code> — סופר UTF-16 units: ‏🔥 נספר כשניים, וטקסט עם אמוג׳י "ארוך מדי" כשהוא לא.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-queries.html"><small>הבא</small>שיעור 2 — שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT</a></div>
 </main>
 </body>

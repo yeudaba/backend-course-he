@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ תרגול שיעור 2</div>
   <h1>✍️ תרגול שיעור 2 — שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT</h1>
-  <p class="subtitle">יחידה 25.5 · 7 שאלות · 0 הבנה · 7 קוד · ⏱ כ־120 דק׳</p>
+  <p class="subtitle">יחידה 25.5 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־285 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,88 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 2: שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT</h2>
-  <p class="subtitle">7 שאלות · 0 הבנה · 7 קוד · ⏱ כ־120 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־195 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P25.5-E43">
+    <h3>P25.5-E43 · ‏LAST_INSERT_ID — של מי?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>שלושה קטעי קוד (mysql2, עם pool). לכל אחד — האם ה־id שמתקבל הוא בהכרח של השורה שהקוד הכניס?</p>
+<pre><code class="lang-ts">// א
+await pool.query("INSERT INTO customers (name, email, city) VALUES (?, ?, ?)", [n, e, c]);
+const [[{ id }]] = await pool.query("SELECT LAST_INSERT_ID() AS id");
+
+// ב
+const [res] = await pool.execute("INSERT INTO customers (name, email, city) VALUES (?, ?, ?)", [n, e, c]);
+const id = res.insertId;
+
+// ג
+const [[{ id }]] = await pool.query("SELECT MAX(id) AS id FROM customers");</code></pre>
+<p>ומה עם INSERT של שלוש שורות בפקודה אחת — מה <code>insertId</code> מחזיר, ואיך מקבלים את שלושת המזהים?</p>
+
+  </div>
+<div class="ex" id="P25.5-E44">
+    <h3>P25.5-E44 · ‏upsert על טבלה עם שני מפתחות ייחודיים</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>טבלה עם שני מפתחות ייחודיים — <code>email</code> ו־<code>username</code>. נחש מה יהיה בטבלה בסוף, ואז הרץ:</p>
+<pre><code class="lang-sql">CREATE TABLE accounts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  visits INT NOT NULL DEFAULT 1
+);
+INSERT INTO accounts (email, username) VALUES ('dana@x.com', 'dana'), ('yossi@x.com', 'yossi');
+INSERT INTO accounts (email, username) VALUES ('new@x.com', 'dana') AS n
+  ON DUPLICATE KEY UPDATE visits = accounts.visits + 1, email = n.email;
+SELECT id, email, username, visits FROM accounts ORDER BY id;</code></pre>
+<p>מה רצה מי שכתב את זה (משתמש חדש עם email חדש), ומה קרה? איך היית כותב את זה ב־PostgreSQL, ולמה שם זה לא קורה?</p>
+
+  </div>
+<div class="ex" id="P25.5-E45">
+    <h3>P25.5-E45 · ‏ROW_COUNT אחרי upsert — 0, ‏1 או 2</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>נחש את שלושת ה־<code>ROW_COUNT()</code>, ואז הרץ על נתוני היחידה:</p>
+<pre><code class="lang-sql">INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 1) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS first;
+INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 3) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS second;
+INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 3) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS third;</code></pre>
+<p>ואיך <code>affectedRows</code> של mysql2 יעזור לך להחזיר מ־API ‏201 (נוצר) או 200 (עודכן)?</p>
+
+  </div>
+<div class="ex" id="P25.5-E46">
+    <h3>P25.5-E46 · ‏ONLY_FULL_GROUP_BY — מה עובר?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>לכל שאילתה — עוברת או נכשלת (error 1055)? הרץ ובדוק:</p>
+<pre><code class="lang-sql">SELECT category, COUNT(*) AS n FROM products GROUP BY category;
+SELECT category, name FROM products GROUP BY category;
+SELECT p.id, p.name, SUM(oi.quantity) AS sold FROM products p JOIN order_items oi ON oi.product_id = p.id GROUP BY p.id;
+SELECT category, ANY_VALUE(name) AS some_name, MAX(price) AS top FROM products GROUP BY category;</code></pre>
+<p>ומה ההבדל בין הרביעית לבין "המוצר היקר בכל קטגוריה"?</p>
+
+  </div>
+<div class="ex" id="P25.5-E47">
+    <h3>P25.5-E47 · ‏‎-&gt;‎ מול ‎-&gt;&gt;‎</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>נחש, ואז הרץ:</p>
+<pre><code class="lang-sql">SELECT name,
+       attributes-&gt;'$.roast' = 'light' AS arrow,
+       attributes-&gt;&gt;'$.roast' = 'light' AS double_arrow,
+       attributes-&gt;'$.weight_g' &gt; 500 AS heavy,
+       attributes-&gt;'$.missing' IS NULL AS missing_is_null
+FROM products WHERE category = 'beans' ORDER BY id;</code></pre>
+<p>מתי <code>-&gt;</code> ומתי <code>-&gt;&gt;</code>?</p>
+
+  </div>
+<div class="ex" id="P25.5-E48">
+    <h3>P25.5-E48 · ‏FULLTEXT או LIKE?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>לכל חיפוש — <code>LIKE</code>, ‏<code>FULLTEXT</code>, או משהו אחר? למה?</p>
+<ol><li>השלמה אוטומטית של שם מוצר: מה שהמשתמש הקליד עד עכשיו הוא <em>תחילת</em> השם.</li><li>חיפוש חופשי בתיאורים של 200,000 מוצרים: "grinder ceramic".</li><li>חיפוש של קוד הזמנה מדויק <code>ORD-2026-00417</code>.</li><li>חיפוש בעברית עם תחיליות: "מטחנה" צריך למצוא גם "המטחנה" ו"למטחנה".</li><li>חיפוש מילה של שלוש אותיות, כמו "cup".</li></ol>
+
+  </div>
 <div class="ex" id="P25.5-E07">
     <h3>P25.5-E07 · היקר ביותר בכל קטגוריה 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
@@ -62,6 +143,57 @@
 <pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E26</pre>
 
   </div>
+<div class="ex" id="P25.5-E49">
+    <h3>P25.5-E49 · סכום מצטבר לכל לקוח 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E49.sql</code> (יש בו רק הערה), להזמנות <code>paid</code> ו־<code>shipped</code>:</p>
+<ul><li><code>customer</code> (שם), ‏<code>order_id</code>, ‏<code>created_at</code>, ‏<code>total</code>.</li><li><code>running_total</code> — סכום ה־total של ההזמנות של אותו לקוח עד ההזמנה הזו (כולל), לפי זמן ההזמנה (ובתיקו — לפי id).</li><li><code>nth</code> — מספר ההזמנה של הלקוח (1, 2, …) באותו סדר.</li><li>ממוין לפי שם הלקוח, ואז לפי זמן ההזמנה ו־id.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E49</pre>
+
+  </div>
+<div class="ex" id="P25.5-E50">
+    <h3>P25.5-E50 · ממוצע לפי שדה ב־JSON 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E50.sql</code> (יש בו רק הערה), למוצרי <code>beans</code> שיש להם <code>roast</code> ב־<code>attributes</code>:</p>
+<ul><li><code>roast</code> (טקסט, בלי מרכאות), ‏<code>products</code> (כמה), ‏<code>avg_price</code> (מעוגל ל־2), ‏<code>total_stock</code>.</li><li>לפי roast.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E50</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־90 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P25.5-E51">
+    <h3>P25.5-E51 · אין RETURNING — מה משתנה בקוד?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 16, פרק 19, שיעור 2</span></div>
+<p>בקוד של הפרויקט ב־PostgreSQL (פרק 16 / ‏<code>$queryRaw</code> של פרק 19) יש:</p>
+<pre><code class="lang-sql">INSERT INTO tasks (owner_id, title) VALUES ($1, $2) RETURNING id, title, status, created_at;
+UPDATE products SET stock = stock - $2 WHERE id = $1 AND stock &gt;= $2 RETURNING stock;
+DELETE FROM sessions WHERE expires_at &lt; now() RETURNING id;</code></pre>
+<p>לכל אחת — איך עושים את אותו דבר ב־MySQL, ומה המחיר? ולמה ב־Prisma (‏<code>create</code>, ‏<code>update</code>) כמעט לא תרגיש את ההבדל?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏RETURNING מפרק 16 ו־Prisma מפרק 19 — והשיעור: אין RETURNING ב־MySQL.</p>
+
+  </div>
+<div class="ex" id="P25.5-E52">
+    <h3>P25.5-E52 · ‏upsert במקביל — יש מרוץ?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 2</span></div>
+<p>שני טאבים של אותו משתמש לוחצים "הוסף לעגלה" על אותו מוצר באותו רגע. השווה שתי גרסאות:</p>
+<pre><code class="lang-ts">// א — קריאה ואז כתיבה
+const [rows] = await pool.query("SELECT quantity FROM cart_items WHERE customer_id = ? AND product_id = ?", [c, p]);
+if (rows.length) await pool.query("UPDATE cart_items SET quantity = ? WHERE customer_id = ? AND product_id = ?", [rows[0].quantity + 1, c, p]);
+else await pool.query("INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (?, ?, 1)", [c, p]);
+
+// ב — פקודה אחת
+await pool.query("INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (?, ?, 1) AS n ON DUPLICATE KEY UPDATE quantity = cart_items.quantity + n.quantity", [c, p]);</code></pre>
+<p>(1) מה יכול לקרות בכל אחת (שתי תוצאות שגויות שונות ב־א)? (2) למה ב׳ בטוחה בלי טרנזקציה? (3) מה המקבילה ב־PostgreSQL מפרק 18?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> מרוצים ו"קרא־שנה־כתוב" מפרק 18 — והשיעור: ‏ON DUPLICATE KEY UPDATE.</p>
+
+  </div>
+<div class="ex" id="P25.5-E53">
+    <h3>P25.5-E53 · דפדוף ב־MySQL — OFFSET או keyset?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 2</span></div>
+<p>רשימת הזמנות, מהחדשה, 20 בעמוד. (1) <code>LIMIT 20 OFFSET 100000</code> — כמה שורות MySQL קורא בפועל, ולמה העמוד ה־5000 איטי? (2) תוך כדי דפדוף נוצרו 3 הזמנות חדשות. מה המשתמש רואה בעמוד הבא, בכל אחת מהשיטות? (3) למה ה־cursor צריך להיות <code>(created_at, id)</code> ולא רק <code>created_at</code>? (4) איך נראה התנאי ב־MySQL?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏keyset pagination מפרק 18 — והשיעור: אותה שפה, ניב אחר.</p>
+
+  </div>
 <div class="ex typed" id="P25.5-E27">
     <h3>P25.5-E27 · INSERT מרובה שורות, עם upsert 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
@@ -69,12 +201,30 @@
 <p><code class="long">buildBulkInsert(table, rows, { add?, set? } = {}): { sql, params }</code></p>
 <ul><li><code>INSERT INTO <code>t</code> (<code>a</code>, <code>b</code>) VALUES (?, ?), (?, ?)</code>. סדר העמודות לפי המפתחות של השורה הראשונה, ו־<code>params</code> לפי אותו סדר, שורה אחרי שורה, גם אם בשורה אחרת המפתחות כתובים בסדר אחר.</li><li>upsert, בתחביר של שיעור 2: אם יש <code>add</code> או <code>set</code>, מוסיפים <code class="mid"> AS new ON DUPLICATE KEY UPDATE </code>, ואחריו קודם כל עמודה מ־<code>add</code> (<code><code>c</code> = <code>t</code>.<code>c</code> + new.<code>c</code></code>), ואחר כך כל עמודה מ־<code>set</code> (<code><code>c</code> = new.<code>c</code></code>), מופרדות ב־<code>", "</code>.</li><li>שם טבלה או עמודה (גם ב־<code>add</code>/<code>set</code>) חייב להתאים ל־<code>^[a-z_][a-z0-9_]*$</code>. אין שורות, או שורה עם עמודות אחרות מהראשונה ← <code>Error</code>.</li></ul>
 <p>הבודק מריץ את התוצאה על MySQL אמיתי.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>map</code>/<code>join</code> מפרק 6, ‏<code>Object.keys</code> מפרק 7 ושאילתות עם פרמטרים מפרק 16 — והשיעור: ‏ON DUPLICATE KEY UPDATE.</p>
 <p>📄 כותבים בקובץ <code class="mid">25v-mysql/starter/P25.5-E27.ts</code> (יש בו רק הערה), מריצים ובודקים:</p>
 <pre class="terminal"><span class="prompt">% </span>node 25v-mysql/starter/P25.5-E27.ts
 <span class="prompt">% </span>npm run check P25.5-E27</pre>
 
   </div>
+<div class="ex" id="P25.5-E54">
+    <h3>P25.5-E54 · העמוד הבא — keyset ב־MySQL 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 2</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E54.sql</code> (יש בו רק הערה): העמוד הבא של הזמנות, מהחדשה לישנה, 3 בעמוד, אחרי ה־cursor <code>('2026-03-04 16:45:00', 4)</code> — כלומר אחרי הזמנה 4 שנוצרה בזמן הזה.</p>
+<ul><li><code>id</code>, ‏<code>created_at</code>, ‏<code>total</code>.</li><li>הזמנות עם אותו <code>created_at</code> כמו ה־cursor ו־id קטן ממנו — שייכות לעמוד הזה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E54</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏keyset pagination ו־row comparison מפרק 18 — והשיעור: SQL של MySQL.</p>
 
+  </div>
+<div class="ex" id="P25.5-E55">
+    <h3>P25.5-E55 · מעגלה להזמנה — ב־SQL אחד 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 17, פרק 18, שיעור 2</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E55.sql</code> (יש בו רק הערה) — סקריפט שהופך את העגלה של לקוח 1 להזמנה, בטרנזקציה אחת:</p>
+<ol><li>הזמנה חדשה ללקוח 1, בסטטוס <code>pending_payment</code>, עם <code>total</code> = סכום (כמות × מחיר נוכחי) של מה שבעגלה.</li><li>שורה ב־<code>order_items</code> לכל פריט בעגלה, עם המחיר הנוכחי כ־<code>unit_price</code>.</li><li>העגלה של לקוח 1 מתרוקנת.</li><li>בסוף — שאילתה אחת: <code>id</code>, ‏<code>customer_id</code>, ‏<code>status</code>, ‏<code>total</code> של ההזמנה החדשה, ‏<code>line_count</code> (כמה שורות פריטים — <code>lines</code> היא מילה שמורה ב־MySQL), ‏<code>units</code> (סכום הכמויות), ו־<code>cart_left</code> (כמה פריטים נשארו בעגלה של לקוח 1).</li></ol>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E55</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>INSERT … SELECT</code> ו־JOIN מפרק 17, טרנזקציה מפרק 18 — והשיעור: ‏<code>LAST_INSERT_ID()</code> במקום RETURNING.</p>
+
+  </div>
 <div class="pager"><a href="lesson-02-queries.html"><small>חזרה לשיעור</small>שיעור 2 — שאילתות: upsert, JSON, GROUP BY ו־FULLTEXT</a><a href="lesson-03-transactions.html"><small>הבא</small>שיעור 3 — InnoDB: טרנזקציות, נעילות ו־deadlocks</a></div>
 </main>
 </body>

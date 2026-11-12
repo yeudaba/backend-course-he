@@ -58,6 +58,131 @@ update: 2 1</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E70">
+    <h3>P25.5-E70 · ‏execute או query? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏execute = prepared statement: ה־SQL נשלח פעם אחת, והערכים בנפרד. ‏query = mysql2 מרכיב את הטקסט המלא בצד שלך (עם escaping).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־prepared statement כל <code>?</code> הוא ערך אחד בדיוק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>execute</code> — השרת מפרסר פעם אחת (mysql2 שומר את ה־statement לחיבור), והערך לעולם לא מתפרש כ־SQL.</li><li><code>query</code> — רק הוא פורש מערך ל־<code>1, 2, 3</code>. ב־execute צריך לבנות <code>?, ?, ?</code> בעצמך (E76).</li><li><code>query</code> עם <code>multipleStatements: true</code> בחיבור (וזהירות: זה גם פותח את הדלת להזרקה של כמה פקודות — רק לחיבור של ה־migrations).</li><li><code>query</code> — ‏<code>VALUES ?</code> עם מערך של מערכים הוא תכונה של ה־escaping בצד הלקוח.</li><li>אף אחד מהם לא עוזר — שם טבלה לא יכול להיות פרמטר. רשימה סגורה (<code class="mid">if (!["a", "b"].includes(table)) throw</code>), או <code>mysql.escapeId(table)</code>. לעולם לא קלט ישיר (E82).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"execute תמיד בטוח יותר" — שניהם בטוחים מהזרקה דרך <em>ערכים</em> אם משתמשים ב־<code>?</code>. ההזרקה מגיעה משרשור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E71">
+    <h3>P25.5-E71 · ‏affectedRows מול changedRows <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏affected = כמה שורות התאימו ל־WHERE (כשה־driver מבקש "found rows", כמו mysql2). ‏changed = כמה באמת השתנו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>להזמנה 2 כבר יש <code>shipped</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import mysql from "mysql2/promise";
+const url = process.env.MYSQL_URL ?? "mysql://root:course@localhost:3306";
+const c = await mysql.createConnection({ uri: url, multipleStatements: true });
+await c.query("CREATE DATABASE IF NOT EXISTS e71; USE e71; CREATE TABLE IF NOT EXISTS orders (id INT PRIMARY KEY, status VARCHAR(20)); REPLACE INTO orders VALUES (1, 'paid'), (2, 'shipped')");
+for (const id of [1, 2, 3]) {
+  const [r] = await c.query("UPDATE orders SET status = 'shipped' WHERE id = ?", [id]);
+  console.log(id, "affected:", r.affectedRows, "changed:", r.changedRows);
+}
+await c.query("DROP DATABASE e71");
+await c.end();</code></pre>
+<pre class="terminal">1 affected: 1 changed: 1
+2 affected: 1 changed: 0
+3 affected: 0 changed: 0</pre>
+<p>1 — נמצאה ושונתה. 2 — נמצאה, לא שונתה (כבר shipped). 3 — לא נמצאה. עם <code>changedRows === 1</code> בתור "הצליח", שליחה חוזרת של "סמן כנשלח" מחזירה כישלון — למרות שהמצב בדיוק מה שהלקוח רצה. ל"האם קיים" — ‏<code>affectedRows</code>; ל"האם שיניתי" — ‏<code>changedRows</code> (E77).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר קוד מ־driver אחר (או עם הגדרה אחרת של <code>flags</code>) ולהניח שאותו מספר אומר אותו דבר — ב־MySQL זה תלוי בהגדרת החיבור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E72">
+    <h3>P25.5-E72 · ‏89.90 + 24.90 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>+</code> עם מחרוזת = שרשור. ‏<code>*</code> ממיר למספר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>0 + "89.90"</code> — מה הסוג של התוצאה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">const a = { price: "89.90" }, b = { price: "24.90" };
+console.log(a.price + b.price);
+console.log(a.price * 2);
+console.log(Number(a.price) + Number(b.price));
+console.log(Math.round(Number(a.price) * 100) + Math.round(Number(b.price) * 100));
+console.log([a, b].reduce((s, p) =&gt; s + p.price, 0));</code></pre>
+<pre class="terminal">89.9024.90
+179.8
+114.80000000000001
+11480
+089.9024.90</pre>
+<p>‏DECIMAL הוא מדויק, ו־number של JavaScript לא תמיד (‏<code>0.1 + 0.2</code>). לכן mysql2 לא מחליט בשבילך. ממירים <strong>פעם אחת</strong>, בשכבה שקוראת מהמסד, לאגורות שלמות (‏<code>priceCents</code>, ‏P25.5-E10) — ושאר הקוד לא רואה מחרוזות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>decimalNumbers: true</code> בכל הפרויקט "כדי שיהיה נוח" — ואז סכומים גדולים מאבדים אגורות בלי שאף אחד ישים לב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E73">
+    <h3>P25.5-E73 · ‏pool בלי release <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה קורה ל־<code>conn</code> כש־<code>OutOfStock</code> נזרק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>connectionLimit</code> — ברירת מחדל 10.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כל פעם שהמלאי חסר — <code>throw</code> לפני ה־<code>release</code>. החיבור לא חוזר ל־pool. אחרי 10 כאלה (‏connectionLimit) אין חיבורים פנויים, ו־<code>getConnection</code> מחכה לנצח (ברירת מחדל: אין timeout בתור).</li><li>מלאי חסר הוא מקרה נדיר — צריך 10 כאלה מאז ה־restart האחרון.</li><li>‏<code>try</code> (… commit) ‏<code>catch</code> (rollback ו־throw) ‏<code>finally</code> (release) — שיעור 4, איור 1.</li><li>טרנזקציה פתוחה עם <code>FOR UPDATE</code>: השורה של המוצר נעולה. כל מי שינסה לקנות אותו מוצר יחכה ל־lock wait timeout (‏50 שניות) — גם מחיבורים אחרים, גם אחרי restart של חלק מהשרתים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל את <code>connectionLimit</code> ל־100 — זה רק דוחה את התקיעה, ותופס חיבורים של המסד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E74">
+    <h3>P25.5-E74 · ‏timezone: "Z" או dateStrings? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי הגדרה, mysql2 מפרש DATETIME כשעון <em>מקומי</em> של התהליך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>dateStrings</code> אפשר להגדיר גם רק לטיפוסים מסוימים: <code>dateStrings: ["DATE"]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>Date</code> של <code>2026-11-04T20:30:00.000Z</code> — שעתיים "אחורה": ה־22:30 פורש כשעון ישראל.</li><li><code>Date</code> של <code>2026-11-04T22:30:00.000Z</code> — נכון.</li><li>המחרוזת <code>"2026-11-04 22:30:00.000"</code> — בלי פרשנות; האפליקציה אחראית.</li></ol>
+<p>DATE: בלי הגדרה — ‏<code>Date</code> של חצות <em>מקומי</em> (‏<code>2026-11-04T22:00:00.000Z</code> — "4 בנובמבר" ב־UTC!). עם <code>"Z"</code> — חצות UTC (עובד, עד שמישהו מציג אותו באזור אחר). עם dateStrings — <code>"2026-11-05"</code>: בדיוק תאריך מקומי (פרק 24), בלי רגע. לכן: <code>timezone: "Z"</code> ו־<code>dateStrings: ["DATE"]</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק במחשב שבו התהליך ב־UTC (CI, Docker) — ואז הבאג מופיע רק אצל מפתח שמריץ מקומית, או להפך.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.5-E09">
     <h3>P25.5-E09 · הזמנה בטרנזקציה עם mysql2 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -206,7 +331,419 @@ export const dayParam = (day: string) =&gt; {
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E75">
+    <h3>P25.5-E75 · לקוח חדש — insertId ואימייל תפוס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const [res] = await pool.execute&lt;ResultSetHeader&gt;(…)</code> — ‏<code>res.insertId</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">catch (err) { if ((err as { errno?: number }).errno === 1062) throw new Error("EMAIL_TAKEN"); throw err; }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E75: לקוח חדש — insertId ואימייל תפוס
+import type { Pool, ResultSetHeader } from "mysql2/promise";
+
+export async function createCustomer(pool: Pool, input: { name: string; email: string; city: string }) {
+  const row = { name: input.name.trim(), email: input.email.trim().toLowerCase(), city: input.city.trim() };
+  try {
+    const [res] = await pool.execute&lt;ResultSetHeader&gt;("INSERT INTO customers (name, email, city) VALUES (?, ?, ?)", [row.name, row.email, row.city]);
+    return { id: res.insertId, ...row };
+  } catch (err) {
+    if ((err as { errno?: number }).errno === 1062) throw new Error("EMAIL_TAKEN");
+    throw err;
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק אם האימייל קיים ב־SELECT לפני ה־INSERT — מרוץ (פרק 18), ושתי פקודות במקום אחת. ה־UNIQUE הוא הבדיקה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E76">
+    <h3>P25.5-E76 · מוצרים לפי רשימת ids 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>pool.query(sql, [ids])</code> — מערך בתוך מערך: ה־<code>?</code> אחד מקבל את כל הרשימה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">new Map(rows.map((r) =&gt; [r.id, r]))</code>, ואז <code>[...new Set(ids)]</code> לפי הסדר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E76: מוצרים לפי רשימת ids
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+export async function productsByIds(pool: Pool, ids: number[]) {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  const [rows] = await pool.query&lt;RowDataPacket[]&gt;("SELECT id, name, price FROM products WHERE id IN (?)", [unique]);
+  const byId = new Map(rows.map((r) =&gt; [Number(r.id), r]));
+  return unique
+    .filter((id) =&gt; byId.has(id))
+    .map((id) =&gt; {
+      const r = byId.get(id)!;
+      return { id, name: String(r.name), priceCents: Math.round(Number(r.price) * 100) };
+    });
+}</code></pre>
+<p>‏<code>IN (?)</code> עם מערך עובד רק עם <code>query</code> (E70). והסדר: SQL לא מבטיח שום סדר בלי ORDER BY — לכן מסדרים בקוד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לולאה של שאילתה לכל id — N+1 (פרק 18).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E77">
+    <h3>P25.5-E77 · ‏"סמן כנשלח" — שלוש תשובות שונות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">UPDATE orders SET status = 'shipped' WHERE id = ? AND status IN ('paid', 'shipped')</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>changedRows</code> ← 1: נשלחה עכשיו. ‏<code>affectedRows</code> 1 ו־changed 0: כבר. ‏affected 0: ‏SELECT קטן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E77: "סמן כנשלח" — שלוש תשובות שונות
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+export async function markShipped(pool: Pool, orderId: number) {
+  const [res] = await pool.execute&lt;ResultSetHeader&gt;(
+    "UPDATE orders SET status = 'shipped' WHERE id = ? AND status IN ('paid', 'shipped')",
+    [orderId],
+  );
+  if (res.changedRows === 1) return "shipped" as const;
+  if (res.affectedRows === 1) return "already" as const;
+  const [rows] = await pool.execute&lt;RowDataPacket[]&gt;("SELECT 1 FROM orders WHERE id = ?", [orderId]);
+  return rows.length ? ("invalid_status" as const) : ("not_found" as const);
+}</code></pre>
+<p>ב־API: ‏<code>shipped</code> ו־<code>already</code> ← 200 (idempotent, פרק 24), ‏<code>invalid_status</code> ← 409, ‏<code>not_found</code> ← 404.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>SELECT של הסטטוס ואז UPDATE — מרוץ: ההזמנה בוטלה בין שתי הפקודות, ונשלחה הזמנה מבוטלת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E78">
+    <h3>P25.5-E78 · הרבה לקוחות ב־INSERT אחד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">pool.query("INSERT INTO customers (name, email, city) VALUES ?", [list.map((c) =&gt; [c.name, c.email, c.city])])</code></pre>
+<p>שלוש רמות של מערכים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">list.map((c, i) =&gt; ({ id: res.insertId + i, email: c.email }))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E78: הרבה לקוחות ב־INSERT אחד
+import type { Pool, ResultSetHeader } from "mysql2/promise";
+
+export async function createCustomers(pool: Pool, list: { name: string; email: string; city: string }[]) {
+  if (list.length === 0) return [];
+  const [res] = await pool.query&lt;ResultSetHeader&gt;(
+    "INSERT INTO customers (name, email, city) VALUES ?",
+    [list.map((c) =&gt; [c.name, c.email, c.city])],
+  );
+  return list.map((c, i) =&gt; ({ id: res.insertId + i, email: c.email }));
+}</code></pre>
+<p>‏INSERT אחד הוא גם טרנזקציה אחת — כפול באמצע מבטל הכול. ו־500 שורות בפקודה אחת מהירות פי עשרות מ־500 פקודות (‏P25.5-E27).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.all</code> של INSERT לכל שורה — לא אטומי (חלק נכנסו, חלק לא), ופותח עשרות חיבורים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E79">
+    <h3>P25.5-E79 · הזמנה עם הפריטים — בשאילתה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כדי לא להיות תלוי ב־TZ: בשאילתה, <code class="mid">DATE_FORMAT(o.created_at, '%Y-%m-%dT%H:%i:%s.%fZ')</code> — או המרה בקוד מ־Date. (‏<code>%f</code> הוא מיקרו־שניות — 6 ספרות.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך <code>JSON_OBJECT</code>, ‏DECIMAL הופך למספר JSON. אגורות: <code>Math.round(x * 100)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E79: הזמנה עם הפריטים — בשאילתה אחת
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+const cents = (v: unknown) =&gt; Math.round(Number(v) * 100);
+
+export async function orderWithItems(pool: Pool, orderId: number) {
+  const [rows] = await pool.query&lt;RowDataPacket[]&gt;(
+    `SELECT o.id, o.status, o.total,
+            DATE_FORMAT(o.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
+            JSON_ARRAYAGG(JSON_OBJECT('productId', oi.product_id, 'name', p.name, 'quantity', oi.quantity, 'unitPrice', oi.unit_price)) AS items
+       FROM orders o
+       JOIN order_items oi ON oi.order_id = o.id
+       JOIN products p ON p.id = oi.product_id
+      WHERE o.id = ?
+      GROUP BY o.id`,
+    [orderId],
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  const items = (r.items as { productId: number; name: string; quantity: number; unitPrice: number | string }[])
+    .map((i) =&gt; ({ productId: Number(i.productId), name: i.name, quantity: Number(i.quantity), unitPriceCents: cents(i.unitPrice) }))
+    .sort((a, b) =&gt; a.productId - b.productId);
+  return {
+    id: Number(r.id),
+    status: String(r.status),
+    totalCents: cents(r.total),
+    createdAt: String(r.created_at).replace(/(\.\d{3})\d{3}Z$/, "$1Z"),
+    items,
+  };
+}</code></pre>
+<p>‏<code>DATE_FORMAT</code> בצד ה־SQL עוקף את כל ההמרות של ה־driver: מה שבעמודה (‏UTC) יוצא כמחרוזת, עם Z. ו־<code>JSON_ARRAYAGG</code> חוסך שאילתה שנייה לפריטים. (הזמנה בלי פריטים לא תחזור ב־JOIN רגיל — בחנות שלנו אין כאלה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">new Date(r.created_at).toISOString()</code> עם ברירות המחדל של mysql2 — ב־<code>TZ=Asia/Jerusalem</code> יוצא <code>07:00Z</code> במקום <code>09:00Z</code> (E74).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.5-E80">
+    <h3>P25.5-E80 · ‏pg מול mysql2 — מה משתנה בקוד? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>$2</code> לפני <code>$1</code> בשאילתה — ומה עם <code>?</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה <code>query</code> של mysql2 מחזיר — אובייקט, או זוג?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>pool.connect()</code> ← <code>pool.getConnection()</code>. ‏<code>"BEGIN"</code>/<code>"COMMIT"</code>/<code>"ROLLBACK"</code> ← <code>conn.beginTransaction()</code>, ‏<code>commit()</code>, ‏<code>rollback()</code> (או אותן מחרוזות, גם עובד).</li><li><code>$1</code> ← <code>?</code>. <strong>המלכודת:</strong> ‏<code>?</code> לפי סדר ההופעה. ב־UPDATE, ‏<code>$2</code> מופיע לפני <code>$1</code> — אז המערך הוא <code>[qty, id]</code>, לא <code>[id, qty]</code>. (‏P25.5-E28 עושה את זה אוטומטית.)</li><li><code>{ rows }</code> ← <code class="mid">const [rows] = await conn.query(…)</code>. ‏<code>rowCount</code> ← ‏<code>affectedRows</code> של ה־ResultSetHeader.</li><li><code>RETURNING id</code> ← אין; <code>insertId</code>.</li><li>וגם: ‏<code>stock</code> חוזר כמספר (INT), אבל אם היה DECIMAL — מחרוזת בשניהם (‏pg מחזיר numeric כמחרוזת גם).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחליף רק <code>$n</code> ל־<code>?</code> בעזרת regex, בלי לסדר מחדש את הפרמטרים — העדכון רץ על מוצר עם id = הכמות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E81">
+    <h3>P25.5-E81 · ‏Prisma: מ־postgresql ל־mysql <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏String ב־MySQL — ‏<code>VARCHAR(191)</code> כברירת מחדל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>migrations הן SQL — של איזה מסד?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>נשבר: <code>VARCHAR(191)</code> — כותרת של 300 נכשלת ("value too long"). ‏<code>@db.VarChar(500)</code> או <code>@db.Text</code>.</li><li>נשבר — <code>mode: "insensitive"</code> לא נתמך ב־MySQL. ולא צריך: הקולציה כבר לא רגישה לרישיות. מורידים את <code>mode</code>.</li><li>נשבר: <code>||</code> הוא OR, ו־ILIKE לא קיים. ‏<code class="mid">CONCAT(title, ' ', description) LIKE …</code>.</li><li>לא שמיש — זה SQL של PostgreSQL. מתחילים היסטוריה חדשה (‏<code>migrate dev</code> על מסד MySQL ריק), ומעבירים נתונים בנפרד (שיעור 5).</li><li>עובד אחרת: ב־REPEATABLE READ ה־<code>findUnique</code> (‏SELECT רגיל) יכול לראות ערך ישן — אותה בעיה כמו ב־PostgreSQL, ועוד יותר (E56). ההחלטה ב־<code>updateMany</code> עם תנאי (‏<code class="mid">where: { id, stock: { gte: qty } }</code>), ו־<code>count</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחליף provider ולהריץ <code>migrate deploy</code> — Prisma מנסה להריץ SQL של PostgreSQL על MySQL, ונופל בקובץ הראשון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E82">
+    <h3>P25.5-E82 · הזרקת SQL — גם ב־MySQL <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל מקום שבו קלט נכנס לטקסט של ה־SQL — ולא כפרמטר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ORDER BY אי אפשר לשים <code>?</code> לשם עמודה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>פגיע. <code>q = "' OR 1=1 -- "</code> מחזיר הכול; ‏<code class="mid">q = "' UNION SELECT email, … FROM customers -- "</code> מוציא לקוחות. תיקון: <code>"… LIKE ?"</code> עם <code>[<code>%${q}%</code>]</code> (ו־escape של <code>%</code> ו־<code>_</code> בקלט, אם חשוב).</li><li>פגיע. תת־שאילתה ב־<code>sort</code> שבוחרת עמודת מיון לפי תו של <code>password_hash</code> — מוציא מידע לפי סדר התוצאות. תיקון: רשימה סגורה — <code class="mid">{ name: "name", price: "price" }[sort] ?? "id"</code>.</li><li>בטוח — <code>?</code> עם ערך.</li></ol>
+<p>עם <code>multipleStatements: true</code>, ב־א אפשר גם לסיים את השאילתה ולהוסיף <code>; DROP TABLE orders</code>. לכן: הדגל כבוי בחיבורים של האפליקציה, ודלוק רק בחיבור נפרד של migrations.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"בדקתי שאין <code>'</code> בקלט" — רשימות שחורות תמיד מפספסות (קידודים, <code>\</code>, ‏ORDER BY בלי מרכאות בכלל).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E83">
+    <h3>P25.5-E83 · ‏repository של מוצרים מעל mysql2 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה פרטית אחת <code>#toProduct(row)</code> — ‏DECIMAL ← אגורות, ‏0/1 ← boolean (‏P25.5-E10).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>adjustStock</code>:</p>
+<pre><code class="lang-sql">UPDATE … SET stock = stock + ? WHERE id = ? AND stock + ? &gt;= 0</code></pre>
+<p>ואז SELECT של המלאי (או הבחנה בין NOT_FOUND ל־OUT_OF_STOCK).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E83: repository של מוצרים מעל mysql2
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+export type Product = { id: number; name: string; category: string; priceCents: number; stock: number; isActive: boolean; attributes: Record&lt;string, unknown&gt; | null };
+
+export class MysqlProductsRepository {
+  #pool: Pool;
+  constructor(pool: Pool) {
+    this.#pool = pool;
+  }
+
+  #toProduct(r: RowDataPacket): Product {
+    return {
+      id: Number(r.id),
+      name: String(r.name),
+      category: String(r.category),
+      priceCents: Math.round(Number(r.price) * 100),
+      stock: Number(r.stock),
+      isActive: Boolean(r.is_active),
+      attributes: r.attributes ?? null,
+    };
+  }
+
+  async findById(id: number): Promise&lt;Product | null&gt; {
+    const [rows] = await this.#pool.execute&lt;RowDataPacket[]&gt;("SELECT * FROM products WHERE id = ?", [id]);
+    return rows.length ? this.#toProduct(rows[0]) : null;
+  }
+
+  async list({ category, onlyActive = true, limit = 20 }: { category?: string; onlyActive?: boolean; limit?: number } = {}): Promise&lt;Product[]&gt; {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (category !== undefined) {
+      where.push("category = ?");
+      params.push(category);
+    }
+    if (onlyActive) where.push("is_active");
+    const sql = `SELECT * FROM products ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id LIMIT ?`;
+    const [rows] = await this.#pool.query&lt;RowDataPacket[]&gt;(sql, [...params, limit]);
+    return rows.map((r) =&gt; this.#toProduct(r));
+  }
+
+  async adjustStock(id: number, delta: number): Promise&lt;number&gt; {
+    const [res] = await this.#pool.execute&lt;ResultSetHeader&gt;("UPDATE products SET stock = stock + ? WHERE id = ? AND stock + ? &gt;= 0", [delta, id, delta]);
+    if (res.affectedRows === 0) {
+      const exists = await this.findById(id);
+      throw new Error(exists ? "OUT_OF_STOCK" : "NOT_FOUND");
+    }
+    const p = await this.findById(id);
+    return p!.stock;
+  }
+}</code></pre>
+<p>שאר האפליקציה מכירה רק את <code>Product</code> — לא <code>"89.90"</code>, לא <code>1</code>, לא <code>is_active</code>. ככה עוברים מסד (או מחליפים בכפיל בבדיקות, פרק 22) בלי לגעת בשאר הקוד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SELECT stock</code> ואז <code>UPDATE … SET stock = ?</code> עם הערך החדש — lost update (E52).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E84">
+    <h3>P25.5-E84 · ‏GET /products עם cursor 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלם חיובי מ־query string: <code>/^\d+$/.test(v)</code>, ואז <code>Number(v)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏"העמוד מלא" — ‏<code>rows.length === limit</code>. (כך יכול להיות עמוד ריק אחרון — מחיר קטן בשביל שאילתה אחת.)</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E84: GET /products עם cursor
+import { Router } from "express";
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+const intParam = (v: unknown, def: number | null, min: number, max: number) =&gt; {
+  if (v === undefined) return def;
+  if (typeof v !== "string" || !/^\d+$/.test(v)) return NaN;
+  const n = Number(v);
+  return n &gt;= min &amp;&amp; n &lt;= max ? n : NaN;
+};
+
+export function productsRouter(pool: Pool) {
+  const router = Router();
+  router.get("/products", async (req, res, next) =&gt; {
+    const limit = intParam(req.query.limit, 10, 1, 50) as number;
+    const after = intParam(req.query.after, 0, 0, Number.MAX_SAFE_INTEGER) as number;
+    const category = req.query.category;
+    if (Number.isNaN(limit) || Number.isNaN(after) || (category !== undefined &amp;&amp; typeof category !== "string")) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR" } });
+      return;
+    }
+    try {
+      const [rows] = await pool.query&lt;RowDataPacket[]&gt;(
+        `SELECT id, name, price FROM products
+          WHERE is_active AND id &gt; ? ${category !== undefined ? "AND category = ?" : ""}
+          ORDER BY id LIMIT ?`,
+        category !== undefined ? [after, category, limit] : [after, limit],
+      );
+      const items = rows.map((r) =&gt; ({ id: Number(r.id), name: String(r.name), priceCents: Math.round(Number(r.price) * 100) }));
+      res.json({ items, nextAfter: items.length === limit ? items[items.length - 1].id : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+  return router;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>OFFSET (page - 1) * limit</code> — עובד, אבל עם כל החסרונות של E53.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E85">
+    <h3>P25.5-E85 · ‏database זמני לבדיקות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חיבור "admin" בלי database:</p>
+<pre><code class="lang-ts">mysql.createConnection({ uri: url, multipleStatements: true })</code></pre>
+<p>השם: <code><code class="mid">test_${randomUUID().replaceAll("-", "").slice(0, 12)}</code></code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">try { … } finally { await pool?.end(); await admin.query(`DROP DATABASE IF EXISTS \`${name}\``); await admin.end(); }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E85: database זמני לבדיקות
+import { randomUUID } from "node:crypto";
+import mysql, { type Pool } from "mysql2/promise";
+
+export async function withTempDatabase&lt;T&gt;(url: string, seedSql: string, fn: (pool: Pool) =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  const name = `test_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const admin = await mysql.createConnection({ uri: url, multipleStatements: true });
+  let pool: Pool | undefined;
+  try {
+    await admin.query(`CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4`);
+    pool = mysql.createPool({ uri: url, database: name, multipleStatements: true, connectionLimit: 5 });
+    if (seedSql.trim()) await pool.query(seedSql);
+    return await fn(pool);
+  } finally {
+    await pool?.end();
+    await admin.query(`DROP DATABASE IF EXISTS \`${name}\``);
+    await admin.end();
+  }
+}</code></pre>
+<p>‏<code>return await</code> בתוך <code>try</code> — כדי שה־<code>finally</code> ירוץ אחרי ש־<code>fn</code> באמת הסתיימה (ולא מיד, כשה־Promise חוזר).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return fn(pool)</code> בלי <code>await</code> — ה־finally סוגר את ה־pool בזמן ש־<code>fn</code> עוד רצה, והבדיקה נכשלת על "Pool is closed".</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-indexes.html"><small>הבא</small>שיעור 5 — אינדקסים, EXPLAIN, migrations והעברת נתונים</a></div>
 </main>
 </body>

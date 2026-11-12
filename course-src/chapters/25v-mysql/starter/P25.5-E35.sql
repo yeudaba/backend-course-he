@@ -1,0 +1,4 @@
+-- P25.5-E35: קוד קופון — בדיוק או בערך? (הנתונים: files/basics.sql)
+-- code, discount, ci_match (= 'save10' בהשוואה הרגילה), exact_match (= 'save10' בדיוק) — לפי id
+--
+-- בדיקה:  npm run check P25.5-E35

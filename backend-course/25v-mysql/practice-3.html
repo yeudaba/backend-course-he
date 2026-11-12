@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ תרגול שיעור 3</div>
   <h1>✍️ תרגול שיעור 3 — InnoDB: טרנזקציות, נעילות ו־deadlocks</h1>
-  <p class="subtitle">יחידה 25.5 · 6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־130 דק׳</p>
+  <p class="subtitle">יחידה 25.5 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־335 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,11 +21,55 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 3: InnoDB: טרנזקציות, נעילות ו־deadlocks</h2>
-  <p class="subtitle">6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־130 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־245 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P25.5-E03">
     <h3>P25.5-E03 · REPEATABLE READ</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
 <p>ב־MySQL ברירת המחדל היא <code>REPEATABLE READ</code> (ב־PostgreSQL: <code>READ COMMITTED</code>). מלאי = 10. טרנזקציה A: <code class="mid">START TRANSACTION; SELECT stock …</code> ← 10. עכשיו B (בחיבור אחר) מוריד ל־7 ועושה COMMIT. מה יראה A ב: (1) <code>SELECT stock</code> שוב? (2) <code>SELECT stock … FOR UPDATE</code>? (3) <code class="mid">UPDATE products SET stock = stock - 1</code> ואז SELECT? ומה המסקנה לגבי "קרא ואז החלט"?</p>
+
+  </div>
+<div class="ex" id="P25.5-E56">
+    <h3>P25.5-E56 · ‏REPEATABLE READ — מה A רואה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>מלאי של מוצר 1: ‏10. שתי טרנזקציות, בסדר הזה:</p>
+<pre><code class="lang-text">A: START TRANSACTION;
+A: SELECT stock FROM products WHERE id = 1;                     -- (1)
+B: UPDATE products SET stock = 4 WHERE id = 1;  (autocommit)
+A: SELECT stock FROM products WHERE id = 1;                     -- (2)
+A: UPDATE products SET stock = stock - 1 WHERE id = 1;
+A: SELECT stock FROM products WHERE id = 1;                     -- (3)
+A: COMMIT;</code></pre>
+<p>מה ייקרא ב־(1), (2), ו־(3), ובסוף במסד? ומה היה ב־(2) עם READ COMMITTED (ברירת המחדל של PostgreSQL)? ומה הלקח לקוד "בדוק שיש מלאי, ואז הורד"?</p>
+
+  </div>
+<div class="ex" id="P25.5-E57">
+    <h3>P25.5-E57 · ‏FOR SHARE או FOR UPDATE?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>לכל מצב — <code>SELECT</code> רגיל, <code>FOR SHARE</code>, או <code>FOR UPDATE</code>? ולמה?</p>
+<ol><li>מסך "ההזמנות שלי" — רשימה להצגה.</li><li>לפני שמוסיפים ביקורת: לוודא שהמוצר קיים ופעיל, ושאף אחד לא ימחק אותו עד שה־INSERT נגמר.</li><li>להעביר כסף: לקרוא את היתרה, להחליט, ולעדכן.</li><li>דוח חודשי שרץ 40 שניות.</li><li>שני workers מעבדים תור, כל אחד צריך עבודה שאף אחד אחר לא לקח.</li></ol>
+
+  </div>
+<div class="ex" id="P25.5-E58">
+    <h3>P25.5-E58 · ‏gap lock — למה INSERT מחכה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>worker מריץ בטרנזקציה: <code class="mid">SELECT * FROM jobs WHERE status = 'queued' FOR UPDATE</code>. אין אינדקס על <code>status</code>. בזמן שהוא עובד, ה־API מנסה <code class="mid">INSERT INTO jobs (status) VALUES ('queued')</code> — וה־INSERT מחכה עד שה־worker מסיים (או נכשל אחרי 50 שניות עם 1205). (1) למה INSERT של שורה <em>חדשה</em> מחכה? (2) למה זה קורה ב־InnoDB ולא ב־PostgreSQL? (3) מה משנה אינדקס על <code>status</code>? (4) ומה עוד אפשר לשנות?</p>
+
+  </div>
+<div class="ex" id="P25.5-E59">
+    <h3>P25.5-E59 · ‏NOWAIT מול SKIP LOCKED</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>לכל מצב — <code>FOR UPDATE</code> (לחכות), <code>NOWAIT</code>, או <code>SKIP LOCKED</code>?</p>
+<ol><li>משתמש לוחץ על מושב באולם. אם מישהו אחר באמצע להזמין אותו — להגיד מיד "המושב בתהליך הזמנה", לא לחכות.</li><li>5 workers שולחים מיילים מתור משותף.</li><li>העברה בין שני ארנקים.</li><li>job לילי שמעדכן מחירים, ולא אכפת לו לחכות כמה שניות.</li><li>"תן לי מושב פנוי כלשהו בשורה A".</li></ol>
+
+  </div>
+<div class="ex" id="P25.5-E60">
+    <h3>P25.5-E60 · ‏FOR UPDATE בלי טרנזקציה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>הקוד הזה אמור למנוע מכירת יותר ממה שיש במלאי, ובכל זאת נמכרו 12 יחידות מתוך 10:</p>
+<pre><code class="lang-ts">const [[p]] = await pool.query("SELECT stock FROM products WHERE id = ? FOR UPDATE", [id]);
+if (p.stock &lt; qty) throw new OutOfStock();
+await pool.query("UPDATE products SET stock = stock - ? WHERE id = ?", [qty, id]);</code></pre>
+<p>(1) למה ה־<code>FOR UPDATE</code> לא עזר? (2) תקן בשתי דרכים: אחת עם טרנזקציה, ואחת בלי. (3) למה בדרך עם הטרנזקציה חייבים <code>getConnection</code>?</p>
 
   </div>
 <div class="ex" id="P25.5-E13">
@@ -58,7 +102,93 @@
 <p>ב־<code>P25.5-E22.ts</code>: שני workers מעבדים את אותה עבודה, ולפעמים worker אחד לוקח את כל התור. מצא ותקן (החוזה של E14).</p>
 
   </div>
+<div class="ex" id="P25.5-E61">
+    <h3>P25.5-E61 · העברה בין ארנקים — בלי deadlock 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>בקובץ <code>25v-mysql/files/locks.sql</code> יש <code class="mid">wallets(customer_id PK, balance)</code>. בקובץ <code class="mid">25v-mysql/starter/P25.5-E61.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function transfer(pool: Pool, fromId: number, toId: number, amount: number): Promise&lt;{ from: number; to: number }&gt;</code></pre>
+<ul><li><code>amount</code> שלם חיובי, אחרת <code>RangeError</code>. ‏<code>fromId === toId</code> ← <code>Error("SAME_WALLET")</code>.</li><li>בטרנזקציה על חיבור אחד: נועלים את <strong>שני</strong> הארנקים בשאילתה אחת, <strong>לפי סדר המזהים</strong> (לא לפי מי שולח). אחד חסר ← <code>Error("WALLET_NOT_FOUND")</code>. אין מספיק ← <code class="mid">Error("INSUFFICIENT_FUNDS")</code>.</li><li>מחזיר את היתרות החדשות. החיבור חוזר ל־pool תמיד.</li></ul>
+<p>הבודק מריץ 40 העברות במקביל, חצי מ־1 ל־4 וחצי מ־4 ל־1 — בלי אף deadlock.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E61</pre>
 
+  </div>
+<div class="ex" id="P25.5-E62">
+    <h3>P25.5-E62 · מושב — עכשיו או אף פעם (NOWAIT) 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>טבלת <code class="mid">seats(id, label, reserved_by)</code> ב־<code>files/locks.sql</code>. בקובץ <code class="mid">25v-mysql/starter/P25.5-E62.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function reserveSeat(pool: Pool, seatId: number, customerId: number): Promise&lt;"reserved" | "taken" | "busy" | "not_found"&gt;</code></pre>
+<ul><li>בטרנזקציה: קוראים את המושב עם <code>FOR UPDATE NOWAIT</code>.</li><li>נעול כרגע על ידי טרנזקציה אחרת ← <code>"busy"</code> — <strong>מיד</strong>, בלי לחכות (MySQL זורק שגיאה עם <code>errno</code> ‏3572).</li><li>לא קיים ← <code>"not_found"</code>. כבר יש <code>reserved_by</code> ← <code>"taken"</code>. אחרת — מעדכנים ← <code>"reserved"</code>.</li><li>החיבור חוזר ל־pool בכל מקרה; שגיאות אחרות — עוברות הלאה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E62</pre>
+
+  </div>
+<div class="ex" id="P25.5-E63">
+    <h3>P25.5-E63 · דוח עקבי — תמונה אחת 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>REPEATABLE READ הוא לא רק מלכודת — הוא גם כלי. דוח שמריץ שתי שאילתות צריך שהן יראו את <em>אותו</em> מצב. בקובץ <code class="mid">25v-mysql/starter/P25.5-E63.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function salesReport(pool: Pool, between?: () =&gt; Promise&lt;void&gt;): Promise&lt;{ orders: number; revenue: number; ids: number[] }&gt;</code></pre>
+<ul><li>שאילתה 1: כמה הזמנות <code>paid</code>/<code>shipped</code>, וסכום ה־total שלהן (‏<code>revenue</code> כמספר).</li><li>אחר כך <code>await between?.()</code> (הבודק מכניס שם הזמנה חדשה מחיבור אחר).</li><li>שאילתה 2: ה־ids של אותן הזמנות, ממוינים.</li><li>שתי השאילתות על אותו חיבור, בטרנזקציה של קריאה בלבד עם snapshot עקבי — כך ש־<code>ids.length === orders</code> תמיד.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E63</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־90 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P25.5-E64">
+    <h3>P25.5-E64 · ‏READ COMMITTED מפרק 18 מול REPEATABLE READ</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 3</span></div>
+<p>קוד שעבד נכון ב־PostgreSQL (פרק 18) עובר ל־MySQL בלי שינוי. לכל קטע — האם ההתנהגות משתנה, ואיך?</p>
+<ol><li>‏UPDATE עם תנאי — <code class="mid">SET balance = balance - 100</code> רק <code>WHERE … AND balance &gt;= 100</code> — ובדיקת מספר השורות.</li><li>בטרנזקציה: <code class="mid">SELECT balance … WHERE id = 1</code> (בלי FOR UPDATE), החלטה בקוד, ואז <code class="mid">UPDATE … SET balance = $new</code>.</li><li>דוח בטרנזקציה: <code>SELECT COUNT(*)</code> ואז <code>SELECT SUM(…)</code> — כשבינתיים נכנסות הזמנות.</li><li>‏<code>SELECT … FOR UPDATE</code> ואז UPDATE, בטרנזקציה.</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> רמות בידוד ו־lost update מפרק 18 — והשיעור: REPEATABLE READ של InnoDB.</p>
+
+  </div>
+<div class="ex" id="P25.5-E65">
+    <h3>P25.5-E65 · ‏INSERT IGNORE — למה מסוכן?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 3</span></div>
+<p>בטבלת idempotency (פרק 24) מישהו כתב</p>
+<pre><code class="lang-sql">INSERT IGNORE INTO idempotency (idem_key, status) VALUES (?, 'pending')</code></pre>
+<p>ובדק <code>affectedRows</code>: 1 = "זכיתי", 0 = "מישהו אחר כבר תפס". (1) מה עוד <code>IGNORE</code> מתעלם ממנו, מלבד מפתח כפול? תן שתי דוגמאות. (2) מה יקרה במקרים האלה לקוד ה־idempotency? (3) מה עדיף?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> תפיסת מפתח Idempotency מפרק 24 — והשיעור: נעילות והתנגשויות ב־InnoDB.</p>
+
+  </div>
+<div class="ex" id="P25.5-E66">
+    <h3>P25.5-E66 · ‏Prisma, ‏$transaction ו־deadlock</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 19, שיעור 3</span></div>
+<p>הפרויקט עבר ל־MySQL עם Prisma (שיעור 4). בלוגים מופיע מדי פעם</p>
+<pre><code class="lang-text">P2034: Transaction failed due to a write conflict or a deadlock. Please retry your transaction</code></pre>
+<p>(1) מה ההבדל בין <code class="mid">prisma.$transaction([a, b])</code> לבין <code class="mid">prisma.$transaction(async (tx) =&gt; …)</code> מבחינת נעילות? (2) איפה כדאי לשים retry — בתוך הפונקציה של ה־transaction, או מסביב לה? למה? (3) מה בקוד שלך יכול להפוך deadlock לנדיר יותר, גם עם Prisma?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>$transaction</code> של Prisma מפרק 19 — והשיעור: deadlock ו־retry.</p>
+
+  </div>
+<div class="ex" id="P25.5-E67">
+    <h3>P25.5-E67 · ספירת צפיות — 50 במקביל 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 3</span></div>
+<p>טבלת <code class="mid">product_views(product_id, day, views)</code> ב־<code>files/locks.sql</code>, עם מפתח ראשי <code>(product_id, day)</code>. בקובץ <code class="mid">25v-mysql/starter/P25.5-E67.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function recordView(pool: Pool, productId: number, day: string): Promise&lt;void&gt;
+export async function topProducts(pool: Pool, day: string, limit: number): Promise&lt;{ productId: number; views: number }[]&gt;</code></pre>
+<ul><li><code>recordView</code> — פקודה אחת: שורה חדשה עם 1, או +1 לקיימת. 50 קריאות במקביל ← בדיוק 50.</li><li><code>topProducts</code> — המוצרים עם הכי הרבה צפיות ביום הזה, מהגבוה; בתיקו — לפי productId. עד <code>limit</code> (פרמטר, לא שרשור).</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E67</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> מרוצים ועדכון אטומי מפרק 18 — והשיעור: נעילות של InnoDB (וה־upsert משיעור 2).</p>
+
+  </div>
+<div class="ex" id="P25.5-E68">
+    <h3>P25.5-E68 · ‏POST /orders עם mysql2 — בלי למכור יותר מדי 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 15, שיעור 3</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E68.ts</code> (יש בו רק הערה) כתוב וייצא <code>ordersRouter(pool)</code> — Router של Express (האפליקציה של הבודק כבר עושה <code>express.json()</code>), מעל <code>files/shop.sql</code>:</p>
+<ul><li><code>POST /orders</code> ‏<code class="mid">{ customerId, productId, quantity }</code> — שלושתם שלמים חיוביים, אחרת 400 <code>VALIDATION_ERROR</code>.</li><li>בטרנזקציה: מורידים מלאי בפקודה אחת, רק למוצר פעיל עם מספיק מלאי. לא הצליח: המוצר לא קיים (או לא פעיל) ← 404 <code>PRODUCT_NOT_FOUND</code>; אחרת ← 409 <code>OUT_OF_STOCK</code>.</li><li>הזמנה (<code>pending_payment</code>, ‏total = מחיר × כמות) ושורת פריט במחיר הנוכחי. לקוח שלא קיים (שגיאת FK, ‏errno 1452) ← 404 <code>CUSTOMER_NOT_FOUND</code>, והמלאי לא יורד.</li><li>הצלחה ← 201 <code>{ orderId, totalCents }</code>. שגיאות — <code>{ error: { code } }</code>.</li></ul>
+<p>הבודק שולח 10 בקשות במקביל על מוצר עם 3 במלאי.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E68</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏Router ו־status codes מפרק 15 — והשיעור: ההחלטה בתוך ה־UPDATE, וטרנזקציה על חיבור אחד.</p>
+
+  </div>
+<div class="ex" id="P25.5-E69">
+    <h3>P25.5-E69 · מחיקת לקוח — בלי לשבור הזמנות 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 17, פרק 21, שיעור 3</span></div>
+<p>לקוח ביקש למחוק את החשבון. אי אפשר למחוק את השורה — יש לו הזמנות (מפתח זר), והן נדרשות לחשבונות. במקום — אנונימיזציה. בקובץ <code class="mid">25v-mysql/starter/P25.5-E69.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function anonymizeCustomer(pool: Pool, customerId: number): Promise&lt;{ cartItemsRemoved: number }&gt;</code></pre>
+<ul><li>בטרנזקציה אחת: מוחקים את העגלה שלו, ומעדכנים את הלקוח: <code>name = 'Deleted user'</code>, ‏<code class="mid">email = 'deleted+&lt;id&gt;@invalid.local'</code>, ‏<code>city = ''</code>.</li><li>לקוח לא קיים ← <code>Error("NOT_FOUND")</code>.</li><li>כל כישלון באמצע (למשל האימייל כבר תפוס) ← שום דבר לא משתנה — גם העגלה לא נמחקת.</li><li>ההזמנות שלו נשארות, עם אותו <code>customer_id</code>.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E69</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> מפתחות זרים מפרק 17, פרטיות ומחיקת מידע אישי מפרק 21 — והשיעור: טרנזקציה על חיבור אחד.</p>
+
+  </div>
 <div class="pager"><a href="lesson-03-transactions.html"><small>חזרה לשיעור</small>שיעור 3 — InnoDB: טרנזקציות, נעילות ו־deadlocks</a><a href="lesson-04-node.html"><small>הבא</small>שיעור 4 — Node.js מול MySQL עם mysql2</a></div>
 </main>
 </body>

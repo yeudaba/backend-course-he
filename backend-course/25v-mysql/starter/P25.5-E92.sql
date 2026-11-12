@@ -1,0 +1,4 @@
+-- P25.5-E92: אילו אינדקסים מיותרים? (הנתונים: files/indexes.sql)
+-- index_name, cols, is_unique, redundant — לכל אינדקס של events_log חוץ מ־PRIMARY, לפי index_name
+--
+-- בדיקה:  npm run check P25.5-E92

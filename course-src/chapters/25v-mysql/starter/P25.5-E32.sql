@@ -1,0 +1,5 @@
+-- P25.5-E32: טבלת קודי הנחה
+-- צור טבלה promo_codes: id, code (ייחודי, רגיש לרישיות), percent (1–90), uses_left (>= 0, ברירת מחדל 1),
+-- valid_until (DATE, אופציונלי), product_id (FK ל־products, אופציונלי). utf8mb4, InnoDB
+--
+-- בדיקה:  npm run check P25.5-E32

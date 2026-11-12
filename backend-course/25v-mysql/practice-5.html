@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ תרגול שיעור 5</div>
   <h1>✍️ תרגול שיעור 5 — אינדקסים, EXPLAIN, migrations והעברת נתונים</h1>
-  <p class="subtitle">יחידה 25.5 · 5 שאלות · 0 הבנה · 5 קוד · ⏱ כ־170 דק׳</p>
+  <p class="subtitle">יחידה 25.5 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־395 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,58 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 5: אינדקסים, EXPLAIN, migrations והעברת נתונים</h2>
-  <p class="subtitle">5 שאלות · 0 הבנה · 5 קוד · ⏱ כ־170 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־300 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P25.5-E86">
+    <h3>P25.5-E86 · ‏UUID כמפתח ראשי ב־InnoDB</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>מפתח צוות מציע להחליף את <code>orders.id</code> (‏<code class="mid">INT UNSIGNED AUTO_INCREMENT</code>) ב־UUID אקראי (v4), שמור כ־<code>CHAR(36)</code>, "כדי שאפשר יהיה לייצר מזהים בצד הלקוח". (1) מה קורה לכל אינדקס משני בטבלה? (2) מה קורה בהכנסה של מיליון הזמנות, ולמה זה לא קורה עם AUTO_INCREMENT? (3) תן שתי דרכים לשמור על היתרון (מזהה מהלקוח) בלי רוב המחיר.</p>
+
+  </div>
+<div class="ex" id="P25.5-E87">
+    <h3>P25.5-E87 · לקרוא EXPLAIN: האם יש קפיצה לטבלה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>אינדקס</p>
+<pre><code class="lang-text">idx_orders_customer_status_created (customer_id, status, created_at)</code></pre>
+<p>לכל שאילתה — האם InnoDB יכול לענות <em>רק מהאינדקס</em> (covering), או שהוא צריך לקפוץ לכל שורה ב־clustered index? למה?</p>
+<ol><li>‏<code>id</code>, עם <code class="mid">customer_id = 3 AND status = 'paid'</code>.</li><li>‏<code>id, total</code>, עם אותו תנאי.</li><li>‏<code>created_at</code>, עם <code>customer_id = 3</code>, ‏<code>ORDER BY created_at</code>.</li><li>‏<code>COUNT(*)</code>, עם <code>customer_id = 3</code>.</li></ol>
+<p>ואיך רואים את זה ב־<code>EXPLAIN FORMAT=TREE</code>?</p>
+
+  </div>
+<div class="ex" id="P25.5-E88">
+    <h3>P25.5-E88 · סדר העמודות באינדקס</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>שלוש שאילתות חמות על <code>orders</code>:</p>
+<pre><code class="lang-sql">-- א: ההזמנות של לקוח, מהחדשה
+SELECT … WHERE customer_id = ? ORDER BY created_at DESC LIMIT 20;
+-- ב: ההזמנות של לקוח בסטטוס מסוים, מהחדשה
+SELECT … WHERE customer_id = ? AND status = ? ORDER BY created_at DESC LIMIT 20;
+-- ג: כל ההזמנות שממתינות לתשלום, מהישנה
+SELECT … WHERE status = 'pending_payment' ORDER BY created_at LIMIT 100;</code></pre>
+<p>אילו מהשאילתות ישתמשו היטב בכל אחד מהאינדקסים: <code>(customer_id, created_at)</code>, ‏<code class="mid">(customer_id, status, created_at)</code>, ‏<code>(status, created_at)</code>, ‏<code>(created_at, customer_id)</code>? כמה אינדקסים צריך כדי לכסות את שלושתן?</p>
+
+  </div>
+<div class="ex" id="P25.5-E89">
+    <h3>P25.5-E89 · ‏migration שנכשל באמצע</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>קובץ migration אחד:</p>
+<pre><code class="lang-sql">ALTER TABLE orders ADD COLUMN currency CHAR(3) NOT NULL DEFAULT 'ILS';
+UPDATE orders SET currency = 'USD' WHERE customer_id IN (SELECT id FROM customers WHERE city = 'New York');
+ALTER TABLE orders ADD CONSTRAINT chk_currency CHECK (currency IN ('ILS', 'EUR'));</code></pre>
+<p>(1) מה המצב במסד אחרי שהקובץ נכשל? (2) מה יקרה כשמריצים אותו שוב "אחרי תיקון"? (3) מה היה קורה באותו קובץ ב־PostgreSQL? (4) איך היית מחלק אותו?</p>
+
+  </div>
+<div class="ex" id="P25.5-E90">
+    <h3>P25.5-E90 · למה GET_LOCK?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>שלושה עותקים של השרת עולים יחד אחרי deploy, וכל אחד מריץ migrations בעלייה. (1) מה יכול לקרות בלי נעילה? תן שני תרחישים. (2) למה לא מספיק "טבלה שבה רושמים מה רץ"? (3) מה <code>GET_LOCK</code> נותן, ולמה הוא קשור ל<em>חיבור</em>? (4) מה ההבדל בין זה לבין להריץ migrations פעם אחת מה־CI (פרק 25)?</p>
+
+  </div>
+<div class="ex" id="P25.5-E91">
+    <h3>P25.5-E91 · איך יודעים שההעברה הצליחה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>העברת את <code>customers</code> ו־<code>orders</code> מ־PostgreSQL ל־MySQL (‏P25.5-E25). לפני שמעבירים את התנועה למסד החדש: (1) אילו שלוש בדיקות היית מריץ בשני הצדדים ומשווה? (2) למה "מספר השורות זהה" לא מספיק? תן שתי דוגמאות לבאג שהוא לא תופס. (3) המערכת הישנה עוד רצה בזמן ההעברה. מה עוד צריך?</p>
+
+  </div>
 <div class="ex" id="P25.5-E16">
     <h3>P25.5-E16 · חיפוש FULLTEXT 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
@@ -52,7 +103,105 @@
 <p>בקובץ <code>P25.5-E25.ts</code>: <code class="mid">copyCustomers(source, target, { batchSize })</code> — מעתיק את <code>customers</code> מ־PostgreSQL (<code>pg</code>) ל־MySQL (<code>mysql2</code>) בקבוצות (keyset לפי id, לא OFFSET): <code>boolean</code> ← 0/1, <code>numeric</code> ← DECIMAL בלי לעבור דרך float, <code>timestamptz</code> ← <code>DATETIME(3)</code> ב־UTC. הרצה שנייה לא מכפילה ומעדכנת שינויים. מחזיר <code>{ copied, batches }</code>.</p>
 
   </div>
+<div class="ex" id="P25.5-E92">
+    <h3>P25.5-E92 · אילו אינדקסים מיותרים? 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>בקובץ <code class="mid">25v-mysql/files/indexes.sql</code> יש טבלה <code>events_log</code> עם כמה אינדקסים. כל אינדקס משני מאט כל INSERT — ואינדקס שהוא "תחילית" של אינדקס אחר מיותר. בקובץ <code class="mid">25v-mysql/starter/P25.5-E92.sql</code> (יש בו רק הערה), מתוך <code class="mid">information_schema.STATISTICS</code>, לכל אינדקס של <code>events_log</code> חוץ מה־PRIMARY:</p>
+<ul><li><code>index_name</code>; ‏<code>cols</code> — העמודות לפי הסדר באינדקס, מופרדות בפסיק (<code>user_id,kind</code>); ‏<code>is_unique</code> (1/0).</li><li><code>redundant</code> (1/0) — האינדקס לא ייחודי, והעמודות שלו הן תחילת העמודות של אינדקס <em>אחר</em> (‏<code>user_id</code> ← ‏<code>user_id,kind</code>). (‏<code>kind</code> לא תחילית של <code>kind_x</code> — לפי עמודות שלמות.)</li><li>לפי index_name.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E92</pre>
 
+  </div>
+<div class="ex" id="P25.5-E93">
+    <h3>P25.5-E93 · ‏UUID ל־BINARY(16), ו־UUIDv7 ממוין 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E93.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function uuidToBin(uuid: string): Buffer
+export function binToUuid(bin: Buffer): string
+export function uuidv7(nowMs: number, random: Buffer): string</code></pre>
+<ul><li><code>uuidToBin</code> — 16 בתים, בדיוק כמו <code>UUID_TO_BIN(uuid)</code> של MySQL. UUID לא תקין (36 תווים, hex ומקפים במקומות שלהם; אותיות גדולות מותרות) ← <code>RangeError</code>. ‏<code>binToUuid</code> — ההפך, באותיות קטנות.</li><li><code>uuidv7</code> — 48 הביטים הראשונים: <code>nowMs</code>; אחריהם 4 ביטים של גרסה (<code>7</code>); ‏2 ביטים של variant (<code>10</code>); כל השאר — מ־<code>random</code> (‏16 בתים, משתמשים בביטים שלו במקומות שנשארו).</li></ul>
+<p>הבודק משווה ל־MySQL אמיתי, ומכניס UUIDv7 לעמודת <code>BINARY(16)</code> כדי לבדוק שהסדר במסד = סדר הזמן.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E93</pre>
+
+  </div>
+<div class="ex" id="P25.5-E94">
+    <h3>P25.5-E94 · העברה בקבוצות — עם המשך 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>הלב של כל העברת נתונים (שיעור 5, סעיף 4), בלי מסד. בקובץ <code class="mid">25v-mysql/starter/P25.5-E94.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function copyInBatches&lt;R extends { id: number }&gt;(opts: {
+  readBatch: (afterId: number, size: number) =&gt; Promise&lt;R[]&gt;;
+  writeBatch: (rows: R[]) =&gt; Promise&lt;void&gt;;
+  size: number;
+  startAfter?: number;
+}): Promise&lt;{ batches: number; rows: number; lastId: number }&gt;</code></pre>
+<ul><li>קוראים קבוצה אחרי <code>startAfter</code> (ברירת מחדל 0), כותבים אותה, וממשיכים מה־id האחרון בה.</li><li>עוצרים כשהקבוצה ריקה, או קטנה מ־<code>size</code> (אחרי שכותבים אותה).</li><li>‏<code>lastId</code> — האחרון שנכתב (או <code>startAfter</code>, אם לא נכתב כלום). כך אפשר להמשיך אחרי קריסה.</li><li>קבוצה שה־ids בה לא עולים ממש (או לא גדולים מ־afterId) ← <code>Error("NOT_SORTED")</code>, לפני שכותבים אותה. ‏<code>size</code> לא שלם חיובי ← <code>RangeError</code>.</li><li><code>writeBatch</code> נכשל ← השגיאה עוברת הלאה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E94</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־95 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P25.5-E95">
+    <h3>P25.5-E95 · ‏EXPLAIN של PostgreSQL מול MySQL</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 5</span></div>
+<p>בפרק 18 קראת <code>EXPLAIN ANALYZE</code> של PostgreSQL (‏<code>Index Scan using …</code>, ‏<code>Seq Scan</code>, ‏<code>actual time</code>). בשיעור — <code>EXPLAIN FORMAT=TREE</code> של MySQL. (1) מה המקבילה ב־MySQL ל־<code>Seq Scan</code>, ול־<code>Index Only Scan</code>? (2) <code>EXPLAIN</code> בלי ANALYZE — מה הוא לא אומר לך, בשני המסדים? (3) מה <code>EXPLAIN ANALYZE</code> ב־MySQL עושה, ולמה לא להריץ אותו על <code>DELETE</code> בפרודקשן? (4) למה ההערכות (<code>rows=15003</code>) יכולות להיות רחוקות מהמציאות, ומה מעדכן אותן?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏EXPLAIN ואינדקסים מפרק 18 — והשיעור: EXPLAIN של MySQL.</p>
+
+  </div>
+<div class="ex" id="P25.5-E96">
+    <h3>P25.5-E96 · ‏expand/contract — כש־DDL לא בטרנזקציה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 25, שיעור 5</span></div>
+<p>בפרק 25 (‏P25-E67) עשית expand ו־contract ב־PostgreSQL, כל אחד בטרנזקציה. עכשיו אותו שינוי — <code>title</code> ← <code>name</code> — ב־MySQL. (1) מה משתנה ב־<code>expand</code>, כשה־<code>ALTER</code> עושה COMMIT מרומז? מה קורה אם ה־UPDATE שאחריו נכשל? (2) איך הופכים כל שלב לבטוח להרצה חוזרת, בלי טרנזקציה? (3) ‏<code>contract</code>: ‏"בדוק שאין NULL, ואז DROP" — למה כאן יש חלון שלא היה ב־PostgreSQL, ומה עושים איתו?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏expand/contract ו־migrations ב־pipeline מפרק 25 — והשיעור: DDL בלי rollback.</p>
+
+  </div>
+<div class="ex" id="P25.5-E97">
+    <h3>P25.5-E97 · ‏prisma migrate deploy נכשל באמצע</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 19, שיעור 5</span></div>
+<p>Prisma מול MySQL. ‏<code>migrate deploy</code> ב־CI נכשל בפקודה השלישית מתוך ארבע של migration אחד. בפעם הבאה הוא מסרב לרוץ:</p>
+<pre><code class="lang-text">P3009: migrate found failed migrations in the target database</code></pre>
+<p>(1) למה Prisma לא "פשוט מנסה שוב"? (2) מה המצב במסד, ואיך בודקים? (3) מה הצעדים לתקן (‏<code>prisma migrate resolve</code>)? (4) מה היית משנה בדרך שבה כותבים migrations ל־MySQL כדי שזה יקרה פחות?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> migrations של Prisma מפרק 19 — והשיעור: DDL עם COMMIT מרומז.</p>
+
+  </div>
+<div class="ex" id="P25.5-E98">
+    <h3>P25.5-E98 · שורה מ־PostgreSQL לשורה של MySQL 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 16, שיעור 5</span></div>
+<p>מה ש־<code>pg</code> מחזיר צריך להיכנס ל־MySQL בלי לאבד כלום. בקובץ <code class="mid">25v-mysql/starter/P25.5-E98.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function toMysqlValue(v: unknown): string | number | null
+export function pgRowToMysql(row: Record&lt;string, unknown&gt;): Record&lt;string, string | number | null&gt;</code></pre>
+<ul><li><code>boolean</code> ← ‏1/0. ‏<code>Date</code> ← <code>"YYYY-MM-DD HH:MM:SS.mmm"</code> ב־UTC (בשביל <code>DATETIME(3)</code>). ‏<code>bigint</code> ← מחרוזת. אובייקט או מערך (‏jsonb) ← <code>JSON.stringify</code>.</li><li>מחרוזת (גם <code>numeric</code>, ש־pg מחזיר כמחרוזת — בלי לעבור דרך number!), מספר, ו־<code>null</code> ← כמו שהם. ‏<code>undefined</code> ← <code>null</code>.</li><li><code>pgRowToMysql</code> — אותו דבר לכל העמודות.</li></ul>
+<p>הבודק מכניס את התוצאה ל־MySQL אמיתי וקורא בחזרה.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E98</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> הטיפוסים של PostgreSQL ומה ש־<code>pg</code> מחזיר מפרק 16 — והשיעור: המרת טיפוסים מפורשת בהעברה.</p>
+
+  </div>
+<div class="ex" id="P25.5-E99">
+    <h3>P25.5-E99 · ‏slow query log — מה הכי איטי? 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 24, שיעור 5</span></div>
+<p>‏MySQL כותב שאילתות איטיות ל־slow query log. כל רשומה נראית כך:</p>
+<pre><code class="lang-text"># Time: 2026-11-07T15:30:24.134567Z
+# User@Host: app[app] @  [172.18.0.4]  Id:    12
+# Query_time: 1.234567  Lock_time: 0.000012 Rows_sent: 10  Rows_examined: 30000
+SET timestamp=1762529424;
+SELECT id, total FROM orders WHERE customer_id = 3 AND status = 'paid' ORDER BY created_at DESC LIMIT 10;</code></pre>
+<p>בקובץ <code class="mid">25v-mysql/starter/P25.5-E99.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function normalizeSql(sql: string): string
+export function slowLogReport(text: string): { query: string; count: number; totalSeconds: number; maxRowsExamined: number }[]</code></pre>
+<ul><li><code>normalizeSql</code> — מחרוזות במרכאות בודדות (גם עם <code>''</code> בתוכן) ← <code>?</code>; מספרים (שלמים ועשרוניים, כמילה שלמה) ← <code>?</code>; רצף רווחים/ירידות שורה ← רווח אחד; בלי <code>;</code> ורווחים בסוף.</li><li>רשומה מתחילה ב־<code># Time:</code>. ה־SQL שלה — כל השורות שאחרי <code># Query_time</code>, חוץ מ־<code>SET timestamp=…;</code> ו־<code>use …;</code>.</li><li>מקבצים לפי השאילתה המנורמלת: כמה פעמים, סך <code>Query_time</code> (מעוגל ל־3 ספרות), והמקסימום של <code>Rows_examined</code>. ממוין לפי totalSeconds מהגבוה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>node 25v-mysql/starter/P25.5-E99.ts
+<span class="prompt">% </span>npm run check P25.5-E99</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> דוח latency מלוגים מפרק 24 (‏P24-E31) — והשיעור: למצוא את השאילתה שצריכה אינדקס.</p>
+
+  </div>
+<div class="ex" id="P25.5-E100">
+    <h3>P25.5-E100 · ‏full table scan — מ־Node 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 5</span></div>
+<p>בבדיקות (או בסביבת פיתוח) — להתריע כשקוד מריץ שאילתה בלי אינדקס. בקובץ <code class="mid">25v-mysql/starter/P25.5-E100.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function fullScans(pool: Pool, sql: string, params?: unknown[]): Promise&lt;{ table: string; rows: number }[]&gt;</code></pre>
+<ul><li>מריצים <code>EXPLAIN FORMAT=JSON</code> + השאילתה (עם הפרמטרים), ומפענחים את ה־JSON (עמודה <code>EXPLAIN</code>; היא יכולה לחזור כמחרוזת).</li><li>עוברים על כל העץ (בכל עומק): כל אובייקט עם <code>table_name</code> ו־<code>access_type === "ALL"</code> ← ‏<code>{ table, rows }</code> (‏<code>rows_examined_per_scan</code>).</li><li>בלי כפילויות, לפי סדר ההופעה.</li></ul>
+<pre class="terminal"><span class="prompt">% </span>npm run check P25.5-E100</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏EXPLAIN ו־seq scan מפרק 18 — והשיעור: EXPLAIN של MySQL.</p>
+
+  </div>
 <div class="pager"><a href="lesson-05-indexes.html"><small>חזרה לשיעור</small>שיעור 5 — אינדקסים, EXPLAIN, migrations והעברת נתונים</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>

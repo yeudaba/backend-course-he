@@ -1,0 +1,4 @@
+-- P25.5-E41: הכנסות לפי חודש
+-- הזמנות paid/shipped: month ('2026-03'), orders, revenue, avg_order (2 ספרות) — לפי חודש
+--
+-- בדיקה:  npm run check P25.5-E41

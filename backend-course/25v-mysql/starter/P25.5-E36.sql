@@ -1,0 +1,4 @@
+-- P25.5-E36: DATETIME מול TIMESTAMP (הנתונים: files/basics.sql)
+-- UTC ← launch 2026-11-04 22:30:00; +02:00 ← israel 2026-11-05 00:30:00; UTC ← name, at_datetime, at_timestamp לפי id
+--
+-- בדיקה:  npm run check P25.5-E36

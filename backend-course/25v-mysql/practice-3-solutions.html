@@ -39,6 +39,107 @@
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E56">
+    <h3>P25.5-E56 · ‏REPEATABLE READ — מה A רואה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏SELECT רגיל ב־REPEATABLE READ — מהתמונה שנלקחה בקריאה הראשונה של הטרנזקציה. ‏UPDATE — תמיד על הגרסה האחרונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי ש־A עדכן את השורה בעצמו, היא "שלו" — הוא רואה את השינוי של עצמו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(1) ‏10.</li><li>(2) ‏10 — אותה תמונה. (ב־READ COMMITTED: ‏4.)</li><li>(3) ‏3 — ה־UPDATE עבד על הגרסה האחרונה (4), ו־A רואה את השינוי של עצמו.</li><li>במסד: 3.</li></ol>
+<p>הלקח: "קרא 10, יש מספיק, הורד 8" — ב־REPEATABLE READ ההחלטה מבוססת על 10, כשבפועל יש 4. מחליטים בתוך ה־UPDATE (<code>WHERE stock &gt;= ?</code>, ‏affectedRows), או קוראים עם <code>FOR UPDATE</code> (השיעור, סעיף 1).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסיק מ־(2) שה־UPDATE של B "לא קרה" — הוא קרה ונשמר; A פשוט לא רואה אותו ב־SELECT רגיל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E57">
+    <h3>P25.5-E57 · ‏FOR SHARE או FOR UPDATE? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏FOR SHARE: אחרים יכולים לקרוא (וגם לנעול ב־SHARE), לא לשנות. ‏FOR UPDATE: אף אחד לא נועל אחריך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>נעילה = מישהו אחר מחכה. מה המחיר של לנעול שורות ל־40 שניות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>רגיל — רק קוראים.</li><li><code>FOR SHARE</code> על המוצר — אחרים יכולים גם הם להוסיף ביקורות (נעילה משותפת), אבל אף אחד לא מוחק/משנה אותו עד ה־COMMIT. (המפתח הזר גם נועל את שורת ההורה ב־SHARE בזמן ה־INSERT.)</li><li><code>FOR UPDATE</code> — מחליטים לפי מה שקראנו, ואסור שמישהו ישנה בינתיים.</li><li>רגיל — ועדיף על replica. נעילה הייתה עוצרת את כל העדכונים ל־40 שניות. וב־REPEATABLE READ הדוח עקבי בלי נעילות (E63).</li><li><code>FOR UPDATE SKIP LOCKED</code> (‏P25.5-E14).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>FOR UPDATE</code> "ליתר ביטחון" בכל מקום — כל הבקשות מחכות זו לזו, והשרת נהיה איטי בלי שום שגיאה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E58">
+    <h3>P25.5-E58 · ‏gap lock — למה INSERT מחכה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־REPEATABLE READ, ‏FOR UPDATE מבטיח שגם שורות <em>חדשות</em> שמתאימות לתנאי לא יופיעו עד הסוף (‏"phantoms").</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלי אינדקס — כדי למצוא את השורות שמתאימות, InnoDB סורק את הכול. מה הוא נועל בדרך?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כדי ש־FOR UPDATE באמת "יחזיק" את כל מה שמתאים ל־<code>status = 'queued'</code>, ‏InnoDB נועל גם את הפערים (gaps) באינדקס — שם שורות חדשות היו נכנסות. בלי אינדקס על status — הוא סרק את המפתח הראשי כולו, ונעל את כל השורות ואת כל הפערים: כל INSERT מחכה.</li><li>PostgreSQL לא מונע phantoms בנעילות (ב־READ COMMITTED אין צורך; ב־SERIALIZABLE הוא מזהה התנגשות אחרת). ל־InnoDB ב־REPEATABLE READ יש gap locks.</li><li>עם אינדקס, הסריקה (והנעילה) רק על הטווח של <code>'queued'</code> — INSERT עם status אחר לא מחכה. (‏INSERT של 'queued' — אולי, תלוי איפה בפער.)</li><li><code class="mid">LIMIT 1 … FOR UPDATE SKIP LOCKED</code> — לוקחים עבודה אחת, לא את כולן; טרנזקציות קצרות; ואם מתאים — רמת בידוד READ COMMITTED לחיבור של ה־worker (בה אין gap locks בחיפושים רגילים).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל את <code>innodb_lock_wait_timeout</code> "כי ה־INSERT נכשל" — הבעיה היא היקף הנעילה, לא הזמן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E59">
+    <h3>P25.5-E59 · ‏NOWAIT מול SKIP LOCKED <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏NOWAIT — שגיאה מיד אם נעול. ‏SKIP LOCKED — מתעלם מהנעולות ומחזיר את השאר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם התשובה הנכונה היא "השורה הזו בדיוק", או "שורה כלשהי שמתאימה"?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>NOWAIT</code> — המושב הזה בדיוק; נעול ← הודעה מיידית (E62).</li><li><code>SKIP LOCKED</code> — כל worker לוקח עבודה אחרת, אף אחד לא מחכה.</li><li><code>FOR UPDATE</code> רגיל (בסדר קבוע, E61) — חייבים את שני הארנקים האלה, ושווה לחכות כמה מילישניות.</li><li><code>FOR UPDATE</code> רגיל.</li><li><code>SKIP LOCKED</code> עם <code>LIMIT 1</code> — מושב שאף אחד לא באמצע להזמין.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SKIP LOCKED</code> כשרוצים שורה מסוימת — "המושב שלך" פשוט לא חוזר, ונראה כאילו הוא לא קיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E60">
+    <h3>P25.5-E60 · ‏FOR UPDATE בלי טרנזקציה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי <code>START TRANSACTION</code>, כל פקודה היא טרנזקציה משלה (autocommit).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>pool.query</code> — כל קריאה, חיבור אחר אולי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ב־autocommit, ה־SELECT … FOR UPDATE הוא טרנזקציה של פקודה אחת: הנעילה משתחררת ברגע שהוא מסתיים — לפני ה־UPDATE. שתי בקשות קוראות 10, ושתיהן מורידות.</li><li>(א) <code>getConnection</code> ← ‏<code>beginTransaction</code> ← SELECT … FOR UPDATE ← בדיקה ← UPDATE ← ‏<code>commit</code> (ו־<code>rollback</code>/‏<code>release</code>). (ב) בלי טרנזקציה: <code class="mid">UPDATE … SET stock = stock - ? WHERE id = ? AND stock &gt;= ?</code>, ו־<code>affectedRows === 0</code> ← אין מלאי (‏P25.5-E13).</li><li>טרנזקציה שייכת לחיבור. ‏BEGIN על חיבור אחד ו־UPDATE על אחר — ה־UPDATE בכלל לא בתוך הטרנזקציה, והחיבור הראשון נשאר עם טרנזקציה פתוחה ונעילות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">pool.query("START TRANSACTION")</code> — נראה נכון, ובפועל פותח טרנזקציה על חיבור אקראי ששאר הקוד לא משתמש בו.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.5-E13">
     <h3>P25.5-E13 · מלאי תחת עומס 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -230,7 +331,354 @@ export async function claimJobs(pool: Pool, workerId: string, limit: number): Pr
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E61">
+    <h3>P25.5-E61 · העברה בין ארנקים — בלי deadlock 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">SELECT customer_id, balance FROM wallets WHERE customer_id IN (?, ?) ORDER BY customer_id FOR UPDATE</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">try { beginTransaction … commit } catch { rollback; throw } finally { release }</code></pre>
+<p>כמו בשיעור 4.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E61: העברה בין ארנקים — בלי deadlock
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+export async function transfer(pool: Pool, fromId: number, toId: number, amount: number) {
+  if (!Number.isInteger(amount) || amount &lt;= 0) throw new RangeError(`סכום לא תקין: ${amount}`);
+  if (fromId === toId) throw new Error("SAME_WALLET");
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // תמיד מהקטן לגדול — כך שתי העברות הפוכות לא נועלות "אחת מכל צד"
+    const [rows] = await conn.query&lt;RowDataPacket[]&gt;(
+      "SELECT customer_id, balance FROM wallets WHERE customer_id IN (?, ?) ORDER BY customer_id FOR UPDATE",
+      [fromId, toId],
+    );
+    if (rows.length !== 2) throw new Error("WALLET_NOT_FOUND");
+    const balance = new Map(rows.map((r) =&gt; [Number(r.customer_id), Number(r.balance)]));
+    const from = balance.get(fromId)! - amount;
+    const to = balance.get(toId)! + amount;
+    if (from &lt; 0) throw new Error("INSUFFICIENT_FUNDS");
+    await conn.query("UPDATE wallets SET balance = ? WHERE customer_id = ?", [from, fromId]);
+    await conn.query("UPDATE wallets SET balance = ? WHERE customer_id = ?", [to, toId]);
+    await conn.commit();
+    return { from, to };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>נעילה בשאילתה אחת עם <code>ORDER BY</code> — InnoDB נועל את השורות לפי סדר הקריאה. העברה 1←4 והעברה 4←1 נועלות שתיהן קודם את 1: השנייה מחכה, ואין מעגל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שני SELECT … FOR UPDATE — קודם <code>fromId</code> ואז <code>toId</code>. בהעברות הפוכות במקביל: deadlock (‏1213), ואחת מהן נכשלת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E62">
+    <h3>P25.5-E62 · מושב — עכשיו או אף פעם (NOWAIT) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">SELECT reserved_by FROM seats WHERE id = ? FOR UPDATE NOWAIT</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>catch</code>: <code class="mid">(err as { errno?: number }).errno === 3572</code> ← rollback ו־<code>"busy"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E62: מושב — עכשיו או אף פעם (NOWAIT)
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+const ER_LOCK_NOWAIT = 3572;
+
+export async function reserveSeat(pool: Pool, seatId: number, customerId: number) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query&lt;RowDataPacket[]&gt;("SELECT reserved_by FROM seats WHERE id = ? FOR UPDATE NOWAIT", [seatId]);
+    let result: "reserved" | "taken" | "not_found";
+    if (rows.length === 0) result = "not_found";
+    else if (rows[0].reserved_by !== null) result = "taken";
+    else {
+      await conn.query("UPDATE seats SET reserved_by = ? WHERE id = ?", [customerId, seatId]);
+      result = "reserved";
+    }
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    if ((err as { errno?: number }).errno === ER_LOCK_NOWAIT) return "busy" as const;
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>בלי NOWAIT, המשתמש השני "נתקע" עד שהראשון מסיים (ואם הוא באמצע תשלום של דקה — עד ה־timeout של 50 שניות). עם NOWAIT — תשובה תוך מילישניות, וה־UI מציג "המושב בתהליך הזמנה".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתפוס את כל השגיאות כ־"busy" — ואז מסד שנפל נראה למשתמש כמו "מישהו אחר מזמין".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E63">
+    <h3>P25.5-E63 · דוח עקבי — תמונה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">START TRANSACTION READ ONLY, WITH CONSISTENT SNAPSHOT</code> — התמונה נלקחת מיד, ולא בקריאה הראשונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>SUM</code> של DECIMAL חוזר כמחרוזת (בלי <code>decimalNumbers</code>) — ‏<code>Number(...)</code>, ‏<code>COALESCE(…, 0)</code> לרשימה ריקה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E63: דוח עקבי — תמונה אחת
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+export async function salesReport(pool: Pool, between?: () =&gt; Promise&lt;void&gt;) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.query("START TRANSACTION READ ONLY, WITH CONSISTENT SNAPSHOT");
+    const [[sum]] = await conn.query&lt;RowDataPacket[]&gt;(
+      "SELECT COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue FROM orders WHERE status IN ('paid', 'shipped')",
+    );
+    await between?.();
+    const [rows] = await conn.query&lt;RowDataPacket[]&gt;("SELECT id FROM orders WHERE status IN ('paid', 'shipped') ORDER BY id");
+    await conn.query("COMMIT");
+    return { orders: Number(sum.orders), revenue: Number(sum.revenue), ids: rows.map((r) =&gt; Number(r.id)) };
+  } catch (err) {
+    await conn.query("ROLLBACK");
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>‏<code>READ ONLY</code> אומר ל־InnoDB שלא יהיו כתיבות — קצת פחות עבודה, ושגיאה אם מישהו בטעות מוסיף UPDATE. בלי טרנזקציה, כל שאילתה רואה את המצב של הרגע שלה — והדוח "40 הזמנות" עם רשימה של 41.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>pool.query</code> לכל שאילתה, עם <code>START TRANSACTION</code> ב־<code>pool.query</code> נפרד — הן לא באותו חיבור, ואין snapshot משותף.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.5-E64">
+    <h3>P25.5-E64 · ‏READ COMMITTED מפרק 18 מול REPEATABLE READ <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏UPDATE עם תנאי — תמיד על הגרסה האחרונה, בשני המסדים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־REPEATABLE READ — כל SELECT רגיל מאותה תמונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא משתנה — בטוח בשניהם. ההחלטה בתוך ה־UPDATE.</li><li>שבור בשניהם (lost update) — אבל ב־MySQL גרוע יותר: גם אם עברו כמה שניות בין שני SELECTים באותה טרנזקציה, הוא ימשיך לראות את הערך הישן.</li><li>משתנה לטובה: ב־PostgreSQL (READ COMMITTED) הספירה והסכום יכולים לא להתאים; ב־MySQL — אותה תמונה (E63).</li><li>לא משתנה — בטוח בשניהם.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"להתאים" את MySQL ל־PostgreSQL עם <code class="mid">SET GLOBAL transaction_isolation = 'READ-COMMITTED'</code> בלי לבדוק — זה משנה התנהגות לכל המערכת, כולל דוחות שסמכו על RR.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E65">
+    <h3>P25.5-E65 · ‏INSERT IGNORE — למה מסוכן? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏IGNORE הופך <em>שגיאות</em> ל־warnings — לא רק duplicate key.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ערך ארוך מדי לעמודה, NULL בעמודת NOT NULL, מפתח זר שלא קיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏IGNORE מוריד את רמת השגיאה של כמעט כל בעיה בשורה: מפתח ארוך מ־<code>VARCHAR</code> ← נחתך בשקט; NULL בעמודת NOT NULL ← ערך ברירת מחדל ("" או 0); מפתח זר לא קיים ← השורה לא נכנסת, עם warning.</li><li>מפתח של 300 תווים נחתך ל־255 — שני מפתחות שונים שמתחילים באותו דבר "מתנגשים", והשני מקבל replay של הראשון. מפתח זר שגוי ← ‏affectedRows 0 ← "מישהו אחר תפס" ← לולאה של 409. הכול בלי שגיאה בלוג.</li><li>INSERT רגיל, ותפיסה של <code>errno 1062</code> (‏ER_DUP_ENTRY) בלבד — שגיאה אחרת היא שגיאה (‏P25.5-E17). או <code class="mid">INSERT … ON DUPLICATE KEY UPDATE idem_key = idem_key</code> ו־affectedRows (1 = חדש, 0 = קיים) — שמגיב רק להתנגשות במפתח.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־IGNORE בייבוא נתונים "כדי שלא ייעצר" — ואז מגלים חודש אחר כך ש־3% מהשורות נחתכו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E66">
+    <h3>P25.5-E66 · ‏Prisma, ‏$transaction ו־deadlock <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏deadlock מבטל את <em>כל</em> הטרנזקציה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Prisma לא בוחר עבורך את הסדר שבו אתה ניגש לשורות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מערך — פקודות מוכנות מראש, שרצות ברצף בטרנזקציה אחת; קצר וצפוי. interactive (‏<code>async (tx)</code>) — קוד שלך באמצע, שיכול לקרוא, להחליט ולכתוב — ולהחזיק נעילות זמן ארוך יותר (במיוחד אם יש בו <code>await</code> לשירות חיצוני).</li><li>מסביב: אחרי deadlock כל הטרנזקציה בוטלה, ולכן מנסים שוב את <em>כולה</em> — <code class="mid">withDeadlockRetry(() =&gt; prisma.$transaction(…))</code> (‏P25.5-E15), על P2034 בלבד.</li><li>לגשת לשורות באותו סדר (למשל <code>orderBy: { id: "asc" }</code> לפני עדכונים, או עדכונים ממוינים לפי id), טרנזקציות קצרות בלי קריאות רשת באמצע, ואינדקסים שמצמצמים מה ננעל (E58).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>retry רק על הפקודה שנכשלה בתוך <code>async (tx)</code> — הטרנזקציה כבר בוטלה, וה־tx לא שמיש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E67">
+    <h3>P25.5-E67 · ספירת צפיות — 50 במקביל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">INSERT INTO product_views (product_id, day, views) VALUES (?, ?, 1) AS n ON DUPLICATE KEY UPDATE views = product_views.views + 1</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>LIMIT ?</code> עובד עם <code>execute</code> ו־<code>query</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E67: ספירת צפיות — 50 במקביל
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+export async function recordView(pool: Pool, productId: number, day: string): Promise&lt;void&gt; {
+  await pool.execute(
+    "INSERT INTO product_views (product_id, day, views) VALUES (?, ?, 1) AS n ON DUPLICATE KEY UPDATE views = product_views.views + 1",
+    [productId, day],
+  );
+}
+
+export async function topProducts(pool: Pool, day: string, limit: number) {
+  const [rows] = await pool.query&lt;RowDataPacket[]&gt;(
+    "SELECT product_id, views FROM product_views WHERE day = ? ORDER BY views DESC, product_id LIMIT ?",
+    [day, limit],
+  );
+  return rows.map((r) =&gt; ({ productId: Number(r.product_id), views: Number(r.views) }));
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏SELECT ואז INSERT או UPDATE — שתי הבעיות של P25.5-E52: Duplicate entry, וצפיות שנעלמות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E68">
+    <h3>P25.5-E68 · ‏POST /orders עם mysql2 — בלי למכור יותר מדי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">UPDATE products SET stock = stock - ? WHERE id = ? AND is_active AND stock &gt;= ?</code></pre>
+<p>← ‏<code>affectedRows</code>. אם 0 — ‏SELECT קטן כדי להבדיל בין 404 ל־409.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אגורות: <code class="mid">Math.round(Number(price) * 100) * quantity</code> — ‏price מגיע כמחרוזת (שיעור 4).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E68: POST /orders עם mysql2 — בלי למכור יותר מדי
+import { Router } from "express";
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+const fail = (code: string) =&gt; ({ error: { code } });
+const isPositiveInt = (v: unknown) =&gt; Number.isInteger(v) &amp;&amp; (v as number) &gt; 0;
+
+export function ordersRouter(pool: Pool) {
+  const router = Router();
+  router.post("/orders", async (req, res, next) =&gt; {
+    const { customerId, productId, quantity } = req.body ?? {};
+    if (![customerId, productId, quantity].every(isPositiveInt)) {
+      res.status(400).json(fail("VALIDATION_ERROR"));
+      return;
+    }
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [upd] = await conn.query&lt;ResultSetHeader&gt;(
+        "UPDATE products SET stock = stock - ? WHERE id = ? AND is_active AND stock &gt;= ?",
+        [quantity, productId, quantity],
+      );
+      if (upd.affectedRows === 0) {
+        const [found] = await conn.query&lt;RowDataPacket[]&gt;("SELECT id FROM products WHERE id = ? AND is_active", [productId]);
+        await conn.rollback();
+        res.status(found.length ? 409 : 404).json(fail(found.length ? "OUT_OF_STOCK" : "PRODUCT_NOT_FOUND"));
+        return;
+      }
+      const [[p]] = await conn.query&lt;RowDataPacket[]&gt;("SELECT price FROM products WHERE id = ?", [productId]);
+      const [order] = await conn.query&lt;ResultSetHeader&gt;(
+        "INSERT INTO orders (customer_id, status, total) VALUES (?, 'pending_payment', ? * ?)",
+        [customerId, p.price, quantity],
+      );
+      await conn.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)", [order.insertId, productId, quantity, p.price]);
+      await conn.commit();
+      res.status(201).json({ orderId: order.insertId, totalCents: Math.round(Number(p.price) * 100) * quantity });
+    } catch (err) {
+      await conn.rollback();
+      if ((err as { errno?: number }).errno === 1452) {
+        res.status(404).json(fail("CUSTOMER_NOT_FOUND"));
+        return;
+      }
+      next(err);
+    } finally {
+      conn.release();
+    }
+  });
+  return router;
+}</code></pre>
+<p>ה־UPDATE עם התנאי הוא גם הבדיקה וגם הנעילה: שתי בקשות על היחידה האחרונה — השנייה מחכה לראשונה, ואחרי ה־COMMIT שלה רואה <code>stock = 0</code> ולא מעדכנת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד מלאי ואחר כך ליצור הזמנה — מחוץ לטרנזקציה. לקוח לא קיים ← ההזמנה נכשלת, והמלאי כבר ירד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E69">
+    <h3>P25.5-E69 · מחיקת לקוח — בלי לשבור הזמנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">CONCAT('deleted+', id, '@invalid.local')</code> — ב־SQL, או בונים את המחרוזת ב־TS.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>affectedRows</code> של ה־UPDATE — 0 ← הלקוח לא קיים ← <code>throw</code> (וה־catch עושה rollback של המחיקה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E69: מחיקת לקוח — בלי לשבור הזמנות
+import type { Pool, ResultSetHeader } from "mysql2/promise";
+
+export async function anonymizeCustomer(pool: Pool, customerId: number) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [cart] = await conn.query&lt;ResultSetHeader&gt;("DELETE FROM cart_items WHERE customer_id = ?", [customerId]);
+    const [upd] = await conn.query&lt;ResultSetHeader&gt;(
+      "UPDATE customers SET name = 'Deleted user', email = CONCAT('deleted+', id, '@invalid.local'), city = '' WHERE id = ?",
+      [customerId],
+    );
+    if (upd.affectedRows === 0) throw new Error("NOT_FOUND");
+    await conn.commit();
+    return { cartItemsRemoved: cart.affectedRows };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}</code></pre>
+<p>האימייל עם ה־id נשאר ייחודי (ה־UNIQUE לא נשבר), לא מגיע לאף אחד (<code>.invalid</code> הוא דומיין שמור), ומאפשר לאדם להירשם שוב עם הכתובת האמיתית שלו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>email = ''</code> — הלקוח השני שנמחק נכשל על UNIQUE.</li><li>למחוק את העגלה בפקודה נפרדת לפני הטרנזקציה — כישלון ב־UPDATE משאיר לקוח "חי" עם עגלה ריקה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-node.html"><small>הבא</small>שיעור 4 — Node.js מול MySQL עם mysql2</a></div>
 </main>
 </body>

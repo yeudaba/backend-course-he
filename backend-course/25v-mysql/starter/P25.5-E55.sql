@@ -1,0 +1,5 @@
+-- P25.5-E55: מעגלה להזמנה — ב־SQL אחד
+-- בטרנזקציה: הזמנה ללקוח 1 מהעגלה, order_items, ריקון העגלה;
+-- ובסוף: id, customer_id, status, total, line_count, units, cart_left
+--
+-- בדיקה:  npm run check P25.5-E55

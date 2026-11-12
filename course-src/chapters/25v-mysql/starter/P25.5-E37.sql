@@ -1,0 +1,4 @@
+-- P25.5-E37: CREATE TABLE מ־PostgreSQL ל־MySQL
+-- כתוב כאן את טבלת tasks ב־MySQL (ראה את ה־CREATE TABLE של PostgreSQL בדף התרגול)
+--
+-- בדיקה:  npm run check P25.5-E37

@@ -14,6 +14,128 @@
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
   <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E86">
+    <h3>P25.5-E86 · ‏UUID כמפתח ראשי ב־InnoDB <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל אינדקס משני מחזיק, ליד כל ערך, את המפתח הראשי (איור 1).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏UUID v4 הוא אקראי — איפה בעץ הוא נכנס?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כל רשומה בכל אינדקס משני גדלה: 36 בתים (‏CHAR(36) ב־utf8mb4 — עד 144 בתים לפי הגדרה!) במקום 4. יותר דיסק, פחות אינדקס בזיכרון.</li><li>כל UUID אקראי נכנס במקום אקראי ב־clustered index: דפים מתפצלים, נכתבים מחדש, ו־buffer pool מתמלא בדפים חצי ריקים. עם AUTO_INCREMENT כל הכנסה בסוף העץ.</li><li>(א) ‏<code>BINARY(16)</code> במקום טקסט (‏<code>UUID_TO_BIN</code>). (ב) UUID ממוין בזמן — ‏v7, או <code>UUID_TO_BIN(uuid, 1)</code> שמסדר מחדש את החלקים של v1 (E93). ‏(ג) מפתח ראשי AUTO_INCREMENT פנימי, ו־UUID כעמודה ייחודית "ציבורית" — מה שה־API חושף.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחליט לפי בדיקה על 1,000 שורות — ההבדל מופיע כשהטבלה כבר לא נכנסת לזיכרון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E87">
+    <h3>P25.5-E87 · לקרוא EXPLAIN: האם יש קפיצה לטבלה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה בדיוק יש בכל רשומה של האינדקס המשני? (העמודות שלו + המפתח הראשי.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>3 — האינדקס ממוין לפי customer_id, ‏status, ‏created_at. האם created_at ממוין בתוך customer_id לבד?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>covering — <code>id</code> הוא המפתח הראשי, והוא בכל רשומה של האינדקס.</li><li>לא — <code>total</code> לא באינדקס; קפיצה לכל שורה. (אם זו שאילתה חמה — להוסיף <code>total</code> לסוף האינדקס.)</li><li>covering (‏created_at באינדקס) — אבל המיון לא "בחינם": בתוך לקוח 3, הרשומות ממוינות קודם לפי status, אז צריך מיון נוסף (filesort) על מה שנמצא.</li><li>covering — סופרים רשומות באינדקס.</li></ol>
+<p>ב־TREE: ‏<code class="mid">Covering index lookup on orders using …</code> במקום <code>Index lookup</code>; וב־FORMAT=TRADITIONAL — ‏<code>Using index</code> בעמודה Extra.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף את כל העמודות לאינדקס "כדי שיהיה covering" — האינדקס הופך לעותק של הטבלה, וכל INSERT מעדכן אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E88">
+    <h3>P25.5-E88 · סדר העמודות באינדקס <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כלל: קודם עמודות עם <code>=</code>, ואחריהן העמודה של המיון/הטווח.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אינדקס הוא "ממוין לפי הראשונה, ובתוכה לפי השנייה…" — כמו ספר טלפונים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>(customer_id, created_at)</code> — א מצוין. ב — מוצא את הלקוח וממוין, אבל מסנן status תוך כדי (כמו "לפני" בשיעור).</li><li><code class="mid">(customer_id, status, created_at)</code> — ב מצוין. א — מוצא את הלקוח, אבל created_at לא ממוין על פני כל הסטטוסים ← מיון.</li><li><code>(status, created_at)</code> — ג מצוין.</li><li><code>(created_at, customer_id)</code> — כמעט לא עוזר לאף אחת: עמודה ראשונה בלי <code>=</code>.</li></ul>
+<p>שלושה אינדקסים: ‏<code>(customer_id, created_at)</code>, ‏<code class="mid">(customer_id, status, created_at)</code>, ‏<code>(status, created_at)</code>. אם א פחות חשובה — אפשר לוותר על הראשון, ולשלם במיון. (ושימו לב: <code>(customer_id)</code> לבד מיותר כשיש אינדקס שמתחיל בו — E92.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>אינדקס לכל עמודה בנפרד — MySQL משתמש בדרך כלל באחד, והשאר רק מאטים כתיבה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E89">
+    <h3>P25.5-E89 · ‏migration שנכשל באמצע <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל ALTER עושה COMMIT מרומז — לפניו ואחריו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־CHECK השלישי — על אילו שורות הוא נכשל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>העמודה נוספה (ה־ALTER הראשון כבר מחויב), ה־UPDATE בוצע (‏autocommit), וה־CHECK נכשל — כי יש שורות USD. המסד "חצי מעודכן".</li><li>ה־ALTER הראשון נכשל: ‏<code class="mid">Duplicate column name 'currency'</code>. ואם הכלי של ה־migrations לא רשם את הקובץ כרץ — הוא תקוע, ומישהו צריך לתקן ביד.</li><li>הכול בטרנזקציה אחת — הכישלון ב־CHECK מבטל גם את העמודה וגם את ה־UPDATE, והמסד בדיוק כמו לפני.</li><li>migration לכל פקודת DDL; פקודות שמותר להריץ שוב (‏<code>ADD COLUMN IF NOT EXISTS</code> לא קיים ב־MySQL — בודקים ב־information_schema, או כלי שעושה זאת); ובדיקת הנתונים <em>לפני</em> CHECK (כאן — ה־CHECK בכלל שגוי: צריך גם USD).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב migrations ל־MySQL "כמו ל־PostgreSQL" עם הרבה פקודות בקובץ, ולסמוך על rollback שלא קיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E90">
+    <h3>P25.5-E90 · למה GET_LOCK? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני עותקים בודקים "migration 7 רץ?" באותו רגע.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏GET_LOCK משתחרר לבד כשהחיבור נסגר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) שניים מריצים את אותו <code>ALTER … ADD COLUMN</code> — אחד מצליח, השני נכשל ("Duplicate column") והשרת שלו לא עולה. (ב) שניים מריצים <code>UPDATE … SET x = x * 100</code> — הנתונים מוכפלים פעמיים.</li><li>הבדיקה ("לא רץ") והרישום ("רץ") הן שתי פעולות, עם migration ארוך באמצע — וב־MySQL ה־DDL לא בטרנזקציה, אז אי אפשר לנעול שורה בטבלה הזו "סביב" ה־ALTER.</li><li>נעילה בשם, ברמת השרת: רק חיבור אחד מחזיק <code>'schema_migrations'</code>; האחרים מחכים (עד timeout), ואחרי שהראשון סיים — רואים שהכול רץ, ולא עושים כלום. היא של החיבור — ולכן שרת שקרס באמצע משחרר אותה אוטומטית (‏P25.5-E19).</li><li>מה־CI — רק תהליך אחד מריץ, לפני ה־deploy, בלי מרוץ בכלל. GET_LOCK הוא רשת ביטחון למי שמריץ migrations בעלייה (נפוץ בפלטפורמות בלי שלב CI).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>GET_LOCK על חיבור מה־pool ואז ה־migrations על חיבורים אחרים — הנעילה "מוחזקת" על ידי חיבור שלא עושה כלום, וחוזרת ל־pool נעולה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E91">
+    <h3>P25.5-E91 · איך יודעים שההעברה הצליחה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>סכומים, תאריכים, טקסט — כל אחד נשבר בדרך אחרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורות שנוספו או השתנו אחרי שהעתקת אותן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>(א) ספירה לכל טבלה. (ב) סכומים: <code>SUM(total)</code> עד האגורה (המרה דרך float תתפוס כאן), ‏<code>SUM(LENGTH(name))</code> או hash של עמודות טקסט (קידוד, ‏utf8mb3). (ג) מינימום/מקסימום של תאריכים (המרת אזור זמן — שעתיים "זזו") ובדיקה מדגמית של שורות ספציפיות בשני הצדדים.</li><li>מספר זהה לא תופס: סכומים שעוגלו (<code>89.90</code> ← <code>89.9000001</code>), טקסט שנחתך או ש־🔥 הפך ל־<code>?</code>, תאריכים שזזו בשעתיים, ‏boolean ש"הפך" (<code>'f'</code> ← 1).</li><li>הרצה חוזרת (idempotent, ‏ON DUPLICATE KEY UPDATE) שמעבירה גם שינויים — כמה סבבים, ואז חלון קצר של "קריאה בלבד" במערכת הישנה, סבב אחרון, השוואה, והעברה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "נראה בסדר" על 10 שורות ראשונות — הבאגים בשורות עם ערכים קיצוניים.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P25.5-E16">
     <h3>P25.5-E16 · חיפוש FULLTEXT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -241,7 +363,333 @@ export async function copyCustomers(source: pg.Client | pg.Pool, target: Pool, {
 
 </div></details>
   </div>
+<div class="ex" id="P25.5-E92">
+    <h3>P25.5-E92 · אילו אינדקסים מיותרים? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם CTE:</p>
+<pre><code class="lang-sql">GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',')</code></pre>
+<p>לכל <code>INDEX_NAME</code>, עם <code>TABLE_SCHEMA = DATABASE()</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תחילית לפי עמודות שלמות: <code class="mid">CONCAT(b.cols, ',') LIKE CONCAT(a.cols, ',%')</code> — הפסיק בסוף מונע ש־<code>kind</code> יתאים ל־<code>kind_x</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E92: אילו אינדקסים מיותרים?
+WITH idx AS (
+  SELECT INDEX_NAME AS index_name,
+         MAX(NON_UNIQUE) = 0 AS is_unique,
+         GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS cols
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events_log' AND INDEX_NAME &lt;&gt; 'PRIMARY'
+  GROUP BY INDEX_NAME
+)
+SELECT a.index_name, a.cols, a.is_unique,
+       (NOT a.is_unique AND EXISTS (
+         SELECT 1 FROM idx b
+         WHERE b.index_name &lt;&gt; a.index_name AND CONCAT(b.cols, ',') LIKE CONCAT(a.cols, ',%')
+       )) AS redundant
+FROM idx a
+ORDER BY a.index_name;</code></pre>
+<pre class="terminal">+------------------+--------------------+-----------+-----------+
+| index_name       | cols               | is_unique | redundant |
++------------------+--------------------+-----------+-----------+
+| idx_kind         | kind               |         0 |         1 |
+| idx_user         | user_id            |         0 |         1 |
+| idx_user_created | user_id,created_at |         0 |         0 |
+| idx_user_kind    | user_id,kind       |         0 |         0 |
+| uq_kind_user     | kind,user_id       |         1 |         0 |
++------------------+--------------------+-----------+-----------+</pre>
+<p>‏<code>idx_user</code> מיותר פעמיים (‏<code>user_id,kind</code> ו־<code>user_id,created_at</code> מתחילים בו). ‏<code>idx_kind</code> מיותר בגלל <code>uq_kind_user</code> — ייחודי שמתחיל ב־<code>kind</code> משרת גם חיפוש לפי kind. את ה־UNIQUE עצמו לא מסמנים — הוא אילוץ, לא רק אינדקס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק אינדקס "מיותר" שמפתח זר צריך — MySQL ישתמש באחר שמתחיל באותה עמודה, אבל אם אין — יסרב למחוק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E93">
+    <h3>P25.5-E93 · ‏UUID ל־BINARY(16), ו־UUIDv7 ממוין 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Buffer.from(uuid.replaceAll("-", ""), "hex")</code>. ובחזרה: <code>hex.slice(0, 8)</code>, ‏<code>slice(8, 12)</code>… עם מקפים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>v7: ‏<code class="mid">const b = Buffer.from(random)</code>; ‏<code>b.writeUIntBE(nowMs, 0, 6)</code>; ‏<code class="mid">b[6] = (b[6] &amp; 0x0f) | 0x70</code>; ‏<code class="mid">b[8] = (b[8] &amp; 0x3f) | 0x80</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E93: UUID ל־BINARY(16), ו־UUIDv7 ממוין
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function uuidToBin(uuid: string): Buffer {
+  if (!UUID.test(uuid)) throw new RangeError(`UUID לא תקין: ${uuid}`);
+  return Buffer.from(uuid.replaceAll("-", ""), "hex");
+}
+
+export function binToUuid(bin: Buffer): string {
+  const h = bin.toString("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+export function uuidv7(nowMs: number, random: Buffer): string {
+  const b = Buffer.from(random.subarray(0, 16));
+  b.writeUIntBE(nowMs, 0, 6); // 48 ביט של זמן — ולכן ממוין לפי זמן
+  b[6] = (b[6] &amp; 0x0f) | 0x70; // version 7
+  b[8] = (b[8] &amp; 0x3f) | 0x80; // variant 10
+  return binToUuid(b);
+}
+
+const id = uuidv7(Date.UTC(2026, 10, 7, 12), Buffer.alloc(16, 0xab));
+console.log(id, uuidToBin(id).length, binToUuid(uuidToBin(id.toUpperCase())) === id);</code></pre>
+<pre class="terminal">01a1b5e1-3e00-7bab-abab-abababababab 16 true</pre>
+<p>‏v7 מתחיל בזמן: מזהה שנוצר אחר כך — גדול יותר, ונכנס בסוף העץ (E86), כמו AUTO_INCREMENT. ועדיין אפשר לייצר אותו בצד הלקוח, בלי לתאם עם אף אחד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Buffer.from(uuid, "hex")</code> בלי להוריד מקפים — ‏Node עוצר בתו הראשון שאינו hex, ומחזיר 4 בתים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E94">
+    <h3>P25.5-E94 · העברה בקבוצות — עם המשך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאת <code>for (;;)</code> עם <code>after</code> שמתעדכן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"עולים ממש":</p>
+<pre><code class="lang-ts">rows.every((r, i) =&gt; r.id &gt; (i === 0 ? after : rows[i - 1].id))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E94: העברה בקבוצות — עם המשך
+export async function copyInBatches&lt;R extends { id: number }&gt;({ readBatch, writeBatch, size, startAfter = 0 }: {
+  readBatch: (afterId: number, size: number) =&gt; Promise&lt;R[]&gt;;
+  writeBatch: (rows: R[]) =&gt; Promise&lt;void&gt;;
+  size: number;
+  startAfter?: number;
+}) {
+  if (!Number.isInteger(size) || size &lt;= 0) throw new RangeError(`size לא תקין: ${size}`);
+  let after = startAfter;
+  let batches = 0;
+  let rows = 0;
+  for (;;) {
+    const batch = await readBatch(after, size);
+    if (batch.length === 0) break;
+    if (!batch.every((r, i) =&gt; r.id &gt; (i === 0 ? after : batch[i - 1].id))) throw new Error("NOT_SORTED");
+    await writeBatch(batch);
+    batches++;
+    rows += batch.length;
+    after = batch[batch.length - 1].id;
+    if (batch.length &lt; size) break;
+  }
+  return { batches, rows, lastId: after };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמשיך לפי מספר הקבוצה (<code>OFFSET batches * size</code>) — שורה שנמחקה במקור באמצע ההעברה מזיזה את כל השאר, ושורה אחת לא מועתקת.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.5-E95">
+    <h3>P25.5-E95 · ‏EXPLAIN של PostgreSQL מול MySQL <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏MySQL: ‏<code>Table scan on orders</code>, ‏<code>Covering index lookup</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏ANALYZE באמת מריץ את השאילתה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>Seq Scan</code> ← <code>Table scan on …</code> (ב־FORMAT=JSON: ‏<code>access_type: "ALL"</code> — E100). ‏<code>Index Only Scan</code> ← <code>Covering index lookup/scan</code> (E87).</li><li>רק תוכנית והערכות — לא כמה שורות באמת ולא כמה זמן. "rows=10" יכול להיות 10,000 בפועל.</li><li>מריץ את השאילתה ומוסיף זמנים ומספרי שורות אמיתיים לכל צעד — כמו ב־PostgreSQL. ‏DELETE/UPDATE — הוא באמת מוחק. בודקים על עותק, או עוטפים בטרנזקציה ועושים ROLLBACK (ב־PostgreSQL; ב־MySQL ‏EXPLAIN ANALYZE תומך רק ב־SELECT ובחלק מהמקרים — עוד סיבה לבדוק על עותק).</li><li>מסטטיסטיקה על התפלגות הערכים, שמתעדכנת מדי פעם. אחרי שינוי גדול (כמו 30,000 הזמנות ללקוח אחד) — ‏<code>ANALYZE TABLE orders</code> (וב־PostgreSQL ‏<code>ANALYZE orders</code>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על תוכנית מהמחשב שלך עם 100 שורות — עם טבלה קטנה, table scan הוא באמת הכי זול, ו־MySQL יבחר בו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E96">
+    <h3>P25.5-E96 · ‏expand/contract — כש־DDL לא בטרנזקציה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בפרק 25 גם ה־ALTER וגם ה־UPDATE בוטלו יחד בכישלון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏UPDATE עם <code>WHERE name IS NULL</code> — מה קורה כשמריצים אותו פעמיים?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>העמודה נוספת ונשארת גם אם ה־UPDATE נכשל. זה בסדר — העמודה ריקה לא מפריעה לקוד הישן — אבל ה־migration "חצי רץ".</li><li>כל צעד בודק אם הוא כבר נעשה: ‏ADD COLUMN רק אם אין (‏information_schema); ‏<code class="mid">UPDATE … WHERE name IS NULL</code> ממלא רק מה שחסר (ובטבלה גדולה — בקבוצות, E94). הרצה חוזרת ממשיכה מאיפה שעצרה.</li><li>בין הבדיקה ל־DROP, הקוד הישן (אם עוד רץ) יכול להכניס שורה בלי <code>name</code>. ב־PostgreSQL הבדיקה וה־DROP היו באותה טרנזקציה. ב־MySQL: contract רק אחרי שאין יותר קוד ישן בכלל (deploy נפרד, כמו שהשיעור בפרק 25 ממליץ), ואז הבדיקה היא רק אימות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על "ה־migration נכשל ← לא קרה כלום" — ב־MySQL קרה חלק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E97">
+    <h3>P25.5-E97 · ‏prisma migrate deploy נכשל באמצע <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בטבלה <code>_prisma_migrations</code> יש שורה למיגרציה הזו — עם <code>finished_at</code> ריק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>--rolled-back</code> מול <code>--applied</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כי ב־MySQL שתי הפקודות הראשונות כבר בוצעו ונשארו. ניסיון חוזר מריץ אותן שוב ונכשל ("Duplicate column"), או גרוע — מבצע UPDATE פעמיים. Prisma מעדיף לעצור ולתת לבן אדם להחליט.</li><li>חלק מהשינויים במסד, חלק לא. בודקים ב־<code>SHOW CREATE TABLE</code> / ‏information_schema מה קיים, מול ה־SQL של ה־migration.</li><li>(א) לתקן את המסד ידנית — לבטל את מה שרץ (‏DROP של מה שנוסף), או להשלים את מה שלא. (ב) לסמן: ‏<code class="mid">migrate resolve --rolled-back &lt;name&gt;</code> (בוטל, יורץ שוב מההתחלה) או <code>--applied</code> (השלמתי ידנית). (ג) לתקן את הקובץ אם הוא הבעיה — ‏<code>migrate deploy</code> שוב.</li><li>migration קטן — פקודת DDL אחת לכל migration (או כמה שאין ביניהן תלות); expand/contract; ובדיקה על עותק של נתוני פרודקשן לפני (שם מגלים CHECK שנכשל על נתונים ישנים — E39).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק את השורה מ־<code>_prisma_migrations</code> "כדי שירוץ שוב" בלי לנקות את מה שרץ — ה־migration ייכשל שוב על הפקודה הראשונה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E98">
+    <h3>P25.5-E98 · שורה מ־PostgreSQL לשורה של MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">d.toISOString().replace("T", " ").replace("Z", "")</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר הבדיקות: ‏<code>null</code>/‏<code>undefined</code>, ‏boolean, ‏Date, ‏bigint, ואז object.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E98: שורה מ־PostgreSQL לשורה של MySQL
+export function toMysqlValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (v instanceof Date) return v.toISOString().replace("T", " ").replace("Z", "");
+  if (typeof v === "bigint") return v.toString();
+  if (typeof v === "object") return JSON.stringify(v);
+  return v as string | number;
+}
+
+export function pgRowToMysql(row: Record&lt;string, unknown&gt;) {
+  return Object.fromEntries(Object.entries(row).map(([k, v]) =&gt; [k, toMysqlValue(v)]));
+}</code></pre>
+<p>‏<code>Date</code> הוא רגע; ‏<code>toISOString</code> תמיד ב־UTC — בלי קשר לאזור של התהליך. ו־<code>"1234567890.12"</code> נשאר מחרוזת עד ש־MySQL ממיר אותה ל־DECIMAL בעצמו, בדיוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number(v)</code> על numeric — מעל 15 ספרות, האגורות "זזות".</li><li><code>d.toLocaleString()</code> או <code>getHours()</code> — לפי האזור של התהליך, ושעתיים "זזות".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E99">
+    <h3>P25.5-E99 · ‏slow query log — מה הכי איטי? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פיצול: <code class="mid">text.split(/^# Time:/m).slice(1)</code>. ו־<code class="mid">/Query_time:\s*([\d.]+).*Rows_examined:\s*(\d+)/</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קודם מחרוזות (<code>/'(?:[^']|'')*'/g</code>), ורק אחר כך מספרים (<code>/\b\d+(?:\.\d+)?\b/g</code>) — אחרת מספר בתוך מחרוזת מוחלף פעמיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E99: slow query log — מה הכי איטי?
+export function normalizeSql(sql: string): string {
+  return sql
+    .replace(/'(?:[^']|'')*'/g, "?")
+    .replace(/\b\d+(?:\.\d+)?\b/g, "?")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s*;$/, "");
+}
+
+export function slowLogReport(text: string) {
+  const groups = new Map&lt;string, { query: string; count: number; total: number; maxRowsExamined: number }&gt;();
+  for (const entry of text.split(/^# Time:/m).slice(1)) {
+    const lines = entry.split("\n");
+    const qi = lines.findIndex((l) =&gt; l.startsWith("# Query_time"));
+    if (qi === -1) continue;
+    const m = /Query_time:\s*([\d.]+).*Rows_examined:\s*(\d+)/.exec(lines[qi]);
+    if (!m) continue;
+    const sql = lines
+      .slice(qi + 1)
+      .filter((l) =&gt; !/^\s*(SET timestamp=\d+;|use \S+;)\s*$/i.test(l))
+      .join("\n");
+    const query = normalizeSql(sql);
+    if (!query) continue;
+    const g = groups.get(query) ?? { query, count: 0, total: 0, maxRowsExamined: 0 };
+    g.count++;
+    g.total += Number(m[1]);
+    g.maxRowsExamined = Math.max(g.maxRowsExamined, Number(m[2]));
+    groups.set(query, g);
+  }
+  return [...groups.values()]
+    .map(({ query, count, total, maxRowsExamined }) =&gt; ({ query, count, totalSeconds: Math.round(total * 1000) / 1000, maxRowsExamined }))
+    .sort((a, b) =&gt; b.totalSeconds - a.totalSeconds);
+}
+
+console.log(normalizeSql("SELECT * FROM t WHERE name = 'O''Brien'  AND id IN (1, 2.5)\n  LIMIT 10;"));</code></pre>
+<pre class="terminal">SELECT * FROM t WHERE name = ? AND id IN (?, ?) LIMIT ?</pre>
+<p>הנרמול הוא מה שהופך 3,000 שורות של "לקוח 3", "לקוח 17"… לשאילתה אחת עם <code>count: 3000</code> — ושם רואים מה באמת שווה אינדקס: לא השאילתה הכי איטית, אלא זו עם הכי הרבה זמן <em>בסך הכול</em>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>/'[^']*'/</code> בלי לטפל ב־<code>''</code> — ‏<code>'O''Brien'</code> נשבר לשניים, ונשארת שארית שהופכת כל שם לשאילתה "אחרת".</li><li>להחליף מספרים לפני מחרוזות — מספרים בתוך טקסט מוחלפים, וה־regex של המחרוזות כבר לא רואה את אותו טקסט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E100">
+    <h3>P25.5-E100 · ‏full table scan — מ־Node 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה רקורסיבית <code>walk(node)</code>: מערך ← על כל איבר; אובייקט ← בודקים אותו, ואז על כל ערך.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">typeof r.EXPLAIN === "string" ? JSON.parse(r.EXPLAIN) : r.EXPLAIN</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E100: full table scan — מ־Node
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+export async function fullScans(pool: Pool, sql: string, params: unknown[] = []) {
+  const [rows] = await pool.query&lt;RowDataPacket[]&gt;(`EXPLAIN FORMAT=JSON ${sql}`, params);
+  const raw = rows[0].EXPLAIN;
+  const plan = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const found: { table: string; rows: number }[] = [];
+  const seen = new Set&lt;string&gt;();
+  const walk = (node: unknown): void =&gt; {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (node === null || typeof node !== "object") return;
+    const o = node as Record&lt;string, unknown&gt;;
+    if (typeof o.table_name === "string" &amp;&amp; o.access_type === "ALL" &amp;&amp; !seen.has(o.table_name)) {
+      seen.add(o.table_name);
+      found.push({ table: o.table_name, rows: Number(o.rows_examined_per_scan) });
+    }
+    Object.values(o).forEach(walk);
+  };
+  walk(plan);
+  return found;
+}</code></pre>
+<p>בבדיקות integration: לעטוף את ה־pool כך שכל שאילתה עוברת גם דרך <code>fullScans</code>, ולהיכשל אם יש סריקה של טבלה שאמורה להיות גדולה. כך אינדקס חסר מתגלה ב־PR — לא בפרודקשן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש <code>"ALL"</code> כמחרוזת בכל ה־JSON — תופס גם טבלה בשם <code>ALL_ORDERS</code>, או ערכים אחרים.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-5.html"><small>חזרה</small>תרגול שיעור 5</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>
