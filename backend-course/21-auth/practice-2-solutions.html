@@ -41,6 +41,121 @@ console.log(Buffer.from(p, "base64url").toString()); // {"sub":7,"role":"user","
 
 </div></details>
   </div>
+<div class="ex" id="P21-E45">
+    <h3>P21-E45 · ‏session או JWT? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בסעיף 1 של השיעור: "יציאה / ביטול" ו"מה השרת בודק".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>JWT אי אפשר לבטל, אבל אפשר לקצר לו את החיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>session: מוחקים את הרשומה, והכרטיס מת מיד. ‏JWT: עובד עד ה־<code>exp</code>.</li><li>session: מיד (מוחקים את ה־sessions שלו). ‏JWT: רק כשהטוקן יפוג.</li><li>session: גישה לאותו מקום שבו שמורים ה־sessions (מסד או Redis משותף). ‏JWT: רק את הסוד.</li><li>session: שאילתה אחת לפחות בכל בקשה. ‏JWT: אפס.</li></ol>
+<p>הפרויקט: access token קצר (15 דקות, JWT, בלי מסד) ו־refresh token ארוך שנשמר במסד (אפשר לבטל, כמו session). כך מקבלים "בלי מסד ברוב הבקשות", וחלון של 15 דקות לכל היותר אחרי ביטול (שיעור 3).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"JWT יותר מאובטח מ־session". אף אחד לא מאובטח יותר. יש פשרות שונות: ביטול מיידי מול בדיקה בלי מסד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E46">
+    <h3>P21-E46 · ‏decode או verify? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>decode</code> רק מפענח Base64. מה הוא <strong>לא</strong> בודק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאל בכל קטע: האם השרת מחליט משהו על סמך נתונים שלא נבדקו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>א — פרצה. כל אחד יכול לכתוב payload עם <code>"role":"admin"</code>, ו־<code>decode</code> יקבל אותו (ראית את זה בשיעור).</li><li>ב — בטוח: <code>verifyAsync</code> בודק חתימה ותוקף, ורק אז משתמשים בתוכן.</li><li>ג — בסדר. זה הלקוח שקורא את הטוקן <strong>שלו</strong> בשביל תצוגה. אין כאן החלטת הרשאה, והשרת ממילא יבדוק.</li><li>ד — עובד, אבל מבולגן: בודקים תוקף לפני חתימה (טוקן מזויף מקבל תשובה של "פג"), ושני מקורות אמת. כאן זה לא פרצה כי <code>verifyAsync</code> נקרא לפני השימוש, אבל עדיף לקחת את ה־payload <strong>מ־verify</strong> (ש־exp כבר בתוכו).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"decode זה בסדר, כי ה־guard ממילא דורש טוקן". הוא דורש <em>מחרוזת</em>, וכל אחד יכול לייצר אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E47">
+    <h3>P21-E47 · מה מותר לשים ב־payload? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל מי שמחזיק את הטוקן קורא את ה־payload. וה־payload נשלח בכל בקשה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ומה קורה לערך בטוקן כשהערך במסד משתנה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>sub</code>, ‏<code>exp</code> — כן, זה העיקר.</li><li><code>role</code>, ‏<code>permissions</code> — מקובל: חוסך שאילתה. המחיר: שינוי הרשאה תופס רק כשהטוקן פג (סיבה לתוקף קצר).</li><li><code>email</code> — עדיף לא: מידע אישי שנחשף לכל מי שרואה את הטוקן (לוגים, proxy), ומשתנה.</li><li><code>passwordHash</code>, ‏<code>creditCardLast4</code> — לא. סודות או מידע רגיש בטקסט גלוי (Base64).</li><li><code>isBlocked</code> — חסר תועלת: אם הוא חסום, לא מנפיקים לו טוקן. וערך שהשתנה אחרי ההנפקה לא יתעדכן בטוקן.</li><li>רשימת משימות — לא. הטוקן נשלח בכל בקשה ויהיה ענק, והמידע מתיישן מיד.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהחתימה "מסתירה" את התוכן. החתימה מונעת <em>שינוי</em>, לא <em>קריאה</em>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E48">
+    <h3>P21-E48 · אילו headers עוברים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>\s+</code> — רווח אחד או יותר. ‏<code>\S+</code> — תווים שאינם רווח, לפחות אחד. ‏<code>^</code>/<code>$</code> — כל המחרוזת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Express לא עושה trim לערכים של headers שאתה בונה בבדיקה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const re = /^Bearer\s+(\S+)$/i;
+for (const h of ["Bearer abc.def.ghi", "bearer abc", "Bearer  abc", "Bearer abc def", "Bearerabc", "Basic abc", " Bearer abc", "BEARER abc.def", ""]) {
+  const m = re.exec(h);
+  console.log(JSON.stringify(h).padEnd(22), m ? m[1] : null);
+}</code></pre>
+<pre class="terminal">"Bearer abc.def.ghi"   abc.def.ghi
+"bearer abc"           abc
+"Bearer  abc"          abc
+"Bearer abc def"       null
+"Bearerabc"            null
+"Basic abc"            null
+" Bearer abc"          null
+"BEARER abc.def"       abc.def
+""                     null</pre>
+<p>הדגל <code>i</code> מקבל כל צורה של "Bearer" (התקן אומר שה־scheme לא תלוי באותיות). שני רווחים עוברים בזכות <code>\s+</code>. טוקן עם רווח בתוכו או רווח לפני "Bearer" נדחים בזכות <code>^</code> ו־<code>$</code>. ו־<code>?? ""</code>: בלי header, <code>req.get</code> מחזיר <code>undefined</code>, ו־<code>exec(undefined)</code> היה בודק את המחרוזת <code>"undefined"</code>. עם <code>""</code> פשוט אין התאמה ← 401.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>header.split(" ")[1]</code> — "עובד" על <code>"Basic abc"</code> ועל <code>"Bearer abc def"</code>, ומעביר הלאה טוקן לא נכון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E49">
+    <h3>P21-E49 · ‏"default deny" — מה קורה כשמישהו שוכח? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"שכחה צריכה להיכשל לכיוון הבטוח" (סעיף 4).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טעות שכולם רואים מיד מול טעות שאף אחד לא רואה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) צוות א׳: ה־route <strong>פתוח לכולם</strong>, ואף אחד לא ישים לב (הוא עובד!) עד שמישהו מבחוץ ימצא אותו. צוות ב׳: הוא מוגן אוטומטית.</li><li>(ב) אף אחד לא יכול להתחבר (401 בכניסה). הבדיקה הראשונה, או המשתמש הראשון, יגלו את זה תוך דקות.</li><li>(ג) הטעות של צוות ב׳. היא "רועשת" ונתפסת מיד, ולא חושפת מידע. הטעות של צוות א׳ שקטה ומסוכנת. זה default deny: מה שלא הותר במפורש — אסור.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־code review יתפוס כל שכחה. הוא לא. ברירת מחדל בטוחה תופסת גם את מה שהעין פספסה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P21-E09">
     <h3>P21-E09 · כניסה ו־JWT 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -600,6 +715,116 @@ for (const [t, now] of [[token, 1793873700], [token.slice(0, -2) + "xx", 1793872
 
 </div></details>
   </div>
+<div class="ex" id="P21-E50">
+    <h3>P21-E50 · ‏jwtInfo — לקרוא טוקן בשביל תצוגה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Buffer.from(part, "base64url").toString("utf8")</code> ואז <code>JSON.parse</code>, בתוך <code>try</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Math.max(0, payload.exp - nowSec)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E50: jwtInfo — רק לתצוגה. לא להחלטות הרשאה!
+export type JwtInfo = { alg: string; sub: number; role: string; secondsLeft: number; expired: boolean };
+
+const fromB64 = (part: string) =&gt; JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+
+export function jwtInfo(token: string, nowSec: number): JwtInfo {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("טוקן לא תקין");
+  let header: { alg: string };
+  let payload: { sub: number; role: string; exp: number };
+  try {
+    header = fromB64(parts[0]);
+    payload = fromB64(parts[1]);
+  } catch {
+    throw new Error("טוקן לא תקין");
+  }
+  return {
+    alg: header.alg,
+    sub: payload.sub,
+    role: payload.role,
+    secondsLeft: Math.max(0, payload.exp - nowSec),
+    expired: nowSec &gt;= payload.exp,
+  };
+}</code></pre>
+<p>שים לב למה שאין כאן: סוד. כל מי שמחזיק את הטוקן יכול להריץ את הפונקציה הזו. לכן היא מתאימה לתצוגה בצד הלקוח, ולעולם לא ל־guard (E46).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>"base64"</code> במקום <code>"base64url"</code> — לרוב עובד, ונכשל דווקא על payload עם <code>-</code> או <code>_</code>.</li><li><code>nowSec &gt; exp</code> — בשנייה של ה־<code>exp</code> עצמו הטוקן כבר לא תקף (ראית בשיעור: 900 ← <code>TokenExpiredError</code>).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P21-E51">
+    <h3>P21-E51 · שניות או מילישניות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Date.now()</code> הוא בערך 1,793,000,000,000. ה־<code>exp</code> קטן ממנו פי אלף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>new Date(n)</code> מצפה למילישניות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const exp = 1793873700;
+console.log(exp &lt; Date.now(), new Date(exp).toISOString(), new Date(exp * 1000).toISOString());</code></pre>
+<pre class="terminal">true 1970-01-21T18:17:53.700Z 2026-11-05T10:15:00.000Z</pre>
+<ul><li>א — <code>exp</code> בשניות תמיד קטן מ־<code>Date.now()</code> במילישניות. כל טוקן "פג", תמיד. (וההפך, <code class="mid">exp * 1000 &lt; Date.now() / 1000</code>, היה נותן טוקן שלא פג אף פעם. זה גרוע יותר, כי אף אחד לא שם לב.)</li><li>ב — ‏1970, שלושה שבועות אחרי ראשית הספירה.</li></ul>
+<p>הכלל: ב־JWT הכול בשניות (<code class="mid">Math.floor(Date.now() / 1000)</code>). וב־JavaScript, ‏<code>Date</code> במילישניות. כשממירים, כופלים או מחלקים ב־1000, פעם אחת, במקום אחד (ה־CLOCK).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "ידנית" אחרי <code>verify</code>. ‏<code>verify</code> כבר בודק <code>exp</code> נכון. בדיקה ידנית נוספת רק מוסיפה מקום לטעות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E52">
+    <h3>P21-E52 · ‏get או getAllAndOverride? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>על איזה "מקום" שמור ה־metadata של <code>@Public()</code> כשהוא על ה־class?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>getAllAndOverride</code> בודק את הרשימה לפי הסדר, ומחזיר את הערך הראשון שאינו <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<table><tr><th>route</th><th>‏<code>get</code> על המתודה בלבד</th><th>‏<code>getAllAndOverride</code></th></tr><tr><td><code>GET /health</code></td><td>401 (ה־metadata על ה־class, לא נמצא)</td><td>פתוח</td></tr><tr><td><code>POST /auth/login</code></td><td>פתוח</td><td>פתוח</td></tr><tr><td><code>GET /auth/me</code></td><td>401</td><td>401</td></tr></table>
+<p>הבאג "בטוח" (default deny: משהו נסגר, לא נפתח), אבל <code>/health</code> שמחזיר 401 שובר את בדיקת הבריאות של השרת (פרק 25), והשרת "נראה מת". ‏<code>getAllAndOverride</code> מאפשר <code>@Public()</code> גם על class וגם על מתודה, והמתודה גוברת (בגלל הסדר).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>getAllAndMerge</code> — מחזיר מערך של כל הערכים. מתאים לרשימות (roles משני המקומות), לא לדגל אחד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E53">
+    <h3>P21-E53 · שלושה שרתים, משתמש אחד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הבקשה השנייה של המשתמש מגיעה לשרת אחר מהראשונה. מה השרת הזה יודע עליו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טוקן שנחתם בסוד A לא עובר <code>verify</code> עם סוד B.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) "מתנתק" באקראי: רק שרת אחד מכיר את ה־session. בערך שתי בקשות מכל שלוש יקבלו 401.</li><li>(ב) רק את אותו <code>JWT_SECRET</code>. אין צורך במצב משותף, וזה היתרון הגדול של JWT בכמה שרתים.</li><li>(ג) כל בקשה שמגיעה לשרת 3 מקבלת 401 INVALID_TOKEN, וכל כניסה דרכו מנפיקה טוקן שהשניים האחרים דוחים. נראה כמו באג אקראי. לכן הסוד מגיע מהגדרות הפריסה, אחיד לכל השרתים, ו־<code>loadConfig</code> בודק אותו בעלייה.</li><li>(ד) עובד: כל השרתים שואלים את אותו Redis. המחיר הוא שאילתה (מהירה) בכל בקשה, ונקודת תלות אחת.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"sticky sessions" (משתמש תמיד לאותו שרת) — פתרון שבור: כשהשרת נופל או מתחלף בפריסה, כל המשתמשים שלו מתנתקים.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P21-E27">
     <h3>P21-E27 · פירוק header של Authorization 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -652,7 +877,135 @@ null null null</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P21-E54">
+    <h3>P21-E54 · ‏guard שמקבל Bearer או cookie 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פירוק ה־cookie: <code>split(";")</code>, ‏<code>trim</code>, ואז <code>indexOf("=")</code> ו־<code>slice</code> (כמו בפרק 14).</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const header = req.get("authorization");</code> ‏— <code>undefined</code> רק אם אין header בכלל. ‏<code class="mid">if (header !== undefined) { ... } else { ... }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E54: guard שמקבל Bearer או cookie
+import { CanActivate, Controller, ExecutionContext, Get, Injectable, Module, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { JwtModule, JwtService } from "@nestjs/jwt";
+
+export const SECRET = "p21-e54-secret-at-least-32-chars!!";
+
+function readCookie(header: string | undefined, name: string): string | undefined {
+  for (const part of (header ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i !== -1 &amp;&amp; part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return undefined;
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly jwt: JwtService) {}
+
+  async canActivate(context: ExecutionContext): Promise&lt;boolean&gt; {
+    const req = context.switchToHttp().getRequest();
+    const header: string | undefined = req.get("authorization");
+    let token: string | undefined;
+    if (header !== undefined) {
+      token = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
+    } else {
+      token = readCookie(req.get("cookie"), "access_token");
+    }
+    if (!token) throw new UnauthorizedException("נדרשת התחברות");
+    try {
+      const payload = await this.jwt.verifyAsync(token);
+      req.user = { id: payload.sub, role: payload.role };
+      return true;
+    } catch {
+      throw new UnauthorizedException("טוקן לא תקין");
+    }
+  }
+}
+
+@Controller()
+export class MeController {
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  me(@Req() req: any) {
+    return req.user;
+  }
+
+  @Get("hello")
+  hello() {
+    return { hello: "world" };
+  }
+}
+
+@Module({
+  imports: [JwtModule.register({ secret: SECRET })],
+  controllers: [MeController],
+  providers: [JwtAuthGuard],
+})
+export class AppModule {}</code></pre>
+<p>למה לא "נופלים" ל־cookie כשה־header שבור? כי זה מסתיר באגים בלקוח, ובאבטחה כלל טוב הוא: מקור אחד ברור לכל בקשה. ו־cookie בדפדפן מביא איתו את CSRF (הדפדפן שולח אותו לבד), לכן במוצר אמיתי מוסיפים <code>SameSite</code> (שיעור 3).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>cookie.split("=")</code> — טוקן שיש בו <code>=</code> (ריפוד של base64) נחתך.</li><li>לחפש <code>includes("access_token")</code> — גם <code>my_access_token=...</code> "מתאים".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E55">
+    <h3>P21-E55 · לקוח API שמוסיף את הטוקן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const headers: Record&lt;string, string&gt; = {};</code>, ואז מוסיפים לפי הצורך.</p>
+<pre><code class="lang-ts">fetch(baseUrl + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בשגיאה: <code class="mid">const text = await res.text();</code> ואז <code>JSON.parse</code> בתוך <code>try</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E55: לקוח API שמוסיף Authorization לכל בקשה
+export class ApiError extends Error {
+  status: number;
+  code: string | undefined;
+  constructor(status: number, message: string, code: string | undefined) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function createApiClient(baseUrl: string, getToken: () =&gt; string | null) {
+  return {
+    async request(method: string, path: string, body?: unknown): Promise&lt;unknown&gt; {
+      const headers: Record&lt;string, string&gt; = {};
+      const token = getToken();
+      if (token !== null) headers.authorization = `Bearer ${token}`;
+      if (body !== undefined) headers["content-type"] = "application/json";
+      const res = await fetch(baseUrl + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      if (res.status === 204) return null;
+      const text = await res.text();
+      if (res.ok) return JSON.parse(text);
+      let data: { code?: string; message?: string } = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+      throw new ApiError(res.status, data.message ?? `HTTP ${res.status}`, data.code);
+    },
+  };
+}</code></pre>
+<p>בזכות <code>getToken</code> (פונקציה, לא ערך), הלקוח תמיד שולח את הטוקן העדכני. זה הבסיס ל־E71 (שיעור 3), שבו הלקוח מרענן טוקן לבד כשמקבל 401.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקבל את הטוקן כמחרוזת ב־<code>createApiClient</code>. אחרי refresh הלקוח ממשיך לשלוח את הישן.</li><li><code>await res.json()</code> על 204 — זורק (אין גוף).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-refresh.html"><small>הבא</small>שיעור 3 — refresh tokens ויציאה</a></div>
 </main>
 </body>

@@ -37,6 +37,107 @@
 
 </div></details>
   </div>
+<div class="ex" id="P21-E56">
+    <h3>P21-E56 · גנבו את טבלת refresh_tokens <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה צריך לשלוח ל־<code>POST /auth/refresh</code>: את הטוקן, או את ה־hash שלו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כמה ניחושים צריך כדי למצוא מחרוזת אקראית של 256 ביט? ואיך מחפשים שורה לפי bcrypt?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) כמעט כלום. השרת מצפה לטוקן, ומחשב ממנו SHA-256. מה־hash אי אפשר לחזור לטוקן. הוא כן לומד מי משתמש פעיל ומתי.</li><li>(ב) הוא שולח כל טוקן פעיל ל־<code>/auth/refresh</code> ומקבל access token, כלומר נכנס לכל החשבונות שעוד לא פגו.</li><li>(ג) לסיסמאות יש "רשימה" לנחש ממנה (סיסמאות נפוצות). לטוקן אקראי של 32 בתים אין: ‏2<sup>256</sup> אפשרויות, גם במיליארד ניחושים בשנייה.</li><li>(ד) bcrypt נותן hash שונה בכל פעם (salt), אז אי אפשר <code>WHERE token_hash = ?</code>. היינו צריכים לעבור על כל השורות ולהריץ <code>compare</code> על כל אחת. ובלי שום תועלת, כי אין מה לנחש.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"hash זה hash". השאלה היא תמיד כמה קשה לנחש את המקור. סיסמה של אדם: קל. 256 ביט אקראיים: בלתי אפשרי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E57">
+    <h3>P21-E57 · ‏rotation: מי נתקע? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שורה 1 מבטלת את <code>R1</code> ומנפיקה <code>R2</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טוקן שכבר בוטל וחוזר ← <code>revokeAllForUser</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>200, זוג חדש עם <code>R2</code>. ‏<code>R1</code> מבוטל, <code>R2</code> פעיל.</li><li>401. ‏<code>R1</code> כבר מבוטל, אז זה "שימוש חוזר": השרת מבטל את <strong>כל</strong> הטוקנים של דנה, כולל <code>R2</code>.</li><li>401: גם <code>R2</code> בוטל. דנה צריכה להתחבר.</li><li>200, ‏<code>R3</code> חדש. התוקף לא מחזיק שום דבר שעובד (רק access token שיפוג תוך 15 דקות).</li></ol>
+<p>אם התוקף ראשון: הוא מקבל <code>R2</code>, והדפדפן של דנה שולח <code>R1</code> ומפעיל את זיהוי השימוש החוזר. גם <code>R2</code> של התוקף מבוטל. בשני הסדרים הגניבה נעצרת. המחיר: דנה מתחברת שוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שזיהוי שימוש חוזר "יודע" מי התוקף. הוא לא יודע. הוא רק יודע שיש שני עותקים, ומבטל את כולם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E58">
+    <h3>P21-E58 · שתי לשוניות מרעננות יחד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הבקשה השנייה מגיעה עם טוקן שהראשונה כבר ביטלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בלקוח: רק לשונית אחת מרעננת, והאחרות מחכות לה (E62 עושה את זה בתוך לשונית אחת).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) הראשונה מצליחה ומבטלת את הטוקן. השנייה מגיעה עם טוקן מבוטל ← "שימוש חוזר" ← כל הטוקנים של דנה מבוטלים.</li><li>(ב) היא "מתנתקת" בלי סיבה. מבחינת השרת זה נראה בדיוק כמו גניבה.</li><li>(ג) לקוח: refresh אחד בכל פעם (single-flight). בתוך לשונית: Promise משותף (E62). בין לשוניות: נעילה (למשל Web Locks) או לשונית "מובילה". שרת: חלון חסד, כלומר טוקן שבוטל לפני פחות מ־10 שניות מחזיר שוב את אותו זוג חדש במקום להפעיל אזעקה. המחיר: מי שגנב טוקן ומשתמש בו בתוך החלון לא נתפס, והקוד מסובך יותר.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבטל את זיהוי השימוש החוזר "כי הוא מנתק משתמשים". זה מחזיר את הבעיה שבגללה הוא קיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E59">
+    <h3>P21-E59 · איפה לשמור את הטוקן? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בסעיף 5: מה XSS יכול לקרוא, ומה נשאר אחרי רענון ואחרי סגירה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ל־CLI אין דפדפן בכלל.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>cookie עם <code class="mid">HttpOnly; Secure; SameSite=Strict</code> ובלי <code>Max-Age</code>, כלומר cookie של "session" שנמחק כשהדפדפן נסגר. JavaScript לא רואה אותו.</li><li>cookie עם <code>HttpOnly</code> ו־<code>Max-Age</code> של שבוע, מוגבל ל־<code>Path=/auth</code>. ‏<code>localStorage</code> היה עובד, אבל כל XSS קורא אותו.</li><li><code>sessionStorage</code>: פשוט וברור להדגמה, ונמחק כשסוגרים את הלשונית. ה־access token בזיכרון.</li><li>קובץ בתיקיית הבית עם הרשאות <code>600</code> (רק המשתמש קורא, פרק 23), או ה־keychain של מערכת ההפעלה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"cookie עם HttpOnly פותר הכול". XSS עדיין יכול <em>לשלוח</em> בקשות בשם המשתמש מתוך הדף. הוא רק לא יכול לגנוב את הטוקן ולקחת אותו איתו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E60">
+    <h3>P21-E60 · יציאה — ומה עם ה־access token? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>access token נבדק בלי מסד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"ואם חייבים גם מיידיות" (סעיף 4).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) 200. הטוקן תקף עד 10:10 (‏15 דקות מ־09:55). ה־logout ביטל רק את ה־refresh token.</li><li>(ב) את כל ה־refresh tokens של דנה (בכל המכשירים). אחרת מי שמחזיק אחד מהם ממשיך לקבל access tokens חדשים, גם בלי לדעת את הסיסמה (E17).</li><li>(ג) ביטול מיידי: מעלים את הגרסה ב־1, וכל טוקן ישן נדחה מיד. המחיר: שאילתה למסד (או ל־cache) <strong>בכל בקשה</strong>, וזה בדיוק מה שחסכנו עם JWT. לרוב עושים את זה רק כשבאמת צריך (E63).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נמחק את הטוקן מה־localStorage וזהו". זה מוחק את העותק <em>שלך</em>, לא את העותק שנגנב.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P21-E15">
     <h3>P21-E15 · refresh token אטום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -306,6 +407,226 @@ export class RefreshTokenService {
 
 </div></details>
   </div>
+<div class="ex" id="P21-E61">
+    <h3>P21-E61 · טוקן אטום ו־hash שלו 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">randomBytes(32).toString("base64url")</code> ו־<code class="mid">createHash("sha256").update(token).digest("hex")</code>, מ־<code>node:crypto</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>newRefreshToken</code> השתמש ב־<code>hashToken</code> שכבר כתבת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E61: refresh token אטום, ו־hash שנשמר במסד
+import { createHash, randomBytes } from "node:crypto";
+
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export function newRefreshToken(): { token: string; hash: string } {
+  const token = randomBytes(32).toString("base64url");
+  return { token, hash: hashToken(token) };
+}</code></pre>
+<p>את <code>token</code> שולחים ללקוח פעם אחת, ואת <code>hash</code> שומרים במסד. בכל refresh מחשבים <code>hashToken(fromClient)</code> ומחפשים לפיו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> — לא מתאים לסודות: צפוי, ובערך 50 ביט בלבד.</li><li><code>"base64"</code> — עם <code>+</code> ו־<code>/</code> ו־<code>=</code>, שצריך לקודד ב־URL וב־cookie.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E62">
+    <h3>P21-E62 · ‏refresh אחד בכל פעם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>משתנה <code class="mid">let inFlight: Promise&lt;string&gt; | null = null;</code> בתוך הסגור (closure, פרק 5).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">inFlight = doRefresh().finally(() =&gt; { inFlight = null; });</code> ‏— <code>finally</code> רץ גם בהצלחה וגם בכשל, ומעביר את התוצאה או השגיאה הלאה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E62: single-flight — refresh אחד בכל פעם
+export function createRefresher(doRefresh: () =&gt; Promise&lt;string&gt;): () =&gt; Promise&lt;string&gt; {
+  let inFlight: Promise&lt;string&gt; | null = null;
+  return () =&gt; {
+    if (inFlight === null) {
+      inFlight = doRefresh().finally(() =&gt; {
+        inFlight = null;
+      });
+    }
+    return inFlight;
+  };
+}</code></pre>
+<p>הדפוס נקרא single-flight: בקשות זהות שמגיעות יחד חולקות עבודה אחת. תפגוש אותו שוב ב־cache (פרק 26), כשאלף בקשות מבקשות את אותו מפתח שפג.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לאפס את <code>inFlight</code> רק ב־<code>then</code>. אחרי כשל אחד, כל הקריאות הבאות מקבלות לנצח את אותה שגיאה.</li><li>לשמור את <strong>התוצאה</strong> ולא את ה־Promise. בזמן שה־refresh רץ, אין עדיין תוצאה, וכל קריאה מתחילה refresh משלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E63">
+    <h3>P21-E63 · ‏tokenVersion — "צא מכל המכשירים" מיד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">await this.jwt.verifyAsync(token, { clockTimestamp: this.now() })</code></pre>
+<p>בתוך <code>try</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const current = this.versions.get(payload.sub) ?? 0;</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E63: tokenVersion — ביטול מיידי של כל ה־access tokens של משתמש
+import { JwtService } from "@nestjs/jwt";
+
+export class AccessTokens {
+  private readonly jwt: JwtService;
+  private readonly now: () =&gt; number;
+  private readonly versions = new Map&lt;number, number&gt;();
+
+  constructor(secret: string, now: () =&gt; number) {
+    this.jwt = new JwtService({ secret });
+    this.now = now;
+  }
+
+  issue(userId: number): Promise&lt;string&gt; {
+    const ver = this.versions.get(userId) ?? 0;
+    return this.jwt.signAsync({ sub: userId, ver, iat: this.now() }, { expiresIn: 900 });
+  }
+
+  async verify(token: string): Promise&lt;{ id: number }&gt; {
+    let payload: { sub: number; ver: number };
+    try {
+      payload = await this.jwt.verifyAsync(token, { clockTimestamp: this.now() });
+    } catch {
+      throw new Error("טוקן לא תקין");
+    }
+    if (payload.ver !== (this.versions.get(payload.sub) ?? 0)) throw new Error("טוקן לא תקין");
+    return { id: payload.sub };
+  }
+
+  logoutEverywhere(userId: number): void {
+    this.versions.set(userId, (this.versions.get(userId) ?? 0) + 1);
+  }
+}</code></pre>
+<p>ה־<code>Map</code> כאן עומד במקום עמודה <code>token_version</code> בטבלת users. ב־guard אמיתי זו שאילתה בכל בקשה, ולכן שמים את הגרסה ב־cache (פרק 26). ותשים לב: השינוי הוא מספר אחד, לא "רשימה של טוקנים שבוטלו" (E28).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק את הגרסה <strong>לפני</strong> <code>verifyAsync</code>, מתוך <code>decode</code>. הסדר תמיד: קודם חתימה.</li><li><code>if (!payload.ver)</code> — גרסה 0 היא falsy.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E64">
+    <h3>P21-E64 · ‏cookie ל־refresh token 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">[`refresh_token=${token}`, `Max-Age=${maxAgeSec}`, "Path=/auth", "HttpOnly", "Secure", "SameSite=Strict"].join("; ")</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פירוק: <code>split(";")</code>, ‏<code>trim()</code>, ואז <code>indexOf("=")</code> ו־<code>slice</code>. רק השם המדויק <code>refresh_token</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E64: refresh token ב־cookie
+const ATTRS = ["Path=/auth", "HttpOnly", "Secure", "SameSite=Strict"];
+
+export function refreshCookie(token: string, maxAgeSec: number): string {
+  return [`refresh_token=${token}`, `Max-Age=${maxAgeSec}`, ...ATTRS].join("; ");
+}
+
+export function clearRefreshCookie(): string {
+  return refreshCookie("", 0);
+}
+
+export function readRefreshCookie(cookieHeader: string | undefined): string | null {
+  for (const part of (cookieHeader ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i === -1) continue;
+    if (part.slice(0, i).trim() === "refresh_token") return part.slice(i + 1).trim() || null;
+  }
+  return null;
+}</code></pre>
+<ul><li><code>HttpOnly</code> — JavaScript בדף לא רואה את ה־cookie, אז XSS לא יכול לגנוב אותו.</li><li><code>Secure</code> — רק ב־HTTPS.</li><li><code>SameSite=Strict</code> — הדפדפן לא שולח אותו בבקשה שמתחילה באתר אחר (הגנה מ־CSRF).</li><li><code>Path=/auth</code> — נשלח רק לנתיבים של <code>/auth</code>, לא בכל <code>GET /tasks</code>.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>Path</code> גם במחיקה. cookie עם Path אחר הוא cookie <em>אחר</em>, והמקורי נשאר.</li><li><code>Expires</code> עם תאריך מחושב ביד — <code>Max-Age</code> פשוט יותר ולא תלוי בשעון של הלקוח.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P21-E65">
+    <h3>P21-E65 · ‏UPDATE עם תנאי, או SELECT ואז UPDATE? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בגרסה א: שתי ה־SELECT קורות לפני ששתי ה־UPDATE מגיעות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־UPDATE, ‏PostgreSQL נועל את השורה. השנייה מחכה, ואז בודקת שוב את ה־WHERE על הגרסה החדשה של השורה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) שתיהן קוראות <code>revoked_at = null</code>, שתיהן מבטלות, ושתיהן מנפיקות זוג חדש. יש שני refresh tokens פעילים מטוקן אחד, וזיהוי השימוש החוזר לא הופעל.</li><li>(ב) הראשונה נועלת את השורה ומעדכנת. השנייה מחכה לנעילה, ואחרי ה־commit של הראשונה בודקת שוב את <code>revoked_at IS NULL</code>. זה כבר לא נכון, אז <code>rowCount = 0</code> ← 401. הבדיקה והשינוי באותה פקודה, בלי חלון ביניהם.</li><li>(ג) עם <code>updateMany</code>, ובודקים <code>count === 1</code> (הקוד למטה). ‏<code>update</code> רגיל לא מתאים, כי הוא מחייב <code>where</code> ייחודי ולא מחזיר "כמה שורות".</li></ul>
+<pre><code class="lang-ts">const { count } = await prisma.refreshToken.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: now } });</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נעטוף את גרסה א ב־transaction". ב־READ COMMITTED שתיהן עדיין קוראות null. צריך <code>SELECT ... FOR UPDATE</code>, או פשוט גרסה ב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E66">
+    <h3>P21-E66 · ‏XSS: איך גונבים טוקן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הדפדפן מפרש את המחרוזת כ־HTML. לתמונה עם <code>src=x</code> יש שגיאת טעינה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>HttpOnly</code> מונע <em>לקרוא</em> את ה־cookie, לא לשלוח בקשות מהדף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) ה־<code>img</code> נכשל בטעינה, ‏<code>onerror</code> רץ כקוד בתוך הדף של דנה, עם כל ההרשאות של הדף.</li><li>(ב) את ה־refresh token. הוא שווה עד 7 ימים, וממנו מקבלים access tokens כמה שרוצים (עד שזיהוי השימוש החוזר יתפוס, כשדנה תרענן).</li><li>(ג) הוא לא יכול לקרוא את הטוקן ולקחת אותו. אבל כל עוד הדף פתוח, הקוד שלו יכול לשלוח בקשות בשם דנה (ה־cookie נשלח לבד). הנזק קטן יותר, אבל לא אפס.</li><li>(ד) <code class="mid">li.textContent = task.title</code>. אז הכותרת היא טקסט, לא HTML. ההגנה הטובה ביותר מגניבת טוקנים היא לא לאפשר XSS מלכתחילה.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לסנן &lt;script&gt;". יש עשרות דרכים להריץ קוד בלי <code>&lt;script&gt;</code> (כמו <code>onerror</code> כאן).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E67">
+    <h3>P21-E67 · טבלה שרק גדלה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏4 בשעה × 10 שעות × 20,000.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טוקן מבוטל שימושי עוד זמן מה: אם הוא חוזר, זה שימוש חוזר. בלי השורה השרת לא יודע לזהות אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) ‏4 × 10 × 20,000 = ‏800,000 שורות ביום.</li><li>(ב) כ־290 מיליון שורות בשנה. החיפוש לפי <code>token_hash</code> עדיין מהיר (אינדקס, ‏<code>log n</code>), אבל הטבלה והאינדקסים תופסים עשרות GB, הגיבויים איטיים, ו־<code>revokeAllForUser</code> סורק יותר.</li><li>(ג) ‏<code>@unique</code> על <code>token_hash</code>: החיפוש בכל refresh, וגם מבטיח שאין כפילות. ‏<code>@@index([userId])</code>: ל־<code>revokeAllForUser</code>, ולמחיקה ב־CASCADE כשמוחקים משתמש.</li><li>(ד) מוחקים רק מה שכבר לא יכול לשמש לכלום:</li></ul>
+<pre><code class="lang-sql">DELETE FROM refresh_tokens WHERE expires_at &lt; now() - interval '1 day';</code></pre>
+<p>טוקן שבוטל אבל עוד לא פג חייב להישאר. אם הוא חוזר, זה סימן לגניבה (שימוש חוזר). אם מוחקים אותו, השרת יענה "טוקן לא מוכר" ולא יבטל את המשפחה. אחרי שהוא פג, אין בו סכנה. מריצים את הניקוי פעם ביום (cron, פרק 26).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">DELETE ... WHERE revoked_at IS NOT NULL</code> — מוחק בדיוק את מה שזיהוי השימוש החוזר צריך.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex typed" id="P21-E28">
     <h3>P21-E28 · רשימת חסימה לטוקנים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -374,7 +695,114 @@ false 1 1</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P21-E68">
+    <h3>P21-E68 · ‏refresh_tokens ב־PostgreSQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>INSERT ... RETURNING id</code>. ב־<code>findByHash</code>:</p>
+<pre><code class="lang-sql">SELECT id, user_id AS "userId", expires_at AS "expiresAt", revoked_at AS "revokedAt"</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const { rowCount } = await db.query("UPDATE ...", [now, id]); return rowCount === 1;</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E68: repository של refresh tokens על PostgreSQL
+type Db = { query(text: string, params?: unknown[]): Promise&lt;any&gt; };
+
+export async function insertToken(db: Db, userId: number, tokenHash: string, expiresAt: Date): Promise&lt;number&gt; {
+  const { rows } = await db.query(
+    "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3) RETURNING id",
+    [userId, tokenHash, expiresAt],
+  );
+  return rows[0].id;
+}
+
+export async function findByHash(db: Db, tokenHash: string) {
+  const { rows } = await db.query(
+    `SELECT id, user_id AS "userId", expires_at AS "expiresAt", revoked_at AS "revokedAt"
+       FROM refresh_tokens WHERE token_hash = $1`,
+    [tokenHash],
+  );
+  return rows[0] as { id: number; userId: number; expiresAt: Date; revokedAt: Date | null } | undefined;
+}
+
+export async function revoke(db: Db, id: number, now: Date): Promise&lt;boolean&gt; {
+  const { rowCount } = await db.query("UPDATE refresh_tokens SET revoked_at = $1 WHERE id = $2 AND revoked_at IS NULL", [now, id]);
+  return rowCount === 1;
+}
+
+export async function revokeAllForUser(db: Db, userId: number, now: Date): Promise&lt;number&gt; {
+  const { rowCount } = await db.query("UPDATE refresh_tokens SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL", [now, userId]);
+  return rowCount;
+}</code></pre>
+<p>זה בדיוק מה ש־<code class="mid">RefreshTokensPrismaRepository</code> של הפרויקט עושה, רק ב־SQL: ‏<code>updateMany</code> עם <code>revokedAt: null</code> ו־<code>count</code> הוא אותו <code class="mid">UPDATE ... WHERE ... AND revoked_at IS NULL</code> ואותו <code>rowCount</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SELECT</code> ואז <code>UPDATE</code> — בבודק, כמה מהעשר יקבלו <code>true</code>.</li><li>לשכוח <code>AS "userId"</code> — העמודה חוזרת כ־<code>user_id</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E69">
+    <h3>P21-E69 · ‏fetch שמרענן לבד על 401 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציה פנימית <code>send(path, init, tokens)</code> שבונה headers ושולחת. ופונקציה <code>refreshOnce()</code> עם <code>let inFlight</code>, כמו ב־E62.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>refreshOnce</code> מחזירים <code>Promise&lt;Tokens | null&gt;</code>: ‏<code>null</code> אם נכשל. ככה כל מי שחיכה יודע אם לנסות שוב.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E69: fetch שמוסיף טוקן, ומרענן לבד (פעם אחת) על 401
+export type Tokens = { accessToken: string; refreshToken: string };
+export type TokenStore = { get(): Tokens | null; set(tokens: Tokens | null): void };
+
+export function createAuthedFetch(baseUrl: string, store: TokenStore) {
+  let inFlight: Promise&lt;Tokens | null&gt; | null = null;
+
+  function send(path: string, init: RequestInit, tokens: Tokens | null): Promise&lt;Response&gt; {
+    const headers: Record&lt;string, string&gt; = { ...(init.headers as Record&lt;string, string&gt; | undefined) };
+    if (tokens) headers.authorization = `Bearer ${tokens.accessToken}`;
+    return fetch(baseUrl + path, { ...init, headers });
+  }
+
+  function refreshOnce(refreshToken: string): Promise&lt;Tokens | null&gt; {
+    inFlight ??= (async () =&gt; {
+      const res = await fetch(baseUrl + "/auth/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const next: Tokens | null = res.status === 200 ? await res.json() : null;
+      store.set(next);
+      return next;
+    })().finally(() =&gt; {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+
+  return async (path: string, init: RequestInit = {}): Promise&lt;Response&gt; =&gt; {
+    const tokens = store.get();
+    const res = await send(path, init, tokens);
+    if (res.status !== 401 || !tokens || path === "/auth/refresh") return res;
+    const next = await refreshOnce(tokens.refreshToken);
+    if (!next) return res;
+    return send(path, init, next);
+  };
+}</code></pre>
+<p>שלושה דברים שמונעים באגים קשים: ניסיון חוזר <strong>אחד</strong> (בלי לולאה אינסופית), refresh <strong>אחד</strong> לכל הבקשות (בלי להפעיל זיהוי שימוש חוזר על עצמך), ו־<code>store.set(null)</code> בכישלון (הדף עובר למסך הכניסה).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code class="mid">refreshOnce(store.get().refreshToken)</code> מחדש בכל בקשה שחיכתה. אחרי שהראשונה הצליחה, ב־store כבר יש טוקן חדש, והשנייה מרעננת שוב ושורפת אותו.</li><li><code>headers: init.headers</code> בלי להעתיק — דורס את <code>Authorization</code>, או משנה את האובייקט של מי שקרא.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-authorization.html"><small>הבא</small>שיעור 4 — הרשאות, בעלות ו־OWASP</a></div>
 </main>
 </body>

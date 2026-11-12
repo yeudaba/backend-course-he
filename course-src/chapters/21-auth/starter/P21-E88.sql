@@ -1,0 +1,6 @@
+-- P21-E88: migration בשלושה שלבים (expand, backfill, contract)
+-- לפני: users (id, email) ו־tasks (id, title) עם נתונים. ביניהם המשתמש legacy@tasks.example
+-- אחרי: tasks.owner_id int NOT NULL, REFERENCES users(id) ON DELETE CASCADE,
+--       כל המשימות הקיימות של legacy@tasks.example (חפש לפי אימייל), ואינדקס על tasks (owner_id)
+--
+-- בדיקה:  npm run check P21-E88

@@ -13,8 +13,587 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>21-auth/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P21-E82">
+    <h3>P21-E82 · ‏migration על טבלה מלאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הערך של <code>owner_id</code> בשורות שכבר קיימות?</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Prisma עצמו כותב אזהרה בראש הקובץ שנוצר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) נכשל: לשורות הקיימות אין ערך ל־<code>owner_id</code>, ו־<code>NOT NULL</code> לא מאפשר <code>NULL</code>. PostgreSQL מסרב, וה־migration לא מוחל (‏<code class="mid">column "owner_id" of relation "tasks" contains null values</code>).</li><li>(ב) בפיתוח הנתונים מזויפים: ה־seed יוצר אותם מחדש. אין מה לשמור.</li><li>(ג) כדי לקרוא את ה־SQL ולתקן אותו <strong>לפני</strong> שהוא רץ. ‏<code>migrate dev</code> מריץ מיד.</li><li>(ד) כל המשימות הקיימות שייכות פתאום למשתמש 1, בלי שאף אחד החליט את זה. אולי משתמש 1 בכלל לא קיים (FK נכשל), ואם קיים, הוא רואה משימות של אחרים. ו־<code>DEFAULT</code> שנשאר בעמודה ממשיך לחלק משימות חדשות למשתמש 1 אם קוד שוכח <code>ownerId</code>.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להריץ <code>prisma migrate reset</code> "כדי שיעבוד". בפיתוח זה בסדר, אבל זה בדיוק ההרגל שמוחק נתונים של לקוחות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E83">
+    <h3>P21-E83 · ‏expand, backfill, contract <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלב 1 לא שובר שום קוד קיים. שלב 3 מחייב שכבר אין שורות עם <code>NULL</code>, וגם שלא ייווצרו חדשות כאלה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>UPDATE</code> על 2 מיליון שורות נועל אותן לזמן ארוך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- 1. expand
+ALTER TABLE tasks ADD COLUMN owner_id int REFERENCES users(id) ON DELETE CASCADE;
+-- 2. backfill (אחרי שהקוד החדש כבר כותב owner_id)
+UPDATE tasks SET owner_id = (SELECT id FROM users WHERE email = 'legacy@tasks.example') WHERE owner_id IS NULL;
+-- 3. contract
+ALTER TABLE tasks ALTER COLUMN owner_id SET NOT NULL;</code></pre>
+<ul><li>(ב) לפני ה־backfill. אחרת, בזמן ה־backfill, הקוד הישן ממשיך ליצור משימות עם <code>NULL</code>, ושלב 3 ייכשל.</li><li>(ג) כל משימה שהגרסה הישנה יוצרת נכשלת (‏<code>NOT NULL</code>): שגיאות 500 למשתמשים. לכן הסדר הוא: קוד חדש בכל השרתים, אחר כך backfill, ורק אז contract.</li><li>(ד) עדיף בקבוצות (‏<code>WHERE id BETWEEN ...</code>, אלף שורות כל פעם). כך כל טרנזקציה קצרה, לא נועלת הרבה, ולא מאטה את האפליקציה. (אם הוא נקטע, ממשיכים מאיפה שעצר, בזכות <code>WHERE owner_id IS NULL</code>.)</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש"שלוש migrations" זה באותו deploy. הכוח של השיטה הוא שבין השלבים עובר זמן, ובכל רגע הקוד הרץ והמסד מתאימים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E84">
+    <h3>P21-E84 · מוחקים משתמש — מה נמחק איתו? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">@relation(..., onDelete: Cascade)</code> מופיע גם ב־<code>Task.owner</code> וגם ב־<code>RefreshToken.user</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־guard לא שואל את המסד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) המשתמש, 4 המשימות ו־3 ה־refresh tokens. PostgreSQL מוחק אותם באותה פקודה.</li><li>(ב) ה־DELETE נכשל עם שגיאת foreign key (‏P2003 ב־Prisma): אי אפשר למחוק משתמש שיש שורות שמצביעות עליו. צריך למחוק קודם את התלויים.</li><li>(ג) הטוקן עדיין עובר את ה־guard (חתימה ותוקף תקינים). ‏<code>GET /tasks</code> מחזיר רשימה ריקה (אין משימות עם <code>owner_id = 1</code>). ‏<code>GET /auth/me</code> לא מוצא משתמש, ובפרויקט מחזיר 401. אחרי 15 דקות הטוקן פג, וה־refresh tokens כבר לא קיימים.</li><li>(ד) כדי לשמור היסטוריה (הזמנות, חשבוניות, יומן פעולות), לאפשר שחזור, ולעמוד בחוקים שמחייבים שמירה. ומצד שני, חוקי פרטיות (GDPR) מחייבים לפעמים מחיקה אמיתית, או לפחות אנונימיזציה של הפרטים האישיים.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים <code>Cascade</code> על כל relation "כדי שלא יהיו שגיאות". מחיקה של לקוח שמוחקת לו את כל החשבוניות היא בדרך כלל באג, לא פיצ'ר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E85">
+    <h3>P21-E85 · ‏@Global ו־overrideProvider(CONFIG) <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">registerAsync({ inject: [CONFIG], useFactory: (c) =&gt; ({ secret: c.jwtSecret }) })</code></pre>
+<p>— ה־factory מקבל את ה־CONFIG דרך DI.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מתי <code>process.env.JWT_SECRET</code> נקרא, ב־<code>register</code> רגיל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) להוסיף <code>imports: [ConfigModule]</code> בכל module שצריך <code>CONFIG</code> או <code>CLOCK</code> (‏Tasks, ‏Auth, ‏Users).</li><li>(ב) כי <code>JwtModule.registerAsync</code> מקבל את הסוד מ־<code>CONFIG</code> דרך DI. ‏<code>overrideProvider</code> מחליף את <code>CONFIG</code> לכל מי שמבקש אותו, כולל ה־factory של <code>JwtModule</code>.</li><li>(ג) הסוד נקרא כשהקובץ נטען, בלי בדיקה. בבדיקות צריך להגדיר <code>process.env</code> לפני ה־import, ו־<code>overrideProvider(CONFIG)</code> לא משפיע עליו. וסוד חסר הופך ל־<code>undefined</code>, וזו שגיאה רק בכניסה הראשונה.</li><li>(ד) fail fast: עדיף שהשרת לא יעלה בכלל (ופריסה נעצרת, פרק 25) מאשר שיעלה ויכשל אצל המשתמש הראשון. או גרוע מזה, יעבוד עם סוד חלש.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא <code>process.env</code> ישירות בכל service. זה עובד, אבל אין בדיקה אחת, אין טיפוסים, ובדיקות צריכות לשנות משתנים גלובליים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E86">
+    <h3>P21-E86 · ‏PR2-NEST כבר לא עובר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>PR2-NEST שולח בקשות בלי <code>Authorization</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אילו routes עם <code>@Public()</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) PR2-NEST נכתב ל־API פתוח, ושולח בקשות בלי טוקן. עכשיו ה־guard הגלובלי דוחה אותן. זה בדיוק השינוי שרצינו: default deny.</li><li>(ב) <code>/health</code> (וגם <code>/docs</code>): הם <code>@Public()</code>.</li><li>(ג) שה־guard לא פועל על <code>/tasks</code>. שכחת לרשום את <code>APP_GUARD</code>, או ש־<code>@Public()</code> נמצא על ה־controller הלא נכון. API "פתוח בטעות" הוא בדיוק הבאג שלא רואים בלי בדיקה.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" את הכישלון בהוספת <code>@Public()</code> ל־<code>TasksController</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E87">
+    <h3>P21-E87 · למה seed.mts? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הפרויקט של Nest מתקמפל ל־CommonJS (פרק 20). ומה ה־seed עושה ברמה העליונה של הקובץ?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>await</code> מחוץ לפונקציה מותר רק ב־ES modules (פרק 8).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) <code>.mts</code> הוא תמיד ES module, בלי קשר להגדרות של הפרויקט. ‏<code>.ts</code> בפרויקט CommonJS הוא CommonJS.</li><li>(ב) ה־seed משתמש ב־<code>await</code> ברמה העליונה (‏<code class="mid">await prisma.user.create(...)</code>), וזה עובד רק ב־ESM. הוא רץ ישירות עם <code>node</code> (‏<code class="mid">seed: "node prisma/seed.mts"</code>), ולא דרך הקומפילציה של Nest.</li><li>(ג) נמוך (4–8). אלה משתמשי דמו עם סיסמאות שכתובות ב־README, אין מה להגן עליהן. cost ‏12 רק מאט כל <code>db:seed</code>. אבל זה <strong>רק</strong> ב־seed. בהרשמה האמיתית: <code>BCRYPT_ROUNDS</code>.</li><li>(ד) תלוי בקוד. אם הוא עושה <code>create</code> על אימייל שכבר קיים, הוא נכשל על <code>UNIQUE</code>. seed טוב מוחק קודם, או משתמש ב־<code>upsert</code> (E94), כדי שיהיה אפשר להריץ אותו שוב ושוב.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף הכול ב־<code>async function main()</code> ולשכוח <code>main().catch(...)</code>. שגיאה הופכת לאזהרה שקטה, ו־<code>db:seed</code> "מצליח".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E88">
+    <h3>P21-E88 · ‏migration בשלושה שלבים — ב־SQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש פקודות:</p>
+<pre><code class="lang-sql">ALTER TABLE ... ADD COLUMN owner_id int REFERENCES users(id) ON DELETE CASCADE;</code></pre>
+<p><code>UPDATE ...</code>, ‏<code class="mid">ALTER TABLE ... ALTER COLUMN owner_id SET NOT NULL;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>UPDATE</code>:</p>
+<pre><code class="lang-sql">SET owner_id = (SELECT id FROM users WHERE email = 'legacy@tasks.example')</code></pre>
+<p>ובסוף <code class="mid">CREATE INDEX ... ON tasks (owner_id);</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P21-E88: expand, backfill, contract
+-- 1. expand: עמודה שמותר בה NULL — לא שוברת כלום
+ALTER TABLE tasks ADD COLUMN owner_id int REFERENCES users(id) ON DELETE CASCADE;
+
+-- 2. backfill: כל המשימות הקיימות למשתמש "ישן"
+UPDATE tasks
+   SET owner_id = (SELECT id FROM users WHERE email = 'legacy@tasks.example')
+ WHERE owner_id IS NULL;
+
+-- 3. contract: מעכשיו חובה
+ALTER TABLE tasks ALTER COLUMN owner_id SET NOT NULL;
+
+CREATE INDEX tasks_owner_id_idx ON tasks (owner_id);</code></pre>
+<p>כאן שלושת השלבים באותו קובץ, כי במסד של הבודק אף אחד לא כותב בזמן ה־migration. בפרודקשן, כפי שראית ב־E83, הם שלושה קבצים, ובין השני לשלישי עולה קוד חדש. ‏<code>WHERE owner_id IS NULL</code> הופך את ה־backfill לבטוח להרצה חוזרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SET owner_id = 1</code> — במסד של הבודק ה־id של legacy הוא לא 1.</li><li><code class="mid">ADD COLUMN owner_id int NOT NULL</code> ישר — נכשל על טבלה מלאה (E82).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E89">
+    <h3>P21-E89 · ‏loadConfig עם Zod 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">z.object({ JWT_SECRET: z.string().min(32), ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(900), ... })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>השמות: <code class="mid">[...new Set(r.error.issues.map((i) =&gt; String(i.path[0])))]</code>. ואם הסדר לא לפי הטבלה, אפשר לסנן את רשימת המפתחות של הסכמה (<code class="mid">Object.keys(envSchema.shape)</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E89: loadConfig — בדיקה אחת של ה־env, בעלייה
+import { z } from "zod";
+
+export type AppConfig = { jwtSecret: string; accessTtlSeconds: number; refreshTtlDays: number; bcryptRounds: number };
+
+const envSchema = z.object({
+  JWT_SECRET: z.string().min(32),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
+});
+
+export function loadConfig(env: Record&lt;string, string | undefined&gt;): AppConfig {
+  const r = envSchema.safeParse(env);
+  if (!r.success) {
+    const bad = new Set(r.error.issues.map((i) =&gt; String(i.path[0])));
+    const names = Object.keys(envSchema.shape).filter((k) =&gt; bad.has(k));
+    throw new Error(`הגדרות לא תקינות: ${names.join(", ")}`);
+  }
+  const e = r.data;
+  return {
+    jwtSecret: e.JWT_SECRET,
+    accessTtlSeconds: e.ACCESS_TOKEN_TTL_SECONDS,
+    refreshTtlDays: e.REFRESH_TOKEN_TTL_DAYS,
+    bcryptRounds: e.BCRYPT_ROUNDS,
+  };
+}</code></pre>
+<p>שני דברים קטנים שחשובים בפרודקשן: הודעת השגיאה מכילה רק <em>שמות</em> (לוגים של פריסה נקראים ע"י הרבה אנשים), והשמות בתוך הקוד הם camelCase, לא <code>SCREAMING_CASE</code> מה־env. מעכשיו שאר הקוד לא יודע ש־<code>process.env</code> קיים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להכניס את <code>i.message</code> להודעה — ב־Zod ההודעה לפעמים כוללת את הערך שהתקבל.</li><li><code>z.number()</code> בלי <code>coerce</code> — כל משתנה סביבה הוא מחרוזת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E90">
+    <h3>P21-E90 · ‏repository בזיכרון עם ownerId מוסתר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const strip = ({ ownerId, ...task }: StoredTask): Task =&gt; task;</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>update</code>: ‏<code class="mid">if ("title" in changes) ...</code>, או <code class="mid">const { title, done } = changes;</code> ולהעתיק רק את מה שהוגדר. לא <code class="mid">Object.assign(stored, changes)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E90: repository בזיכרון — ownerId בפנים, לא בחוץ
+export type Task = { id: number; title: string; done: boolean };
+type StoredTask = Task &amp; { ownerId: number };
+
+const strip = ({ ownerId, ...task }: StoredTask): Task =&gt; task;
+
+export class InMemoryTasksRepository {
+  #tasks: StoredTask[] = [];
+  #nextId = 1;
+
+  #find(ownerId: number, id: number) {
+    return this.#tasks.find((t) =&gt; t.id === id &amp;&amp; t.ownerId === ownerId);
+  }
+
+  insert(ownerId: number, data: { title: string; done?: boolean }): Task {
+    const task: StoredTask = { id: this.#nextId++, title: data.title, done: data.done ?? false, ownerId };
+    this.#tasks.push(task);
+    return strip(task);
+  }
+
+  list(ownerId: number): Task[] {
+    return this.#tasks.filter((t) =&gt; t.ownerId === ownerId).map(strip);
+  }
+
+  findById(ownerId: number, id: number): Task | undefined {
+    const t = this.#find(ownerId, id);
+    return t &amp;&amp; strip(t);
+  }
+
+  update(ownerId: number, id: number, changes: Partial&lt;Omit&lt;Task, "id"&gt;&gt;): Task | undefined {
+    const t = this.#find(ownerId, id);
+    if (!t) return undefined;
+    if (changes.title !== undefined) t.title = changes.title;
+    if (changes.done !== undefined) t.done = changes.done;
+    return strip(t);
+  }
+
+  delete(ownerId: number, id: number): boolean {
+    const i = this.#tasks.findIndex((t) =&gt; t.id === id &amp;&amp; t.ownerId === ownerId);
+    if (i === -1) return false;
+    this.#tasks.splice(i, 1);
+    return true;
+  }
+}</code></pre>
+<p>אותה צורה בדיוק כמו <code>tasks.repository.ts</code> בפרויקט. ה־controller וה־service לא יודעים ש־<code>ownerId</code> קיים בשורה, וה־API נשאר זהה לשלבים הקודמים. ובגלל ש־<code>ownerId</code> הוא תמיד הפרמטר הראשון, אי אפשר לקרוא לאף פעולה "בלי בעלים".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return t</code> במקום <code>strip(t)</code> — מחזיר את האובייקט הפנימי עם <code>ownerId</code>, ומי שמשנה אותו משנה את האחסון.</li><li><code>Object.assign(t, changes)</code> — ‏<code>{ ownerId: 2 }</code> מעביר את המשימה למשתמש אחר (E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E91">
+    <h3>P21-E91 · ‏insert שתופס P2002 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">try { return await this.prisma.user.create({ data }); } catch (err) { ... }</code></pre>
+<p>— ה־<code>await</code> בתוך ה־<code>try</code> חשוב.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">if ((err as { code?: string }).code === "P2002") return undefined; throw err;</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E91: P2002 (unique) ← undefined, ו־service יחליט שזה 409
+export type UserRow = { id: number; email: string; passwordHash: string; role: "user" | "admin" };
+export type PrismaLike = {
+  user: {
+    create(args: { data: Omit&lt;UserRow, "id"&gt; }): Promise&lt;UserRow&gt;;
+    findUnique(args: { where: { email: string } }): Promise&lt;UserRow | null&gt;;
+  };
+};
+
+export class UsersRepository {
+  private readonly prisma: PrismaLike;
+
+  constructor(prisma: PrismaLike) {
+    this.prisma = prisma;
+  }
+
+  async insert(data: Omit&lt;UserRow, "id"&gt;): Promise&lt;UserRow | undefined&gt; {
+    try {
+      return await this.prisma.user.create({ data });
+    } catch (err) {
+      if ((err as { code?: string }).code === "P2002") return undefined;
+      throw err;
+    }
+  }
+
+  async findByEmail(email: string): Promise&lt;UserRow | undefined&gt; {
+    return (await this.prisma.user.findUnique({ where: { email } })) ?? undefined;
+  }
+}</code></pre>
+<p>ה־repository לא יודע מה זה HTTP: הוא אומר "לא הוכנס" (<code>undefined</code>), וה־service מתרגם ל־409 <code>EMAIL_TAKEN</code>. וכל שגיאה אחרת (מסד נפל, P2003) עולה למעלה ונהיית 500, כי היא באמת תקלה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">return this.prisma.user.create(...)</code> בלי <code>await</code> בתוך <code>try</code>. ה־Promise נדחה <em>אחרי</em> שיצאת מה־<code>try</code>, וה־<code>catch</code> לא תופס כלום.</li><li><code class="mid">catch { return undefined; }</code> לכל שגיאה — מסד שנפל נראה כמו "אימייל תפוס".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E92">
+    <h3>P21-E92 · ‏Swagger עם כפתור Authorize 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">new DocumentBuilder().setTitle("tasks-api").setVersion("1.0").addBearerAuth().build()</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">import { ApiBearerAuth, DocumentBuilder, SwaggerModule } from "@nestjs/swagger";</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E92: Swagger — Bearer על מה שמוגן
+import { Controller, Get, INestApplication, Module } from "@nestjs/common";
+import { ApiBearerAuth, DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+
+@ApiBearerAuth()
+@Controller("tasks")
+export class TasksController {
+  @Get()
+  list() {
+    return [];
+  }
+}
+
+@Controller("health")
+export class HealthController {
+  @Get()
+  check() {
+    return { ok: true };
+  }
+}
+
+@Module({ controllers: [TasksController, HealthController] })
+export class AppModule {}
+
+export function createDocument(app: INestApplication) {
+  const config = new DocumentBuilder().setTitle("tasks-api").setVersion("1.0").addBearerAuth().build();
+  return SwaggerModule.createDocument(app, config);
+}</code></pre>
+<p><code>addBearerAuth()</code> מוסיף ל־<code>components.securitySchemes</code> סכמה בשם <code>bearer</code>, וב־<code>/docs</code> מופיע כפתור Authorize. ‏<code>@ApiBearerAuth()</code> מסמן אילו פעולות צריכות אותה (<code>security: [{ bearer: [] }]</code>). שים לב: זה רק <strong>תיעוד</strong>. מה שבאמת מגן הוא ה־guard. route עם <code>@ApiBearerAuth()</code> ובלי guard פתוח לגמרי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>@ApiBearerAuth()</code> מגן על ה־route.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E93">
+    <h3>P21-E93 · ‏AuthSession — כניסה, רענון דף ויציאה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שדה פרטי <code class="mid">#access: string | null = null</code>, ו־<code class="mid">get accessToken() { return this.#access; }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>logout</code>: ‏<code class="mid">try { await fetch(...) } catch {} finally { ... }</code>, או פשוט <code class="mid">await fetch(...).catch(() =&gt; {})</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E93: AuthSession — access בזיכרון, refresh ב־storage
+export type StorageLike = { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void };
+type Tokens = { accessToken: string; refreshToken: string };
+
+const KEY = "refreshToken";
+
+export class AuthSession {
+  #access: string | null = null;
+  readonly #baseUrl: string;
+  readonly #storage: StorageLike;
+
+  constructor(baseUrl: string, storage: StorageLike) {
+    this.#baseUrl = baseUrl;
+    this.#storage = storage;
+  }
+
+  get accessToken(): string | null {
+    return this.#access;
+  }
+
+  #post(path: string, body: unknown) {
+    return fetch(this.#baseUrl + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  }
+
+  #save(t: Tokens) {
+    this.#access = t.accessToken;
+    this.#storage.setItem(KEY, t.refreshToken);
+  }
+
+  async login(email: string, password: string): Promise&lt;void&gt; {
+    const res = await this.#post("/auth/login", { email, password });
+    const data = await res.json();
+    if (res.status !== 200) throw new Error(data.message);
+    this.#save(data);
+  }
+
+  async restore(): Promise&lt;boolean&gt; {
+    const refreshToken = this.#storage.getItem(KEY);
+    if (!refreshToken) return false;
+    const res = await this.#post("/auth/refresh", { refreshToken });
+    if (res.status !== 200) {
+      this.#storage.removeItem(KEY);
+      return false;
+    }
+    this.#save(await res.json());
+    return true;
+  }
+
+  async logout(): Promise&lt;void&gt; {
+    const refreshToken = this.#storage.getItem(KEY);
+    if (refreshToken) await this.#post("/auth/logout", { refreshToken }).catch(() =&gt; {});
+    this.#access = null;
+    this.#storage.removeItem(KEY);
+  }
+}</code></pre>
+<p>ככה "רענון הדף" עובד: הזיכרון נמחק (ה־access token איננו), אבל ה־refresh token ב־<code>sessionStorage</code> נשאר, ו־<code>restore()</code> מקבל זוג חדש. וכשה־refresh לא עובד (בוטל, פג), מוחקים אותו מיד, כדי לא לשלוח אותו שוב ושוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור גם את ה־access token ב־storage "כדי לחסוך refresh". עכשיו XSS קורא שניים במקום אחד, ובשביל מה? refresh אחד בטעינת דף זה זול.</li><li>לא למחוק ב־<code>logout</code> כשהבקשה נכשלה (אין רשת). המשתמש לחץ "יציאה" ונשאר מחובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E94">
+    <h3>P21-E94 · ‏seed שאפשר להריץ שוב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const { rowCount } = await db.query("INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING", [...]);</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החשב את כל ה־hashes במקביל עם <code>Promise.all</code> (פרק 10), ואז הכנס אחד אחד וסכום את <code>rowCount</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E94: seed אידמפוטנטי
+import bcrypt from "bcryptjs";
+
+type Db = { query(text: string, params?: unknown[]): Promise&lt;any&gt; };
+export type DemoUser = { email: string; password: string; role: "user" | "admin" };
+
+export async function seedUsers(db: Db, users: DemoUser[], rounds: number): Promise&lt;number&gt; {
+  const hashes = await Promise.all(users.map((u) =&gt; bcrypt.hash(u.password, rounds)));
+  let added = 0;
+  for (const [i, u] of users.entries()) {
+    const { rowCount } = await db.query(
+      "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING",
+      [u.email.toLowerCase(), hashes[i], u.role],
+    );
+    added += rowCount;
+  }
+  return added;
+}</code></pre>
+<p>"אידמפוטנטי" (פרק 14): להריץ פעם אחת או עשר — אותה תוצאה. זה מה שמאפשר <code>npm run db:seed</code> בכל פעם שמישהו מקים סביבה, בלי "קודם תמחק את המסד".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">ON CONFLICT DO UPDATE SET password_hash = ...</code> — מאפס סיסמה של משתמש אמיתי שבמקרה יש לו אימייל של דמו.</li><li>לבדוק <code>SELECT</code> לפני כל <code>INSERT</code> — שתי פקודות, וחלון ביניהן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E95">
+    <h3>P21-E95 · עמוד של משימות — רק שלי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">WHERE owner_id = $1 AND ($2::text IS NULL OR status = $2)</code> — תנאי אחד שעובד עם ובלי סינון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי שאילתות: <code class="mid">SELECT count(*)::int AS total ...</code> עם אותו <code>WHERE</code>, ו־</p>
+<pre><code class="lang-sql">SELECT ... ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E95: עמוד משימות של משתמש אחד
+type Db = { query(text: string, params?: unknown[]): Promise&lt;any&gt; };
+
+export async function listTasks(db: Db, ownerId: number, opts: { status?: "todo" | "done"; limit: number; offset: number }) {
+  const where = "WHERE owner_id = $1 AND ($2::text IS NULL OR status = $2)";
+  const status = opts.status ?? null;
+  const [count, page] = await Promise.all([
+    db.query(`SELECT count(*)::int AS total FROM tasks ${where}`, [ownerId, status]),
+    db.query(`SELECT id, title, status FROM tasks ${where} ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`, [ownerId, status, opts.limit, opts.offset]),
+  ]);
+  return { data: page.rows, total: count.rows[0].total };
+}</code></pre>
+<p>האינדקס <code class="mid">(owner_id, status, created_at)</code> מתאים בדיוק לשאילתה: קודם הבעלים (תמיד שם), אחר כך הסטטוס (לפעמים), ואחר כך המיון. ו־<code>id DESC</code> שובר שוויון בין שתי משימות שנוצרו באותו רגע, כדי שהעמודים יהיו יציבים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>count(*)</code> בלי <code>::int</code> — חוזר כ־bigint (‏<code>"5"</code>, מחרוזת) ב־pg רגיל.</li><li>לבנות את ה־WHERE עם <code>if</code> ולהדביק <code>status</code> למחרוזת — injection.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P21-E96">
+    <h3>P21-E96 · ‏updateMany ו־count, או findFirst ואז update? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>update</code> ב־Prisma דורש <code>where</code> עם שדה ייחודי. ‏<code>{ id, ownerId }</code> הוא לא אינדקס ייחודי בסכמה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>update</code> על שורה שלא קיימת זורק P2025.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) מחיקה באמצע: <code>update</code> זורק P2025, ואם לא תופסים, 500 במקום 404. שינוי בעלות באמצע: ה־<code>update</code> רץ על <code>where: { id }</code> בלבד, ומשנה משימה שכבר לא של המשתמש. החלון קטן, אבל הוא קיים.</li><li>(ב) <code>update</code> דורש <code>where</code> ייחודי (<code>WhereUniqueInput</code>). אפשר להוסיף <code>@@unique([id, ownerId])</code>, אבל זה אינדקס מיותר רק בשביל זה. ‏<code>updateMany</code> מקבל כל תנאי ומחזיר <code>count</code>.</li><li>(ג) בשתיהן שתי שאילתות. בא׳: קריאה ואז כתיבה, והכתיבה לא בודקת בעלות. בב׳: כתיבה שכבר כוללת את הבעלות, ואחריה קריאה רק כדי להחזיר תוצאה. ההחלטה "מותר?" קורית בתוך פקודה אחת במסד.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהבדיקה ב־<code>findFirst</code> "מספיקה, כי זה אותו בקשה". הבקשה היא שלך, אבל המסד משרת עוד מאות בקשות באותו זמן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E97">
+    <h3>P21-E97 · הסוד נכנס ל־Git <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>commit שמוחק קובץ לא מוחק אותו מה־commits הקודמים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"מי שיודע את JWT_SECRET יכול להנפיק טוקן לכל משתמש, כולל admin" (שיעור 2).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) כן. הוא בהיסטוריה (<code>git log -p</code>, ‏<code>git show &lt;commit&gt;</code>), בכל clone שנעשה בשעה הזו, ובשירותים שסורקים GitHub אוטומטית אחרי סודות (תוך דקות).</li><li>(ב) לחתום טוקן עם <code>{ sub: 1, role: "admin" }</code> ולהיכנס כמה שהוא רוצה, בלי סיסמה.</li><li>(ג) להחליף את הסוד בפרודקשן (rotate), מיד. כל ה־access tokens הקיימים מפסיקים לעבוד. ה־refresh tokens אטומים ובמסד, אז הם ממשיכים לעבוד: המשתמשים מקבלים טוקן חדש בבקשה הבאה ולא מרגישים כמעט כלום. ניקוי ההיסטוריה (‏<code>git filter-repo</code>) בא אחר כך, וזה לא מחליף את ההחלפה.</li><li>(ד) <code>.env</code> ב־<code>.gitignore</code> מהיום הראשון, ‏<code>.env.example</code> בלי ערכים, ‏<code>git status</code> לפני כל commit, וסורק סודות (pre-commit או ב־CI).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נמחק את ה־commit, ואז זה כאילו לא קרה". סוד שנחשף הוא סוד שרוף. מחליפים אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E98">
+    <h3>P21-E98 · ‏CLOCK — למה לא Date.now()? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">overrideProvider(CLOCK).useValue({ now: () =&gt; fakeNow })</code>. ואז הבודק מזיז את <code>fakeNow</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי שלא שואל את ה־CLOCK, לא יודע שהזמן "זז".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li>(א) הבודק מחליף את <code>CLOCK</code> בשעון מזויף, ו"מזיז" אותו 15 דקות או 7 ימים קדימה. כל קוד שמשתמש ב־<code>clock.now()</code> רואה את הזמן החדש מיד.</li><li>(ב) "אחרי 15 דקות": ‏<code>verifyAsync</code> בלי <code>clockTimestamp</code> בודק לפי השעון האמיתי, שזז רק שנייה. הטוקן עדיין "תקף" והבדיקה נכשלת. ‏<code>createdAt</code> עם <code>new Date()</code>: כל בדיקה שמשווה זמנים מקבלת ערך שונה בכל הרצה (לא יציבה). ‏"7 ימים" תלוי באיך <code>expiresAt</code> חושב: עם השעון המזויף, הוא בסדר.</li><li>(ג) מה שקשה לשלוט בו (זמן, אקראיות, רשת) לא נוצר בתוך הקוד אלא מוזרק מבחוץ, דרך interface. בפרודקשן: השעון האמיתי. בבדיקות: שעון שאתה שולט בו.</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן בדיקה איטית עם <code class="mid">await sleep(15 * 60 * 1000)</code>. בדיקה של רבע שעה לא תרוץ אף פעם.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P21-E24">
     <h3>P21-E24 · אתגר: סימניות עם משתמשים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -329,6 +908,111 @@ export class BookmarksAppModule {}</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להשאיר <code>ownerId</code> בתשובה של bookmarks — לא אסון, אבל מיותר. API מחזיר מה שהלקוח צריך.</li><li><code>@Public()</code> על <code>AuthController</code> כולו ← גם <code>/auth/me</code> פתוח, ו־<code>@CurrentUser()</code> מחזיר <code>undefined</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E99">
+    <h3>P21-E99 · בודק IDOR משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>פונקציית עזר:</p>
+<pre><code class="lang-ts">const call = (method, path, token, body?) =&gt; fetch(baseUrl + path, { method, headers: {...}, body: ... })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הבקשות של B חייבות להיות <strong>ברצף</strong> (<code>await</code> אחרי <code>await</code>), לא ב־<code>Promise.all</code>: ה־DELETE לא אמור לרוץ לפני ה־PATCH.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E99: בודק IDOR — מה קורה כש־B נוגע במשימה של A
+export type OwnershipReport = { get: number; patch: number; delete: number; stillExists: boolean; title: string };
+
+export async function probeOwnership(baseUrl: string, tokenA: string, tokenB: string): Promise&lt;OwnershipReport&gt; {
+  const call = (method: string, path: string, token: string, body?: unknown) =&gt;
+    fetch(baseUrl + path, {
+      method,
+      headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  const created = await (await call("POST", "/tasks", tokenA, { title: "של A" })).json();
+  const path = `/tasks/${created.id}`;
+  const get = (await call("GET", path, tokenB)).status;
+  const patch = (await call("PATCH", path, tokenB, { title: "B היה כאן" })).status;
+  const del = (await call("DELETE", path, tokenB)).status;
+  const after = await call("GET", path, tokenA);
+  const stillExists = after.status === 200;
+  const title = stillExists ? (await after.json()).title : "";
+  return { get, patch, delete: del, stillExists, title };
+}
+
+export function isSafe(r: OwnershipReport): boolean {
+  return r.get === 404 &amp;&amp; r.patch === 404 &amp;&amp; r.delete === 404 &amp;&amp; r.stillExists &amp;&amp; r.title === "של A";
+}</code></pre>
+<p>שים לב למה שהבודק תופס: שרת שמחזיר 404 על ה־PATCH <strong>אבל משנה את המשימה</strong> נראה בטוח לפי ה־status. לכן בודקים גם מה קרה בפועל (קריאה של A בסוף). ככה כתובים בדיקות אבטחה: לא רק "מה ענו לי", אלא "מה השתנה".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתפק ב־status. השרת הפגיע בבודק מחזיר 404 ובכל זאת משנה.</li><li><code>Promise.all</code> על שלוש הבקשות של B — ה־DELETE יכול לרוץ ראשון, וה־PATCH מקבל 404 "בצדק".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P21-E100">
+    <h3>P21-E100 · החלפת סיסמה בטרנזקציה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>המבנה מפרק 18:</p>
+<pre><code class="lang-ts">const client = await pool.connect(); try { await client.query("BEGIN"); ...; await client.query("COMMIT"); } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ביציאה מוקדמת (<code>NOT_FOUND</code>, ‏<code>WRONG_PASSWORD</code>) גם צריך <code>ROLLBACK</code> לפני ה־<code>return</code> (או <code>COMMIT</code>: לא שינית כלום, אבל הנעילה של <code>FOR UPDATE</code> חייבת להשתחרר).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E100: החלפת סיסמה וביטול refresh tokens — הכול או כלום
+import bcrypt from "bcryptjs";
+
+type Client = { query(text: string, params?: unknown[]): Promise&lt;any&gt;; release(): void };
+type Pool = { connect(): Promise&lt;Client&gt; };
+
+export async function changePassword(
+  pool: Pool,
+  userId: number,
+  oldPassword: string,
+  newPassword: string,
+  rounds: number,
+  now: Date,
+): Promise&lt;"OK" | "NOT_FOUND" | "WRONG_PASSWORD"&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT password_hash FROM users WHERE id = $1 FOR UPDATE", [userId]);
+    if (rows.length === 0) {
+      await client.query("ROLLBACK");
+      return "NOT_FOUND";
+    }
+    if (!(await bcrypt.compare(oldPassword, rows[0].password_hash))) {
+      await client.query("ROLLBACK");
+      return "WRONG_PASSWORD";
+    }
+    const hash = await bcrypt.hash(newPassword, rounds);
+    await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, userId]);
+    await client.query("UPDATE refresh_tokens SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL", [now, userId]);
+    await client.query("COMMIT");
+    return "OK";
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>למה טרנזקציה? בלעדיה, אם ביטול הטוקנים נכשל, הסיסמה כבר הוחלפה, אבל התוקף שגנב refresh token ממשיך להיכנס. המשתמש בטוח שהוא "נעל" את החשבון, וזה מצב גרוע יותר מכישלון גלוי. ו־<code>FOR UPDATE</code>: שתי החלפות סיסמה באותו רגע לא ידרסו אחת את השנייה בלי לבדוק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>pool.query("BEGIN")</code> — כל פקודה יכולה ללכת לחיבור אחר, וה־BEGIN לא משפיע על כלום (פרק 18).</li><li>לשכוח <code>release</code> ביציאה מוקדמת — אחרי כמה ניסיונות כושלים ה־pool ריק והשרת נתקע.</li></ul>
 
 
 </div></details>
