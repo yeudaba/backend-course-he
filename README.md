@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **2151** | **1322** | **1531** |
+| **42** | **196** | **2368** | **1419** | **1543** |
 
 ## מה שונה כאן
 
@@ -271,9 +271,9 @@
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 20](backend-course/20-nestjs/index.html) | NestJS | 4 | 83 | 48 | ✔ |
-| [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 28 | 25 | ✔ |
-| [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 28 | 24 | ✔ |
-| [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 28 | 24 | ✔ |
+| [פרק 21](backend-course/21-auth/index.html) | כניסה והרשאות | 5 | 100 | 57 | ✔ |
+| [פרק 22](backend-course/22-testing/index.html) | בדיקות | 5 | 101 | 57 | ✔ |
+| [פרק 23](backend-course/23-docker/index.html) | Linux ו־Docker | 5 | 100 | 56 | ✔ |
 | [פרק 24](backend-course/24-production/index.html) | מוכן לפרודקשן: לוגים, זמן, Idempotency והגבלת קצב | 6 | 33 | 29 | ✔ |
 | [פרק 25](backend-course/25-deploy/index.html) | CI ופריסה: מהמחשב שלך לכתובת חיה | 5 | 28 | 25 | ✔ |
 | [פרויקט 3](backend-course/25p-project-shop/index.html) | פרויקט הדגל: חנות ציוד קפה | 6 | — | 6 | ✔ |
