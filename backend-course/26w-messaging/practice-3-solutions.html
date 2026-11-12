@@ -54,6 +54,106 @@ await sqs.send(new DeleteQueueCommand({ QueueUrl }));</code></pre>
 </div></details>
     
   </div>
+<div class="ex" id="P26.5-E62">
+    <h3>P26.5-E62 · ‏visibility timeout קצר מדי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשנייה 30 ההודעה חוזרת להיות גלויה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ReceiptHandle שייך לקבלה מסוימת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>בשנייה 30 ההודעה גלויה שוב, consumer אחר מקבל אותה ומתחיל להפיק את אותה חשבונית. שתי חשבוניות.</li><li>ה־handle ישן (הייתה קבלה חדשה). ב־SQS המחיקה בדרך כלל עדיין מצליחה, אבל ה־consumer השני כבר עובד — ואולי ימחק "שוב" או יחזיר אותה. כפילות בכל מקרה.</li><li>הגדרה: timeout ארוך מהזמן הארוך הסביר (60–90 שניות). קוד: heartbeat — <code>ChangeMessageVisibility</code> כל כמה שניות בזמן העבודה (‏E67). ובכל מקרה — consumer אידמפוטנטי.</li><li>consumer שנפל באמת משאיר את ההודעה מוסתרת 12 שעות — עיכוב ענק לכל כשל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל את ה־timeout בלי consumer אידמפוטנטי — הכפילות נדירה יותר, לא נעלמת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E63">
+    <h3>P26.5-E63 · כמה עולה short polling? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏50 קריאות בשנייה ל־worker.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שנייה × 60 × 60 × 24 × 30 = 2,592,000 שניות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏4 × 50 = 200 בשנייה × 2,592,000 ≈ ‏518 מיליון בקשות ← ‏~$207 בחודש, על כלום.</li><li>כל worker — קריאה כל 20 שניות כשריק: ‏4 × 129,600 ≈ ‏518,400 בקשות ← ‏~$0.21.</li><li>קריאה ריקה גם כשיש הודעות (רק חלק מהשרתים נשאלים) — עיכוב לא צפוי. ולולאה שמחזירה מיד צורכת CPU ב־worker.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף sleep של שנייה" — זול יותר, אבל כל הודעה מחכה עד שנייה, וכשיש עומס זה מאט. long polling חוזר <em>מיד</em> כשיש הודעה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E64">
+    <h3>P26.5-E64 · מה ה־MessageGroupId? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>group = יחידת הסדר, וגם יחידת החסימה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך group — הודעה אחת בכל רגע.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>סדר גלובלי — ואפס מקביליות: worker אחד עובד, השאר מחכים. הודעה תקועה עוצרת את <em>כל</em> התור.</li><li>הנכון: סדר לכל הזמנה, מקביליות בין הזמנות. הודעה תקועה עוצרת רק את ההזמנה שלה.</li><li>אין סדר בכלל (כל הודעה group משלה) — כמו Standard, אבל עם מגבלות של FIFO.</li><li>עובד, אבל הלקוח הגדול הוא "group חם": כל ה־500 שלו בטור, ואם אחת נתקעת — כולן. עדיף ישות קטנה יותר (הזמנה), אם הסדר בין הזמנות של אותו לקוח לא חשוב.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור FIFO "ליתר ביטחון" עם group אחד — מקבלים תור איטי, ושום הגנה מכפילות שלא היה אפשר לקבל מ־consumer אידמפוטנטי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E65">
+    <h3>P26.5-E65 · ‏DLQ — ומה עושים איתו <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">ApproximateNumberOfMessagesVisible</code> של ה־DLQ.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>redrive לפני התיקון = עוד 5 כישלונות לכל אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏DLQ עם יותר מ־0 הודעות (או קצב עלייה) ← alarm. ‏DLQ שאף אחד לא רואה הוא פח.</li><li>קודם deploy של התיקון, ואחר כך redrive — ההודעות חוזרות לתור הראשי ועוברות. לפני התיקון — הן פשוט חוזרות ל־DLQ אחרי עוד 5 ניסיונות.</li><li>הן ייכשלו שוב ויחזרו ל־DLQ. לכן מסננים לפני (או שה־consumer מזהה שגיאה קבועה ושולח מיד, ‏E16).</li><li>כדי שיהיה זמן לגלות, לתקן ולהחזיר — בלי שההודעות יימחקו בינתיים. (וב־Standard, ה־retention נספר מהשליחה המקורית — עוד סיבה לארוך.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נמחק את ה־DLQ, ממילא זה זבל" — אלה 3,000 הזמנות שלא קיבלו חשבונית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E66">
+    <h3>P26.5-E66 · ‏SNS ← SQS מול תור אחד <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תור = כל הודעה ל־consumer אחד (E40).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תור לכל שירות = מצב, retries ו־DLQ לכל שירות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א׳: כל הודעה לאחד מהם — כל שירות רואה שליש. ב׳: כל שירות מקבל כל הודעה.</li><li>א׳: ההודעות שהמלאי "לקח" חוזרות ואולי מגיעות לשירות אחר שלא יודע מה לעשות בהן. ב׳: התור של המלאי מתמלא ומחכה; לשאר לא קרה כלום.</li><li>רק ב־ב׳ — לכל תור <code>RedrivePolicy</code> משלו.</li><li>SNS מעתיק לכל המנויים, כמו fanout שמעתיק לכל תור מקושר; התורים מחזיקים את ההודעות עד שהצרכן מוכן.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים filter ב־consumer שמתעלם ממה שלא שלו" בתור אחד — ההודעה כבר נלקחה ממי שהיה צריך אותה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.5-E09">
     <h3>P26.5-E09 · SQS FIFO 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -230,7 +330,373 @@ export async function processInvoices(sqs: SQSClient, queueUrl: string, issue: (
 </div></details>
     
   </div>
+<div class="ex" id="P26.5-E67">
+    <h3>P26.5-E67 · ‏heartbeat ל־visibility בזמן עבודה ארוכה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>setInterval</code>, ו־<code>clearInterval</code> ב־<code>finally</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־interval:</p>
+<pre><code class="lang-ts">sqs.send(new ChangeMessageVisibilityCommand({ … })).catch(() =&gt; {});</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E67: heartbeat ל־visibility בזמן עבודה ארוכה
+import { ChangeMessageVisibilityCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export async function withVisibilityHeartbeat&lt;T&gt;(
+  sqs: SQSClient,
+  queueUrl: string,
+  receiptHandle: string,
+  work: () =&gt; Promise&lt;T&gt;,
+  { visibilitySeconds, everyMs }: { visibilitySeconds: number; everyMs: number },
+): Promise&lt;T&gt; {
+  const timer = setInterval(() =&gt; {
+    sqs.send(new ChangeMessageVisibilityCommand({ QueueUrl: queueUrl, ReceiptHandle: receiptHandle, VisibilityTimeout: visibilitySeconds })).catch(() =&gt; {});
+  }, everyMs);
+  try {
+    return await work();
+  } finally {
+    clearInterval(timer);
+  }
+}</code></pre>
+<p>‏<code>VisibilityTimeout</code> ב־ChangeMessageVisibility נספר <em>מעכשיו</em>, לא מתחילת הקבלה — לכן heartbeat של "עוד 30 שניות" כל 10 שניות שומר על ההודעה כמה שצריך. ואם ה־worker מת — ה־heartbeat מת איתו, וההודעה חוזרת תוך 30 שניות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל את ה־heartbeat רק פעם אחת בהתחלה עם ערך גדול — זה סתם timeout ארוך (‏E62).</li><li>בלי <code>finally</code> — עבודה שזרקה משאירה interval שממשיך להאריך הודעה שאף אחד לא מטפל בה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E68">
+    <h3>P26.5-E68 · שליחה ב־batches — וגם מה שנכשל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">for (let i = 0; i &lt; messages.length; i += 10) {
+  const chunk = messages.slice(i, i + 10);
+  // …
+}</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>res.Failed ?? []</code> — כל אחד עם <code>Id</code> ו־<code>Code</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E68: שליחה ב־batches — וגם מה שנכשל
+import { SendMessageBatchCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export async function sendAll(sqs: SQSClient, queueUrl: string, messages: { id: string; body: unknown }[]) {
+  const ok = new Set&lt;string&gt;();
+  const bad = new Map&lt;string, string&gt;();
+  for (let i = 0; i &lt; messages.length; i += 10) {
+    const chunk = messages.slice(i, i + 10);
+    const res = await sqs.send(
+      new SendMessageBatchCommand({ QueueUrl: queueUrl, Entries: chunk.map((m) =&gt; ({ Id: m.id, MessageBody: JSON.stringify(m.body) })) }),
+    );
+    for (const s of res.Successful ?? []) ok.add(s.Id!);
+    for (const f of res.Failed ?? []) bad.set(f.Id!, f.Code ?? "Unknown");
+  }
+  return {
+    sent: messages.filter((m) =&gt; ok.has(m.id)).map((m) =&gt; m.id),
+    failed: messages.filter((m) =&gt; bad.has(m.id)).map((m) =&gt; ({ id: m.id, code: bad.get(m.id)! })),
+  };
+}</code></pre>
+<p>‏23 הודעות ← 3 בקשות במקום 23 (וגם 3 חיובים במקום 23). והבדיקה של <code>Failed</code> היא לא קישוט: קוד שבודק רק "האם זרק" חושב שהכול נשלח, וההודעה הפגומה נעלמת בשקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח שאין <code>Failed</code> כי לא נזרקה שגיאה — בדיוק המקום שבו הודעות נעלמות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E69">
+    <h3>P26.5-E69 · ‏redrive: מה־DLQ חזרה לתור 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם send, אחר כך delete — אם נפלת ביניהם, ההודעה בשני התורים (כפילות, לא אובדן).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>Id</code> ב־batch — מספר הסידור (<code>String(i)</code>). מיפוי בחזרה: <code class="mid">Successful.map((s) =&gt; msgs[Number(s.Id)])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E69: redrive — מה־DLQ חזרה לתור
+import { DeleteMessageBatchCommand, ReceiveMessageCommand, SendMessageBatchCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export async function redrive(sqs: SQSClient, fromUrl: string, toUrl: string, max = Infinity) {
+  let moved = 0;
+  while (moved &lt; max) {
+    const { Messages: msgs = [] } = await sqs.send(
+      new ReceiveMessageCommand({ QueueUrl: fromUrl, MaxNumberOfMessages: Math.min(10, max - moved), WaitTimeSeconds: 0 }),
+    );
+    if (msgs.length === 0) break;
+    const sent = await sqs.send(new SendMessageBatchCommand({ QueueUrl: toUrl, Entries: msgs.map((m, i) =&gt; ({ Id: String(i), MessageBody: m.Body! })) }));
+    const ok = (sent.Successful ?? []).map((s) =&gt; msgs[Number(s.Id)]);
+    if (ok.length) {
+      await sqs.send(new DeleteMessageBatchCommand({ QueueUrl: fromUrl, Entries: ok.map((m, i) =&gt; ({ Id: String(i), ReceiptHandle: m.ReceiptHandle! })) }));
+    }
+    moved += ok.length;
+  }
+  return moved;
+}</code></pre>
+<p>ל־SQS יש היום redrive מובנה בקונסולה (<code>StartMessageMoveTask</code>), אבל זה בדיוק מה שהוא עושה. ה־<code>max</code> חשוב: מחזירים קודם 10, רואים שהן עוברות, ורק אז את השאר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק לפני ששולחים — נפילה ביניהם מוחקת את ההודעה לגמרי.</li><li>לבקש תמיד 10 — עם <code>max: 12</code> מעבירים 20.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E70">
+    <h3>P26.5-E70 · עומק התור, וכמה workers צריך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">AttributeNames: ["ApproximateNumberOfMessages", …]</code>, והערכים חוזרים כמחרוזות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">Math.min(max, Math.max(min, n))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E70: עומק התור, וכמה workers צריך
+import { GetQueueAttributesCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export async function queueDepth(sqs: SQSClient, queueUrl: string) {
+  const { Attributes: a = {} } = await sqs.send(
+    new GetQueueAttributesCommand({
+      QueueUrl: queueUrl,
+      AttributeNames: ["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed"],
+    }),
+  );
+  return {
+    visible: Number(a.ApproximateNumberOfMessages ?? 0),
+    inFlight: Number(a.ApproximateNumberOfMessagesNotVisible ?? 0),
+    delayed: Number(a.ApproximateNumberOfMessagesDelayed ?? 0),
+  };
+}
+
+export function workersNeeded(depth: { visible: number; inFlight: number }, { perWorker, min, max }: { perWorker: number; min: number; max: number }) {
+  return Math.min(max, Math.max(min, Math.ceil((depth.visible + depth.inFlight) / perWorker)));
+}</code></pre>
+<p>זה המדד שמחברים ל־autoscaling של workers (‏KEDA ב־Kubernetes, או ECS לפי מדד של CloudWatch): ה־CPU של worker שמחכה להודעות הוא אפס, אז HPA לפי CPU לא רואה שיש 50,000 בתור. "Approximate" — כי SQS מבוזר, והמספר הוא הערכה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא לספור in-flight — workers שעובדים עכשיו נעלמים מהחישוב, והמערכת "מקטינה" באמצע עבודה.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.5-E71">
+    <h3>P26.5-E71 · חנות הקפה על AWS: ‏BullMQ או SQS? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>DelaySeconds</code> — עד 15 דקות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ElastiCache קיים ב־AWS.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מייל אישור — תור עבודה רגיל: send, ‏receive, ‏delete, ‏DLQ. ‏jobId קבוע ← ‏consumer אידמפוטנטי (UNIQUE כבר קיים).</li><li>ביטול אחרי 30 דקות: <code>DelaySeconds</code> מוגבל ל־15 דקות. אפשר לשלוח שוב (שתי השהיות), או EventBridge Scheduler — אבל זה כבר לא "שורה אחת".</li><li>אפשרות סבירה: להשאיר BullMQ על ElastiCache — הקוד לא משתנה, ו־Redis כבר קיים בשביל ה־cache. ‏SQS — כשיש כמה שירותים, כשרוצים אפס תפעול, או כשהצרכן הוא Lambda. ובכל מקרה: cron כרשת ביטחון לביטולים (פרק 26).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"בענן חייבים את השירות של הענן" — BullMQ על ElastiCache הוא ענן לגמרי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E72">
+    <h3>P26.5-E72 · ‏policy ל־consumer של SQS <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>receive, ‏delete, ‏ChangeMessageVisibility — ומה עוד?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־DLQ מקבל הודעות מ־SQS עצמו (redrive), לא מ־worker.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>צריך: <code>sqs:ReceiveMessage</code>, ‏<code>sqs:DeleteMessage</code> (ו־Batch), ‏<code class="mid">sqs:ChangeMessageVisibility</code> (heartbeat), ‏<code>sqs:GetQueueAttributes</code>. לא צריך: <code>SendMessage</code>, ‏<code>PurgeQueue</code>, ‏<code>DeleteQueue</code>, ‏<code>SetQueueAttributes</code>.</li><li>ה־ARN של התור הזה בלבד (<code class="mid">arn:aws:sqs:eu-central-1:123456789012:invoices</code>).</li><li><code>SendMessage</code> — רק שירות ההזמנות. ל־DLQ אף אחד לא שולח ישירות — SQS מעביר לפי ה־RedrivePolicy (והכלי של ה־redrive, ‏E69, צריך הרשאה מפורשת כשמריצים אותו).</li><li>באג או פריצה ב־worker יכולים <code>PurgeQueue</code> (למחוק את כל ההזמנות שממתינות), לשלוח הודעות מזויפות לכל תור בחשבון, או למחוק תורים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>ChangeMessageVisibility</code> — ה־heartbeat נכשל בשקט (‏E67 בולע את השגיאה), וההודעות חוזרות באמצע עבודה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E73">
+    <h3>P26.5-E73 · ‏Lambda שקוראת מ־SQS <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>AWS מושך בשבילך, ומוחק את כל ה־batch אם ה־handler הצליח.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>batchItemFailures</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שירות של AWS (event source mapping) עושה long polling, קורא ל־Lambda עם ה־batch, ומוחק אם הצליחה.</li><li>הכול נחשב כישלון — כל ה־10 חוזרות אחרי ה־visibility timeout, ו־9 שכבר טופלו יטופלו שוב (כפילות).</li><li>ה־handler מחזיר רשימה של ההודעות שנכשלו (<code>batchItemFailures</code>), ורק הן חוזרות. בדיוק <code>failed</code> של E10.</li><li>עבודה ארוכה (Lambda מוגבלת ב־15 דקות), עומס קבוע (שעת מכונה זולה יותר), חיבורים כבדים למסד (כל Lambda פותחת חיבור — עם אלף במקביל, המסד קורס).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>try/catch</code> סביב כל ה־batch שמחזיר הצלחה — ההודעה שנכשלה נמחקת ונעלמת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E74">
+    <h3>P26.5-E74 · ‏claim check: הודעה גדולה דרך S3 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>Buffer.byteLength(json)</code> — עברית היא 2 בתים לאות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">(await s3.send(new GetObjectCommand({ Bucket, Key }))).Body!.transformToString()</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E74: claim check — הודעה גדולה דרך S3
+import { randomUUID } from "node:crypto";
+import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { SendMessageCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export async function sendClaimCheck(
+  { s3, sqs }: { s3: S3Client; sqs: SQSClient },
+  { bucket, queueUrl }: { bucket: string; queueUrl: string },
+  payload: unknown,
+  limitBytes = 200_000,
+): Promise&lt;"inline" | "s3"&gt; {
+  const json = JSON.stringify(payload);
+  if (Buffer.byteLength(json) &lt;= limitBytes) {
+    await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify({ inline: payload }) }));
+    return "inline";
+  }
+  const s3Key = `claims/${randomUUID()}.json`;
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Key, Body: json, ContentType: "application/json" }));
+  await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify({ s3Key }) }));
+  return "s3";
+}
+
+export async function readClaimCheck(s3: S3Client, bucket: string, body: string) {
+  const msg = JSON.parse(body) as { inline?: unknown; s3Key?: string };
+  if (msg.s3Key) {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: msg.s3Key }));
+    return JSON.parse(await obj.Body!.transformToString());
+  }
+  return msg.inline;
+}</code></pre>
+<p>הסדר: קודם S3, אחר כך התור — ככה לעולם אין כרטיס לקובץ שלא קיים. ומי מוחק את הקבצים? בדרך כלל lifecycle rule על ה־prefix <code>claims/</code> (למשל אחרי 14 יום, כמו ה־DLQ) — לא ה־consumer, שאולי עוד יצטרך לקרוא שוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>json.length</code> — עם עברית, הודעה "קטנה" עוברת את המגבלה.</li><li>לשלוח את ההודעה לפני ש־<code>PutObject</code> הסתיים — consumer מהיר מקבל <code>NoSuchKey</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E75">
+    <h3>P26.5-E75 · ‏poller שנעצר יפה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>let running = true</code>, ו־<code class="mid">const loop = (async () =&gt; { while (running) { … } })()</code>. ‏<code>stop</code>: ‏<code class="mid">running = false; await loop</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>receive שכבר בדרך יחזור אחרי עד <code>waitSeconds</code> — ההודעות שהגיעו בו מטופלות לפני שהלולאה בודקת את <code>running</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E75: poller שנעצר יפה
+import { DeleteMessageCommand, ReceiveMessageCommand, type SQSClient } from "@aws-sdk/client-sqs";
+
+export function startPoller(sqs: SQSClient, queueUrl: string, handler: (body: unknown) =&gt; Promise&lt;void&gt;, { waitSeconds }: { waitSeconds: number }) {
+  let running = true;
+  const counts = { handled: 0, failed: 0 };
+  const loop = (async () =&gt; {
+    while (running) {
+      let msgs;
+      try {
+        ({ Messages: msgs = [] } = await sqs.send(new ReceiveMessageCommand({ QueueUrl: queueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: waitSeconds })));
+      } catch {
+        await new Promise((r) =&gt; setTimeout(r, 200));
+        continue;
+      }
+      for (const m of msgs) {
+        try {
+          await handler(JSON.parse(m.Body!));
+          await sqs.send(new DeleteMessageCommand({ QueueUrl: queueUrl, ReceiptHandle: m.ReceiptHandle! }));
+          counts.handled++;
+        } catch {
+          counts.failed++;
+        }
+      }
+    }
+  })();
+  return {
+    async stop() {
+      running = false;
+      await loop;
+    },
+    stats: () =&gt; ({ ...counts }),
+  };
+}</code></pre>
+<p>ב־SIGTERM (פרק 24): ‏<code>await poller.stop()</code>, ואז לסגור את המסד. במקרה הגרוע ה־stop מחכה <code>waitSeconds</code> — לכן 20 שניות של long polling הם עדיין בתוך 30 השניות של Kubernetes, אבל כדאי לדעת שהן שם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>process.exit</code> ב־SIGTERM — הודעות באמצע טיפול לא נמחקות, ויטופלו שוב.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E76">
+    <h3>P26.5-E76 · ‏batch של 10, במקביל של 3 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>concurrency</code> "עובדים", וכל אחד לוקח את האינדקס הבא מתוך מונה משותף: <code class="mid">while (next &lt; messages.length) { const i = next++; … }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תוצאה לכל אינדקס במערך (<code>results[i] = true/false</code>), ובסוף מסננים לפי הסדר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E76: batch של 10, במקביל של 3
+export async function processBatch&lt;M extends { MessageId: string }&gt;(messages: M[], handler: (m: M) =&gt; Promise&lt;void&gt;, concurrency: number) {
+  const results: boolean[] = [];
+  let next = 0;
+  async function worker() {
+    while (next &lt; messages.length) {
+      const i = next++;
+      try {
+        await handler(messages[i]);
+        results[i] = true;
+      } catch {
+        results[i] = false;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, messages.length) }, worker));
+  return {
+    ok: messages.filter((_, i) =&gt; results[i]).map((m) =&gt; m.MessageId),
+    failed: messages.filter((_, i) =&gt; !results[i]).map((m) =&gt; m.MessageId),
+  };
+}</code></pre>
+<p>‏<code>next++</code> בטוח כאן כי JavaScript רץ ב־thread אחד: בין <code>await</code> ל־<code>await</code> אף "עובד" אחר לא נכנס באמצע. אז ה־<code>failed</code> הולך ל־DeleteMessageBatch (רק ה־ok) — כמו ב־E10.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחלק לגלים של 3 עם <code>Promise.all</code> — הודעה איטית אחת עוצרת את כל הגל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-kafka.html"><small>הבא</small>שיעור 4 — Kafka: partitions, keys ו־consumer groups</a></div>
 </main>
 </body>

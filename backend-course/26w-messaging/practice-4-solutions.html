@@ -54,6 +54,106 @@ order-1 shipped  → partition 1, offset 2</pre>
 </div></details>
     
   </div>
+<div class="ex" id="P26.5-E77">
+    <h3>P26.5-E77 · הוספנו partitions — מה קרה לסדר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>hash % 3</code> ו־<code>hash % 6</code> — לא תמיד אותו מספר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני partitions = שני consumers אולי, בלי סדר ביניהם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>hash(42) % 6</code> — אולי P1, ואולי P4. Kafka לא מעביר הודעות ישנות.</li><li>אם עבר ל־P4 — ‏<code>paid</code> יכול להיקרא לפני <code>placed</code> (‏P4 מטופל ע״י consumer אחר, או נקרא קודם). הסדר לכל key נשבר — רק לרגע המעבר, אבל זה מספיק.</li><li>לתכנן מראש מספר partitions נדיב (קשה להוריד, יקר לשנות); או topic חדש והעברה מסודרת; וב־consumer — ‏seq לכל ישות שמזהה אירוע ישן (‏E13).</li><li>partitions הם תקרת המקביליות של group: 3 partitions = עד 3 consumers עובדים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Kafka יעביר את ההודעות הישנות לפי ה־hash החדש" — לא. log לא משתנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E78">
+    <h3>P26.5-E78 · ‏rebalance — מי קורא מה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל partition ל־consumer אחד בדיוק, בתוך group.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Kafka מגלה consumer מת אחרי session timeout.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>A: ‏P0–P3.</li><li>A ו־B — שניים כל אחד (למשל A: P0, P1; B: P2, P3).</li><li>5 consumers, 4 partitions: ארבעה קוראים partition אחד, ואחד (למשל E) — כלום. הוא standby.</li><li>אחרי session timeout (שניות) — rebalance: ה־partition של B עובר למישהו אחר (אולי ל־E שחיכה).</li><li>מי שמקבל את ה־partition מתחיל מה־committed offset — ההודעה תטופל שוב. at-least-once, ולכן אידמפוטנטיות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף consumers כדי להוריד lag" מעבר למספר ה־partitions — הם יושבים בטלים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E79">
+    <h3>P26.5-E79 · ‏autocommit — מה יכול להשתבש? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>autocommit מסמן "נקרא", לא "טופל".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>commit = "מכאן נמשיך בפעם הבאה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אבדו. ה־offset התקדם, ואף אחד לא יקרא אותן שוב (אלא ב־replay ידני).</li><li>אבדה — ה־commit כבר כלל אותה. at-most-once.</li><li>יטופלו שוב — ה־commit האחרון לפני 201. at-least-once.</li><li>commit אחרי טיפול: רק מה שבאמת טופל מסומן ← at-least-once עקבי, בלי אובדן. ושגיאה (המסד נפל) ← לא ממשיכים הלאה; מנסים שוב, או עוצרים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נבלע שגיאות כדי לא לתקוע את ה־partition" — עם autocommit, זה בדיוק "לזרוק הודעות".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E80">
+    <h3>P26.5-E80 · לקרוא lag <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>lag = ‏end − committed.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>partition אחד = consumer אחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏P0: 5, ‏P1: 5, ‏P2: 46,000. סה״כ 46,010.</li><li>(א) "key חם" — לקוח אחד ענק שכל ההודעות שלו ב־P2. (ב) ה־consumer של P2 תקוע: הודעה רעלה שנכשלת שוב ושוב, או handler איטי שנתקע (‏timeout למסד).</li><li>לא — P2 נקרא רק ע״י consumer אחד. צריך לתקן את הסיבה: לשחרר את ההודעה התקועה (DLQ), או לפזר את ה־key החם.</li><li>lag שעולה בהתמדה ב־partition מסוים, או "זמן מאז ה־commit האחרון" — alarm אחרי כמה דקות. ‏(‏E19 מחשב את זה.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להסתכל רק על lag כולל — partition אחד תקוע מתחבא בממוצע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E81">
+    <h3>P26.5-E81 · ‏retention ו־replay <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הודעה ישנה מה־retention נמחקת — לא משנה אם נקראה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>offset שכבר לא קיים ← לפי <code>auto.offset.reset</code> (או ה־fallback של הספרייה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>רק 7 הימים האחרונים. את השאר — מהמסד (backfill), או שלא.</li><li>לא דרך Kafka — האירועים נמחקו. מתקנים מהמסד, או מגיבוי של האירועים (S3).</li><li>ה־committed offset שלו כבר לא קיים (נמחק). הוא קופץ לפי ההגדרה: ל־earliest (מה שנשאר — ומפספס את מה שנמחק) או ל־latest (מפספס הכול באמצע). בכל מקרה — הודעות אבדו לו.</li><li>דיסק שגדל לנצח; מידע אישי שאי אפשר למחוק בקלות (זכות להישכח); ושינויי סכמה של שנים בתוך אותו topic. אפשר — אבל זה תכנון שלם (גרסאות, compaction, ארכיון), לא שינוי של הגדרה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Kafka שומר הכול" — הוא שומר לפי retention. ברירת המחדל היא שבוע.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.5-E12">
     <h3>P26.5-E12 · producer של Kafka 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -328,7 +428,298 @@ next: 4 pending: 1</pre>
 
 </div></details>
   </div>
+<div class="ex" id="P26.5-E82">
+    <h3>P26.5-E82 · חלוקת partitions בין consumers 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const base = Math.floor(partitions / n);
+const extra = partitions % n;</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>consumer במקום i מקבל <code>base + (i &lt; extra ? 1 : 0)</code>, החל מ־partition שאחרי הקודם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E82: חלוקת partitions בין consumers
+export function assignPartitions(partitions: number, consumers: string[]): Record&lt;string, number[]&gt; {
+  if (new Set(consumers).size !== consumers.length) throw new Error("שמות כפולים");
+  const sorted = [...consumers].sort();
+  const n = sorted.length;
+  const out: Record&lt;string, number[]&gt; = {};
+  if (n === 0) return out;
+  const base = Math.floor(partitions / n);
+  const extra = partitions % n;
+  let next = 0;
+  sorted.forEach((c, i) =&gt; {
+    const count = base + (i &lt; extra ? 1 : 0);
+    out[c] = Array.from({ length: count }, (_, k) =&gt; next + k);
+    next += count;
+  });
+  return out;
+}</code></pre>
+<p>מכאן רואים שתי אמיתות מהשיעור: consumers מעבר למספר ה־partitions מקבלים <code>[]</code>, וכל שינוי ברשימה (מישהו הצטרף או נפל) מזיז partitions בין כולם. (Kafka היום מעדיף שיטות "דביקות" — cooperative sticky — שמזיזות כמה שפחות.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי מיון — אותה קבוצה מקבלת חלוקה אחרת בכל פעם, לפי סדר ההצטרפות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E83">
+    <h3>P26.5-E83 · להחזיר group אחורה (replay) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם בודקים את כל הערכים, ורק אז קריאה אחת ל־admin.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">Object.entries(offsets).map(([p, o]) =&gt; ({ partition: Number(p), offset: BigInt(o) }))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E83: להחזיר group אחורה (replay)
+import type { Admin } from "@platformatic/kafka";
+
+export async function rewindGroup(admin: Admin, groupId: string, topic: string, offsets: Record&lt;number, number&gt;) {
+  const entries = Object.entries(offsets).map(([p, o]) =&gt; ({ partition: Number(p), offset: o }));
+  for (const e of entries) {
+    if (!Number.isInteger(e.partition) || e.partition &lt; 0) throw new RangeError(`partition לא תקין: ${e.partition}`);
+    if (!Number.isInteger(e.offset) || e.offset &lt; 0) throw new RangeError(`offset לא תקין: ${e.offset}`);
+  }
+  if (entries.length === 0) return;
+  await admin.alterConsumerGroupOffsets({
+    groupId,
+    topics: [{ name: topic, partitionOffsets: entries.map((e) =&gt; ({ partition: e.partition, offset: BigInt(e.offset) })) }],
+  });
+}</code></pre>
+<p>שני תנאים לפני replay אמיתי: ה־group לא רץ באותו רגע (Kafka לא ייתן לשנות offsets של group פעיל), וה־consumer אידמפוטנטי — כי כל מה שבין ה־offset החדש לישן יטופל שוב. ‏(בשורת הפקודה: <code class="mid">kafka-consumer-groups --reset-offsets</code>.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־admin לכל partition בנפרד — partition לא תקין באמצע משאיר group חצי מוזז.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E84">
+    <h3>P26.5-E84 · ‏dedupe עם חלון: לזכור רק את האחרונים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>Set</code> שומר סדר הכנסה. הישן ביותר: <code>set.values().next().value</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">if (set.size &gt; max) set.delete(oldest)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E84: dedupe עם חלון — לזכור רק את האחרונים
+export class RecentIds {
+  #ids = new Set&lt;string&gt;();
+  #max: number;
+  constructor(max: number) {
+    this.#max = max;
+  }
+
+  seen(id: string) {
+    if (this.#ids.has(id)) return true;
+    this.#ids.add(id);
+    if (this.#ids.size &gt; this.#max) this.#ids.delete(this.#ids.values().next().value as string);
+    return false;
+  }
+
+  get size() {
+    return this.#ids.size;
+  }
+}</code></pre>
+<p>זיכרון קבוע, ו־O(1) לכל הודעה. המחיר: כפילות שמגיעה אחרי יותר מ־<code>max</code> הודעות (replay של יום שלם!) לא תיתפס. לכן זו אופטימיזציה מעל ההגנה האמיתית (UNIQUE במסד), לא במקומה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מערך עם <code>includes</code> — O(n) לכל הודעה; עם 100,000 זה מורגש.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.5-E85">
+    <h3>P26.5-E85 · ‏outbox כ־log ו־Kafka כ־log <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏INSERT לטבלה ועדכון ההזמנה — באותה טרנזקציה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>partitions, retention, הרבה groups בקצב גבוה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אטומיות עם שאר הנתונים: האירוע נכתב יחד עם השינוי, או לא בכלל. אין dual write.</li><li>נפח וקצב (מיליוני הודעות בשנייה), מקביליות מובנית (partitions ו־groups), retention ו־replay, ואקוסיסטם של צרכנים — בלי להעמיס על המסד הראשי.</li><li>כל אחד במה שהוא טוב: הטבלה — "נכתב יחד עם ההזמנה"; Kafka — "מופץ לעשרה שירותים". ה־relay מחבר (שיעור 5).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נקרא ישירות מטבלת ה־outbox בכל השירותים" — עובד לשניים־שלושה; עם עשרה, המסד הראשי הופך ל־broker.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E86">
+    <h3>P26.5-E86 · ‏Redis pub/sub או Kafka? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>pub/sub לא שומר; log שומר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה הנזק אם הודעה אחת אבדה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>pub/sub: כלום — פספס. Kafka: ממשיך מה־offset שלו וקורא את כל מה שהצטבר.</li><li>pub/sub: רק מעכשיו. Kafka: יכול לקרוא מתחילת ה־retention.</li><li>ביטול cache — pub/sub (אבד? ה־TTL מתקן). חשבוניות — Kafka (או תור): חייב לא לאבד. לוח בדפדפן — pub/sub ל־SSE, ובחיבור מחדש טוענים מצב מלא (פרק 26, שיעור 6).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־Kafka לכל דבר "כי הוא אמין" — consumer group לכל instance של API רק בשביל ביטול cache זה הרבה מנגנון בשביל הודעה שמותר לאבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E87">
+    <h3>P26.5-E87 · איך בודקים consumer? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"handler" טהור מול "צינור" (consume/commit).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כפילות, סדר, כישלון באמצע.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>את ה־handler כפונקציה: מקבל הודעה מפוענחת, מחזיר/כותב. מפרקים: פענוח וולידציה (‏E89), לוגיקה (‏E13), ו"צינור" דק שרק מחבר ל־Kafka. ה־unit tests על שני הראשונים.</li><li>הצינור: שה־commit קורה אחרי הטיפול, ש־group חדש מתחיל מהמקום הנכון, שאחרי נפילה ממשיכים מה־committed — דברים שתלויים בהתנהגות של ה־broker והספרייה.</li><li>(א) אותה הודעה פעמיים ← תוצאה אחת. (ב) הודעות של אותו key בסדר הפוך ← המצב הנכון. (ג) נפילה אחרי עדכון המסד ולפני ה־commit ← ההרצה הבאה לא מכפילה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>mock של כל ה־Kafka client כדי "לבדוק את ה־commit" — בודק את ה־mock, לא את Kafka.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E88">
+    <h3>P26.5-E88 · ‏lag לכל partition ב־SQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קודם — רשימת (group, topic): <code class="mid">SELECT DISTINCT group_name, topic FROM committed_offsets</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחר כך <code class="mid">JOIN end_offsets USING (topic)</code>, ו־<code class="mid">LEFT JOIN committed_offsets</code> על group, ‏topic ו־partition.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P26.5-E88: lag לכל partition ב־SQL
+WITH groups AS (SELECT DISTINCT group_name, topic FROM committed_offsets)
+SELECT g.group_name, g.topic, e.partition,
+       e.end_offset - COALESCE(c.committed, 0) AS lag
+FROM groups g
+JOIN end_offsets e ON e.topic = g.topic
+LEFT JOIN committed_offsets c
+  ON c.group_name = g.group_name AND c.topic = g.topic AND c.partition = e.partition
+ORDER BY lag DESC, g.group_name, g.topic, e.partition;</code></pre>
+<p>ה־LEFT JOIN הוא העיקר: partition שה־group עוד לא נגע בו (למשל אחרי שהוסיפו partitions) הוא בדיוק המקום שבו lag מתחבא — ו־JOIN רגיל היה מעלים אותו מהדוח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתחיל מ־<code>committed_offsets</code> בלבד — partitions בלי commit לא מופיעים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E89">
+    <h3>P26.5-E89 · לפענח הודעה לפי event-type, עם zod 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const schemas: Record&lt;string, z.ZodType&gt; = { "order.placed": z.object({ … }), … };</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הסדר: header ← סוג מוכר ← JSON ← schema ← key.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E89: לפענח הודעה לפי event-type, עם zod
+import { z } from "zod";
+
+const id = z.number().int().positive();
+const schemas: Record&lt;string, z.ZodType&lt;{ orderId: number }&gt;&gt; = {
+  "order.placed": z.object({ orderId: id, email: z.string().includes("@"), totalCents: id }),
+  "order.paid": z.object({ orderId: id, amountCents: id }),
+  "order.shipped": z.object({ orderId: id, carrier: z.string().min(1) }),
+};
+
+type Result = { ok: true; type: string; event: unknown } | { ok: false; reason: string };
+
+export function decodeMessage(m: { key: string | null; value: string; headers: Record&lt;string, string&gt; }): Result {
+  const type = m.headers["event-type"];
+  if (!type) return { ok: false, reason: "missing-type" };
+  const schema = schemas[type];
+  if (!schema) return { ok: false, reason: "unknown-type" };
+  let data: unknown;
+  try {
+    data = JSON.parse(m.value);
+  } catch {
+    return { ok: false, reason: "bad-json" };
+  }
+  const r = schema.safeParse(data);
+  if (!r.success) return { ok: false, reason: "invalid" };
+  if (m.key !== String(r.data.orderId)) return { ok: false, reason: "wrong-key" };
+  return { ok: true, type, event: data };
+}</code></pre>
+<p>‏<code>z.object</code> (לא strict) בכוונה: producer שמוסיף שדה לא שובר consumers ישנים (שיעור 5). וכל <code>ok: false</code> הוא שגיאה <em>קבועה</em> — ההודעה הולכת ל־DLQ (topic של dead letters), לא ל־retry.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את <code>r.data</code> — zod מוריד את השדות הלא מוכרים, ו־consumer שמעביר את האירוע הלאה מאבד מידע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E90">
+    <h3>P26.5-E90 · סדר בתוך key, מקביליות בין keys 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>Map&lt;key, Promise&lt;void&gt;&gt;</code> — "הזנב" של כל key. הודעה חדשה: <code class="mid">tail.then(() =&gt; handler(m))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הזנב לא צריך להיכשל: <code>next.catch(() =&gt; {})</code>. ניקוי: אם בסוף הזנב עדיין הוא אותו Promise — <code>delete</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E90: סדר בתוך key, מקביליות בין keys
+export function perKeySerial&lt;M extends { key: string }&gt;(handler: (m: M) =&gt; Promise&lt;void&gt;) {
+  const tails = new Map&lt;string, Promise&lt;void&gt;&gt;();
+  const all = new Set&lt;Promise&lt;void&gt;&gt;();
+  return {
+    push(m: M) {
+      const prev = tails.get(m.key) ?? Promise.resolve();
+      const run = prev.then(() =&gt; handler(m));
+      const tail = run.catch(() =&gt; {});
+      tails.set(m.key, tail);
+      all.add(tail);
+      tail.then(() =&gt; {
+        all.delete(tail);
+        if (tails.get(m.key) === tail) tails.delete(m.key);
+      });
+      return run;
+    },
+    async idle() {
+      while (all.size) await Promise.all([...all]);
+    },
+  };
+}</code></pre>
+<p>ככה consumer אחד מטפל באלף הזמנות במקביל — וכל הזמנה בסדר שלה. הסכנה: commit. offset 100 יכול להסתיים לפני 98 (של key אחר) — ו־commit של 101 "מדלג" על 98 שעוד לא נגמרה. לכן ב־Kafka עושים commit רק עד ה־offset הרציף שהסתיים (או מחכים ל־<code>idle()</code> לפני commit).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">prev.then(() =&gt; handler(m))</code> בלי <code>catch</code> בזנב — כישלון אחד גורם לכל ההודעות הבאות של אותו key להידחות בלי לרוץ.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-4.html"><small>חזרה</small>תרגול שיעור 4</a><a href="lesson-05-reliability.html"><small>הבא</small>שיעור 5 — אמינות: אידמפוטנטיות, outbox ו־retries</a></div>
 </main>
 </body>

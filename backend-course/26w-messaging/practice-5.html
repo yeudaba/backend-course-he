@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 26.5</a> ‹ תרגול שיעור 5</div>
   <h1>✍️ תרגול שיעור 5 — אמינות: אידמפוטנטיות, outbox ו־retries</h1>
-  <p class="subtitle">יחידה 26.5 · 10 שאלות · 0 הבנה · 10 קוד · ⏱ כ־300 דק׳</p>
+  <p class="subtitle">יחידה 26.5 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־410 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,50 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 5: אמינות: אידמפוטנטיות, outbox ו־retries</h2>
-  <p class="subtitle">10 שאלות · 0 הבנה · 10 קוד · ⏱ כ־300 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־315 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+<div class="ex" id="P26.5-E91">
+    <h3>P26.5-E91 · אידמפוטנטי מטבעו, או צריך עזרה?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>לכל טיפול באירוע — אידמפוטנטי מטבעו? אם לא, איזו משלוש הדרכים מהשיעור מתאימה (מטבעו / upsert לפי מפתח טבעי / ‏<code>processed_events</code>)?</p>
+<ol><li><code class="mid">UPDATE users SET email = $2 WHERE id = $1</code></li><li><code class="mid">UPDATE accounts SET balance = balance + $2 WHERE id = $1</code></li><li><code class="mid">INSERT INTO shipments (order_id, carrier) VALUES ($1, $2)</code></li><li><code class="mid">DELETE FROM carts WHERE user_id = $1</code></li><li><code class="mid">UPDATE orders SET status = 'paid' WHERE id = $1</code> — אבל אחרי <code>shipped</code> הוא מחזיר אחורה את הסטטוס.</li><li>‏<code class="mid">INSERT INTO page_views (product_id, at) VALUES (…)</code> — סופרים צפיות.</li></ol>
+
+  </div>
+<div class="ex" id="P26.5-E92">
+    <h3>P26.5-E92 · ‏dual write — ארבעה סדרים</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>לכל קוד — מה קורה אם התהליך נופל ב־💥? ואיזה מהם בטוח?</p>
+<ol><li><code>INSERT order</code> ← 💥 ← <code>publish</code></li><li><code>publish</code> ← 💥 ← <code>INSERT order</code></li><li><code class="mid">BEGIN; INSERT order; publish; COMMIT</code> — ‏💥 לפני COMMIT</li><li><code class="mid">BEGIN; INSERT order; INSERT outbox; COMMIT</code> ← 💥 ← (relay עוד לא רץ)</li></ol>
+
+  </div>
+<div class="ex" id="P26.5-E93">
+    <h3>P26.5-E93 · לנסות שוב, או לוותר?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>לכל שגיאה בטיפול — retry עם backoff, או dead letter מיד?</p>
+<ol><li><code>ECONNREFUSED</code> מהמסד.</li><li>‏<code>400 Bad Request</code> מספק המיילים: "invalid email address".</li><li>‏<code>429 Too Many Requests</code> עם <code>Retry-After: 30</code>.</li><li><code>SyntaxError</code> ב־<code>JSON.parse</code> של ההודעה.</li><li>‏<code>404</code>: ההזמנה לא קיימת — אולי כי האירוע הגיע לפני שה־replica של המסד התעדכנה.</li><li>‏<code>503</code> מספק התשלומים.</li><li>‏<code class="mid">TypeError: Cannot read properties of undefined</code> בקוד שלך.</li></ol>
+
+  </div>
+<div class="ex" id="P26.5-E94">
+    <h3>P26.5-E94 · מ־version 1 ל־version 2, בלי לשבור</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>‏<code>order.placed</code> גרסה 1: ‏<code>total: 89.9</code> (מספר, בשקלים). גרסה 2: ‏<code class="mid">total: { amountCents: 8990, currency: "ILS" }</code>. יש שלושה consumers.</p>
+<ol><li>סדר את השלבים: (א) producer עובר לשלוח v2; (ב) consumers מתעדכנים לקבל v1 <em>וגם</em> v2; (ג) מוחקים את התמיכה ב־v1; (ד) מחכים שכל ה־v1 ייצאו מה־topic/התור.</li><li>למה "להוסיף שדה <code>totalCents</code> לצד <code>total</code>" אינו שינוי שובר, ו"לשנות את הטיפוס של <code>total</code>" כן?</li><li>מה עושה consumer ישן שמקבל v2 שהוא לא מכיר?</li></ol>
+
+  </div>
+<div class="ex" id="P26.5-E95">
+    <h3>P26.5-E95 · ‏seq: איזה אירוע ישן?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>projection של "מצב ההזמנה" (‏E13) שומר <code>{ status, seq }</code>. הגיעו, בסדר הזה, אירועים של הזמנה 42:</p>
+<pre><code class="lang-text">seq=1 placed   seq=3 shipped   seq=2 paid   seq=3 shipped   seq=5 delivered   seq=4 out-for-delivery</code></pre>
+<ol><li>מה הסטטוס אחרי כל אירוע, ואילו אירועים נזרקים?</li><li>מה הסטטוס הסופי?</li><li>מאיפה ה־producer מקבל את ה־seq (רמז: השורה במסד)?</li><li>מה ה־projection מפספס כש־<code>paid</code> נזרק, ומתי זה בעייתי?</li></ol>
+
+  </div>
+<div class="ex" id="P26.5-E96">
+    <h3>P26.5-E96 · שני relays על אותה טבלת outbox</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
+<p>לזמינות, מריצים שני עותקים של ה־relay (‏E17). כל אחד: <code class="mid">SELECT … WHERE published_at IS NULL ORDER BY id LIMIT 100</code>, ‏publish לכל אחד, ‏<code class="mid">UPDATE … SET published_at = now()</code>.</p>
+<ol><li>מה קורה כששניהם רצים באותו רגע?</li><li>מה עושה <code>FOR UPDATE SKIP LOCKED</code> (בתוך טרנזקציה), ולמה דווקא <code>SKIP</code>?</li><li>עם SKIP LOCKED — relay A לקח את שורות 1–100 (של הזמנה 42: ‏placed בשורה 7), ו־B לקח 101–200 (של הזמנה 42: ‏paid בשורה 150). מה יכול לקרות לסדר, ואיך E28 פותר?</li></ol>
+
+  </div>
 <div class="ex" id="P26.5-E08">
     <h3>P26.5-E08 · מעטפת לאירועים 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
@@ -76,11 +119,35 @@
 <p>הדרך: ה־offsets לא נשמרים ב־Kafka, אלא בטבלה <code>consumer_offsets</code> — <em>באותה טרנזקציה</em> עם העדכון של <code>revenue_by_minute</code>. בעלייה: קוראים את ה־offsets מהמסד, ומתחילים מהם (<code>MessagesStreamModes.MANUAL</code> עם <code>offsets</code>) — partition שאין לו שורה ← מ־0. עוצרים אחרי <code>max</code> אירועים.</p>
 
   </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־95 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P26.5-E97">
+    <h3>P26.5-E97 · ‏processed_events ו־isolation</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 18, שיעור 5</span></div>
+<p>ב־E15 ה־consumer עושה בטרנזקציה: <code class="mid">INSERT INTO processed_events … ON CONFLICT DO NOTHING</code>, ורק אם נוספה שורה — את הפעולה. (1) שני consumers מקבלים את אותו אירוע באותה מילישנייה. מה בדיוק עוצר את השני — איזה מנגנון של PostgreSQL מפרק 18? (2) למה גרסה עם <code class="mid">SELECT … WHERE event_id = $1</code> ואז <code>INSERT</code> שבורה גם ב־<code>READ COMMITTED</code>? (3) הטרנזקציה של הראשון נכשלה אחרי ה־INSERT. מה רואה השני?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> טרנזקציות, נעילות ו־UNIQUE מפרק 18 — והשיעור: consumer אידמפוטנטי.</p>
+
+  </div>
+<div class="ex" id="P26.5-E98">
+    <h3>P26.5-E98 · ‏outbox בחנות הקפה</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 26, שיעור 5</span></div>
+<p>בפרק 26 (שיעור 5), ב־<code>pay</code>: ‏UPDATE של ההזמנה, ואחרי ה־COMMIT — <code class="mid">queue.add("order-confirmation")</code>. ה־README אמר "מה הייתי משפר: outbox". (1) תאר את השינוי בקוד: מה נכתב בטרנזקציה, ומי מעביר ל־BullMQ? (2) מה ה־<code>jobId</code> שה־relay ישתמש בו, ולמה? (3) מה נשאר נכון מהמנגנונים הקיימים (‏UNIQUE על המייל), ולמה עדיין צריך אותו?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> התור והמייל של פרויקט 3 בפרק 26 (וה־relay של P26-E83) — והשיעור: transactional outbox.</p>
+
+  </div>
+<div class="ex" id="P26.5-E99">
+    <h3>P26.5-E99 · לבדוק אידמפוטנטיות</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 22, שיעור 5</span></div>
+<p>כתוב (בתיאור, או ב־<code>node:test</code>) שלוש בדיקות שמוכיחות ש־<code>handlePaymentEvent</code> (‏E15) אידמפוטנטי — ובכל אחת: מה ה־setup, מה הפעולה, ומה ה־assert. אחת מהן חייבת להיות במקביל. ולמה בדיקה שקוראת לפונקציה פעמיים <em>ברצף</em> לא מספיקה?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> בדיקות עם מסד אמיתי ו־<code>Promise.all</code> מפרק 22 — והשיעור: consumer אידמפוטנטי.</p>
+
+  </div>
 <div class="ex typed" id="P26.5-E27">
     <h3>P26.5-E27 · בדיקות ל־decide: לנסות שוב או dead letter? 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 5</span></div>
 <p><strong>🔁 חזרה על כתיבת בדיקות (פרק 22): גבולות, union של תוצאות, וטבלת קלטים לא תקינים.</strong> ב־<code class="mid">26w-messaging/starter/P26.5-E27.ts</code> יש <code class="mid">decide(attempt, maxAttempts, error)</code>, שמחליטה מה לעשות בהודעה שהטיפול בה נכשל:</p>
 <ul><li><code>attempt</code> — מספר הניסיון שנכשל עכשיו (1 = הראשון). לא שלם או קטן מ־1 ← <code>RangeError</code>.</li><li>שגיאה שאינה <code>retryable</code> ← <code class="mid">{ action: "dead-letter", reason }</code> מיד. ה־<code>reason</code> כולל את הודעת השגיאה.</li><li>הגענו ל־<code>maxAttempts</code> ניסיונות ← dead-letter, גם כאן עם הודעת השגיאה ב־<code>reason</code>.</li><li>אחרת ← <code class="mid">{ action: "retry", delayMs }</code>: ‏1000ms × 2<sup>attempt−1</sup> (1000, 2000, 4000...), ולכל היותר 60,000.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> כתיבת בדיקות עם טבלת מקרים מפרק 22 — והשיעור: ההחלטה "לנסות שוב או dead letter".</p>
 <p>כתוב בדיקות ב־<code>P26.5-E27.spec.ts</code>, מקובץ ריק. הבודק מריץ אותן על הקוד התקין, על שני מימושים תקינים אחרים, ועל 11 גרסאות עם באג. את <code>P26.5-E27.ts</code> לא משנים.</p>
 <pre class="terminal"><span class="prompt">% </span>node --test 26w-messaging/starter/P26.5-E27.spec.ts
 <span class="prompt">% </span>npm run check P26.5-E27</pre>
@@ -92,11 +159,21 @@
 <p><strong>🔁 חזרה על CTE ופונקציות חלון: ‏<code>ROW_NUMBER</code> ו־<code>COUNT</code> עם <code>PARTITION BY</code> (‏P17-E27, ‏P18-E28)</strong>. ה־relay של ה־outbox (שיעור 5) חייב לשמור סדר לכל מפתח: אסור לפרסם <code>OrderShipped</code> לפני <code>OrderPaid</code> של אותה הזמנה. לכן הוא שואל: "מה האירוע הבא לכל מפתח, וכמה ממתינים אחריו?". בטבלה <code class="mid">outbox(id, topic, key, event_type, created_at, published_at)</code> כתוב שאילתה עם העמודות:</p>
 <ul><li><code>topic</code>, ‏<code>key</code> — שורה אחת לכל צירוף שיש לו אירועים שלא פורסמו (<code>published_at IS NULL</code>). אותו <code>key</code> ב־topic אחר הוא רצף נפרד.</li><li><code>next_id</code> — ה־<code>id</code> הקטן ביותר מבין הממתינים, ו־<code>event_type</code> שלו.</li><li><code>pending</code> — כמה אירועים ממתינים לאותו <code>topic</code> ו־<code>key</code>.</li></ul>
 <p>מיון: <code>next_id</code>.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏CTE ופונקציות חלון מפרקים 17–18 — והשיעור: relay של outbox ששומר סדר לכל מפתח.</p>
 <p>📄 כותבים בקובץ <code class="mid">26w-messaging/starter/P26.5-E28.sql</code> (יש בו רק הערה), ובודקים:</p>
 <pre class="terminal"><span class="prompt">% </span>npm run check P26.5-E28</pre>
 
   </div>
+<div class="ex" id="P26.5-E100">
+    <h3>P26.5-E100 · ‏upcaster: מ־v1 ל־v2 בקריאה 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 11, שיעור 5</span></div>
+<p>הדרך המקובלת לתמוך בגרסאות ישנות (‏E94): בכניסה ל־consumer, כל אירוע "מועלה" לגרסה האחרונה — והלוגיקה מכירה רק אותה. בקובץ <code class="mid">26w-messaging/starter/P26.5-E100.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+<pre><code class="lang-ts">export function upcast(e: { type: string; version: number; data: unknown }): { type: "order.placed"; version: 2; data: { orderId: number; email: string; total: { amountCents: number; currency: string } } }</code></pre>
+<ul><li>רק <code>order.placed</code> (אחר ← <code>Error</code>).</li><li>v2 — כמו שהוא (העתק, לא אותו אובייקט).</li><li>v1: ‏<code class="mid">data: { orderId, email, total }</code> כש־<code>total</code> הוא מספר בשקלים ← <code class="mid">total: { amountCents, currency: "ILS" }</code>, עם <code>amountCents</code> מעוגל לשלם (‏89.9 ← 8990, לא 8990.000000000001).</li><li>גרסה אחרת (כולל 3 — "מהעתיד") ← <code>Error</code> שמזכיר את הגרסה.</li><li>שאר השדות של המעטפה (<code>id</code>, ‏<code>occurredAt</code>…) נשמרים. לא משנים את הקלט.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> discriminated unions ו־<code>switch</code> על שדה מפרק 11 — והשיעור: גרסאות של אירועים.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P26.5-E100</pre>
 
+  </div>
 <div class="pager"><a href="lesson-05-reliability.html"><small>חזרה לשיעור</small>שיעור 5 — אמינות: אידמפוטנטיות, outbox ו־retries</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>
 </main>
 </body>

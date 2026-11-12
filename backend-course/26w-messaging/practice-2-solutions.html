@@ -57,6 +57,107 @@ all    order.created.il, order.cancelled.us, order.cancelled.il, order.created, 
 </div></details>
     
   </div>
+<div class="ex" id="P26.5-E47">
+    <h3>P26.5-E47 · ‏direct, ‏topic או fanout — לאן זה מגיע? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>direct — שוויון מדויק, ו־<code>*</code>/<code>#</code> הם סתם תווים. fanout — מתעלם מה־key.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>topic: ‏<code>*</code> — מילה אחת בדיוק; ‏<code>#</code> — אפס מילים או יותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>direct</strong>: 1 ← ‏q1. ‏2, 3, 4 ← אף אחד (אין binding שהוא בדיוק <code>order.created.il</code>, <code>order</code> או ריק).</li><li><strong>topic</strong>: 1 ← ‏q1, ‏q2, ‏q3. ‏2 ← ‏q3 (‏<code>*</code> לא תופס שתי מילים). ‏3 ← ‏q3 (‏<code>order.*</code> צריך מילה אחרי הנקודה). ‏4 ← ‏q3 (‏<code>#</code> תופס גם אפס מילים).</li><li><strong>fanout</strong>: כל הארבע ← כל שלושת התורים.</li></ul>
+<p>הודעה בלי תור מתאים — נזרקת בשקט. ‏<code>mandatory: true</code> ב־publish גורם ל־RabbitMQ להחזיר אותה ל־producer (אירוע <code>return</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>order.*</code> תופס <code>order.created.il</code> — לזה צריך <code>order.#</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E48">
+    <h3>P26.5-E48 · ‏prefetch: מה קורה בלעדיו? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי prefetch, RabbitMQ דוחף לכל consumer כמה שיש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>prefetch = ‏unacked לכל היותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א׳ מקבל את כל ה־10,000 לזיכרון (unacked), ו־ב׳ — כלום. א׳ עלול להיגמר לו הזיכרון, ועבודה מתעכבת למרות שיש worker פנוי.</li><li>א׳ מחזיק 10 בכל רגע; ב׳ מקבל מיד את הבאות — העבודה מתחלקת.</li><li>חוזרות לתור, ו־ב׳ מקבל אותן (at-least-once — אולי חלקן כבר טופלו).</li><li>גבוה מדי — חזרה לבעיה 1, ונפילה מחזירה הרבה הודעות. ‏1 — בין כל הודעה לבאה יש הלוך־חזור ברשת, וה־worker מחכה. ערך טיפוסי: כמספר העבודות שה־worker באמת יכול להריץ במקביל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיר prefetch <em>אחרי</em> <code>consume</code> — הוא חל רק על consumers שנוצרים אחריו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E49">
+    <h3>P26.5-E49 · ‏nack עם requeue — הלולאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>requeue מחזיר <em>לראש</em> התור, ו־<em>מיד</em>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>prefetch 1 — אותה הודעה, שוב ושוב.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>ההודעה חוזרת לראש התור ונמסרת שוב מיד — אלפי פעמים בשנייה. המעבד ב־100%, הלוג מתמלא באותה שגיאה.</li><li>עם prefetch 1 — תקועות מאחוריה. עם prefetch גבוה — חלקן מטופלות, אבל ההודעה הפגומה תופסת חלק מה־worker לתמיד.</li><li>קבועה (JSON פגום, נתונים לא תקינים) ← <code>nack(msg, false, false)</code> ל־dead letter מיד (‏E07). זמנית (שירות לא זמין) ← retry עם השהיה (תור המתנה עם TTL, ‏E18), ואחרי N ניסיונות — dead letter.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף <code>setTimeout</code> לפני ה־nack" — ההודעה תפוסה (unacked) כל הזמן הזה, ו־worker שנופל באמצע מחזיר אותה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E50">
+    <h3>P26.5-E50 · ‏durable, ‏persistent, ו־RabbitMQ שעלה מחדש <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>durable — ההגדרה של התור שורדת. persistent — ההודעה נכתבת לדיסק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>צריך את שניהם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>התור נעלם — ואיתו ההודעות, גם אם הן persistent.</li><li>התור נשאר, ריק — ההודעות היו רק בזיכרון.</li><li>הכול נשאר (מה שהגיע לדיסק — לכן publisher confirms כשחשוב).</li><li>נמחק כבר כשהחיבור נסגר — זה כל העניין שלו (מתאים ל־"תור לכל instance", ‏E53).</li><li>ה־exchange נשאר, התור וה־binding — לא. הודעות שמגיעות עכשיו — לאף אחד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"הגדרנו persistent, אז שום הודעה לא תאבד" — לא עם תור שאינו durable, ולא בלי volume לקונטיינר (‏E58).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E51">
+    <h3>P26.5-E51 · לקרוא את x-death <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏rejected = ‏nack ב־<code>work</code>. ‏expired = יצאה מתור ההמתנה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הסדר במערך: האחרון שקרה ראשון — אבל אל תסמוך על זה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>פעמיים — <code>count: 2</code> ברשומה של <code>work</code> עם <code>rejected</code>.</li><li>שלישי.</li><li>זה היה הניסיון השלישי, ו־3 הוא המקסימום ← לא לשלוח ל־retry, אלא ל־dead queue (‏E18).</li><li>ב־x-death יש רשומה לכל (תור, סיבה), וגם תורים אחרים בדרך (dead letter, העברה ידנית). הספירה הנכונה היא הרשומה של התור שלך, עם הסיבה שלך — זה בדיוק E55.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לספור את אורך המערך — הוא לא גדל עם כל ניסיון; ה־<code>count</code> גדל.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P26.5-E06">
     <h3>P26.5-E06 · topic exchange 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -266,7 +367,350 @@ export async function startEmailWorker(ch: Channel, queue: string, sendEmail: (t
 </div></details>
     
   </div>
+<div class="ex" id="P26.5-E52">
+    <h3>P26.5-E52 · התאמה של topic binding 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>match(p, k)</code>: אם <code>p</code> ריק ← ‏<code>k</code> ריק. אם <code>p[0] === "#"</code> ← לנסות לדלג על 0, 1, 2… מילים מ־<code>k</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>key ריק — <code>""</code>.split(".") הוא <code>[""]</code>. כדאי להפוך אותו ל־<code>[]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E52: התאמה של topic binding
+const words = (s: string) =&gt; (s === "" ? [] : s.split("."));
+
+function match(p: string[], k: string[]): boolean {
+  if (p.length === 0) return k.length === 0;
+  const [head, ...rest] = p;
+  if (head === "#") {
+    for (let skip = 0; skip &lt;= k.length; skip++) if (match(rest, k.slice(skip))) return true;
+    return false;
+  }
+  if (k.length === 0) return false;
+  return (head === "*" || head === k[0]) &amp;&amp; match(rest, k.slice(1));
+}
+
+export function bindingMatches(pattern: string, routingKey: string) {
+  return match(words(pattern), words(routingKey));
+}</code></pre>
+<p>זה מה שה־topic exchange מריץ על כל binding לכל הודעה (בגרסה יעילה יותר — עץ של מילים). כדאי לבדוק כך תבניות לפני שמקשרים תורים בפרודקשן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמיר ל־regex עם <code>#</code> ← <code>.*</code> — ‏<code>order.#</code> הופך ל־<code>order\..*</code>, שלא תופס <code>order</code> לבד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E53">
+    <h3>P26.5-E53 · ‏fanout: הודעה לכל ה־instances 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const { queue } = await ch.assertQueue("", { exclusive: true });</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const { consumerTag } = await ch.consume(queue, cb, { noAck: true });
+// …
+await ch.cancel(consumerTag);</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E53: fanout — הודעה לכל ה־instances
+import type { Channel } from "amqplib";
+
+export async function subscribeInstance(ch: Channel, exchange: string, onMessage: (data: unknown) =&gt; void) {
+  await ch.assertExchange(exchange, "fanout", { durable: false });
+  const { queue } = await ch.assertQueue("", { exclusive: true });
+  await ch.bindQueue(queue, exchange, "");
+  const { consumerTag } = await ch.consume(queue, (msg) =&gt; {
+    if (msg) onMessage(JSON.parse(msg.content.toString()));
+  }, { noAck: true });
+  return {
+    queue,
+    async cancel() {
+      await ch.cancel(consumerTag);
+    },
+  };
+}
+
+export function broadcast(ch: Channel, exchange: string, data: unknown) {
+  return ch.publish(exchange, "", Buffer.from(JSON.stringify(data)), { contentType: "application/json" });
+}</code></pre>
+<p>זה pub/sub של Redis (פרק 26) — ב־RabbitMQ. תור exclusive לכל instance: instance שמת — התור שלו נמחק לבד, ואין הודעות שנערמות לאף אחד. ‏<code>noAck</code> מתאים כאן: "נקה cache" שאבד אינו אסון (ה־TTL מכסה).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>תור עם שם קבוע לכל ה־instances — אז הם <em>מתחלקים</em> בהודעות (E40), וכל instance מקבל רק חלק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E54">
+    <h3>P26.5-E54 · ‏worker שנותן הזדמנות שנייה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>msg.fields.redelivered</code> — ‏<code>true</code> אם RabbitMQ כבר מסר את ההודעה הזו (ל־consumer כלשהו) ולא קיבל ack.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני <code>try</code>: אחד ל־<code>JSON.parse</code>, ואחד ל־handler.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E54: worker שנותן הזדמנות שנייה אחת
+import type { Channel } from "amqplib";
+
+export async function startSecondChanceWorker(ch: Channel, queue: string, handler: (job: unknown) =&gt; Promise&lt;void&gt;) {
+  await ch.prefetch(1);
+  const { consumerTag } = await ch.consume(queue, async (msg) =&gt; {
+    if (!msg) return;
+    let job: unknown;
+    try {
+      job = JSON.parse(msg.content.toString());
+    } catch {
+      return ch.nack(msg, false, false); // קבוע — אין טעם לנסות שוב
+    }
+    try {
+      await handler(job);
+      ch.ack(msg);
+    } catch {
+      ch.nack(msg, false, !msg.fields.redelivered); // ראשון ← עוד ניסיון; שני ← dead letter
+    }
+  });
+  return consumerTag;
+}</code></pre>
+<p>‏<code>redelivered</code> הוא דגל, לא מונה — "לפחות פעם אחת קודם". לכן זה נותן בדיוק הזדמנות שנייה אחת, וזה גם תופס הודעה שחזרה בגלל worker שנפל (גם אז היא redelivered). לספירה אמיתית — x-death (‏E55) או ה־<code>x-delivery-limit</code> של quorum queues.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>requeue תמיד — הלולאה של E49.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E55">
+    <h3>P26.5-E55 · כמה פעמים כבר נכשלה? (x-death) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">Array.isArray(headers?.["x-death"])</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>filter</code> ואז <code>reduce</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E55: כמה פעמים כבר נכשלה? (x-death)
+type Death = { queue?: string; reason?: string; count?: number };
+
+export function deathCount(headers: Record&lt;string, unknown&gt; | undefined, queue: string, reason?: string) {
+  const deaths = headers?.["x-death"];
+  if (!Array.isArray(deaths)) return 0;
+  return (deaths as Death[])
+    .filter((d) =&gt; d.queue === queue &amp;&amp; (reason === undefined || d.reason === reason))
+    .reduce((s, d) =&gt; s + (typeof d.count === "number" ? d.count : 1), 0);
+}</code></pre>
+<p>זה החלק "באיזה ניסיון אני" של E18: ‏<code class="mid">deathCount(msg.properties.headers, queue, "rejected") + 1</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code class="mid">headers["x-death"][0].count</code> — הרשומה הראשונה יכולה להיות של תור ההמתנה (‏<code>expired</code>), לא של התור שלך.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26.5-E56">
+    <h3>P26.5-E56 · ‏retry ב־BullMQ מול RabbitMQ <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>BullMQ שומר את העבודה ב־Redis, עם <code>attemptsMade</code>, ו־sorted set של עבודות מתוזמנות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תור המתנה אחד לכל השהיה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>BullMQ הוא תור <em>עבודות</em>: לכל עבודה יש מצב (מונה ניסיונות, שגיאה אחרונה), וזמן ריצה עתידי ב־sorted set — "תחזיר בעוד X" הוא פעולה בסיסית. ‏RabbitMQ הוא broker של <em>הודעות</em>: הודעה לא "מחכה עד", היא בתור או לא.</li><li>כמה תורי המתנה — <code>work.retry.1s</code>, ‏<code>work.retry.4s</code>, ‏<code>work.retry.16s</code> — וה־worker בוחר לאיזה לשלוח לפי x-death (או תור לכל השהיה, ‏E60). או plugin של delayed messages.</li><li>כשההודעות כבר זורמות ב־RabbitMQ בין שירותים (ניתוב, כמה צרכנים, שפות שונות), ואין Redis משותף. BullMQ מצוין בתוך אפליקציית Node אחת.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר "בשביל ה־retry" אירועים בין שירותים ל־BullMQ — הוא לא נועד לניתוב ול־fan-out.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E57">
+    <h3>P26.5-E57 · מי רשאי לפרסם? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־RabbitMQ יש הרשאות configure / write / read לפי regex של שמות, לכל משתמש ו־vhost.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>broker הוא צינור, לא מקור אמת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הכול: לפרסם אירועים מזויפים (<code>order.paid</code>), לקרוא את כל התורים (מידע אישי), למחוק תורים.</li><li>משתמש לכל שירות. הזמנות: write ל־exchange של <code>orders</code> בלבד. מיילים: read מהתור שלו, configure לתור שלו בלבד. ו־vhost נפרד לכל סביבה.</li><li>הוא יכול להיות מזויף (שירות שנפרץ), שגוי (באג ב־producer), או ישן. מאמתים את הסכמה (zod), ומה שמשנה כסף — בודקים מול מקור האמת (המסד של ההזמנות), לא לפי מה שכתוב בהודעה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשאיר <code>guest</code>/<code>guest</code> — ב־RabbitMQ הוא עובד רק מ־localhost, אז "פותרים" עם משתמש admin לכולם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E58">
+    <h3>P26.5-E58 · ‏RabbitMQ ב־compose — מה שורד restart? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>restart — אותו קונטיינר. down — קונטיינר חדש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>RabbitMQ שומר נתונים בתיקייה לפי שם ה־node, שנגזר מה־hostname.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הכול — אותו קונטיינר, אותה מערכת קבצים.</li><li>כלום — קונטיינר חדש, דיסק חדש.</li><li><code class="mid">volumes: [rabbit-data:/var/lib/rabbitmq]</code>, ו־<code>hostname: rabbitmq</code> קבוע — אחרת לקונטיינר חדש יש hostname אחר, ו־RabbitMQ מחפש את הנתונים בתיקייה אחרת ("נעלמו").</li><li>healthcheck (<code class="mid">rabbitmq-diagnostics -q ping</code>) ו־<code class="mid">depends_on: { rabbitmq: { condition: service_healthy } }</code> — ובכל מקרה, חיבור מחדש בקוד: broker יכול ליפול גם אחרי שהכול עלה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "שורד" רק עם <code>restart</code> — זה לא מה שקורה ב־deploy.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E59">
+    <h3>P26.5-E59 · ‏POST /events ל־topic exchange 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">country: z.string().regex(/^[A-Za-z]{2}$/)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">ch.publish(exchange, key, Buffer.from(JSON.stringify(event)), {
+  persistent: true,
+  contentType: "application/json",
+  messageId: event.id,
+});</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E59: POST /events ל־topic exchange
+import express from "express";
+import type { Channel } from "amqplib";
+import { z } from "zod";
+
+const schema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["created", "paid", "shipped", "cancelled"]),
+  orderId: z.number().int().positive(),
+  country: z.string().regex(/^[A-Za-z]{2}$/),
+});
+
+export function eventsApp(ch: Channel, exchange: string) {
+  const app = express();
+  app.use(express.json());
+  app.post("/events", (req, res) =&gt; {
+    const r = schema.safeParse(req.body);
+    if (!r.success) return res.status(400).json({ error: "אירוע לא תקין" });
+    const e = r.data;
+    const routingKey = `order.${e.type}.${e.country.toLowerCase()}`;
+    ch.publish(exchange, routingKey, Buffer.from(JSON.stringify(e)), { persistent: true, contentType: "application/json", messageId: e.id });
+    res.status(202).json({ routingKey });
+  });
+  return app;
+}</code></pre>
+<p>ה־routing key נבנה מהנתונים <em>אחרי</em> ולידציה — כך <code>country: "IL"</code> ו־<code>"il"</code> מגיעים לאותו binding, ו־<code>type: "order.#"</code> לא יכול "לנתב" את עצמו לכל התורים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות את ה־key מ־<code>req.body.type</code> לפני ולידציה — לקוח יכול לשלוח <code>"*.#"</code> ולקבל ניתוב שלא התכוונת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E60">
+    <h3>P26.5-E60 · השהיה לכל הודעה — בלי head-of-line 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">assertQueue(name, { durable: true, messageTtl, deadLetterExchange: "", deadLetterRoutingKey: target, expires })</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אותו delay ← אותו תור, עם אותן הגדרות — ‏<code>assertQueue</code> חוזר שוב בלי שגיאה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E60: השהיה לכל הודעה — בלי head-of-line
+import type { Channel } from "amqplib";
+
+export async function scheduleIn(ch: Channel, { waitPrefix, target }: { waitPrefix: string; target: string }, payload: unknown, delayMs: number) {
+  const wait = `${waitPrefix}.${delayMs}`;
+  await ch.assertQueue(wait, {
+    durable: true,
+    messageTtl: delayMs,
+    deadLetterExchange: "",
+    deadLetterRoutingKey: target,
+    expires: delayMs + 60_000,
+  });
+  ch.sendToQueue(wait, Buffer.from(JSON.stringify(payload)), { persistent: true, contentType: "application/json" });
+  return wait;
+}</code></pre>
+<p>בתור עם TTL קבוע כל ההודעות פגות באותו קצב, אז הסדר בתור הוא גם סדר הפקיעה — אין head-of-line. המחיר: תור לכל השהיה, ולכן בפועל מעגלים להשהיות קבועות (1s, ‏5s, ‏30s, ‏5m). השהיות של שעות וימים — זה כבר תפקיד של מסד או BullMQ, לא של broker.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>תור המתנה אחד ו־<code>expiration</code> לכל הודעה — עובד בבדיקה עם הודעה אחת, ונשבר בפרודקשן.</li><li>לשכוח <code>deadLetterRoutingKey</code> — ההודעה "מתה" ל־default exchange עם השם של תור ההמתנה, וחוזרת אליו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.5-E61">
+    <h3>P26.5-E61 · עצירה מסודרת של consumer 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const inFlight = new Set&lt;Promise&lt;void&gt;&gt;()</code>: כל טיפול נכנס כשמתחיל ויוצא כשמסתיים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">await Promise.allSettled([...inFlight])</code>, ואז <code>await ch.close()</code> — ה־close מחזיר ל־תור את מה שעוד unacked.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E61: עצירה מסודרת של consumer
+import type { Channel, ConsumeMessage } from "amqplib";
+
+export async function startConsumer(ch: Channel, queue: string, handler: (job: unknown) =&gt; Promise&lt;void&gt;, prefetch: number) {
+  await ch.prefetch(prefetch);
+  const inFlight = new Set&lt;Promise&lt;void&gt;&gt;();
+  const handle = async (msg: ConsumeMessage) =&gt; {
+    try {
+      await handler(JSON.parse(msg.content.toString()));
+      ch.ack(msg);
+    } catch {
+      ch.nack(msg, false, false);
+    }
+  };
+  const { consumerTag } = await ch.consume(queue, (msg) =&gt; {
+    if (!msg) return;
+    const p = handle(msg).finally(() =&gt; inFlight.delete(p));
+    inFlight.add(p);
+  });
+  return {
+    async stop() {
+      await ch.cancel(consumerTag);
+      await Promise.allSettled([...inFlight]);
+      await ch.close();
+    },
+  };
+}</code></pre>
+<p>שלושת השלבים הם אותו כיבוי מסודר של שרת HTTP (פרק 24): לסגור את הדלת, לחכות למי שבפנים, לכבות את האור. בלי שלב 2 — ‏<code>close</code> מחזיר לתור הודעות שבאמצע טיפול, ו־worker אחר יטפל בהן שוב (at-least-once — לא נורא אם אידמפוטנטי, אבל מיותר).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ch.close()</code> מיד — עבודות באמצע נקטעות, וה־ack שלהן נכשל ("channel closed").</li><li>לשכוח <code>cancel</code> — בזמן ההמתנה ממשיכות להגיע הודעות חדשות, וה־stop לא נגמר.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-sqs.html"><small>הבא</small>שיעור 3 — SQS: visibility timeout, FIFO ו־DLQ</a></div>
 </main>
 </body>
