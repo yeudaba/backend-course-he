@@ -1,0 +1,113 @@
+// P19-E58: הסכמה של החנות, עם isVip, sku ו־Review
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  pending
+  paid
+  shipped
+  cancelled
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id         Int          @id @default(autoincrement())
+  name       String
+  price      Decimal      @db.Decimal(10, 2)
+  stock      Int          @default(0)
+  isActive   Boolean      @default(true) @map("is_active")
+  categoryId Int          @map("category_id")
+  category   Category     @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  tags       ProductTag[]
+  sku        String?      @unique
+  reviews    Review[]
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model Customer {
+  id       Int      @id @default(autoincrement())
+  fullName String   @map("full_name")
+  email    String   @unique
+  city     String?
+  joinedOn DateTime @map("joined_on") @db.Date
+  orders   Order[]
+  isVip    Boolean  @default(false) @map("is_vip")
+  reviews  Review[]
+
+  @@map("customers")
+}
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  customerId Int         @map("customer_id")
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  status     OrderStatus @default(pending)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  items      OrderItem[]
+
+  @@index([customerId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  orderId   Int     @map("order_id")
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+
+  @@id([orderId, productId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Tag {
+  id       Int          @id @default(autoincrement())
+  name     String       @unique
+  products ProductTag[]
+
+  @@map("tags")
+}
+
+model ProductTag {
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tagId     Int     @map("tag_id")
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
+  @@map("product_tags")
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  productId  Int      @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId Int      @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id])
+  rating     Int
+  text       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([productId, customerId])
+  @@index([customerId])
+  @@map("reviews")
+}

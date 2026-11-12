@@ -13,8 +13,560 @@
   <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
   <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
   <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>19-prisma/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P19-E71">
+    <h3>P19-E71 · ‏refactor — ומה מוכיח שלא שברת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>refactor = מבנה חדש, <strong>אותה</strong> התנהגות.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם משהו נשבר אחרי commit שמשנה שני דברים — איזה מהם אשם?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הקוד זז (מה־service ל־repository), אבל מבחוץ — אותם endpoints, אותן תשובות. זה ההגדרה של refactor.</li><li>PR2-SERVICE, ‏PR2-API ו־PR2-LIST — הם בודקים התנהגות דרך ה־API/ה־service, לא איפה הקוד יושב. הם רצים עם InMemory (ברירת המחדל של <code>createApp</code>), לכן בלי מסד — ומהר.</li><li>צעדים קטנים: אם אחרי ה־refactor הבדיקות ירוקות, יודעים שהמבנה החדש נכון. אחר כך מוסיפים את Prisma, ואם משהו נשבר — זה Prisma. commit אחד עם שניהם — כל כישלון יכול להיות בכל מקום.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"refactor" שמשנה גם התנהגות ("ובדרך תיקנתי שהמיון יהיה הפוך") — הבדיקות נכשלות, ולא ברור אם זה באג או שינוי מכוון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E72">
+    <h3>P19-E72 · למה low, medium, high — ולא לפי א״ב? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"ב־enum של PostgreSQL הסדר הוא סדר ההגדרה בסכמה".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אילו בדיקות של PR2 ממיינות לפי עדיפות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>בסדר <code>low, medium, high</code>: ‏<code>desc</code> ← ‏high, medium, low — מה שהמשתמש מצפה לו. אחרי "סידור" לפי א״ב: ‏<code>desc</code> ← ‏medium, low, high — מיון "עובד" ושגוי. (ושינוי סדר של enum קיים במסד הוא לא שינוי של שורה בסכמה — זה migration לא טריוויאלי.) תדע מ־PR2-LIST / PR2-DB, שבודקים <code>sort=-priority</code>. זו בדיוק הסיבה שיש בדיקה ל־sort, ולא רק ל"יש תוצאות".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפתור במיון ב־JS אחרי השאילתה — שובר את ה־pagination (העמוד הראשון נבחר לפי מיון אחר).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E73">
+    <h3>P19-E73 · ‏NULL בסוף — גם ב־desc? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־PostgreSQL, NULL נחשב "גדול מכל ערך".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"גדול מכולם" ← אחרון בסדר עולה, ו<strong>ראשון</strong> בסדר יורד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TEMP TABLE t (title text, due_date date);
+INSERT INTO t VALUES ('a', '2026-12-01'), ('b', '2026-11-20'), ('c', NULL);
+SELECT string_agg(title, ', ' ORDER BY due_date ASC) AS asc_default, string_agg(title, ', ' ORDER BY due_date DESC) AS desc_default,
+       string_agg(title, ', ' ORDER BY due_date DESC NULLS LAST) AS desc_nulls_last FROM t;</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 3
+ asc_default | desc_default | desc_nulls_last
+-------------+--------------+-----------------
+ b, a, c     | c, a, b      | a, b, c
+(1 row)</pre>
+<p>ב־<code>desc</code> בלי הוראה, המשימות <strong>בלי</strong> תאריך יעד קופצות לראש הרשימה — הפוך ממה שמשתמש מצפה ("הדחופות קודם"). ‏<code class="mid">{ dueDate: { sort: "desc", nulls: "last" } }</code> ב־Prisma ← <code>NULLS LAST</code> ב־SQL. ובזיכרון (<code>InMemoryTasksRepository</code>) — חייבים לממש את אותו כלל ביד, אחרת שתי ה־repositories מחזירות סדר שונה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק מיון רק על נתונים שבכולם יש תאריך — הבאג לא מופיע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E74">
+    <h3>P19-E74 · ‏P2025 ← undefined — ומי מחליט על 404? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>גם ל־<code>InMemoryTasksRepository</code> יש <code>update</code>. מה הוא מחזיר כשאין משימה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>P19-E22 ("הכול 'לא נמצא'").</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כי החוזה (<code>TasksRepository</code>) משותף לשני המימושים. ה־service לא יודע — ולא צריך לדעת — ש־P2025 קיים. אם רק מימוש אחד זורק, ה־service צריך לטפל בשני סוגי "לא נמצא".</li><li>ה־service (או ה־route): ‏<code>undefined</code> ← <code>NotFoundError</code> ← errorHandler ← 404. ה־repository רק מדווח "אין".</li><li>כי שגיאות אחרות (המסד לא זמין, באג ב־query) הן לא "לא נמצא". אם הכול הופך ל־<code>undefined</code>, נפילת מסד נראית ללקוח כמו 404, והלוגים שותקים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "קיים?" עם <code>findUnique</code> לפני ה־<code>update</code> כדי לא לקבל P2025 — שתי שאילתות, ומרוץ: המשימה יכולה להימחק ביניהן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E75">
+    <h3>P19-E75 · ‏Promise.all לרשימה ול־count <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי שאילתות על שני חיבורים מה־pool — כל אחת לבד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם ה־count והרשימה רואים את אותו "צילום" של המסד?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כמעט חצי — הזמן הוא של האיטית מבין השתיים, לא הסכום.</li><li>כל אחת רואה את המסד ברגע שלה (Read Committed), אז ייתכן <code>total</code> גדול באחד מהרשימה (או הפוך). לרשימה במסך זה בסדר — "עמוד 2 מתוך 3" לא צריך להיות מדויק ברמת המילישנייה. אם כן צריך (דוח כספי) — <code>$transaction</code> עם Repeatable Read (פרק 18).</li><li>אם ה־where שונה (למשל שכחת את הסינון לפי status באחד) — "מציג 20 מתוך 57" כש־57 הם <strong>כל</strong> המשימות. בונים את ה־where פעם אחת, במשתנה, ומשתמשים בו בשתיהן.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.all</code> בתוך interactive transaction — שתי השאילתות על אותו חיבור, ממילא אחת אחרי השנייה (P18-E39).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E76">
+    <h3>P19-E76 · ‏stats: ‏groupBy והסטטוסים החסרים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>GROUP BY מחזיר רק קבוצות <strong>שקיימות</strong> (P17-E62).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פרק 12: שעון מוזרק. ופרק 13: באיזה אזור זמן "היום"?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אין שורה ל־<code>in_progress</code> — אין משימות כאלה. מתחילים מאובייקט עם אפסים לכל הסטטוסים (<code class="mid">{ todo: 0, in_progress: 0, done: 0 }</code>), ו"שופכים" עליו את התוצאות. אחרת ה־API מחזיר מפתח חסר, וה־frontend מציג <code>undefined</code>.</li><li>"היום" תלוי בשעון ובאזור זמן. כשה־service מקבל שעון מוזרק ומחשב את התאריך פעם אחת, אפשר לבדוק "משימה באיחור" עם תאריך קבוע בבדיקה — ושני המימושים (InMemory ו־Prisma) משתמשים באותו "היום" בדיוק.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">Object.fromEntries(rows.map(...))</code> לבד — עובד רק כשכל הסטטוסים קיימים במסד. כלומר, בבדיקה עם נתוני seed — כן, ובמסד חדש — לא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P19-E77">
+    <h3>P19-E77 · ‏toApiOrder — מה־client ל־API 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">[...o.items].sort((a, b) =&gt; a.productId - b.productId)</code> — עותק, לא למיין את המקור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">Math.round(Number(i.unitPrice) * 100) * i.quantity</code> לכל פריט, וחלוקה ב־100 בסוף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E77: toApiOrder — מה־client ל־API
+export type ApiOrder = { id: number; customerId: number; status: string; createdAt: string; items: { productId: number; quantity: number; unitPrice: number }[]; total: number };
+
+export function toApiOrder(o: { id: number; customerId: number; status: string; createdAt: Date; items: { productId: number; quantity: number; unitPrice: unknown }[] }): ApiOrder {
+  const items = [...o.items]
+    .sort((a, b) =&gt; a.productId - b.productId)
+    .map((i) =&gt; ({ productId: i.productId, quantity: i.quantity, unitPrice: Number(i.unitPrice) }));
+  const cents = items.reduce((sum, i) =&gt; sum + Math.round(i.unitPrice * 100) * i.quantity, 0);
+  return { id: o.id, customerId: o.customerId, status: o.status, createdAt: o.createdAt.toISOString(), items, total: cents / 100 };
+}</code></pre>
+<p>‏<code>unitPrice: unknown</code> בחתימה — כדי שהפונקציה תקבל גם <code>Decimal</code> של Prisma וגם מספר רגיל (בבדיקות). ‏<code>Number(decimal)</code> עובד כי ל־<code>Decimal</code> יש <code>valueOf</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את <code>unitPrice</code> כמו שהוא — ב־JSON הוא הופך למחרוזת (<code>"89.9"</code>), והלקוח של ה־API מקבל טיפוס אחר ממה שהתיעוד אומר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E78">
+    <h3>P19-E78 · רשימת הזמנות: סינון, מיון, עמודים ו־count 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const where = { ...(q.status &amp;&amp; { status: q.status }), ...(q.customerId &amp;&amp; { customerId: q.customerId }) };</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const dir = sort.startsWith("-") ? "desc" : "asc"; orderBy: [{ createdAt: dir }, { id: dir }]</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E78: רשימת הזמנות — סינון, מיון, עמודים ו־count
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export type ListQuery = { status?: "pending" | "paid" | "shipped" | "cancelled"; customerId?: number; sort?: "createdAt" | "-createdAt"; page?: number; limit?: number };
+
+export async function listOrders(prisma: PrismaClient, q: ListQuery) {
+  const { sort = "-createdAt", page = 1, limit = 5 } = q;
+  const where = {
+    ...(q.status !== undefined &amp;&amp; { status: q.status }),
+    ...(q.customerId !== undefined &amp;&amp; { customerId: q.customerId }),
+  };
+  const dir = sort.startsWith("-") ? ("desc" as const) : ("asc" as const);
+  const [data, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      select: { id: true, customerId: true, status: true },
+      orderBy: [{ createdAt: dir }, { id: dir }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.order.count({ where }),
+  ]);
+  return { data, meta: { page, limit, total } };
+}</code></pre>
+<p>‏<code>where</code> נבנה פעם אחת ומשמש את שתי השאילתות (P19-E75). ‏<code>as const</code> — כדי ש־TypeScript ידע ש־<code>dir</code> הוא <code>"asc" | "desc"</code> ולא סתם <code>string</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>count()</code> בלי where — ‏<code>total</code> של כל ההזמנות, גם כשמסננים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E79">
+    <h3>P19-E79 · ‏orderStats עם groupBy 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const rows = await prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } });</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">const byStatus = { pending: 0, paid: 0, shipped: 0, cancelled: 0 }; for (const r of rows) byStatus[r.status] = r._count._all;</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E79: orderStats עם groupBy
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function orderStats(prisma: PrismaClient, customerId?: number) {
+  const rows = await prisma.order.groupBy({
+    by: ["status"],
+    where: customerId === undefined ? {} : { customerId },
+    _count: { _all: true },
+  });
+  const byStatus = { pending: 0, paid: 0, shipped: 0, cancelled: 0 };
+  for (const r of rows) byStatus[r.status] = r._count._all;
+  const total = Object.values(byStatus).reduce((a, b) =&gt; a + b, 0);
+  return { total, byStatus };
+}</code></pre>
+<p>‏<code>byStatus[r.status]</code> מתקמפל כי <code>r.status</code> הוא ה־union של ה־enum — ו־TypeScript יודע שכל ערך שלו הוא מפתח באובייקט.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ארבע קריאות <code>count</code> (אחת לכל סטטוס) — עובד, ארבע שאילתות במקום אחת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E80">
+    <h3>P19-E80 · מחיקת לקוח: לא נמצא, ‏או "יש לו הזמנות" 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">err instanceof Prisma.PrismaClientKnownRequestError &amp;&amp; err.code === "P2025"</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>return await</code> בתוך ה־try (P19-E08) — אחרת ה־catch לא תופס.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E80: מחיקת לקוח — לא נמצא, או "יש לו הזמנות"
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function deleteCustomer(prisma: PrismaClient, id: number): Promise&lt;boolean&gt; {
+  try {
+    await prisma.customer.delete({ where: { id } });
+    return true;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2025") return false;
+      if (err.code === "P2003") throw new AppError("HAS_ORDERS");
+    }
+    throw err;
+  }
+}</code></pre>
+<p>שלוש תוצאות שונות, שלוש תשובות ב־API: 204, ‏404, ‏409. ה־FK (פרק 17) עושה את הבדיקה "יש הזמנות?" — הקוד רק מתרגם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>count</code> של הזמנות לפני המחיקה — מרוץ (הזמנה יכולה להיווצר ביניהן), ושאילתה מיותרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E81">
+    <h3>P19-E81 · עדכון חלקי של מוצר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Prisma מתעלם משדות <code>undefined</code> ב־<code>data</code> — אפשר להעביר את <code>changes</code> כמעט כמו שהוא.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-ts">select: { id: true, name: true, price: true, stock: true, isActive: true }</code></pre>
+<p>ואז <code class="mid">{ ...p, price: Number(p.price) }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E81: עדכון חלקי של מוצר
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export type ApiProduct = { id: number; name: string; price: number; stock: number; isActive: boolean };
+
+export async function updateProduct(prisma: PrismaClient, id: number, changes: Partial&lt;Omit&lt;ApiProduct, "id"&gt;&gt;): Promise&lt;ApiProduct | undefined&gt; {
+  try {
+    const p = await prisma.product.update({
+      where: { id },
+      data: { name: changes.name, price: changes.price, stock: changes.stock, isActive: changes.isActive },
+      select: { id: true, name: true, price: true, stock: true, isActive: true },
+    });
+    return { ...p, price: Number(p.price) };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError &amp;&amp; err.code === "P2025") return undefined;
+    throw err;
+  }
+}</code></pre>
+<p>כתבתי את ארבעת השדות במפורש, ולא <code>data: changes</code>: אם מחר מישהו יוסיף ל־<code>changes</code> שדה (<code>categoryId</code>? ‏<code>id</code>?) — הוא לא יגיע למסד בטעות. שדה <code>undefined</code> — Prisma פשוט לא כותב אותו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">data: { ...changes, price: changes.price ?? 0 }</code> — עדכון של השם בלבד מאפס את המחיר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E82">
+    <h3>P19-E82 · חיפוש לקוחות בכמה שדות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">where: { OR: [{ fullName: { contains: q, mode: "insensitive" } }, ...] }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>city</code> יכול להיות NULL — ‏<code>contains</code> פשוט לא יתאים לו (בלי שגיאה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E82: חיפוש לקוחות בכמה שדות
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function searchCustomers(prisma: PrismaClient, q: string) {
+  const text = q.trim();
+  if (text === "") return [];
+  const like = { contains: text, mode: "insensitive" as const };
+  return prisma.customer.findMany({
+    where: { OR: [{ fullName: like }, { email: like }, { city: like }] },
+    select: { id: true, fullName: true },
+    orderBy: [{ fullName: "asc" }, { id: "asc" }],
+  });
+}</code></pre>
+<p>‏<code>contains</code> מוסיף <code>%</code> מסביב — אבל <strong>לא</strong> מוסיף escape ל־<code>%</code> ול־<code>_</code> שבתוך <code>q</code> (בדקנו: <code>q = "%"</code> מחזיר את כל הלקוחות). לחיפוש בתיבת טקסט זה בדרך כלל בסדר; כשזה חשוב — escape ביד, כמו ב־P16-E56.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>mode: "insensitive"</code> — "haifa" לא מוצא את "Haifa".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E83">
+    <h3>P19-E83 · ‏repository ללקוחות — בזיכרון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">private rows = new Map&lt;number, Customer&gt;();</code> ‏— ו־<code>{ ...c }</code> בכל החזרה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"id הבא": <code class="mid">Math.max(0, ...this.rows.keys()) + 1</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E83: repository ללקוחות — בזיכרון
+export type Customer = { id: number; fullName: string; email: string; city: string | null };
+
+export interface CustomersRepository {
+  findById(id: number): Promise&lt;Customer | undefined&gt;;
+  findByEmail(email: string): Promise&lt;Customer | undefined&gt;;
+  insert(data: Omit&lt;Customer, "id"&gt;): Promise&lt;Customer&gt;;
+  delete(id: number): Promise&lt;boolean&gt;;
+}
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export class InMemoryCustomersRepository implements CustomersRepository {
+  private rows = new Map&lt;number, Customer&gt;();
+
+  constructor(initial: Customer[] = []) {
+    for (const c of initial) this.rows.set(c.id, { ...c });
+  }
+
+  async findById(id: number) {
+    const c = this.rows.get(id);
+    return c ? { ...c } : undefined;
+  }
+
+  async findByEmail(email: string) {
+    const e = email.toLowerCase();
+    const c = [...this.rows.values()].find((r) =&gt; r.email.toLowerCase() === e);
+    return c ? { ...c } : undefined;
+  }
+
+  async insert(data: Omit&lt;Customer, "id"&gt;) {
+    if (await this.findByEmail(data.email)) throw new AppError("EMAIL_TAKEN");
+    const c = { id: Math.max(0, ...this.rows.keys()) + 1, ...data };
+    this.rows.set(c.id, c);
+    return { ...c };
+  }
+
+  async delete(id: number) {
+    return this.rows.delete(id);
+  }
+}</code></pre>
+<p>מתודות <code>async</code> גם בלי שום המתנה — כי החוזה מבטיח Promise, כמו המימוש של Prisma. כך ה־service לא יודע (ולא צריך לדעת) מי מאחוריו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר את האובייקט השמור עצמו — הקוד שקרא יכול לשנות את "המסד" בלי <code>update</code>, ובדיקות עוברות בזיכרון ונכשלות עם Prisma.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E84">
+    <h3>P19-E84 · ‏repository ללקוחות — עם Prisma 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">const SELECT = { id: true, fullName: true, email: true, city: true } as const;</code></pre>
+<p>בכל שאילתה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>findUnique</code> יחזיר <code>null</code>; החוזה מבקש <code>undefined</code>: <code>?? undefined</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E84: repository ללקוחות — עם Prisma
+import { Prisma, type PrismaClient } from "../files/generated/prisma/client.ts";
+
+export type Customer = { id: number; fullName: string; email: string; city: string | null };
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const SELECT = { id: true, fullName: true, email: true, city: true } as const;
+const known = (err: unknown, code: string) =&gt; err instanceof Prisma.PrismaClientKnownRequestError &amp;&amp; err.code === code;
+
+export class PrismaCustomersRepository {
+  private prisma: PrismaClient;
+  constructor(prisma: PrismaClient) {
+    this.prisma = prisma;
+  }
+
+  async findById(id: number): Promise&lt;Customer | undefined&gt; {
+    return (await this.prisma.customer.findUnique({ where: { id }, select: SELECT })) ?? undefined;
+  }
+
+  async findByEmail(email: string): Promise&lt;Customer | undefined&gt; {
+    return (await this.prisma.customer.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: SELECT })) ?? undefined;
+  }
+
+  async insert(data: Omit&lt;Customer, "id"&gt;): Promise&lt;Customer&gt; {
+    const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    try {
+      return await this.prisma.customer.create({ data: { ...data, joinedOn: today }, select: SELECT });
+    } catch (err) {
+      if (known(err, "P2002")) throw new AppError("EMAIL_TAKEN");
+      throw err;
+    }
+  }
+
+  async delete(id: number): Promise&lt;boolean&gt; {
+    try {
+      await this.prisma.customer.delete({ where: { id } });
+      return true;
+    } catch (err) {
+      if (known(err, "P2025")) return false;
+      throw err;
+    }
+  }
+}</code></pre>
+<p>שני הבדלים בין המימושים שהבודק מגלה. הראשון: INSERT שנכשל על אימייל תפוס "שורף" מספר במסד (P18-E32), ולכן הלקוח הבא מקבל id 11 ולא 10 — זה תקין, והחוזה לא מבטיח מספרים רציפים. השני: ה־UNIQUE במסד הוא על <code>email</code> כמו שהוא (רגיש לאותיות), ובזיכרון — בלי הבדל. כדי שהשניים יתנהגו אותו דבר, ה־service שומר תמיד אימייל באותיות קטנות (או index ייחודי על <code>lower(email)</code>, P18-E12). זו בדיוק הסיבה להריץ את אותו תרחיש על שני המימושים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">findUnique({ where: { email } })</code> — רגיש לאותיות; <code>"Dana@example.com"</code> לא מוצא את דנה, אבל ב־InMemory כן.</li><li>להחזיר את כל שדות הלקוח (בלי <code>select</code>) — <code>joinedOn</code> "דולף" לחוזה, והשוואה עם InMemory נכשלת.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
+<div class="ex" id="P19-E85">
+    <h3>P19-E85 · למה ה־routes לא השתנו? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־route מדבר עם ה־service. ה־service מדבר עם <code>TasksRepository</code> — interface.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"תלוי ב־interface, לא במימוש".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כלום. ה־route מקבל בקשה, קורא ל־<code>service.list(query)</code>, ומחזיר JSON. הוא לא יודע אם מאחור יש מערך, PostgreSQL או API אחר.</li><li>ה־service מקבל <code>TasksRepository</code> ב־constructor (‏dependency injection), ומשתמש רק במתודות של ה־interface. כל מחלקה שמממשת אותו — מתאימה.</li><li>כל route — כי הלוגיקה (סינון, מיון, ספירה) הייתה פזורה בהם. כל שינוי כזה הוא סיכון, ובלי בדיקות טובות — באגים.</li></ol>
+<p>זה המשפט מ"בעולם העבודה": "החלפנו את שכבת האחסון בלי לגעת ב־routes, והבדיקות הוכיחו שההתנהגות זהה".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"interface זה סתם טקס" — עד הפעם הראשונה שמחליפים מימוש. ובבדיקות — כל יום (InMemory).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E86">
+    <h3>P19-E86 · ‏createApp עם ברירת מחדל InMemory <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקה בלי מסד — מהירה ופשוטה. אבל איזה קוד היא <strong>לא</strong> מריצה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>P19-E73 ו־P19-E84: מתי שני המימושים מתנהגים אחרת?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>הן רצות בלי PostgreSQL, במילישניות, בכל מחשב — ובודקות את כל ה־HTTP, הוולידציה והלוגיקה.</li><li>הן לא מריצות את <code>PrismaTasksRepository</code> בכלל. אם הוא ממיין NULL אחרת, רגיש לאותיות, או מתרגם P2025 לא נכון — הבדיקות ירוקות והייצור שבור.</li><li>PR2-DB: אותם תרחישים, מול מסד אמיתי ו־PrismaTasksRepository. העיקרון: הרבה בדיקות מהירות על InMemory, ומעט בדיקות "חוזה" שמריצות את אותם תרחישים על שני המימושים (כמו הבודק של P19-E84).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לוותר על InMemory "כי יש מסד אמיתי בבדיקות" — כל בדיקה נהיית איטית ותלויה בסביבה; ולוותר על בדיקות מול המסד — הבאגים של Prisma מתגלים רק בייצור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E87">
+    <h3>P19-E87 · סינון במסד או בזיכרון? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־JS — המסד לא יודע מה תעשה עם השורות; הוא שולח את כולן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איזו שאילתה ה־index על <code>(status, created_at)</code> משרת?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>בזיכרון: כל 200,000 השורות עוברות ברשת, נטענות לזיכרון של Node (מאות MB), ממוינות ב־JS — בכל בקשה, כדי להחזיר 20. במסד: 20 שורות (ועוד <code>count</code>), וה־index על <code>(status, created_at)</code> נותן למסד לקפוץ ישר ל־todo, כבר ממוין, בלי לקרוא את השאר. ובונוס: בזיכרון של שרת אחד אין "מקור אמת" כשיש שני שרתים (P18-E49).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נטען הכול פעם אחת ונשמור בזיכרון" — מטמון שצריך לעדכן בכל כתיבה, בכל עותק של השרת. זו כבר מערכת אחרת (Redis, יחידה 26).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P19-E24">
     <h3>P19-E24 · אתגר: repository למוצרים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -179,6 +731,80 @@ export async function monthlyReport(prisma: PrismaClient, year: number) {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>GROUP BY ישר על orders — חודשים בלי מכירות פשוט לא יופיעו, והגרף בדשבורד "יקפוץ" מפברואר לאפריל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E88">
+    <h3>P19-E88 · ‏router שמקבל repository 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const id = Number(req.params.id); if (!Number.isInteger(id) || id &lt;= 0) return res.status(400).json({ error: "VALIDATION" });</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Express 5, שגיאה מ־<code>async</code> handler מגיעה ל־error middleware. שם: <code>err.code === "EMAIL_TAKEN"</code> ← 409, ‏<code>ZodError</code> ← 400 — או <code>safeParse</code> בתוך ה־handler.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E88: router שמקבל repository
+import express from "express";
+import { z } from "zod";
+
+type Customer = { id: number; fullName: string; email: string; city: string | null };
+interface CustomersRepository {
+  findById(id: number): Promise&lt;Customer | undefined&gt;;
+  findByEmail(email: string): Promise&lt;Customer | undefined&gt;;
+  insert(data: Omit&lt;Customer, "id"&gt;): Promise&lt;Customer&gt;;
+  delete(id: number): Promise&lt;boolean&gt;;
+}
+
+const CreateCustomer = z.object({
+  fullName: z.string().trim().min(1),
+  email: z.email().transform((e) =&gt; e.toLowerCase()),
+  city: z.string().nullable().default(null),
+});
+
+const parseId = (raw: string) =&gt; {
+  const id = Number(raw);
+  return Number.isInteger(id) &amp;&amp; id &gt; 0 ? id : undefined;
+};
+
+export function createApp(repo: CustomersRepository) {
+  const app = express();
+  app.use(express.json());
+
+  app.get("/customers/:id", async (req, res) =&gt; {
+    const id = parseId(req.params.id);
+    if (id === undefined) return res.status(400).json({ error: "VALIDATION" });
+    const c = await repo.findById(id);
+    if (!c) return res.status(404).json({ error: "NOT_FOUND" });
+    res.json(c);
+  });
+
+  app.post("/customers", async (req, res) =&gt; {
+    const parsed = CreateCustomer.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "VALIDATION" });
+    res.status(201).json(await repo.insert(parsed.data));
+  });
+
+  app.delete("/customers/:id", async (req, res) =&gt; {
+    const id = parseId(req.params.id);
+    if (id === undefined) return res.status(400).json({ error: "VALIDATION" });
+    if (!(await repo.delete(id))) return res.status(404).json({ error: "NOT_FOUND" });
+    res.status(204).end();
+  });
+
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) =&gt; {
+    if (err?.code === "EMAIL_TAKEN") return res.status(409).json({ error: "EMAIL_TAKEN" });
+    res.status(500).json({ error: "INTERNAL" });
+  });
+  return app;
+}</code></pre>
+<p>‏<code>createApp(repo)</code> — זו כל ה־DI: מי שקורא מחליט מה מוזרק. בבדיקות — InMemory, ב־<code>server.ts</code> — Prisma. ה־app נשאר אותו קובץ. (וה־<code>toLowerCase</code> באימייל הוא מה שגורם לשני המימושים להתנהג אותו דבר — P19-E84.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק ב־route אם <code>err</code> הוא <code class="mid">PrismaClientKnownRequestError</code> עם P2002 — עכשיו ה־route יודע על Prisma, וה־InMemory צריך לזייף שגיאות של Prisma.</li></ul>
 
 
 </div></details>

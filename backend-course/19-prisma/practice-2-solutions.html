@@ -34,6 +34,160 @@
 
 </div></details>
   </div>
+<div class="ex" id="P19-E48">
+    <h3>P19-E48 · מה Prisma ייצר במסד? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטבלה בשיעור: ‏<code>String?</code> ← nullable; ‏<code>enum</code> ← <code>CREATE TYPE</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה חסר ב־<code>createdAt</code>? ומה חסר בסוף המודל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>זה מה שהפקודה הזו מייצרת מהמודל (הרצה אמיתית):</p>
+<pre class="terminal"><span class="prompt">% </span>npx prisma migrate diff --from-empty --to-schema schema.prisma --script</pre>
+<pre><code class="lang-sql">-- CreateEnum
+CREATE TYPE "Plan" AS ENUM ('free', 'pro');
+
+-- CreateTable
+CREATE TABLE "Account" (
+    "id" SERIAL NOT NULL,
+    "email" TEXT NOT NULL,
+    "nickname" TEXT,
+    "balance" DECIMAL(10,2) NOT NULL,
+    "plan" "Plan" NOT NULL DEFAULT 'free',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Account_email_key" ON "Account"("email");</code></pre>
+<p>שתי הבעיות: (1) <code>createdAt</code> הוא <code>TIMESTAMP(3)</code> — בלי אזור זמן; חסר <code>@db.Timestamptz(3)</code>. (2) בלי <code>@@map</code>/<code>@map</code> — הטבלה <code>"Account"</code> והעמודה <code>"createdAt"</code>, עם אותיות גדולות, וב־psql צריך מירכאות בכל שאילתה (<code class="mid">SELECT "createdAt" FROM "Account"</code>). שאר הדברים כצפוי: <code>nickname</code> בלי NOT NULL, ‏<code>@unique</code> הפך ל־UNIQUE INDEX, ה־enum לטיפוס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשנה אחר כך" — שינוי טבלה עם נתונים הוא migration שצריך לתכנן. כדאי להחליט על שמות וטיפוסי זמן מההתחלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E49">
+    <h3>P19-E49 · ‏"missing an opposite relation field" <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשיעור: "בצד ה'אחד' — מערך".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שדות קשר הם "בשביל ה־client". מה ה־client של <code>Author</code> לא יידע לעשות בלי השדה הזה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>השגיאה (הרצה אמיתית של <code>migrate diff</code>):</p>
+<pre class="terminal"><span class="err">error: Error validating field `author` in model `Book`: The relation field `author` on model `Book` is missing an opposite relation field on the model `Author`. Either run `prisma format` or add it manually.</span></pre>
+<p>חסר ב־<code>Author</code>: <code>books Book[]</code>. במסד הוא לא קיים (ה־FK רק ב־<code>books</code>), אבל Prisma דורש ששני הצדדים של קשר יוגדרו, כדי שה־client יתמוך בשני הכיוונים: <code>include: { books: true }</code> על מחבר, ו־<code class="mid">where: { books: { some: ... } }</code>. ‏<code>npx prisma format</code> מוסיף אותו לבד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>bookId</code> ל־<code>Author</code> "כדי להשלים" — זו עמודה אמיתית במסד, וקשר שונה לגמרי (לכל מחבר ספר אחד).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E50">
+    <h3>P19-E50 · ‏onDelete: SetNull על שדה חובה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>SET NULL</code> + <code>NOT NULL</code> באותה עמודה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>P17-E31: "SET NULL אפשרי רק כשעמודת ה־FK יכולה להיות NULL".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">\set SHOW_CONTEXT never
+CREATE TABLE "Employee" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    CONSTRAINT "Employee_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "Task" (
+    "id" SERIAL NOT NULL,
+    "title" TEXT NOT NULL,
+    "assigneeId" INTEGER NOT NULL,
+    CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
+);
+ALTER TABLE "Task" ADD CONSTRAINT "Task_assigneeId_fkey" FOREIGN KEY ("assigneeId") REFERENCES "Employee"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+INSERT INTO "Employee" (name) VALUES ('Dana');
+INSERT INTO "Task" (title, "assigneeId") VALUES ('Fix login', 1);
+DELETE FROM "Employee" WHERE id = 1;</code></pre>
+<pre class="terminal">CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+INSERT 0 1
+INSERT 0 1
+ERROR:  null value in column "assigneeId" of relation "Task" violates not-null constraint
+DETAIL:  Failing row contains (1, Fix login, null).</pre>
+<p>המחיקה נכשלת: המסד מנסה לשים NULL בעמודה שאוסרת אותו. Prisma לא עצר את זה בזמן כתיבת הסכמה — הבאג מתגלה רק כשמישהו מוחק עובד. התיקון: <code>assigneeId Int?</code> ו־<code>assignee Employee?</code> (תרגיל P19-E55).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" ל־<code>onDelete: Cascade</code> — עכשיו עזיבה של עובד מוחקת את כל המשימות שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E51">
+    <h3>P19-E51 · ‏migrate dev, ‏deploy או reset? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה יוצר migration חדש? מה רק מריץ קיימים? מה מוחק?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בייצור — רק מה שלא שואל ולא מוחק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>dev</strong> — יוצר migration חדש מההבדל, ומריץ.</li><li><strong>dev</strong> (מריץ את החדשים; אם אין שינוי בסכמה — לא יוצר כלום). ‏<code>deploy</code> גם יעבוד.</li><li><strong>deploy</strong> — רק מריץ את מה שלא רץ. בלי ליצור, בלי לשאול, בלי לאפס.</li><li><strong>reset</strong> — מוחק הכול ומריץ מחדש (ואז seed).</li><li><strong>deploy</strong> — אותו דבר כמו בייצור, ולכן גם בודק שה־migrations רצים נקי מאפס.</li><li><strong>status</strong>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>migrate dev</code> מול ייצור — אם הוא מזהה "drift" הוא מציע לאפס את המסד. זה הסוף של הנתונים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E52">
+    <h3>P19-E52 · עמודת חובה חדשה בטבלה מלאה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לשורות הקיימות — מה הערך של העמודה החדשה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>P16-E19: שלושה שלבים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">ALTER TABLE customers ADD COLUMN phone text NOT NULL;
+ALTER TABLE customers ADD COLUMN phone text NOT NULL DEFAULT '';
+SELECT COUNT(*) AS customers, COUNT(*) FILTER (WHERE phone = '') AS empty_phone FROM customers;</code></pre>
+<pre class="terminal">ERROR:  column "phone" of relation "customers" contains null values
+ALTER TABLE
+ customers | empty_phone
+-----------+-------------
+         8 |           8
+(1 row)</pre>
+<p>בלי default — השורות הקיימות היו מקבלות NULL, וה־NOT NULL אוסר: הפקודה נכשלת (‏<code>migrate dev</code> מזהיר מראש שהשינוי לא יעבור על טבלה עם נתונים). עם default ריק — עובר, אבל עכשיו 8 לקוחות עם "טלפון" ריק, שאף בדיקה לא תתפוס. האפשרויות: (א) <code>String?</code> — אם באמת לא לכולם יש טלפון; (ב) שלושה שלבים: עמודה nullable ← מילוי (script או UPDATE) ← <code>NOT NULL</code> — עם <code class="mid">npx prisma migrate dev --create-only</code>, שמאפשר לערוך את ה־SQL לפני שהוא רץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>@default("")</code> רק כדי שה־migration יעבור — ערך "חובה" שאין לו משמעות.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P19-E19">
     <h3>P19-E19 · seed שאפשר להריץ שוב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -153,7 +307,485 @@ model Loan {
 
 </div></details>
   </div>
+<div class="ex" id="P19-E53">
+    <h3>P19-E53 · פוסטים ותגובות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אחד־לרבים: בצד התגובה — <code>postId</code>, ושדה הקשר:</p>
+<pre><code class="lang-prisma">post Post @relation(fields: [postId], references: [id], onDelete: Cascade)</code></pre>
+<p>ובצד הפוסט — <code>comments Comment[]</code>.</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>זמן לא חובה: <code class="mid">DateTime? @map("published_at") @db.Timestamptz(3)</code>. ‏index: <code>@@index([postId])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">datasource db {
+  provider = "postgresql"
+}
+
+model Post {
+  id          Int       @id @default(autoincrement())
+  title       String
+  body        String
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  comments    Comment[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    String
+  text      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([postId])
+  @@map("comments")
+}</code></pre>
+<p>ה־index על <code>postId</code> — כי "התגובות של פוסט" היא השאילתה הנפוצה, ו־PostgreSQL לא יוצר index ל־FK לבד (פרק 18).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>DateTime</code> בלי <code>@db.Timestamptz(3)</code> — timestamp בלי אזור זמן (P19-E48).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E54">
+    <h3>P19-E54 · צוותים וחברות בצוות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כמו <code>ProductTag</code> בסכמה של הפרק: מודל קישור עם <code>@@id([userId, teamId])</code>, ושני <code>@relation</code> עם <code>onDelete: Cascade</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שדה מסוג enum עם ברירת מחדל: <code>role Role @default(member)</code>. ובשני המודלים האחרים — <code>memberships Membership[]</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  member
+  admin
+  owner
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  email       String       @unique
+  memberships Membership[]
+
+  @@map("users")
+}
+
+model Team {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  memberships Membership[]
+
+  @@map("teams")
+}
+
+model Membership {
+  userId   Int      @map("user_id")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId   Int      @map("team_id")
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role     Role     @default(member)
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  @@id([userId, teamId])
+  @@index([teamId])
+  @@map("memberships")
+}</code></pre>
+<p>‏<code>role</code> הוא הסיבה לקשר מפורש (ולא "מובלע"): לקשר עצמו יש מידע. ‏<code>@@index([teamId])</code> — כי המפתח הראשי מתחיל ב־<code>userId</code>, ו"חברי צוות X" צריך index משלו (P18-E57).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>id</code> נפרד בלי <code>@@id</code>/<code>@@unique</code> על הזוג — אותו משתמש פעמיים באותו צוות, עם שני תפקידים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E55">
+    <h3>P19-E55 · משימה בלי אחראי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני סימני שאלה: <code>assigneeId Int?</code> ו־<code>assignee Employee?</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-prisma">@relation(fields: [assigneeId], references: [id], onDelete: SetNull)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">datasource db {
+  provider = "postgresql"
+}
+
+model Employee {
+  id    Int    @id @default(autoincrement())
+  name  String
+  tasks Task[]
+
+  @@map("employees")
+}
+
+model Task {
+  id         Int       @id @default(autoincrement())
+  title      String
+  assigneeId Int?      @map("assignee_id")
+  assignee   Employee? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([assigneeId])
+  @@map("tasks")
+}</code></pre>
+<p>‏<code>Int?</code> הופך את העמודה ל־nullable, ו־<code>Employee?</code> אומר ל־client ש־<code>task.assignee</code> יכול להיות <code>null</code> — ו־TypeScript יכריח לבדוק (P17-E53).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>רק <code>assignee Employee?</code> בלי <code>Int?</code> — Prisma דוחה: שדה הקשר אופציונלי אבל העמודה חובה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E56">
+    <h3>P19-E56 · חשבוניות: תאריך, כסף וזמן עדכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>תאריך בלבד: <code>DateTime @db.Date</code>. מתעדכן אוטומטית: <code>@updatedAt</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-prisma">updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">datasource db {
+  provider = "postgresql"
+}
+
+model Invoice {
+  id        Int      @id @default(autoincrement())
+  number    String   @unique
+  issuedOn  DateTime @map("issued_on") @db.Date
+  total     Decimal  @db.Decimal(12, 2)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("invoices")
+}</code></pre>
+<p>שים לב: ל־<code>updated_at</code> אין DEFAULT במסד — Prisma ממלא אותו בעצמו בכל <code>create</code>/<code>update</code>. ‏INSERT ישיר ב־SQL (בלי Prisma) חייב לתת לו ערך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>DateTime</code> בלי <code>@db.Date</code> לתאריך הנפקה — עכשיו יש לו גם שעה, ו"חשבוניות מ־1 במרץ" תלוי באזור זמן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E57">
+    <h3>P19-E57 · ממסד קיים לסכמה: חדר כושר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>timestamptz(3)</code> ← <code>@db.Timestamptz(3)</code>. ‏<code>DEFAULT now()</code> ← <code>@default(now())</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Booking</code> הוא מודל קישור עם <code>@@id([memberId, classId])</code> ושני קשרים עם <code>onDelete: Cascade</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-prisma">datasource db {
+  provider = "postgresql"
+}
+
+model Member {
+  id       Int       @id @default(autoincrement())
+  fullName String    @map("full_name")
+  email    String    @unique
+  bookings Booking[]
+
+  @@map("members")
+}
+
+model GymClass {
+  id       Int       @id @default(autoincrement())
+  title    String
+  startsAt DateTime  @map("starts_at") @db.Timestamptz(3)
+  capacity Int       @default(20)
+  bookings Booking[]
+
+  @@map("classes")
+}
+
+model Booking {
+  memberId Int      @map("member_id")
+  member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  classId  Int      @map("class_id")
+  gymClass GymClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  bookedAt DateTime @default(now()) @map("booked_at") @db.Timestamptz(3)
+
+  @@id([memberId, classId])
+  @@map("bookings")
+}</code></pre>
+<p>שלוש טבלאות, ובכל אחת — שדה לכל עמודה ושדות קשר שלא קיימים במסד. כשתעביר פרויקט קיים ל־Prisma, <code>npx prisma db pull</code> כותב את זה בשבילך — ועכשיו תדע לקרוא ולתקן את מה שהוא כתב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>bookings Booking[]</code> בצד של <code>Member</code> או <code>GymClass</code> — שגיאת "missing an opposite relation field" (P19-E49).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E58">
+    <h3>P19-E58 · הרחבת הסכמה של החנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"ביקורת אחת לכל זוג" — <code class="mid">@@unique([productId, customerId])</code> (המפתח הראשי נשאר <code>id</code>).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אל תשכח את שני הצדדים של כל קשר: <code>reviews Review[]</code> ב־<code>Product</code> וב־<code>Customer</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>רק השינויים (שאר הקובץ — כמו בפרק; הקובץ המלא: <code>solutions/P19-E58.prisma</code>):</p>
+<pre><code class="lang-prisma">model Product {
+  // ... כמו קודם
+  sku        String?      @unique
+  reviews    Review[]
+}
+
+model Customer {
+  // ... כמו קודם
+  isVip    Boolean  @default(false) @map("is_vip")
+  reviews  Review[]
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  productId  Int      @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId Int      @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id])
+  rating     Int
+  text       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([productId, customerId])
+  @@index([customerId])
+  @@map("reviews")
+}</code></pre>
+<p>‏<code>String? @unique</code> — ייחודי רק בין הערכים שקיימים: הרבה מוצרים יכולים להיות בלי sku (NULL), כי ב־UNIQUE שני NULLים לא נחשבים שווים. ו־<code>@@unique</code> של הזוג יוצר index שמתחיל ב־<code>productId</code>, אז "הביקורות של לקוח" צריך <code>@@index([customerId])</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשנות שדות קיימים "בדרך" (שמות, טיפוסים) — זה migration שמשנה טבלאות עם נתונים. רק הוספות.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P19-E59">
+    <h3>P19-E59 · ‏enum במסד ו־union ב־TypeScript <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Prisma מייצר מ־<code>enum OrderStatus</code> טיפוס <code class="mid">"pending" | "paid" | "shipped" | "cancelled"</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"ב־enum של PostgreSQL הסדר הוא סדר ההגדרה בסכמה" (שיעור 4).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שגיאת TypeScript: <code>"shiped"</code> לא יכול להיות שווה לאף ערך ב־union — שגיאת כתיב נתפסת לפני הרצה (עם <code>string</code> רגיל — הייתה עוברת בשקט).</li><li>שגיאת TypeScript: <code>"refunded"</code> לא ב־enum. וגם אם תעקוף (<code>as any</code>), המסד ידחה: הטיפוס <code>"OrderStatus"</code> לא מכיר אותו.</li><li>תקין — כל ערך של ה־union הוא גם <code>string</code> (הכיוון ההפוך לא).</li></ol>
+<p>המיון לפי סדר ההגדרה: <code>pending</code>, ‏<code>paid</code>, ‏<code>shipped</code>, ‏<code>cancelled</code> — לא א״ב. הוספת ערך חדש ל־enum = migration (<code>ALTER TYPE ... ADD VALUE</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־enum לערכים שמשתנים הרבה (רשימת ערים, קטגוריות) — כל שינוי הוא migration. לזה — טבלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E60">
+    <h3>P19-E60 · אילו indexes Prisma יצר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>@unique</code> ← UNIQUE INDEX. ‏<code>@@index([...])</code> ← INDEX.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>המפתח הראשי של <code>order_items</code> הוא <code>(order_id, product_id)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏UNIQUE — מ־<code>@unique</code> על <code>Category.name</code>, ‏<code>Customer.email</code>, ‏<code>Tag.name</code>. השאר — מ־<code>@@index</code>: ‏<code>Product</code> (‏<code>[categoryId]</code>), ‏<code>Order</code> (‏<code>[customerId, createdAt]</code>), ‏<code>OrderItem</code> (‏<code>[productId]</code>), ‏<code>ProductTag</code> (‏<code>[tagId]</code>).</li><li>המפתח הראשי <code>(order_id, product_id)</code> כבר מתחיל ב־<code>order_id</code> — הוא משמש גם כ־index עליו. בדיוק כמו ב־P18-E57. (וכך גם <code>product_tags</code>: ‏<code>product_id</code> ראשון במפתח, ו־<code>tag_id</code> צריך index משלו.)</li><li>"ההזמנות של לקוח X, מהחדשה לישנה" — <code class="mid">WHERE customer_id = $1 ORDER BY created_at DESC</code>: שוויון ואז מיון, כמו ב־P18-E59.</li></ol>
+<p>Prisma לא מוסיף index ל־FK בעצמו (ב־PostgreSQL) — כל <code>@@index</code> כאן נכתב ביד בסכמה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>@@index([orderId])</code> ל־<code>OrderItem</code> — כפילות של תחילת המפתח הראשי, עוד עלות על כל INSERT.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E61">
+    <h3>P19-E61 · ‏Decimal — לא number <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>numeric(10,2)</code> במסד מדויק. ‏<code>number</code> ב־JS — לא תמיד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורה 3: כמה ספרות מדויקות יש ל־<code>number</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">console.log(0.1 + 0.2, 89.9 * 3);
+console.log(Math.round(0.1 * 100) + Math.round(0.2 * 100), Math.round(89.9 * 100) * 3 / 100);
+console.log(Number("12345678901234567.89"), Number.MAX_SAFE_INTEGER);</code></pre>
+<pre class="terminal">0.30000000000000004 269.70000000000005
+30 269.7
+12345678901234568 9007199254740991</pre>
+<p><code>number</code> הוא float: חשבון עשרוני לא מדויק, ומעל ~15–16 ספרות הוא מאבד ספרות. ‏<code>Decimal</code> שומר את הערך בדיוק כמו המסד — ומשאיר לך את ההחלטה: <code>Number(price)</code> להצגה ולחישובים קטנים (עם אגורות, כמו בשורה 2), או חשבון עם <code>Decimal</code> עצמו (<code>price.mul(3)</code>) בכספים גדולים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>price + 10</code> על Decimal — מחרוזת משורשרת (<code>"89.910"</code>) או שגיאת טיפוס, לא חיבור.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E62">
+    <h3>P19-E62 · ‏"migrate diff" בזיכרון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>Map</code> של טבלה ← <code>Map</code> של עמודה ← Column, לכל אחד מהצדדים. ‏<code class="mid">[...new Set([...a.keys(), ...b.keys()])].sort()</code> — כל השמות משני הצדדים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון מחרוזות "לפי א״ב" כאן: <code>sort()</code> בלי פונקציה (סדר תווים) מספיק — שמות טבלאות ועמודות באנגלית.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E62: "migrate diff" בזיכרון
+export type Column = { table: string; name: string; type: string; nullable: boolean };
+
+function byTable(cols: Column[]) {
+  const m = new Map&lt;string, Map&lt;string, Column&gt;&gt;();
+  for (const c of cols) {
+    if (!m.has(c.table)) m.set(c.table, new Map());
+    m.get(c.table)!.set(c.name, c);
+  }
+  return m;
+}
+const union = (a: Iterable&lt;string&gt;, b: Iterable&lt;string&gt;) =&gt; [...new Set([...a, ...b])].sort();
+
+export function diffColumns(before: Column[], after: Column[]) {
+  const b = byTable(before);
+  const a = byTable(after);
+  const steps: string[] = [];
+  let destructive = false;
+  for (const t of union(b.keys(), a.keys())) {
+    const old = b.get(t);
+    const cur = a.get(t);
+    if (!old) { steps.push(`CREATE TABLE ${t}`); continue; }
+    if (!cur) { steps.push(`DROP TABLE ${t}`); destructive = true; continue; }
+    for (const name of union(old.keys(), cur.keys())) {
+      const o = old.get(name);
+      const c = cur.get(name);
+      if (!o) steps.push(`ADD COLUMN ${t}.${name} ${c!.type}${c!.nullable ? "" : " NOT NULL"}`);
+      else if (!c) { steps.push(`DROP COLUMN ${t}.${name}`); destructive = true; }
+      else {
+        if (o.type !== c.type) { steps.push(`ALTER COLUMN ${t}.${name} TYPE ${c.type}`); destructive = true; }
+        if (o.nullable &amp;&amp; !c.nullable) { steps.push(`ALTER COLUMN ${t}.${name} SET NOT NULL`); destructive = true; }
+        if (!o.nullable &amp;&amp; c.nullable) steps.push(`ALTER COLUMN ${t}.${name} DROP NOT NULL`);
+      }
+    }
+  }
+  return { steps, destructive };
+}</code></pre>
+<p>‏<code>DROP NOT NULL</code> לא הורס (רק מרשה יותר). ‏<code>ADD COLUMN ... NOT NULL</code> — גם הוא יכול להיכשל על טבלה מלאה (P19-E52); Prisma בודק את זה מול המסד האמיתי — כאן אין לנו את הנתונים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעבור רק על העמודות של after — עמודות שנמחקו לא מתגלות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E63">
+    <h3>P19-E63 · ‏@db.Date: מ־Date למחרוזת ובחזרה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">d.toISOString().slice(0, 10)</code> — תמיד UTC. ‏<code>d.getDate()</code> — לפי השעון המקומי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדיקת תאריך: <code>/^\d{4}-\d{2}-\d{2}$/</code>, ואז <code>new Date(s + "T00:00:00Z")</code> — ו<strong>בחזרה</strong>: אם <code class="mid">toISOString().slice(0, 10) !== s</code>, התאריך "גלש" (30 בפברואר ← 2 במרץ).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E63: @db.Date — מ־Date למחרוזת ובחזרה
+export type ApiCustomer = { id: number; fullName: string; email: string; city: string | null; joinedOn: string };
+
+export function toApiCustomer(c: { id: number; fullName: string; email: string; city: string | null; joinedOn: Date }): ApiCustomer {
+  return { id: c.id, fullName: c.fullName, email: c.email, city: c.city, joinedOn: c.joinedOn.toISOString().slice(0, 10) };
+}
+
+export function toCustomerData(body: { fullName: string; email: string; city?: string | null; joinedOn: string }) {
+  const d = new Date(`${body.joinedOn}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(body.joinedOn) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== body.joinedOn) {
+    throw new Error("תאריך לא תקין");
+  }
+  return { fullName: body.fullName, email: body.email.trim().toLowerCase(), city: body.city ?? null, joinedOn: d };
+}</code></pre>
+<p>שתי פונקציות, אחת לכל כיוון, ובכל אחת — כל ההמרות. כשהן במקום אחד, הבאג של "התאריך זז ביום בשרת בחו״ל" נפתר פעם אחת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>new Date("2025-11-02")</code> בלי <code>Z</code> — זה דווקא UTC (פורמט תאריך בלבד), אבל <code class="mid">new Date("2025-11-02T00:00")</code> הוא שעון מקומי. הכי בטוח: לכתוב את ה־<code>Z</code> במפורש.</li><li><code><code class="mid">${d.getFullYear()}-${d.getMonth() + 1}-...</code></code> — שעון מקומי, ובלי אפסים מובילים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E64">
+    <h3>P19-E64 · ‏Zod לפי המודל, ואז create 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">email: z.email().transform((e) =&gt; e.toLowerCase())</code>, ‏<code class="mid">city: z.string().trim().min(1).nullable().default(null)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>create</code>: <code>joinedOn: new Date(<code class="mid">${input.joinedOn}T00:00:00Z</code>)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E64: Zod לפי המודל, ואז create
+import { z } from "zod";
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export const CustomerInput = z.object({
+  fullName: z.string().trim().min(1),
+  email: z.email().transform((e) =&gt; e.toLowerCase()),
+  city: z.string().trim().min(1).nullable().default(null),
+  joinedOn: z.iso.date(),
+});
+
+export async function createCustomer(prisma: PrismaClient, body: unknown) {
+  const input = CustomerInput.parse(body);
+  const c = await prisma.customer.create({
+    data: { ...input, joinedOn: new Date(`${input.joinedOn}T00:00:00Z`) },
+  });
+  return { id: c.id, fullName: c.fullName, email: c.email, city: c.city, joinedOn: c.joinedOn.toISOString().slice(0, 10) };
+}</code></pre>
+<p>Zod מגן על "מה הלקוח של ה־API שלח" (400 עם הסבר), והמסד מגן על "מה מותר לשמור" (NOT NULL, ‏UNIQUE). שתי השכבות — לשני דברים שונים, כמו ב־P17-E40.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">prisma.customer.create({ data: body })</code> — ישירות מהבקשה: הלקוח יכול לשלוח <code>id</code> או <code>isVip</code> ולקבוע אותם בעצמו (mass assignment, ‏OWASP — פרק 21).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-queries.html"><small>הבא</small>שיעור 3 — שאילתות, transactions ושגיאות</a></div>
 </main>
 </body>
