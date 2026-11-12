@@ -1,0 +1,4 @@
+-- P18-E61: "ההזמנות ששולמו" של לקוח
+-- index אחד ל־WHERE customer_id = $1 AND status = 'paid' ORDER BY created_at DESC LIMIT 5 — בלי Sort
+--
+-- בדיקה:  npm run check P18-E61

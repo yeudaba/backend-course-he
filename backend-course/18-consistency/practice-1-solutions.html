@@ -34,6 +34,194 @@
 
 </div></details>
   </div>
+<div class="ex" id="P18-E29">
+    <h3>P18-E29 · אחרי השגיאה — שום דבר לא עובר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ל־Yossi (2) יש 250. מה ה־CHECK על <code>balance</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחרי שגיאה, ה־transaction "מת": כל פקודה נדחית עד סוף הבלוק — וגם ה־COMMIT לא באמת שומר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance - 999 WHERE id = 2;
+SELECT balance FROM accounts WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 3;
+COMMIT;
+SELECT id, balance FROM accounts WHERE id IN (1, 3) ORDER BY id;</code></pre>
+<pre class="terminal">BEGIN
+UPDATE 1
+ERROR:  new row for relation "accounts" violates check constraint "accounts_balance_check"
+DETAIL:  Failing row contains (2, Yossi, -749.00).
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+ id | balance
+----+---------
+  1 | 1000.00
+  3 |    0.00
+(2 rows)</pre>
+<p>אחרי השגיאה המסד לא מוכן לעשות כלום בתוך ה־transaction — גם לא SELECT — עד שהוא נסגר. ה־<code>COMMIT</code> מחזיר <code>ROLLBACK</code>: גם העדכון הראשון של Dana בוטל. בקוד: אם לא תבדוק שגיאות, אתה עלול לחשוב ש"ה־COMMIT עבר" — ולכן ב־Node כל שגיאה זורקת, וה־catch עושה ROLLBACK.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להמשיך "לתקן" בתוך אותו transaction אחרי שגיאה (עוד UPDATE, עוד SELECT) — כל פקודה תיכשל באותה הודעה. צריך ROLLBACK ולהתחיל מחדש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E30">
+    <h3>P18-E30 · ‏ACID — איזו אות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>A — הכול או כלום. C — האילוצים מתקיימים. I — לא רואים חצאי עבודה של אחרים. D — מה ש־commit שורד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בסעיף 5, איזו תכונה <strong>חסרה</strong>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>A</strong> — שתי הפקודות יחד או אף אחת.</li><li><strong>D</strong> — PostgreSQL כותב ליומן (WAL) בדיסק לפני שהוא מחזיר הצלחה ל־COMMIT.</li><li><strong>I</strong> — שינויים שלא נעשה להם commit לא נראים לחיבורים אחרים.</li><li><strong>C</strong> — ה־CHECK מבטיח שאחרי כל commit החוקים מתקיימים.</li><li>חסר <strong>D</strong> — "נשמר" אצלה זה "נשמר בזיכרון". (זה בדיוק ההבדל בין Redis בתצורה מסוימת למסד יחסי — יחידה 26.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבלבל C של ACID עם "עקביות" במערכות מבוזרות (CAP) — כאן היא רק "האילוצים שלך מתקיימים".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E31">
+    <h3>P18-E31 · מה השעה בתוך transaction? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>now()</code> מחזיר את הזמן שבו ה־transaction <strong>התחיל</strong>. ‏<code>clock_timestamp()</code> — את הזמן ברגע הזה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כמה ערכים שונים של <code>created_at</code> יש בשתי השורות?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">BEGIN;
+SELECT pg_sleep(0.2);
+SELECT now() = transaction_timestamp() AS now_is_start, clock_timestamp() &gt; now() AS clock_moved;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10);
+SELECT pg_sleep(0.2);
+INSERT INTO transfers (from_id, to_id, amount) VALUES (4, 3, 20);
+SELECT COUNT(*) AS transfers, COUNT(DISTINCT created_at) AS different_times FROM transfers;
+COMMIT;</code></pre>
+<pre class="terminal">BEGIN
+ pg_sleep
+----------
+
+(1 row)
+
+ now_is_start | clock_moved
+--------------+-------------
+ t            | t
+(1 row)
+
+INSERT 0 1
+ pg_sleep
+----------
+
+(1 row)
+
+INSERT 0 1
+ transfers | different_times
+-----------+-----------------
+         2 |               1
+(1 row)
+
+COMMIT</pre>
+<p>בתוך transaction, <code>now()</code> "קפוא" — לכל השורות שנכתבו בו אותה שעה. זה מכוון: כל מה שקרה ב־transaction קרה "ברגע אחד" (גם זה חלק מ־A). אבל זה מפתיע אם ממיינים לפי <code>created_at</code>: שתי השורות שוות, וצריך שובר שוויון (<code>id</code>) — שיעור 4.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>now()</code> כדי למדוד כמה זמן לקח משהו בתוך transaction — תמיד 0. למדידה: <code>clock_timestamp()</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E32">
+    <h3>P18-E32 · מה ROLLBACK לא מבטל <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מונה ה־IDENTITY מתקדם גם כשה־INSERT מתבטל — כדי ששני transactions במקביל לא יקבלו אותו מספר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ROLLBACK מבטל שינויים <strong>במסד</strong>. האימייל כבר יצא מהשרת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">BEGIN;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;
+ROLLBACK;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;</code></pre>
+<pre class="terminal">BEGIN
+ id
+----
+  1
+(1 row)
+
+INSERT 0 1
+ROLLBACK
+ id
+----
+  2
+(1 row)
+
+INSERT 0 1</pre>
+<p>(1) המספר 1 "נשרף" — ה־ROLLBACK לא מחזיר אותו. מספרים מ־IDENTITY הם ייחודיים, לא רציפים (אל תשתמש בהם כ"מספר חשבונית" שחייב להיות רציף). (2) אם ה־COMMIT נכשל — הלקוח קיבל אימייל על העברה שלא קרתה. כל מה שיוצא מהמסד (אימייל, קריאה ל־API של תשלומים, קובץ) לא מתבטל ב־ROLLBACK. שולחים <strong>אחרי</strong> COMMIT מוצלח (ואם השליחה נכשלת — מנסים שוב; ההעברה כבר אמיתית). וגם: שליחה בתוך transaction פתוח מחזיקה נעילות כל זמן השליחה (שיעור 2).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשלח את האימייל לפני, כדי שהלקוח יקבל מהר" — מהיר, ולפעמים שקרי.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E33">
+    <h3>P18-E33 · ‏BEGIN כרשת ביטחון ב־psql <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־DELETE מדווח כמה שורות נמחקו — זה הרגע לעצור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בתוך ה־transaction אתה רואה את השינויים שלך. אחרי ROLLBACK — הם לא היו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10), (4, 2, 20), (4, 3, 30);
+BEGIN;
+DELETE FROM transfers;
+SELECT COUNT(*) AS left_after_delete FROM transfers;
+ROLLBACK;
+SELECT COUNT(*) AS left_in_the_end FROM transfers;</code></pre>
+<pre class="terminal">INSERT 0 3
+BEGIN
+DELETE 3
+ left_after_delete
+-------------------
+                 0
+(1 row)
+
+ROLLBACK
+ left_in_the_end
+-----------------
+               3
+(1 row)</pre>
+<p><code>DELETE 3</code> כשציפית ל־1 — סימן לעצור. ROLLBACK, וכאילו לא קרה. הרגל של אנשי DBA: כל UPDATE/DELETE ידני על מסד אמיתי — בתוך BEGIN, עם SELECT לבדיקה, ורק אז COMMIT.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח לסגור (בלי COMMIT ובלי ROLLBACK) ולהשאיר את ה־psql פתוח — השורות נעולות, ושאר המערכת מחכה (שיעור 2).</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P18-E06">
     <h3>P18-E06 · העברה ב־SQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -224,7 +412,350 @@ export async function transferAll(pool: Pool, fromId: number, toId: number): Pro
 
 </div></details>
   </div>
+<div class="ex" id="P18-E34">
+    <h3>P18-E34 · סגירת חשבון ב־transaction 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">INSERT INTO transfers (from_id, to_id, amount) SELECT 2, 1, balance FROM accounts WHERE id = 2;</code></pre>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>להוספה ל־Dana: <code class="mid">balance + (SELECT balance FROM accounts WHERE id = 2)</code> — לפני האיפוס.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">BEGIN;
+INSERT INTO transfers (from_id, to_id, amount)
+  SELECT 2, 1, balance FROM accounts WHERE id = 2;
+UPDATE accounts SET balance = balance + (SELECT balance FROM accounts WHERE id = 2) WHERE id = 1;
+UPDATE accounts SET balance = 0 WHERE id = 2;
+COMMIT;</code></pre>
+<pre class="terminal">BEGIN
+INSERT 0 1
+UPDATE 1
+UPDATE 1
+COMMIT</pre>
+<p>שלוש פקודות שחייבות לקרות יחד: בלי transaction, נפילה אחרי השנייה משאירה ל־Dana את הכסף ול־Yossi עדיין את היתרה — כסף שנוצר. ‏(<code>INSERT ... SELECT</code> — מכניס את התוצאה של שאילתה; כאן שורה אחת.) ואם במקביל מישהו מפקיד ל־Yossi? בין הקריאה של היתרה לאיפוס יכול להיכנס כסף שיימחק — את זה פותרים בשיעור 2 עם <code>FOR UPDATE</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב <code>250</code> ביד — נכון היום, ושגוי מחר.</li><li>לאפס לפני ההוספה ל־Dana — היא מקבלת 0.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E35">
+    <h3>P18-E35 · פתיחת חשבון עם הפקדה ראשונה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>התבנית מהשיעור: <code>connect</code>, ואז:</p>
+<pre><code class="lang-ts">try { BEGIN ... COMMIT } catch { ROLLBACK; throw } finally { release }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">const { rows } = await client.query("INSERT INTO accounts (owner, balance) VALUES ($1, 0) RETURNING id", [owner]);</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E35: פתיחת חשבון עם הפקדה ראשונה
+import type { Pool } from "pg";
+
+export async function openAccount(pool: Pool, owner: string, fromId: number, deposit: number): Promise&lt;number&gt; {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO accounts (owner, balance) VALUES ($1, 0) RETURNING id", [owner]);
+    const id: number = rows[0].id;
+    await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [deposit, fromId]);
+    await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [deposit, id]);
+    await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [fromId, id, deposit]);
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>ה־INSERT של החשבון הוא חלק מה־transaction — ולכן גם הוא מתבטל אם ההפקדה נכשלת. בלי זה היו נשארים "חשבונות רפאים" עם יתרה 0 מכל ניסיון שנכשל. (ה־id שנשרף לא חוזר — P18-E32.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ליצור את החשבון עם <code>pool.query</code> לפני ה־transaction — הוא נשמר מיד, גם כשההפקדה נכשלת.</li><li><code>return id</code> לפני ה־COMMIT — ה־finally משחרר את החיבור באמצע transaction פתוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E36">
+    <h3>P18-E36 · תשלום משכורות: הכול או כלום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאת <code>for ... of</code> עם <code>await</code> בתוך transaction אחד — כל הפקודות על אותו <code>client</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">const r = await client.query("UPDATE ... WHERE id = $2", [amount, toId]); if (r.rowCount === 0) throw new Error(...)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E36: תשלום משכורות — הכול או כלום
+import type { Pool } from "pg";
+
+export async function payMany(pool: Pool, fromId: number, payments: { toId: number; amount: number }[]): Promise&lt;number[]&gt; {
+  if (payments.length === 0) return [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ids: number[] = [];
+    for (const { toId, amount } of payments) {
+      await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+      const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+      if (to.rowCount === 0) throw new Error(`חשבון לא קיים: ${toId}`);
+      const { rows } = await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3) RETURNING id", [fromId, toId, amount]);
+      ids.push(rows[0].id);
+    }
+    await client.query("COMMIT");
+    return ids;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>transaction יכול להכיל כמה פקודות שרוצים — גם לולאה. הכול נשמר ב־COMMIT אחד, או מתבטל. (ואם יש 10,000 תשלומים? transaction ארוך מחזיק נעילות — בשיעור 2 נראה למה זה יקר, ובשיעור 4 איך שולחים הרבה שורות בפקודה אחת.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתעלם מ־<code>rowCount</code> — UPDATE של חשבון שלא קיים "מצליח" עם 0 שורות, והכסף יורד מ־Avi לשום מקום (עד ש־FK של transfers עוצר — אם יש).</li><li><code>payments.map(async ...)</code> במקום לולאה — כל הפקודות נשלחות "ביחד", וקשה לדעת מה נכשל ומתי (P18-E39).</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P18-E37">
+    <h3>P18-E37 · ה־COMMIT עבר, התשובה לא הגיעה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מבחינת השרת, הבקשה השנייה היא בקשה חדשה לגמרי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מפתח שהלקוח מייצר פעם אחת לכל "כוונה" (UUID), ונשלח בכל ניסיון חוזר — ועמודה עם UNIQUE.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שתיים. ה־transaction הראשון הצליח (D — הוא נשמר), והשני הוא transaction חדש ותקין. transaction לא יודע ששתי בקשות הן "אותה כוונה".</li><li>GET רק קורא — לשלוח אותו פעמיים זה כמו פעם אחת. POST יוצר משהו — כל שליחה יוצרת עוד.</li><li><strong>Idempotency key</strong>: הלקוח מייצר מזהה (<code>crypto.randomUUID()</code>) לכל העברה ושולח אותו בכותרת <code>Idempotency-Key</code> בכל ניסיון. בשרת: עמודה <code class="mid">idempotency_key text NOT NULL UNIQUE</code> בטבלת ההעברות, והרישום שלה בתוך אותו transaction. בניסיון השני — <code>23505</code>, ה־transaction מתבטל (הכסף לא זז שוב), והשרת מחזיר את התוצאה של הראשונה. זה בדיוק מה ש־<code class="mid">shop_orders.idempotency_key</code> באתגר P18-E24 עושה, ומה ש־Stripe דורש בכל תשלום.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לבדוק אם הייתה העברה זהה בדקה האחרונה" — שתי העברות לגיטימיות של 300 לאותו אדם נחסמות, ושתי בקשות במקביל עדיין עוברות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E38">
+    <h3>P18-E38 · ‏transaction בלי await <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בלי <code>await</code>, <code>client.query(...)</code> מחזיר Promise — והקוד ממשיך מיד לשורה הבאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Promise שנדחה ואף אחד לא מחכה לו — "unhandled rejection". ב־Node 15 ומעלה זה מפיל את התהליך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>"ok"</code> — מיד, עוד לפני שהמסד ענה. ה־catch לא רץ, כי שום <code>await</code> לא "קיבל" את השגיאה. ‏<code>pg</code> שולח את הפקודות בתור על אותו חיבור, ולכן הן כן מגיעות לפי הסדר: ה־UPDATE נכשל, ה־transaction "מת" (P18-E29), וה־COMMIT הופך ל־ROLLBACK. הכסף לא זז — אבל הלקוח קיבל "ok".</li><li>הוא נדחה בלי שאף אחד מחכה לו: <code>unhandledRejection</code> — ו־Node מפיל את כל השרת (כל הבקשות של כל המשתמשים).</li><li>החיבור חוזר ל־pool באמצע עבודה. בקשה אחרת יכולה לקבל אותו ולשלוח פקודות שייכנסו לתוך ה־transaction הזה (או ייכשלו בגללו). באג שמופיע רק בעומס, ואי אפשר לשחזר.</li></ol>
+<p>ESLint עם הכלל <code class="mid">@typescript-eslint/no-floating-promises</code> (פרק 8) תופס בדיוק את זה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה עבד בבדיקה" — במקרה המוצלח הכול נראה תקין, כי הפקודות רצות בסדר הנכון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E39">
+    <h3>P18-E39 · ‏Promise.all בתוך transaction <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חיבור אחד = פקודה אחת בכל רגע. ‏<code>pg</code> מכניס את השאר לתור.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם UPDATE של שורה שלא קיימת נכשל?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא. ל־transaction יש חיבור אחד, והוא מריץ פקודה אחת בכל פעם — <code>pg</code> פשוט שם את השלוש בתור. אותה מהירות, קוד פחות ברור.</li><li>UPDATE של id 99 לא נכשל — הוא מעדכן 0 שורות. Avi מאבד 100 ש״ח שלא הגיעו לאף אחד, וה־COMMIT שומר את זה. (בלולאה עם <code>await</code> היית יכול לבדוק <code>rowCount</code> אחרי כל פקודה ולעצור — P18-E36.)</li><li>כשהעבודה היא כמה שאילתות <strong>בלתי תלויות</strong>, שאין ביניהן "הכול או כלום" — למשל דשבורד עם שלוש שאילתות קריאה — עם <code>pool.query</code>, שמשתמש בכמה חיבורים מה־pool.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את ה־Promise.all ל־<code>pool.query</code> כדי "שיהיה מקביל באמת" — עכשיו כל פקודה בחיבור אחר, מחוץ ל־transaction (P18-E20).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E40">
+    <h3>P18-E40 · פנקס בזיכרון — הכול או כלום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const cents = new Map([...balances].map(([k, v]) =&gt; [k, Math.round(v * 100)]));</code></pre>
+<p>עובדים רק על העותק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>החזרה: <code class="mid">new Map([...cents].map(([k, v]) =&gt; [k, v / 100]))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E40: פנקס בזיכרון — הכול או כלום
+export type Op = { from: string; to: string; amount: number };
+
+export function applyAll(balances: Map&lt;string, number&gt;, ops: Op[]): Map&lt;string, number&gt; {
+  const cents = new Map([...balances].map(([k, v]) =&gt; [k, Math.round(v * 100)] as [string, number]));
+  for (const { from, to, amount } of ops) {
+    for (const name of [from, to]) if (!cents.has(name)) throw new Error(`חשבון לא קיים: ${name}`);
+    if (!(amount &gt; 0)) throw new Error("סכום לא חוקי");
+    const a = Math.round(amount * 100);
+    if (cents.get(from)! &lt; a) throw new Error(`אין מספיק כסף: ${from}`);
+    cents.set(from, cents.get(from)! - a);
+    cents.set(to, cents.get(to)! + a);
+  }
+  return new Map([...cents].map(([k, v]) =&gt; [k, v / 100] as [string, number]));
+}</code></pre>
+<p>כל השינויים על עותק, והמקור לא משתנה אף פעם — מחזירים <code>Map</code> חדש. ‏<code>throw</code> באמצע "זורק" את העותק, וזה ה־ROLLBACK. כך עובדים גם reducers ב־frontend, ו־"immutable updates" בכלל.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעדכן את <code>balances</code> ישירות ולבדוק "בסוף" — כשהפעולה השלישית נכשלת, השתיים הראשונות כבר בוצעו על המקור.</li><li><code>new Map(balances)</code> כעותק — נכון כאן (המספרים לא משותפים), אבל שים לב: אם הערכים היו אובייקטים, זה עותק רדוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E41">
+    <h3>P18-E41 · ‏route של העברה: Zod, transaction ו־status 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שגיאות "צפויות" (404, ‏409) אפשר לזרוק מתוך ה־transaction עם קוד משלך, ולתרגם ב־catch אחרי ה־ROLLBACK: מחלקה קטנה עם <code>status</code> ו־<code>code</code> (כמו <code>AppError</code> מ־P18-E10).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־catch: קודם <code>ROLLBACK</code>, ואז:</p>
+<pre><code class="lang-ts">if (err instanceof HttpFail) return { status: err.status, body: { error: err.code } }; if (err.code === "23514") return { status: 409, ... }; throw err;</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E41: route של העברה — Zod, transaction ו־status
+import type { Pool } from "pg";
+import { z } from "zod";
+
+const TransferBody = z.object({
+  fromId: z.number().int().positive(),
+  toId: z.number().int().positive(),
+  amount: z.number().positive().multipleOf(0.01),
+});
+
+class HttpFail extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string) {
+    super(code);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export async function handleTransfer(pool: Pool, body: unknown): Promise&lt;{ status: number; body: unknown }&gt; {
+  const parsed = TransferBody.safeParse(body);
+  if (!parsed.success) return { status: 400, body: { error: "VALIDATION" } };
+  const { fromId, toId, amount } = parsed.data;
+  if (fromId === toId) return { status: 400, body: { error: "SAME_ACCOUNT" } };
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const from = await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+    if (from.rowCount === 0) throw new HttpFail(404, "ACCOUNT_NOT_FOUND");
+    const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    if (to.rowCount === 0) throw new HttpFail(404, "ACCOUNT_NOT_FOUND");
+    const { rows } = await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3) RETURNING id", [fromId, toId, amount]);
+    await client.query("COMMIT");
+    return { status: 201, body: { id: rows[0].id } };
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    if (err instanceof HttpFail) return { status: err.status, body: { error: err.code } };
+    if (err.code === "23514") return { status: 409, body: { error: "INSUFFICIENT_FUNDS" } };
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>ה־route עצמו ב־Express הוא שתי שורות:</p>
+<pre><code class="lang-ts">const r = await handleTransfer(pool, req.body); res.status(r.status).json(r.body);</code></pre>
+<p>. הפרדה כזו (לוגיקה בלי <code>req</code>/<code>res</code>) היא מה שמאפשר לבדוק אותה ישירות — פרק 22.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "יש מספיק כסף?" עם SELECT לפני ה־UPDATE — מרוץ (שיעור 2). ה־CHECK כבר עושה את זה, אטומית.</li><li><code>return</code> מתוך ה־catch בלי ROLLBACK — החיבור חוזר ל־pool עם transaction פתוח ש"מת".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E42">
+    <h3>P18-E42 · ייבוא העברות מ־CSV 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>csv.split(/\r?\n/)</code>, ואז לולאה עם האינדקס (<code>n = i + 1</code>). מספר שלם חיובי: <code class="mid">Number.isInteger(x) &amp;&amp; x &gt; 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור לכל שורה מפוענחת גם את <code>n</code> — כדי שאפשר יהיה לדווח עליה גם בשגיאה מהמסד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E42: ייבוא העברות מ־CSV
+import type { Pool } from "pg";
+
+type Row = { n: number; from: number; to: number; amount: number };
+
+function parse(csv: string): Row[] {
+  const rows: Row[] = [];
+  csv.split(/\r?\n/).forEach((line, i) =&gt; {
+    const n = i + 1;
+    if (n === 1 || line.trim() === "") return;
+    const parts = line.split(",").map((s) =&gt; s.trim());
+    const [from, to, amount] = parts.map(Number);
+    const ok = parts.length === 3 &amp;&amp; parts.every((p) =&gt; p !== "") &amp;&amp; Number.isInteger(from) &amp;&amp; from &gt; 0 &amp;&amp; Number.isInteger(to) &amp;&amp; to &gt; 0 &amp;&amp; amount &gt; 0;
+    if (!ok) throw new Error(`שורה ${n}: לא תקינה`);
+    rows.push({ n, from, to, amount });
+  });
+  return rows;
+}
+
+export async function importTransfers(pool: Pool, csv: string): Promise&lt;number&gt; {
+  const rows = parse(csv);
+  const client = await pool.connect();
+  let current = 0;
+  try {
+    await client.query("BEGIN");
+    for (const r of rows) {
+      current = r.n;
+      await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [r.amount, r.from]);
+      await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [r.amount, r.to]);
+      await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [r.from, r.to, r.amount]);
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    throw new Error(`שורה ${current}: ${err.message}`);
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>שני שלבים: אימות של כל הקובץ (זול, בלי מסד), ואז transaction אחד. הודעה עם מספר שורה הופכת "הייבוא נכשל" ל"שורה 7: יתרה לא מספיקה" — מה שהמשתמש צריך כדי לתקן את הקובץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לפענח ולכתוב באותה לולאה — שורה 900 לא תקינה, ו־899 כבר נשלחו למסד (בתוך transaction זה עדיין מתבטל, אבל עשית 2,700 פקודות לחינם).</li><li><code>Number("")</code> הוא <code>0</code>, ו־<code>Number(" 5 ")</code> הוא <code>5</code> — בדוק שהשדה לא ריק.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-concurrency.html"><small>הבא</small>שיעור 2 — מקביליות ו־race conditions</a></div>
 </main>
 </body>

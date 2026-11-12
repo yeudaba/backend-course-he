@@ -671,6 +671,7 @@ export async function customersWithOrderCounts(pool: Pool, ids: number[]) {
 @task
 <p>בקובץ <code>18-consistency/starter/P18-E24.ts</code> השלם <code>checkout(pool, { customerId, items, idempotencyKey })</code> מעל <code>catalog</code>, <code>shop_orders</code>, <code>shop_order_lines</code>. <code>items</code>: <code>[{ productId, quantity }]</code>.</p>
 <ul><li><code>items</code> ריק ← <code>AppError("EMPTY_CART")</code>. אותו מוצר פעמיים ← מאחדים כמויות.</li><li>הכול ב־transaction אחד: נעילת המוצרים (FOR UPDATE, לפי id), מוצר חסר ← <code>AppError("PRODUCT_NOT_FOUND")</code>, מלאי לא מספיק לאחד מהם ← <code>AppError("OUT_OF_STOCK")</code> עם <code>productId</code> על השגיאה — ואז <strong>אף</strong> מלאי לא משתנה.</li><li>מחיר נשמר ב־<code>unit_price</code> מהקטלוג ברגע ההזמנה; <code>total</code> = סכום השורות. מחזירה <code>{ orderId, total, replayed: false }</code> (total כמספר).</li><li><strong>Idempotency</strong>: אם כבר יש הזמנה עם אותו <code>idempotencyKey</code> — מחזירה אותה (<code>replayed: true</code>) בלי לשנות כלום. גם כששתי בקשות עם אותו מפתח מגיעות יחד.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> כל הפרק — transaction (שיעור 1), נעילה בסדר קבוע ו־idempotency (שיעור 2) — עם מחלקת שגיאה מפרק 8 ו־Map מפרק 7, ב־checkout אחד כמו בחנות אמיתית.</p>
 @hint1
 <p>בדיקת מפתח קיים בהתחלה + UNIQUE על <code>idempotency_key</code> לטיפול במרוץ: אם ה־INSERT של ההזמנה נכשל ב־<code>23505</code> — ROLLBACK, ואז קרא את ההזמנה הקיימת והחזר אותה.</p>
 @hint2
@@ -759,6 +760,7 @@ SELECT id FROM big_orders WHERE status = 'pending' AND created_at >= '2025-12-24
 -- 3: כמה בוטלו מאז דצמבר
 SELECT COUNT(*) FROM big_orders WHERE status = 'cancelled' AND created_at >= '2025-12-01';
 ```
+<p>🔗 <strong>איך זה מתחבר:</strong> index מרובה עמודות וחלקי (שיעור 3) מול שאילתות של דשבורד אמיתי — שוויון, טווח, מיון ו־COUNT מפרקים 16–17.</p>
 @hint1
 <p>שאילתות 2 ו־3 הן אותה "צורה": שוויון על status, טווח על created_at.</p>
 @hint2
@@ -831,6 +833,8 @@ export async function transferAll(pool: Pool, fromId: number, toId: number): Pro
 <ul><li>ב־catch לבלוע את השגיאה (<code>return null</code>) — מי שקרא חושב שהכול הצליח.</li><li><code>client.release()</code> בסוף ה־try ולא ב־finally — כל שגיאה משאירה חיבור תפוס, ואחרי כמה שגיאות ה־pool נתקע.</li><li><code>fn(client)</code> בלי <code>await</code> — ‏COMMIT רץ לפני שהשאילתות של <code>fn</code> הסתיימו, ושגיאה שלהן כבר לא תגיע ל־catch.</li><li>לקרוא ל־<code>pool.query</code> בתוך <code>fn</code> במקום ל־<code>client.query</code> — השאילתה רצה בחיבור אחר, מחוץ ל־transaction.</li></ul>
 
 @@ P18-E27 | 3 | מאחד שליפות (batch loader) 🤖 | 30 | שיעור 4
+@lesson 4
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על closures (פרק 5), ‏<code>Map</code> (פרק 7) ו־<code>new Promise</code> עם <code>setTimeout</code> (פרק 10)</strong>. ב־P18-E17 פתרת N+1 כשכל המזהים היו ידועים מראש. אבל לפעמים כמה חלקים נפרדים בקוד מבקשים כל אחד אדם אחד, באותו רגע, ואף אחד מהם לא יודע על האחרים. הפתרון המקובל הוא <strong>batch loader</strong> (כך עובדת הספרייה DataLoader): אוספים את כל הבקשות שהגיעו "באותו סיבוב", ושולחים שאילתה אחת.</p>
@@ -845,6 +849,7 @@ const [a, b, c] = await Promise.all([load(7), load(3), load(7)]); // שאילת�
 % npm run check P18-E27
 ```
 <p>הבודק סופר שאילתות (כמו ב־P18-E17), ובודק גם שגיאה מ־pool מזויף.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> closures מפרק 5, ‏<code>Map</code> מפרק 7 ו־Promise עם <code>setTimeout</code> מפרק 10 — כדי לאחד שאילתות ולפתור N+1 מהשיעור גם כשהבקשות מגיעות מחלקים שונים בקוד.</p>
 @hint1
 <p>ה־closure שומר <code>Map</code> של id ← רשימת "ממתינים" (<code>{ resolve, reject }</code> מתוך <code>new Promise</code>). ‏<code>load</code> מוסיף ממתין. אם ה־Map היה ריק לפני ההוספה, זו הקריאה הראשונה בסיבוב, ולכן היא מתזמנת את השליחה: <code>setTimeout(flush, 0)</code>.</p>
 @hint2
@@ -894,6 +899,8 @@ export function createPersonLoader(pool: Pick<Pool, "query">) {
 <ul><li><code>setTimeout(flush, 0)</code> בכל קריאה — כמה <code>flush</code> רצים, והשני שולח שאילתה עם רשימה ריקה (או שולח שוב את אותם ids).</li><li>לנקות את ה־Map רק אחרי ה־<code>await</code> — קריאות שהגיעו בזמן השאילתה נמחקות ולא מקבלות תשובה לעולם.</li><li>לחזור עם <code>rows[i]</code> לפי מקום במערך — המסד לא מבטיח שהשורות יחזרו באותו סדר, ו־id חסר מזיז את כולם.</li><li>לשכוח <code>reject</code> ב־catch — כשהמסד נופל, כל הקוראים תקועים לנצח.</li></ul>
 
 @@ P18-E28 | 3 | שלושת הלקוחות המובילים בכל חודש 🤖 | 20 | שיעור 4
+@lesson 4
+@part 2
 @type review
 @task
 <p><strong>🔁 חזרה על <code>GROUP BY</code> ו־<code>date_trunc</code> (‏P17-E14) ועל <code>ROW_NUMBER</code> עם <code>PARTITION BY</code> (‏P17-E18)</strong>, על טבלה של 200,000 שורות. בקובץ <code>18-consistency/starter/P18-E28.sql</code>: מתוך <code>big_orders</code>, רק הזמנות בסטטוס <code>paid</code> או <code>shipped</code>, ברבעון הראשון של 2025 (מ־1 בינואר ועד לפני 1 באפריל). לכל חודש — שלושת הלקוחות שההכנסה מהם הכי גבוהה:</p>
@@ -902,6 +909,7 @@ export function createPersonLoader(pool: Pick<Pool, "query">) {
 ```term
 % npm run check P18-E28
 ```
+<p>🔗 <strong>איך זה מתחבר:</strong> GROUP BY, ‏<code>date_trunc</code> ו־<code>ROW_NUMBER</code> מפרק 17 — הפעם על 200,000 שורות, כמו בדוחות של השיעור.</p>
 @hint1
 <p>שלושה שלבים, כל אחד ב־CTE משלו: (1) <code>monthly</code> — ‏<code>GROUP BY</code> לפי חודש ולקוח. (2) <code>ranked</code> — ‏<code>ROW_NUMBER() OVER (PARTITION BY month ORDER BY revenue DESC, customer_id)</code>. ‏(3) <code>WHERE place &lt;= 3</code>.</p>
 @hint2
@@ -944,3 +952,2160 @@ ORDER BY month, place;
 <p><code>ORDER BY revenue DESC, customer_id</code> בתוך החלון: בלי קריטריון שני, בתיקו המסד בוחר סדר כרצונו, והדוח יוצא שונה בכל הרצה.</p>
 @mistakes
 <ul><li><code>RANK()</code> במקום <code>ROW_NUMBER()</code> — בתיקו שני לקוחות מקבלים אותו מקום, ויכולים לחזור ארבעה.</li><li><code>created_at &lt;= '2025-03-31'</code> — זה <code>2025-03-31 00:00</code>, ורוב היום האחרון נחתך.</li><li><code>PARTITION BY customer_id</code> — מדרג חודשים לכל לקוח, במקום לקוחות לכל חודש.</li></ul>
+
+@@ P18-E29 | 2 | אחרי השגיאה — שום דבר לא עובר | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>מה יודפס אחרי כל פקודה? מה היתרה של Dana בסוף, ולמה ה־SELECT באמצע לא מחזיר אותה?</p>
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance - 999 WHERE id = 2;
+SELECT balance FROM accounts WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 3;
+COMMIT;
+SELECT id, balance FROM accounts WHERE id IN (1, 3) ORDER BY id;
+```
+@hint1
+<p>ל־Yossi (2) יש 250. מה ה־CHECK על <code>balance</code>?</p>
+@hint2
+<p>אחרי שגיאה, ה־transaction "מת": כל פקודה נדחית עד סוף הבלוק — וגם ה־COMMIT לא באמת שומר.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql stderr continue
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance - 999 WHERE id = 2;
+SELECT balance FROM accounts WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 3;
+COMMIT;
+SELECT id, balance FROM accounts WHERE id IN (1, 3) ORDER BY id;
+```
+```out
+BEGIN
+UPDATE 1
+ERROR:  new row for relation "accounts" violates check constraint "accounts_balance_check"
+DETAIL:  Failing row contains (2, Yossi, -749.00).
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+ id | balance
+----+---------
+  1 | 1000.00
+  3 |    0.00
+(2 rows)
+```
+<p>אחרי השגיאה המסד לא מוכן לעשות כלום בתוך ה־transaction — גם לא SELECT — עד שהוא נסגר. ה־<code>COMMIT</code> מחזיר <code>ROLLBACK</code>: גם העדכון הראשון של Dana בוטל. בקוד: אם לא תבדוק שגיאות, אתה עלול לחשוב ש"ה־COMMIT עבר" — ולכן ב־Node כל שגיאה זורקת, וה־catch עושה ROLLBACK.</p>
+@mistakes
+<ul><li>להמשיך "לתקן" בתוך אותו transaction אחרי שגיאה (עוד UPDATE, עוד SELECT) — כל פקודה תיכשל באותה הודעה. צריך ROLLBACK ולהתחיל מחדש.</li></ul>
+
+@@ P18-E30 | 1 | ‏ACID — איזו אות? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>לכל מקרה — איזו מארבע התכונות (Atomicity, ‏Consistency, ‏Isolation, ‏Durability) מבטיחה אותו (או הייתה חסרה בו)?</p>
+<ol><li>השרת נפל בין "הורד מ־Yossi" ל"הוסף ל־Noa", ואחרי העלייה — הכסף לא נעלם.</li><li>COMMIT החזיר הצלחה, ושנייה אחר כך נפל החשמל בשרת המסד. אחרי העלייה — ההעברה שם.</li><li>דוח שרץ באמצע העברה לא ראה את הכסף "באוויר" — לא אצל Yossi ולא אצל Noa.</li><li>העברה שהייתה משאירה יתרה שלילית נכשלה, אף שכל פקודה בה הייתה תקינה תחבירית.</li><li>מערכת ששומרת נתונים בזיכרון ומדי פעם כותבת לקובץ — ואיבדה את 5 הדקות האחרונות בקריסה.</li></ol>
+@hint1
+<p>A — הכול או כלום. C — האילוצים מתקיימים. I — לא רואים חצאי עבודה של אחרים. D — מה ש־commit שורד.</p>
+@hint2
+<p>בסעיף 5, איזו תכונה <strong>חסרה</strong>?</p>
+@solution
+<ol><li><strong>A</strong> — שתי הפקודות יחד או אף אחת.</li><li><strong>D</strong> — PostgreSQL כותב ליומן (WAL) בדיסק לפני שהוא מחזיר הצלחה ל־COMMIT.</li><li><strong>I</strong> — שינויים שלא נעשה להם commit לא נראים לחיבורים אחרים.</li><li><strong>C</strong> — ה־CHECK מבטיח שאחרי כל commit החוקים מתקיימים.</li><li>חסר <strong>D</strong> — "נשמר" אצלה זה "נשמר בזיכרון". (זה בדיוק ההבדל בין Redis בתצורה מסוימת למסד יחסי — יחידה 26.)</li></ol>
+@mistakes
+<ul><li>לבלבל C של ACID עם "עקביות" במערכות מבוזרות (CAP) — כאן היא רק "האילוצים שלך מתקיימים".</li></ul>
+
+@@ P18-E31 | 2 | מה השעה בתוך transaction? | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>ל־<code>transfers.created_at</code> יש <code>DEFAULT now()</code>. מה יחזיר כל SELECT? מה זה אומר על שתי ההעברות שנרשמו באותו transaction בהפרש של 0.2 שנייה?</p>
+```sql
+BEGIN;
+SELECT pg_sleep(0.2);
+SELECT now() = transaction_timestamp() AS now_is_start, clock_timestamp() > now() AS clock_moved;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10);
+SELECT pg_sleep(0.2);
+INSERT INTO transfers (from_id, to_id, amount) VALUES (4, 3, 20);
+SELECT COUNT(*) AS transfers, COUNT(DISTINCT created_at) AS different_times FROM transfers;
+COMMIT;
+```
+@hint1
+<p><code>now()</code> מחזיר את הזמן שבו ה־transaction <strong>התחיל</strong>. ‏<code>clock_timestamp()</code> — את הזמן ברגע הזה.</p>
+@hint2
+<p>כמה ערכים שונים של <code>created_at</code> יש בשתי השורות?</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+BEGIN;
+SELECT pg_sleep(0.2);
+SELECT now() = transaction_timestamp() AS now_is_start, clock_timestamp() > now() AS clock_moved;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10);
+SELECT pg_sleep(0.2);
+INSERT INTO transfers (from_id, to_id, amount) VALUES (4, 3, 20);
+SELECT COUNT(*) AS transfers, COUNT(DISTINCT created_at) AS different_times FROM transfers;
+COMMIT;
+```
+```out
+BEGIN
+ pg_sleep
+----------
+
+(1 row)
+
+ now_is_start | clock_moved
+--------------+-------------
+ t            | t
+(1 row)
+
+INSERT 0 1
+ pg_sleep
+----------
+
+(1 row)
+
+INSERT 0 1
+ transfers | different_times
+-----------+-----------------
+         2 |               1
+(1 row)
+
+COMMIT
+```
+<p>בתוך transaction, <code>now()</code> "קפוא" — לכל השורות שנכתבו בו אותה שעה. זה מכוון: כל מה שקרה ב־transaction קרה "ברגע אחד" (גם זה חלק מ־A). אבל זה מפתיע אם ממיינים לפי <code>created_at</code>: שתי השורות שוות, וצריך שובר שוויון (<code>id</code>) — שיעור 4.</p>
+@mistakes
+<ul><li>להשתמש ב־<code>now()</code> כדי למדוד כמה זמן לקח משהו בתוך transaction — תמיד 0. למדידה: <code>clock_timestamp()</code>.</li></ul>
+
+@@ P18-E32 | 2 | מה ROLLBACK לא מבטל | 10 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>(1) מה יחזירו שני ה־<code>RETURNING id</code>? (2) הקוד בהמשך מבצע העברה ושולח אימייל "ההעברה בוצעה" — מה קורה אם ה־COMMIT נכשל? איפה לשלוח את האימייל?</p>
+```sql
+BEGIN;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;
+ROLLBACK;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;
+```
+```ts
+await client.query("BEGIN");
+await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+await sendEmail(owner, `העברת ${amount} ש״ח`);
+await client.query("COMMIT");
+```
+@hint1
+<p>מונה ה־IDENTITY מתקדם גם כשה־INSERT מתבטל — כדי ששני transactions במקביל לא יקבלו אותו מספר.</p>
+@hint2
+<p>ROLLBACK מבטל שינויים <strong>במסד</strong>. האימייל כבר יצא מהשרת.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+BEGIN;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;
+ROLLBACK;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 50) RETURNING id;
+```
+```out
+BEGIN
+ id
+----
+  1
+(1 row)
+
+INSERT 0 1
+ROLLBACK
+ id
+----
+  2
+(1 row)
+
+INSERT 0 1
+```
+<p>(1) המספר 1 "נשרף" — ה־ROLLBACK לא מחזיר אותו. מספרים מ־IDENTITY הם ייחודיים, לא רציפים (אל תשתמש בהם כ"מספר חשבונית" שחייב להיות רציף). (2) אם ה־COMMIT נכשל — הלקוח קיבל אימייל על העברה שלא קרתה. כל מה שיוצא מהמסד (אימייל, קריאה ל־API של תשלומים, קובץ) לא מתבטל ב־ROLLBACK. שולחים <strong>אחרי</strong> COMMIT מוצלח (ואם השליחה נכשלת — מנסים שוב; ההעברה כבר אמיתית). וגם: שליחה בתוך transaction פתוח מחזיקה נעילות כל זמן השליחה (שיעור 2).</p>
+@mistakes
+<ul><li>"נשלח את האימייל לפני, כדי שהלקוח יקבל מהר" — מהיר, ולפעמים שקרי.</li></ul>
+
+@@ P18-E33 | 1 | ‏BEGIN כרשת ביטחון ב־psql | 5 | שיעור 1
+@lesson 1
+@part 1
+@kind understand
+@task
+<p>רצית למחוק את ההעברות הישנות, ושכחת את ה־WHERE. מה יודפס? מה מצב הטבלה בסוף?</p>
+```sql
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10), (4, 2, 20), (4, 3, 30);
+BEGIN;
+DELETE FROM transfers;
+SELECT COUNT(*) AS left_after_delete FROM transfers;
+ROLLBACK;
+SELECT COUNT(*) AS left_in_the_end FROM transfers;
+```
+@hint1
+<p>ה־DELETE מדווח כמה שורות נמחקו — זה הרגע לעצור.</p>
+@hint2
+<p>בתוך ה־transaction אתה רואה את השינויים שלך. אחרי ROLLBACK — הם לא היו.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 3, 10), (4, 2, 20), (4, 3, 30);
+BEGIN;
+DELETE FROM transfers;
+SELECT COUNT(*) AS left_after_delete FROM transfers;
+ROLLBACK;
+SELECT COUNT(*) AS left_in_the_end FROM transfers;
+```
+```out
+INSERT 0 3
+BEGIN
+DELETE 3
+ left_after_delete
+-------------------
+                 0
+(1 row)
+
+ROLLBACK
+ left_in_the_end
+-----------------
+               3
+(1 row)
+```
+<p><code>DELETE 3</code> כשציפית ל־1 — סימן לעצור. ROLLBACK, וכאילו לא קרה. הרגל של אנשי DBA: כל UPDATE/DELETE ידני על מסד אמיתי — בתוך BEGIN, עם SELECT לבדיקה, ורק אז COMMIT.</p>
+@mistakes
+<ul><li>לשכוח לסגור (בלי COMMIT ובלי ROLLBACK) ולהשאיר את ה־psql פתוח — השורות נעולות, ושאר המערכת מחכה (שיעור 2).</li></ul>
+
+@@ P18-E34 | 2 | סגירת חשבון ב־transaction 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>Yossi (2) סוגר את החשבון, וכל היתרה שלו עוברת ל־Dana (1). בקובץ <code>18-consistency/starter/P18-E34.sql</code>, ב־transaction אחד:</p>
+<ol><li>רשום ב־<code>transfers</code> העברה מ־2 ל־1 בסכום <strong>היתרה הנוכחית</strong> של Yossi (תת־שאילתה — לא מספר שכתבת ביד).</li><li>הוסף את הסכום הזה ל־Dana.</li><li>אפס את היתרה של Yossi.</li></ol>
+<p>שים לב לסדר: אם תאפס קודם — "היתרה הנוכחית" תהיה 0.</p>
+```term
+% npm run check P18-E34
+```
+<p>הבודק מריץ את הקובץ גם אחרי שהוא משנה את היתרה של Yossi.</p>
+@hint1
+```sql
+INSERT INTO transfers (from_id, to_id, amount) SELECT 2, 1, balance FROM accounts WHERE id = 2;
+```
+@hint2
+<p>להוספה ל־Dana: <code>balance + (SELECT balance FROM accounts WHERE id = 2)</code> — לפני האיפוס.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E34.sql
+BEGIN;
+INSERT INTO transfers (from_id, to_id, amount)
+  SELECT 2, 1, balance FROM accounts WHERE id = 2;
+UPDATE accounts SET balance = balance + (SELECT balance FROM accounts WHERE id = 2) WHERE id = 1;
+UPDATE accounts SET balance = 0 WHERE id = 2;
+COMMIT;
+```
+```out
+BEGIN
+INSERT 0 1
+UPDATE 1
+UPDATE 1
+COMMIT
+```
+<p>שלוש פקודות שחייבות לקרות יחד: בלי transaction, נפילה אחרי השנייה משאירה ל־Dana את הכסף ול־Yossi עדיין את היתרה — כסף שנוצר. ‏(<code>INSERT ... SELECT</code> — מכניס את התוצאה של שאילתה; כאן שורה אחת.) ואם במקביל מישהו מפקיד ל־Yossi? בין הקריאה של היתרה לאיפוס יכול להיכנס כסף שיימחק — את זה פותרים בשיעור 2 עם <code>FOR UPDATE</code>.</p>
+@mistakes
+<ul><li>לכתוב <code>250</code> ביד — נכון היום, ושגוי מחר.</li><li>לאפס לפני ההוספה ל־Dana — היא מקבלת 0.</li></ul>
+
+@@ P18-E35 | 3 | פתיחת חשבון עם הפקדה ראשונה 🤖 | 20 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>חשבון חדש נפתח עם הפקדה ראשונה מחשבון קיים (למשל הורה שפותח חשבון לילד). בקובץ <code>18-consistency/starter/P18-E35.ts</code> כתוב וייצא:</p>
+```ts
+export async function openAccount(pool: Pool, owner: string, fromId: number, deposit: number): Promise<number>
+```
+<ul><li>ב־transaction אחד, על חיבור אחד (<code>pool.connect()</code>): יוצרת חשבון עם יתרה 0 (‏<code>RETURNING id</code>), מורידה <code>deposit</code> מ־<code>fromId</code>, מוסיפה לחשבון החדש, ורושמת ב־<code>transfers</code>. מחזירה את ה־id החדש.</li><li>כל שגיאה (למשל אין מספיק כסף — CHECK) ← ROLLBACK: <strong>לא</strong> נשאר חשבון חדש. השגיאה נזרקת הלאה כמו שהיא.</li><li>החיבור משתחרר תמיד.</li></ul>
+<p>(<code>import type { Pool } from "pg";</code>)</p>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E35.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E35
+```
+@hint1
+<p>התבנית מהשיעור: <code>connect</code>, ואז:</p>
+```ts
+try { BEGIN ... COMMIT } catch { ROLLBACK; throw } finally { release }
+```
+@hint2
+```sql
+const { rows } = await client.query("INSERT INTO accounts (owner, balance) VALUES ($1, 0) RETURNING id", [owner]);
+```
+@solution
+```ts save=solutions/P18-E35.ts
+// P18-E35: פתיחת חשבון עם הפקדה ראשונה
+import type { Pool } from "pg";
+
+export async function openAccount(pool: Pool, owner: string, fromId: number, deposit: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("INSERT INTO accounts (owner, balance) VALUES ($1, 0) RETURNING id", [owner]);
+    const id: number = rows[0].id;
+    await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [deposit, fromId]);
+    await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [deposit, id]);
+    await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [fromId, id, deposit]);
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>ה־INSERT של החשבון הוא חלק מה־transaction — ולכן גם הוא מתבטל אם ההפקדה נכשלת. בלי זה היו נשארים "חשבונות רפאים" עם יתרה 0 מכל ניסיון שנכשל. (ה־id שנשרף לא חוזר — P18-E32.)</p>
+@mistakes
+<ul><li>ליצור את החשבון עם <code>pool.query</code> לפני ה־transaction — הוא נשמר מיד, גם כשההפקדה נכשלת.</li><li><code>return id</code> לפני ה־COMMIT — ה־finally משחרר את החיבור באמצע transaction פתוח.</li></ul>
+
+@@ P18-E36 | 3 | תשלום משכורות: הכול או כלום 🤖 | 25 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>Avi (4) משלם כמה תשלומים בבת אחת. אם אחד נכשל — אף אחד לא יוצא. בקובץ <code>18-consistency/starter/P18-E36.ts</code> כתוב וייצא:</p>
+```ts
+export async function payMany(pool: Pool, fromId: number, payments: { toId: number; amount: number }[]): Promise<number[]>
+```
+<ul><li>לכל תשלום, לפי הסדר: הורדה מ־<code>fromId</code>, הוספה ל־<code>toId</code>, ורישום ב־<code>transfers</code> (‏<code>RETURNING id</code>). מחזירה את מזהי ההעברות, לפי הסדר.</li><li>חשבון יעד שלא קיים: ה־UPDATE מעדכן 0 שורות (‏<code>rowCount</code>) — זרוק <code>new Error(`חשבון לא קיים: ${toId}`)</code>. ‏(FK על <code>transfers.to_id</code> היה תופס את זה רק בשלב הרישום — ובהודעה פחות ברורה.)</li><li>כל שגיאה ← ROLLBACK לכולם, והשגיאה נזרקת. מערך ריק ← <code>[]</code>, בלי לפנות למסד.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E36.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E36
+```
+@hint1
+<p>לולאת <code>for ... of</code> עם <code>await</code> בתוך transaction אחד — כל הפקודות על אותו <code>client</code>.</p>
+@hint2
+```sql
+const r = await client.query("UPDATE ... WHERE id = $2", [amount, toId]); if (r.rowCount === 0) throw new Error(...)
+```
+@solution
+```ts save=solutions/P18-E36.ts
+// P18-E36: תשלום משכורות — הכול או כלום
+import type { Pool } from "pg";
+
+export async function payMany(pool: Pool, fromId: number, payments: { toId: number; amount: number }[]): Promise<number[]> {
+  if (payments.length === 0) return [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ids: number[] = [];
+    for (const { toId, amount } of payments) {
+      await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+      const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+      if (to.rowCount === 0) throw new Error(`חשבון לא קיים: ${toId}`);
+      const { rows } = await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3) RETURNING id", [fromId, toId, amount]);
+      ids.push(rows[0].id);
+    }
+    await client.query("COMMIT");
+    return ids;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>transaction יכול להכיל כמה פקודות שרוצים — גם לולאה. הכול נשמר ב־COMMIT אחד, או מתבטל. (ואם יש 10,000 תשלומים? transaction ארוך מחזיק נעילות — בשיעור 2 נראה למה זה יקר, ובשיעור 4 איך שולחים הרבה שורות בפקודה אחת.)</p>
+@mistakes
+<ul><li>להתעלם מ־<code>rowCount</code> — UPDATE של חשבון שלא קיים "מצליח" עם 0 שורות, והכסף יורד מ־Avi לשום מקום (עד ש־FK של transfers עוצר — אם יש).</li><li><code>payments.map(async ...)</code> במקום לולאה — כל הפקודות נשלחות "ביחד", וקשה לדעת מה נכשל ומתי (P18-E39).</li></ul>
+
+@@ P18-E37 | 2 | ה־COMMIT עבר, התשובה לא הגיעה | 10 | פרק 14, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>האפליקציה שולחת <code>POST /transfers</code> (‏300 ש״ח). השרת מבצע את ה־transaction, ה־COMMIT מצליח — ואז החיבור של הטלפון נקטע, והאפליקציה מקבלת timeout. אחרי 3 שניות היא שולחת שוב את אותה בקשה.</p>
+<ol><li>כמה העברות יהיו במסד? האם transaction יכול למנוע את זה?</li><li>למה GET אפשר לשלוח שוב בלי לחשוב, ו־POST לא? (פרק 14: idempotent.)</li><li>הצע פתרון: מה הלקוח שולח, ואיזה אילוץ במסד אוכף אותו?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> methods ו־idempotency מפרק 14, ‏timeout ו־retry ברשת — והשיעור: transaction מבטיח "הכול או כלום" <strong>בתוך</strong> המסד, לא בין המסד ללקוח.</p>
+@hint1
+<p>מבחינת השרת, הבקשה השנייה היא בקשה חדשה לגמרי.</p>
+@hint2
+<p>מפתח שהלקוח מייצר פעם אחת לכל "כוונה" (UUID), ונשלח בכל ניסיון חוזר — ועמודה עם UNIQUE.</p>
+@solution
+<ol><li>שתיים. ה־transaction הראשון הצליח (D — הוא נשמר), והשני הוא transaction חדש ותקין. transaction לא יודע ששתי בקשות הן "אותה כוונה".</li><li>GET רק קורא — לשלוח אותו פעמיים זה כמו פעם אחת. POST יוצר משהו — כל שליחה יוצרת עוד.</li><li><strong>Idempotency key</strong>: הלקוח מייצר מזהה (<code>crypto.randomUUID()</code>) לכל העברה ושולח אותו בכותרת <code>Idempotency-Key</code> בכל ניסיון. בשרת: עמודה <code>idempotency_key text NOT NULL UNIQUE</code> בטבלת ההעברות, והרישום שלה בתוך אותו transaction. בניסיון השני — <code>23505</code>, ה־transaction מתבטל (הכסף לא זז שוב), והשרת מחזיר את התוצאה של הראשונה. זה בדיוק מה ש־<code>shop_orders.idempotency_key</code> באתגר P18-E24 עושה, ומה ש־Stripe דורש בכל תשלום.</li></ol>
+@mistakes
+<ul><li>"לבדוק אם הייתה העברה זהה בדקה האחרונה" — שתי העברות לגיטימיות של 300 לאותו אדם נחסמות, ושתי בקשות במקביל עדיין עוברות.</li></ul>
+
+@@ P18-E38 | 3 | ‏transaction בלי await | 10 | פרק 10, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>מישהו שכח <code>await</code>:</p>
+```ts
+export async function transfer(pool: Pool, fromId: number, toId: number, amount: number) {
+  const client = await pool.connect();
+  try {
+    client.query("BEGIN");
+    client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+    client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    client.query("COMMIT");
+    return "ok";
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<ol><li>מה <code>transfer</code> מחזירה כשאין ל־fromId מספיק כסף? האם ה־catch רץ?</li><li>מה קורה ל־Promise של ה־UPDATE שנכשל? (פרק 10)</li><li>ה־<code>release</code> רץ לפני שהפקודות סיימו לרוץ. למה זה מסוכן במיוחד?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> Promise ו־<code>await</code> מפרק 10 — <code>try/catch</code> תופס רק שגיאות של Promise שמחכים לו. והשיעור: ה־ROLLBACK תלוי בזה שה־catch באמת רץ.</p>
+@hint1
+<p>בלי <code>await</code>, <code>client.query(...)</code> מחזיר Promise — והקוד ממשיך מיד לשורה הבאה.</p>
+@hint2
+<p>Promise שנדחה ואף אחד לא מחכה לו — "unhandled rejection". ב־Node 15 ומעלה זה מפיל את התהליך.</p>
+@solution
+<ol><li><code>"ok"</code> — מיד, עוד לפני שהמסד ענה. ה־catch לא רץ, כי שום <code>await</code> לא "קיבל" את השגיאה. ‏<code>pg</code> שולח את הפקודות בתור על אותו חיבור, ולכן הן כן מגיעות לפי הסדר: ה־UPDATE נכשל, ה־transaction "מת" (P18-E29), וה־COMMIT הופך ל־ROLLBACK. הכסף לא זז — אבל הלקוח קיבל "ok".</li><li>הוא נדחה בלי שאף אחד מחכה לו: <code>unhandledRejection</code> — ו־Node מפיל את כל השרת (כל הבקשות של כל המשתמשים).</li><li>החיבור חוזר ל־pool באמצע עבודה. בקשה אחרת יכולה לקבל אותו ולשלוח פקודות שייכנסו לתוך ה־transaction הזה (או ייכשלו בגללו). באג שמופיע רק בעומס, ואי אפשר לשחזר.</li></ol>
+<p>ESLint עם הכלל <code>@typescript-eslint/no-floating-promises</code> (פרק 8) תופס בדיוק את זה.</p>
+@mistakes
+<ul><li>"זה עבד בבדיקה" — במקרה המוצלח הכול נראה תקין, כי הפקודות רצות בסדר הנכון.</li></ul>
+
+@@ P18-E39 | 2 | ‏Promise.all בתוך transaction | 10 | פרק 10, שיעור 1
+@lesson 1
+@part 2
+@kind understand
+@task
+<p>"נאיץ את ה־transaction": שלושת ה־UPDATEים של משכורות נשלחים יחד.</p>
+```ts
+await client.query("BEGIN");
+await Promise.all([
+  client.query("UPDATE accounts SET balance = balance - 100 WHERE id = 4"),
+  client.query("UPDATE accounts SET balance = balance + 100 WHERE id = 99"),
+  client.query("UPDATE accounts SET balance = balance + 100 WHERE id = 2"),
+]);
+await client.query("COMMIT");
+```
+<ol><li>האם זה מהיר יותר? כמה חיבורים עובדים כאן?</li><li>id 99 לא קיים. מה יקרה — כמה כסף יירד מ־Avi?</li><li>מתי <code>Promise.all</code> כן מאיץ עבודה עם מסד?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>Promise.all</code> מפרק 10 — מקביליות אמיתית צריכה כמה "עובדים". והשיעור: transaction הוא חיבור אחד.</p>
+@hint1
+<p>חיבור אחד = פקודה אחת בכל רגע. ‏<code>pg</code> מכניס את השאר לתור.</p>
+@hint2
+<p>האם UPDATE של שורה שלא קיימת נכשל?</p>
+@solution
+<ol><li>לא. ל־transaction יש חיבור אחד, והוא מריץ פקודה אחת בכל פעם — <code>pg</code> פשוט שם את השלוש בתור. אותה מהירות, קוד פחות ברור.</li><li>UPDATE של id 99 לא נכשל — הוא מעדכן 0 שורות. Avi מאבד 100 ש״ח שלא הגיעו לאף אחד, וה־COMMIT שומר את זה. (בלולאה עם <code>await</code> היית יכול לבדוק <code>rowCount</code> אחרי כל פקודה ולעצור — P18-E36.)</li><li>כשהעבודה היא כמה שאילתות <strong>בלתי תלויות</strong>, שאין ביניהן "הכול או כלום" — למשל דשבורד עם שלוש שאילתות קריאה — עם <code>pool.query</code>, שמשתמש בכמה חיבורים מה־pool.</li></ol>
+@mistakes
+<ul><li>להעביר את ה־Promise.all ל־<code>pool.query</code> כדי "שיהיה מקביל באמת" — עכשיו כל פקודה בחיבור אחר, מחוץ ל־transaction (P18-E20).</li></ul>
+
+@@ P18-E40 | 3 | פנקס בזיכרון — הכול או כלום 🤖 | 20 | פרק 7, פרק 8, פרק 11, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>לפני שמגיעים למסד — לבדיקות או לסימולציה — אותו רעיון בזיכרון. בקובץ <code>18-consistency/starter/P18-E40.ts</code> כתוב וייצא:</p>
+```ts
+export type Op = { from: string; to: string; amount: number };
+export function applyAll(balances: Map<string, number>, ops: Op[]): Map<string, number>
+```
+<ul><li>מחזירה <code>Map</code> <strong>חדש</strong> עם היתרות אחרי כל הפעולות, לפי הסדר. ה־<code>Map</code> שקיבלה — לא משתנה אף פעם (גם לא בכישלון).</li><li>אם פעולה כלשהי לא חוקית — זורקת <code>Error</code> עם ההודעה המתאימה, ושום דבר לא "נשמר":<br>חשבון לא קיים ← <code>`חשבון לא קיים: ${name}`</code>; סכום לא חיובי ← <code>"סכום לא חוקי"</code>; יתרה שתרד מתחת ל־0 ← <code>`אין מספיק כסף: ${from}`</code>.</li><li>סכומים מדויקים: <code>0.1 + 0.2</code> צריך לתת <code>0.3</code> (אגורות).</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E40.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E40
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>Map</code> והעתקה מפרק 7, ‏<code>throw</code> מפרק 8, טיפוסים מפרק 11 — והשיעור: Atomicity. העתק לעבוד עליו ← אם הכול הצליח, מחזירים אותו ("COMMIT"); אם לא — זורקים אותו ("ROLLBACK").</p>
+@hint1
+```ts
+const cents = new Map([...balances].map(([k, v]) => [k, Math.round(v * 100)]));
+```
+<p>עובדים רק על העותק.</p>
+@hint2
+<p>החזרה: <code>new Map([...cents].map(([k, v]) =&gt; [k, v / 100]))</code>.</p>
+@solution
+```ts save=solutions/P18-E40.ts
+// P18-E40: פנקס בזיכרון — הכול או כלום
+export type Op = { from: string; to: string; amount: number };
+
+export function applyAll(balances: Map<string, number>, ops: Op[]): Map<string, number> {
+  const cents = new Map([...balances].map(([k, v]) => [k, Math.round(v * 100)] as [string, number]));
+  for (const { from, to, amount } of ops) {
+    for (const name of [from, to]) if (!cents.has(name)) throw new Error(`חשבון לא קיים: ${name}`);
+    if (!(amount > 0)) throw new Error("סכום לא חוקי");
+    const a = Math.round(amount * 100);
+    if (cents.get(from)! < a) throw new Error(`אין מספיק כסף: ${from}`);
+    cents.set(from, cents.get(from)! - a);
+    cents.set(to, cents.get(to)! + a);
+  }
+  return new Map([...cents].map(([k, v]) => [k, v / 100] as [string, number]));
+}
+```
+<p>כל השינויים על עותק, והמקור לא משתנה אף פעם — מחזירים <code>Map</code> חדש. ‏<code>throw</code> באמצע "זורק" את העותק, וזה ה־ROLLBACK. כך עובדים גם reducers ב־frontend, ו־"immutable updates" בכלל.</p>
+@mistakes
+<ul><li>לעדכן את <code>balances</code> ישירות ולבדוק "בסוף" — כשהפעולה השלישית נכשלת, השתיים הראשונות כבר בוצעו על המקור.</li><li><code>new Map(balances)</code> כעותק — נכון כאן (המספרים לא משותפים), אבל שים לב: אם הערכים היו אובייקטים, זה עותק רדוד.</li></ul>
+
+@@ P18-E41 | 3 | ‏route של העברה: Zod, transaction ו־status 🤖 | 30 | פרק 14, פרק 15, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>הלוגיקה של <code>POST /transfers</code>, בלי Express (כדי לבדוק אותה ישירות). בקובץ <code>18-consistency/starter/P18-E41.ts</code> כתוב וייצא:</p>
+```ts
+export async function handleTransfer(pool: Pool, body: unknown): Promise<{ status: number; body: unknown }>
+```
+<ul><li>Zod: ‏<code>fromId</code>, ‏<code>toId</code> — מספרים שלמים חיוביים; ‏<code>amount</code> — חיובי, עד 2 ספרות אחרי הנקודה (<code>.multipleOf(0.01)</code>). לא תקין ← <code>{ status: 400, body: { error: "VALIDATION" } }</code>. אותו חשבון בשני הצדדים ← 400 ו־<code>"SAME_ACCOUNT"</code>.</li><li>transaction: הורדה, הוספה, רישום ב־<code>transfers</code> עם <code>RETURNING id</code>. ‏UPDATE שעדכן 0 שורות (חשבון חסר) ← ROLLBACK ו־<code>{ status: 404, body: { error: "ACCOUNT_NOT_FOUND" } }</code>. ‏CHECK על היתרה (<code>23514</code>) ← ROLLBACK ו־<code>409</code> עם <code>"INSUFFICIENT_FUNDS"</code>.</li><li>הצלחה ← <code>{ status: 201, body: { id } }</code>. כל שגיאה אחרת — ROLLBACK ו־<code>throw</code> (ה־error middleware יחזיר 500).</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E41.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E41
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> status codes מפרק 14, ‏Zod מפרק 15 — והשיעור: ה־transaction והשגיאות שלו הן מה שקובע את התשובה ל־HTTP.</p>
+@hint1
+<p>שגיאות "צפויות" (404, ‏409) אפשר לזרוק מתוך ה־transaction עם קוד משלך, ולתרגם ב־catch אחרי ה־ROLLBACK: מחלקה קטנה עם <code>status</code> ו־<code>code</code> (כמו <code>AppError</code> מ־P18-E10).</p>
+@hint2
+<p>ב־catch: קודם <code>ROLLBACK</code>, ואז:</p>
+```ts
+if (err instanceof HttpFail) return { status: err.status, body: { error: err.code } }; if (err.code === "23514") return { status: 409, ... }; throw err;
+```
+@solution
+```ts save=solutions/P18-E41.ts
+// P18-E41: route של העברה — Zod, transaction ו־status
+import type { Pool } from "pg";
+import { z } from "zod";
+
+const TransferBody = z.object({
+  fromId: z.number().int().positive(),
+  toId: z.number().int().positive(),
+  amount: z.number().positive().multipleOf(0.01),
+});
+
+class HttpFail extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string) {
+    super(code);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export async function handleTransfer(pool: Pool, body: unknown): Promise<{ status: number; body: unknown }> {
+  const parsed = TransferBody.safeParse(body);
+  if (!parsed.success) return { status: 400, body: { error: "VALIDATION" } };
+  const { fromId, toId, amount } = parsed.data;
+  if (fromId === toId) return { status: 400, body: { error: "SAME_ACCOUNT" } };
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const from = await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+    if (from.rowCount === 0) throw new HttpFail(404, "ACCOUNT_NOT_FOUND");
+    const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    if (to.rowCount === 0) throw new HttpFail(404, "ACCOUNT_NOT_FOUND");
+    const { rows } = await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3) RETURNING id", [fromId, toId, amount]);
+    await client.query("COMMIT");
+    return { status: 201, body: { id: rows[0].id } };
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    if (err instanceof HttpFail) return { status: err.status, body: { error: err.code } };
+    if (err.code === "23514") return { status: 409, body: { error: "INSUFFICIENT_FUNDS" } };
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>ה־route עצמו ב־Express הוא שתי שורות:</p>
+```ts
+const r = await handleTransfer(pool, req.body); res.status(r.status).json(r.body);
+```
+<p>. הפרדה כזו (לוגיקה בלי <code>req</code>/<code>res</code>) היא מה שמאפשר לבדוק אותה ישירות — פרק 22.</p>
+@mistakes
+<ul><li>לבדוק "יש מספיק כסף?" עם SELECT לפני ה־UPDATE — מרוץ (שיעור 2). ה־CHECK כבר עושה את זה, אטומית.</li><li><code>return</code> מתוך ה־catch בלי ROLLBACK — החיבור חוזר ל־pool עם transaction פתוח ש"מת".</li></ul>
+
+@@ P18-E42 | 3 | ייבוא העברות מ־CSV 🤖 | 25 | פרק 2, פרק 6, פרק 8, שיעור 1
+@lesson 1
+@part 2
+@task
+<p>הבנק שולח קובץ CSV של העברות, וכולו נטען — או כלום. בקובץ <code>18-consistency/starter/P18-E42.ts</code> כתוב וייצא:</p>
+```ts
+export async function importTransfers(pool: Pool, csv: string): Promise<number>
+```
+<ul><li>שורה ראשונה — כותרת <code>from,to,amount</code> (מדלגים). שורות ריקות (גם בסוף) — מדלגים. כל שורה אחרת: שלושה שדות, שני מספרים שלמים חיוביים וסכום חיובי.</li><li><strong>קודם</strong> מפענחים את כל הקובץ, ורק אם הכול תקין — פונים למסד. שורה לא תקינה ← <code>throw new Error(`שורה ${n}: לא תקינה`)</code> (‏<code>n</code> — מספר השורה בקובץ, הכותרת היא 1), בלי לגעת במסד.</li><li>ב־transaction אחד: לכל שורה — הורדה, הוספה, רישום. שגיאה מהמסד ← ROLLBACK ו־<code>throw new Error(`שורה ${n}: ${err.message}`)</code>.</li><li>מחזירה כמה העברות נטענו.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E42.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E42
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>split</code>/<code>trim</code> מפרק 2, לולאות ומערכים מפרק 6, הודעות שגיאה עם הקשר מפרק 8 — והשיעור: קובץ שלם כ־transaction אחד.</p>
+@hint1
+<p><code>csv.split(/\r?\n/)</code>, ואז לולאה עם האינדקס (<code>n = i + 1</code>). מספר שלם חיובי: <code>Number.isInteger(x) &amp;&amp; x &gt; 0</code>.</p>
+@hint2
+<p>שמור לכל שורה מפוענחת גם את <code>n</code> — כדי שאפשר יהיה לדווח עליה גם בשגיאה מהמסד.</p>
+@solution
+```ts save=solutions/P18-E42.ts
+// P18-E42: ייבוא העברות מ־CSV
+import type { Pool } from "pg";
+
+type Row = { n: number; from: number; to: number; amount: number };
+
+function parse(csv: string): Row[] {
+  const rows: Row[] = [];
+  csv.split(/\r?\n/).forEach((line, i) => {
+    const n = i + 1;
+    if (n === 1 || line.trim() === "") return;
+    const parts = line.split(",").map((s) => s.trim());
+    const [from, to, amount] = parts.map(Number);
+    const ok = parts.length === 3 && parts.every((p) => p !== "") && Number.isInteger(from) && from > 0 && Number.isInteger(to) && to > 0 && amount > 0;
+    if (!ok) throw new Error(`שורה ${n}: לא תקינה`);
+    rows.push({ n, from, to, amount });
+  });
+  return rows;
+}
+
+export async function importTransfers(pool: Pool, csv: string): Promise<number> {
+  const rows = parse(csv);
+  const client = await pool.connect();
+  let current = 0;
+  try {
+    await client.query("BEGIN");
+    for (const r of rows) {
+      current = r.n;
+      await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [r.amount, r.from]);
+      await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [r.amount, r.to]);
+      await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [r.from, r.to, r.amount]);
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    throw new Error(`שורה ${current}: ${err.message}`);
+  } finally {
+    client.release();
+  }
+}
+```
+<p>שני שלבים: אימות של כל הקובץ (זול, בלי מסד), ואז transaction אחד. הודעה עם מספר שורה הופכת "הייבוא נכשל" ל"שורה 7: יתרה לא מספיקה" — מה שהמשתמש צריך כדי לתקן את הקובץ.</p>
+@mistakes
+<ul><li>לפענח ולכתוב באותה לולאה — שורה 900 לא תקינה, ו־899 כבר נשלחו למסד (בתוך transaction זה עדיין מתבטל, אבל עשית 2,700 פקודות לחינם).</li><li><code>Number("")</code> הוא <code>0</code>, ו־<code>Number(" 5 ")</code> הוא <code>5</code> — בדוק שהשדה לא ריק.</li></ul>
+
+@@ P18-E43 | 2 | מי מחכה, ומה הוא רואה אחר כך? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>שני חלונות psql, על נתוני הפרק (ל־Dana 1000). מה קורה בכל שלב? מה היתרה של Dana בסוף — ולמה לא 900?</p>
+```term
+.. ── A ──                                              ── B ──
+% BEGIN;
+% UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+..                                                      % UPDATE accounts SET balance = balance - 50 WHERE id = 1;
+% ROLLBACK;
+..                                                      (?)
+..                                                      % SELECT balance FROM accounts WHERE id = 1;
+```
+@hint1
+<p>UPDATE נועל את השורה עד סוף ה־transaction של A. ‏B (בלי BEGIN — כל פקודה transaction משלה) מגיע לאותה שורה.</p>
+@hint2
+<p>אחרי ROLLBACK, מה הערך ש־B "רואה" כשהוא סוף־סוף מקבל את השורה?</p>
+@solution
+<ol><li>ה־UPDATE של A נועל את שורה 1. ה־UPDATE של B <strong>נתקע</strong> — מחכה ש־A יסיים.</li><li>A עושה ROLLBACK: השינוי שלו מתבטל והנעילה משתחררת. B ממשיך מיד, ומחשב <code>balance - 50</code> מהערך <strong>העדכני</strong> — 1000 (לא 900, שהוא ערך שמעולם לא נשמר).</li><li>הסוף: <code>950</code>.</li></ol>
+<p>זו הסיבה שעדכון אטומי (<code>balance = balance - 50</code>) בטוח: המסד מחשב אותו אחרי שהוא מקבל את השורה, מהערך שבאמת שמור. ואם A היה עושה COMMIT — B היה מחשב מ־900, ומגיע ל־850.</p>
+@mistakes
+<ul><li>לחשוב ש־B נכשל כי "השורה תפוסה" — ב־Read Committed הוא מחכה, לא נכשל.</li></ul>
+
+@@ P18-E44 | 2 | ‏deadlock או רק המתנה? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>לכל זוג transactions שרצים במקביל — יכול להיווצר deadlock, או שבמקרה הגרוע אחד מחכה לשני? (כל שורה היא UPDATE של חשבון, לפי הסדר.)</p>
+<ol><li>A: חשבון 1 ← חשבון 4. ‏B: חשבון 1 ← חשבון 4.</li><li>A: חשבון 1 ← חשבון 4. ‏B: חשבון 4 ← חשבון 1.</li><li>A: חשבון 1 ← חשבון 2. ‏B: חשבון 3 ← חשבון 4.</li><li>A: חשבונות 1, 2, 3. ‏B: חשבונות 3, 1.</li><li>A: ‏<code>SELECT ... WHERE id IN (1, 4) ORDER BY id FOR UPDATE</code>. ‏B: אותו דבר עם <code>IN (4, 1)</code>.</li></ol>
+@hint1
+<p>deadlock צריך מעגל: A מחזיק X ומחכה ל־Y, ו־B מחזיק Y ומחכה ל־X.</p>
+@hint2
+<p>בסעיף 5 — באיזה סדר נועלות השורות? (לפי ה־<code>ORDER BY</code>, לא לפי ה־IN.)</p>
+@solution
+<ol><li><strong>המתנה</strong> — שניהם מתחילים ב־1; מי שהגיע שני מחכה, ואז ממשיך.</li><li><strong>deadlock אפשרי</strong> — A מחזיק 1 ומחכה ל־4, B מחזיק 4 ומחכה ל־1.</li><li><strong>אין קשר</strong> — שורות שונות, אף אחד לא מחכה.</li><li><strong>deadlock אפשרי</strong> — A נעל 1 (ואולי 2) ומחכה ל־3; ‏B נעל 3 ומחכה ל־1.</li><li><strong>המתנה בלבד</strong> — ה־<code>ORDER BY id</code> קובע שהשורות ננעלות 1 ואז 4 בשניהם. זה הפתרון מ־P18-E13: אותו סדר נעילה לכולם.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>IN (4, 1)</code> נועל קודם את 4. הסדר של הרשימה לא קובע כלום; רק <code>ORDER BY</code>.</li></ul>
+
+@@ P18-E45 | 2 | תשלום בתוך הנעילה | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>קוד הקנייה נועל את שורת המוצר, ואז קורא לספק התשלומים (תשובה תוך 2 שניות בממוצע), ורק אז מוריד מלאי ועושה COMMIT. במבצע, 30 לקוחות לוחצים "קנה" על אותו מוצר באותה שנייה.</p>
+```ts
+await client.query("BEGIN");
+await client.query("SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE", [id]);
+await payments.charge(card, price);           // ~2 שניות
+await client.query("UPDATE inventory SET stock = stock - 1 WHERE product_id = $1", [id]);
+await client.query("COMMIT");
+```
+<ol><li>כמה זמן יחכה הלקוח ה־30?</li><li>ה־pool של השרת הוא 10 חיבורים. מה קורה בזמן הזה לבקשות אחרות לגמרי (למשל "הצג פרופיל")?</li><li>הצע סדר אחר.</li></ol>
+@hint1
+<p>כל אחד מחזיק את הנעילה כ־2 שניות, והם עוברים אחד־אחד.</p>
+@hint2
+<p>מי שמחכה לנעילה — מחזיק חיבור מה־pool כל הזמן הזה.</p>
+@solution
+<ol><li>כ־60 שניות (29 × 2 לפניו, ועוד שלו). רוב הדפדפנים/שרתי proxy יוותרו לפני כן — והלקוח ילחץ שוב.</li><li>10 בקשות קנייה תופסות את כל 10 החיבורים (כולן מחכות לנעילה), וכל בקשה אחרת — גם "הצג פרופיל" — מחכה לחיבור פנוי. האתר כולו "נתקע" בגלל מוצר אחד.</li><li>להחזיק נעילה רק לרגע: קודם עדכון אטומי ששומר את המלאי (<code>UPDATE ... WHERE stock &gt;= 1</code>, אולי בסטטוס "שמור"), COMMIT, ואז לחייב. אם החיוב נכשל — transaction קצר שני שמחזיר את המלאי. ככה מחזיקים נעילה מילישניות, לא שניות.</li></ol>
+@mistakes
+<ul><li>להגדיל את ה־pool ל־100 — הבעיה היא הנעילה, לא החיבורים; מאה בקשות יחכו בתור במקום עשר.</li></ul>
+
+@@ P18-E46 | 1 | איזו שגיאה שווה ניסיון חוזר? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>ל־<code>withSerializableRetry</code> (P18-E19) מגיעות שגיאות. לכל אחת — לנסות שוב את כל ה־transaction, או להחזיר שגיאה מיד? למה?</p>
+<ol><li><code>40001</code> — could not serialize access due to concurrent update.</li><li><code>40P01</code> — deadlock detected.</li><li><code>23505</code> — duplicate key (אימייל תפוס).</li><li><code>23514</code> — check constraint (יתרה שלילית).</li><li><code>42703</code> — column "balanse" does not exist.</li><li><code>ECONNREFUSED</code> — המסד לא זמין.</li></ol>
+@hint1
+<p>השאלה: "אם אריץ את אותו דבר שוב בעוד רגע — יש סיכוי שיצליח?"</p>
+@hint2
+<p>שגיאה שנובעת מ<strong>תזמון</strong> עם מישהו אחר — שונה משגיאה שנובעת מה<strong>נתונים</strong> או מה<strong>קוד</strong>.</p>
+@solution
+<ol><li><strong>שוב</strong> — התנגשות תזמון; בניסיון הבא הסדר יהיה אחר.</li><li><strong>שוב</strong> — המסד ביטל את ה־transaction שלך כדי לשבור את המעגל; השני כבר ממשיך.</li><li><strong>לא</strong> — האימייל תפוס, ויישאר תפוס. 409 ללקוח.</li><li><strong>לא</strong> — אין מספיק כסף; ניסיון חוזר ייכשל באותה צורה (אלא אם במקרה הופקד כסף — וזה לא מה שהלקוח ביקש).</li><li><strong>לא</strong> — באג בקוד. ניסיון חוזר רק מעמיס. 500 ולוג.</li><li><strong>אולי, בזהירות</strong> — זמני, אבל לא בלולאה צפופה: כמה ניסיונות עם המתנה שגדלה (backoff), ואז 503. (וב־retry של ה־transaction כולו, לא רק של הפקודה האחרונה.)</li></ol>
+@mistakes
+<ul><li>retry על כל שגיאה "ליתר ביטחון" — באג בקוד הופך לפי 5 עומס על המסד, ולקוח שמחכה פי 5 עד שהוא מקבל את אותה שגיאה.</li></ul>
+
+@@ P18-E47 | 1 | משיכה רק אם יש 🤖 | 5 | שיעור 2
+@lesson 2
+@part 1
+@type warmup
+@task
+<p>בקובץ <code>18-consistency/starter/P18-E47.sql</code>: פקודה <strong>אחת</strong> שמושכת 300 מהחשבון של Yossi (2) — רק אם יש לו לפחות 300 — ומחזירה (<code>RETURNING</code>) את <code>id</code> ו־<code>balance</code> החדש. אין מספיק ← אפס שורות, ושום דבר לא משתנה.</p>
+```term
+% npm run check P18-E47
+```
+<p>הבודק מריץ את הקובץ גם על יתרות אחרות.</p>
+@hint1
+<p>הבדיקה והכתיבה באותה פקודה: התנאי ב־WHERE.</p>
+@hint2
+```sql
+UPDATE accounts SET balance = balance - 300 WHERE id = 2 AND balance >= 300 RETURNING id, balance;
+```
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E47.sql
+UPDATE accounts SET balance = balance - 300 WHERE id = 2 AND balance >= 300 RETURNING id, balance;
+```
+```out
+ id | balance
+----+---------
+(0 rows)
+
+UPDATE 0
+```
+<p>ל־Yossi 250 — אפס שורות. בקוד: <code>rowCount === 0</code> ← "אין מספיק כסף". שתי משיכות במקביל לא יכולות שתיהן להצליח: השנייה מחכה לנעילה של הראשונה, ואז בודקת את התנאי מול היתרה העדכנית.</p>
+@mistakes
+<ul><li>לסמוך רק על ה־CHECK (<code>balance &gt;= 0</code>) — זה עובד, אבל דרך שגיאה שמבטלת את כל ה־transaction; התנאי ב־WHERE נותן תשובה נקייה (0 שורות).</li></ul>
+
+@@ P18-E48 | 3 | שמירת מלאי עם כלל "מלאי נמוך" 🤖 | 25 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>כלל עסקי: כשנשארו פחות מ־5 יחידות, אפשר לשמור לכל היותר 2 בהזמנה אחת. זו בדיקה שתלויה בערך הנוכחי — אז קוראים עם נעילה. בקובץ <code>18-consistency/starter/P18-E48.ts</code> כתוב וייצא <code>class AppError</code> (עם <code>code</code>, כמו ב־P18-E10) ו־:</p>
+```ts
+export async function reserve(pool: Pool, productId: number, qty: number): Promise<number>
+```
+<ul><li>ב־transaction: <code>SELECT stock ... FOR UPDATE</code>. אין מוצר ← <code>AppError("PRODUCT_NOT_FOUND")</code>.</li><li><code>stock &lt; 5</code> ו־<code>qty &gt; 2</code> ← <code>AppError("LOW_STOCK_LIMIT")</code>. ‏<code>qty &gt; stock</code> ← <code>AppError("OUT_OF_STOCK")</code>.</li><li>אחרת — מורידה ומחזירה את המלאי שנשאר. כל שגיאה ← ROLLBACK; החיבור משתחרר תמיד.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E48.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E48
+```
+<p>הבודק מריץ עשרות שמירות במקביל ובודק שהמלאי לא יורד מתחת לאפס ושהכלל נשמר.</p>
+@hint1
+<p>הכלל תלוי ב־stock <strong>לפני</strong> השמירה — לכן <code>FOR UPDATE</code>: אף אחד לא ישנה אותו עד ה־COMMIT שלך.</p>
+@hint2
+<p>אחרי הבדיקות:</p>
+```sql
+UPDATE inventory SET stock = stock - $2 WHERE product_id = $1 RETURNING stock
+```
+@solution
+```ts save=solutions/P18-E48.ts
+// P18-E48: שמירת מלאי עם כלל "מלאי נמוך"
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function reserve(pool: Pool, productId: number, qty: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE", [productId]);
+    if (rows.length === 0) throw new AppError("PRODUCT_NOT_FOUND");
+    const stock: number = rows[0].stock;
+    if (stock < 5 && qty > 2) throw new AppError("LOW_STOCK_LIMIT");
+    if (qty > stock) throw new AppError("OUT_OF_STOCK");
+    const updated = await client.query("UPDATE inventory SET stock = stock - $2 WHERE product_id = $1 RETURNING stock", [productId, qty]);
+    await client.query("COMMIT");
+    return updated.rows[0].stock;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>עדכון אטומי אחד לא מספיק כאן: הכלל "פחות מ־5 ← עד 2" אפשר לכתוב ב־WHERE, אבל אז "למה זה נכשל" נעלם (0 שורות — אזל? כלל? אין מוצר?). עם <code>FOR UPDATE</code> הקוד קורא, מחליט ומסביר — ואף אחד לא משנה את השורה באמצע.</p>
+@mistakes
+<ul><li><code>SELECT</code> בלי <code>FOR UPDATE</code> — שני לקוחות רואים 6, כל אחד שומר 3, ונשארות... 0, כשהכלל אמר שהשני היה צריך לקבל עד 2. (ועם מלאי קטן — גם מלאי שלילי שנעצר רק ב־CHECK.)</li><li><code>pool.query("... FOR UPDATE")</code> מחוץ ל־transaction — הנעילה משתחררת מיד בסוף הפקודה.</li></ul>
+
+@@ P18-E49 | 2 | נעילה בזיכרון — ושני שרתים | 10 | פרק 10, פרק 13, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>מישהו פתר את הקנייה הכפולה בלי המסד: "תור" בזיכרון של התהליך, כך שקניות רצות אחת־אחת (תכתוב אחד כזה ב־P18-E52):</p>
+```ts
+const lock = createMutex();
+app.post("/buy/:id", async (req, res) => {
+  const left = await lock.run(async () => {
+    const { rows } = await pool.query("SELECT stock FROM inventory WHERE product_id = $1", [req.params.id]);
+    if (rows[0].stock < 1) throw new AppError("OUT_OF_STOCK");
+    await pool.query("UPDATE inventory SET stock = $1 WHERE product_id = $2", [rows[0].stock - 1, req.params.id]);
+    return rows[0].stock - 1;
+  });
+  res.json({ left });
+});
+```
+<ol><li>על שרת אחד (<code>node server.js</code>) — האם יש עוד מכירה כפולה?</li><li>מחר מריצים 3 עותקים של השרת (Docker, פרק 23; או כמה תהליכים מאחורי load balancer). מה קורה?</li><li>ומה עם סקריפט ניהול שמעדכן מלאי ישירות במסד?</li><li>מה הפתרון שעובד בכל המקרים?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> Promises ו־event loop מפרק 10, תהליכים מפרק 13 (כל תהליך — זיכרון משלו) — והשיעור: הנעילה צריכה להיות במקום שכולם חולקים.</p>
+@hint1
+<p>ה־<code>lock</code> הוא משתנה בזיכרון של <strong>תהליך אחד</strong>.</p>
+@hint2
+<p>מה כל שלושת השרתים (והסקריפט) חולקים?</p>
+@solution
+<ol><li>לא — על תהליך אחד, ה־mutex באמת מסדר את הקניות בתור (וזה גם מאט: כל הקניות, של כל המוצרים, בתור אחד).</li><li>לכל עותק יש <code>lock</code> משלו. שני עותקים מריצים את הקריאה־חישוב־כתיבה במקביל — המרוץ חוזר, והוא יופיע רק בייצור (בפיתוח יש תהליך אחד).</li><li>הסקריפט לא מכיר את ה־lock בכלל.</li><li>לנעול במקום המשותף — המסד: עדכון אטומי עם תנאי (<code>stock = stock - 1 WHERE stock &gt;= 1</code>), או <code>FOR UPDATE</code>. המסד רואה את כל הבקשות מכל השרתים.</li></ol>
+@mistakes
+<ul><li>"נריץ רק עותק אחד" — עד שהשרת הראשון נופל, או שצריך עוד אחד לעומס. ההנחה הזו נשברת בלי שאף אחד שם לב.</li></ul>
+
+@@ P18-E50 | 2 | איזה status לכל התנגשות? | 10 | פרק 14, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>לכל מצב — איזה status code יחזיר ה־API, ומה הלקוח (אפליקציה) אמור לעשות?</p>
+<ol><li>המוצר אזל (העדכון האטומי החזיר 0 שורות).</li><li>הלקוח כבר רשום לאירוע (UNIQUE על <code>(event_id, user_id)</code>).</li><li>deadlock — והשרת ניסה שוב פעם אחת והצליח.</li><li>Serializable: 5 ניסיונות, כולם נכשלו ב־<code>40001</code>.</li><li>שני מנהלים ערכו את אותו מוצר; השני שלח גרסה ישנה (<code>version</code> בבקשה לא תואם למסד).</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> status codes ו־<code>Retry-After</code> מפרק 14 — והשיעור: כל פתרון למרוץ נגמר בתשובה כלשהי ללקוח.</p>
+@hint1
+<p>409 Conflict — "הבקשה תקינה, אבל מתנגשת במצב הנוכחי". 503 — "זמני, נסה שוב".</p>
+@hint2
+<p>מה שהשרת פתר בעצמו — הלקוח בכלל לא צריך לדעת עליו.</p>
+@solution
+<ol><li><strong>409</strong> (<code>OUT_OF_STOCK</code>). הלקוח מציג "אזל" — לא מנסה שוב.</li><li><strong>409</strong> (<code>ALREADY_BOOKED</code>) — או 200 עם ההרשמה הקיימת, אם רוצים שהפעולה תהיה idempotent. לא 500.</li><li><strong>200/201</strong> רגיל. ה־retry היה פנימי; הלקוח לא צריך לדעת.</li><li><strong>503</strong> עם <code>Retry-After: 1</code> — עומס זמני. הלקוח יכול לנסות שוב בעוד רגע.</li><li><strong>409</strong> (או 412 Precondition Failed, אם הגרסה נשלחה בכותרת <code>If-Match</code>). הלקוח טוען מחדש, מראה למשתמש את השינויים, ונותן לו להחליט. (זה "optimistic locking": ה־UPDATE כולל <code>AND version = $2</code> ומעלה את <code>version</code> ב־1 — ו־0 שורות אומר שמישהו הקדים.)</li></ol>
+@mistakes
+<ul><li>500 על כל שגיאה מהמסד — הלקוח לא יודע אם לנסות שוב, ומערכות ניטור מתריעות על "באג" שהוא בעצם "אזל".</li></ul>
+
+@@ P18-E51 | 2 | לחיצה כפולה על "שלם" | 10 | פרק 15, שיעור 2
+@lesson 2
+@part 2
+@kind understand
+@task
+<p>האפליקציה שולחת את אותה הזמנה פעמיים (לחיצה כפולה), עם אותו <code>idempotency_key</code>. מה יודפס? מה צריך השרת להחזיר על הבקשה השנייה — ולמה בדיקה "האם יש כבר הזמנה עם המפתח הזה?" לפני ה־INSERT לא מספיקה?</p>
+```sql
+INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES (7, 'k-123', 189.00) RETURNING id;
+INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES (7, 'k-123', 189.00) RETURNING id;
+SELECT id, idempotency_key, total FROM shop_orders;
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> כותרות ו־error middleware מפרק 15 (P18-E37) — והשיעור: אילוץ (UNIQUE) כפתרון למרוץ.</p>
+@hint1
+<p><code>shop_orders.idempotency_key</code> מוגדר <code>UNIQUE</code>.</p>
+@hint2
+<p>שתי הבקשות של לחיצה כפולה מגיעות באותה מילישנייה — שתיהן יכולות לעבור "בדיקה מקדימה".</p>
+@solution
+```sql run db=18-consistency/files/bank.sql stderr continue
+INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES (7, 'k-123', 189.00) RETURNING id;
+INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES (7, 'k-123', 189.00) RETURNING id;
+SELECT id, idempotency_key, total FROM shop_orders;
+```
+```out
+ id
+----
+  1
+(1 row)
+
+INSERT 0 1
+ERROR:  duplicate key value violates unique constraint "shop_orders_idempotency_key_key"
+DETAIL:  Key (idempotency_key)=(k-123) already exists.
+ id | idempotency_key | total
+----+-----------------+--------
+  1 | k-123           | 189.00
+(1 row)
+```
+<p>הזמנה אחת. על השנייה השרת תופס <code>23505</code> (על האילוץ של <code>idempotency_key</code>), שולף את ההזמנה הקיימת, ומחזיר <strong>אותה תשובה</strong> כמו בפעם הראשונה (201 עם אותו id) — מבחינת הלקוח, הפעולה קרתה פעם אחת. בדיקה מקדימה עם SELECT היא "קרא ← החלט ← כתוב": שתי הבקשות קוראות "אין", ושתיהן כותבות — בדיוק המרוץ מהשיעור. האילוץ הוא הבדיקה היחידה שהמסד עושה אטומית.</p>
+@mistakes
+<ul><li>להחזיר 409 על הבקשה השנייה — הלקוח רואה "שגיאה" על תשלום שעבר, ולוחץ שוב (עם מפתח חדש...).</li></ul>
+
+@@ P18-E52 | 3 | ‏mutex בזיכרון 🤖 | 25 | פרק 5, פרק 10, פרק 11, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>הכלי מ־P18-E49 — שימושי לכל משאב בתוך תהליך אחד (קובץ, מטמון). בקובץ <code>18-consistency/starter/P18-E52.ts</code> כתוב וייצא:</p>
+```ts
+export function createMutex(): { run<T>(fn: () => Promise<T>): Promise<T>; pending(): number }
+```
+<ul><li><code>run(fn)</code> מריצה את <code>fn</code> רק אחרי שכל ה־<code>fn</code>ים שנשלחו לפניה <strong>הסתיימו</strong> (הצליחו או נכשלו), ומחזירה את התוצאה שלה (או זורקת את השגיאה שלה).</li><li>שגיאה של <code>fn</code> אחת לא עוצרת את הבאות בתור.</li><li><code>pending()</code> — כמה <code>run</code>ים עוד לא הסתיימו (כולל זו שרצה עכשיו).</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E52.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E52
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> closure מפרק 5 (משתנה "הזנב של התור" שחי בין קריאות), Promise ו־<code>then</code> מפרק 10, generics מפרק 11 — והשיעור: "אחד אחרי השני" זה מה שנעילה עושה. (ו־P18-E49: למה במסד זה לא מספיק.)</p>
+@hint1
+<p>שמור Promise של "הזנב": <code>let tail: Promise&lt;unknown&gt; = Promise.resolve();</code>. כל <code>run</code>: ‏<code>const result = tail.then(() =&gt; fn());</code></p>
+@hint2
+<p>הזנב החדש צריך להמשיך גם אם <code>fn</code> נכשלה: <code>tail = result.catch(() =&gt; {});</code>.</p>
+@solution
+```ts save=solutions/P18-E52.ts
+// P18-E52: mutex בזיכרון
+export function createMutex() {
+  let tail: Promise<unknown> = Promise.resolve();
+  let count = 0;
+  return {
+    run<T>(fn: () => Promise<T>): Promise<T> {
+      count++;
+      const result = tail.then(() => fn());
+      tail = result.catch(() => {}).finally(() => count--);
+      return result;
+    },
+    pending: () => count,
+  };
+}
+```
+<p>שלוש שורות של Promise: כל משימה "נתלית" על סוף התור, והתור החדש הוא המשימה הזו — אחרי שהסתיימה, בהצלחה או בכישלון. אין כאן נעילה של מערכת ההפעלה: JavaScript רץ בחוט אחד, ו"לחכות" זה פשוט להירשם ל־<code>then</code>.</p>
+@mistakes
+<ul><li><code>tail = result</code> בלי <code>catch</code> — שגיאה אחת "תוקעת" את כל התור: כל ה־<code>then</code> הבאים מדלגים על <code>fn</code> וזורקים אותה שגיאה.</li><li>להריץ את <code>fn()</code> מיד ורק "לחכות" לתוצאה הקודמת — המשימות עדיין רצות במקביל.</li></ul>
+
+@@ P18-E53 | 3 | מימוש קופון — פעם אחת לכל משתמש 🤖 | 30 | פרק 8, פרק 17, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>קופון עם מספר מימושים מוגבל, ומשתמש יכול לממש אותו רק פעם אחת. הבודק יוצר את הטבלאות:</p>
+```sql
+CREATE TABLE coupons (code text PRIMARY KEY, uses_left integer NOT NULL CHECK (uses_left >= 0));
+CREATE TABLE coupon_redemptions (
+  code     text NOT NULL REFERENCES coupons (code),
+  user_id  integer NOT NULL,
+  PRIMARY KEY (code, user_id)
+);
+```
+<p>בקובץ <code>18-consistency/starter/P18-E53.ts</code> כתוב וייצא <code>class AppError</code> (עם <code>code</code>) ו־:</p>
+```ts
+export async function redeem(pool: Pool, code: string, userId: number): Promise<number>
+```
+<ul><li>ב־transaction: הורדה <strong>אטומית</strong> של <code>uses_left</code> (רק אם &gt; 0), ורישום ב־<code>coupon_redemptions</code>. מחזירה כמה מימושים נשארו.</li><li>העדכון לא עדכן שורה: אין קופון כזה ← <code>AppError("COUPON_NOT_FOUND")</code>; יש אבל נגמר ← <code>AppError("COUPON_EXHAUSTED")</code>.</li><li>המשתמש כבר מימש (<code>23505</code> ברישום) ← <code>AppError("ALREADY_REDEEMED")</code> — וה־ROLLBACK מחזיר את המימוש שירד.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E53.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E53
+```
+<p>הבודק: 20 משתמשים במקביל על קופון עם 5 מימושים — בדיוק 5 מצליחים; ואותו משתמש 6 פעמים במקביל — בדיוק פעם אחת.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> מחלקת שגיאה עם <code>code</code> מפרק 8, מפתח ראשי של זוג מפרק 17 — והשיעור: שני פתרונות למרוץ ביחד: עדכון אטומי (למונה) ואילוץ (ל"פעם אחת").</p>
+@hint1
+```sql
+UPDATE coupons SET uses_left = uses_left - 1 WHERE code = $1 AND uses_left > 0 RETURNING uses_left
+```
+<p>. 0 שורות ← <code>SELECT 1 FROM coupons WHERE code = $1</code> כדי לדעת איזו שגיאה.</p>
+@hint2
+<p>ב־catch, אחרי ROLLBACK:</p>
+```ts
+if (err.code === "23505") throw new AppError("ALREADY_REDEEMED");
+```
+@solution
+```ts save=solutions/P18-E53.ts
+// P18-E53: מימוש קופון — פעם אחת לכל משתמש
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function redeem(pool: Pool, code: string, userId: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("UPDATE coupons SET uses_left = uses_left - 1 WHERE code = $1 AND uses_left > 0 RETURNING uses_left", [code]);
+    if (rows.length === 0) {
+      const exists = await client.query("SELECT 1 FROM coupons WHERE code = $1", [code]);
+      throw new AppError(exists.rowCount === 0 ? "COUPON_NOT_FOUND" : "COUPON_EXHAUSTED");
+    }
+    await client.query("INSERT INTO coupon_redemptions (code, user_id) VALUES ($1, $2)", [code, userId]);
+    await client.query("COMMIT");
+    return rows[0].uses_left;
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") throw new AppError("ALREADY_REDEEMED");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>שני מנגנונים, שתי שאלות: "נשארו מימושים?" — עדכון אטומי עם תנאי, כמו מלאי. "המשתמש כבר מימש?" — המפתח הראשי של הזוג; שתי בקשות במקביל של אותו משתמש — אחת תקבל 23505. ובזכות ה־transaction, המימוש שירד מהמונה חוזר.</p>
+@mistakes
+<ul><li>לבדוק "כבר מימש?" עם SELECT לפני — שתי בקשות במקביל עוברות את הבדיקה (P18-E51).</li><li>לרשום קודם ולהוריד אחר כך, בלי transaction — רישום שהצליח וקופון שנגמר משאירים "מימוש" בלי כיסוי.</li></ul>
+
+@@ P18-E54 | 3 | מגבלה יומית להעברות 🤖 | 30 | פרק 13, פרק 17, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>לכל חשבון — מגבלה על סך ההעברות היוצאות ביום. זה חוק על <strong>כמה שורות</strong> (כל ההעברות של היום), ולכן עדכון אטומי של שורה אחת לא מספיק. בקובץ <code>18-consistency/starter/P18-E54.ts</code> כתוב וייצא <code>class AppError</code> (עם <code>code</code>) ו־:</p>
+```ts
+export async function transferWithLimit(pool: Pool, fromId: number, toId: number, amount: number, dailyLimit: number): Promise<number>
+```
+<ul><li>ב־transaction: נעל את שורת החשבון של <code>fromId</code> (<code>FOR UPDATE</code>) — כך שהעברות של אותו חשבון עוברות אחת־אחת. אין חשבון ← <code>AppError("ACCOUNT_NOT_FOUND")</code>.</li><li>סכום ההעברות היוצאות של <code>fromId</code> שה־<code>created_at</code> שלהן מהיום (<code>created_at &gt;= date_trunc('day', now())</code>), ועוד <code>amount</code> — מעל <code>dailyLimit</code> ← <code>AppError("DAILY_LIMIT")</code>.</li><li>אחרת: הורדה, הוספה, רישום ב־<code>transfers</code> (‏<code>RETURNING id</code>) ← מחזירה את ה־id. כל שגיאה ← ROLLBACK.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E54.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E54
+```
+<p>הבודק: 10 העברות של 100 במקביל עם מגבלה 300 — בדיוק 3 מצליחות.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> "היום" וזמנים מפרק 13, ‏<code>SUM</code> ו־<code>COALESCE</code> מפרק 17 — והשיעור: כשהחוק הוא על הרבה שורות, נועלים את ה"הורה" המשותף שלהן.</p>
+@hint1
+```sql
+SELECT COALESCE(SUM(amount), 0) AS sent FROM transfers WHERE from_id = $1 AND created_at >= date_trunc('day', now())
+```
+<p>את השאילתה הזו מריצים אחרי ה־<code>FOR UPDATE</code>.</p>
+@hint2
+<p>בלי ה־<code>FOR UPDATE</code>, עשר בקשות קוראות "נשלחו היום 0" באותו רגע, וכולן עוברות. עם — כל אחת מחכה שהקודמת תסיים (ותרשום את ההעברה שלה).</p>
+@solution
+```ts save=solutions/P18-E54.ts
+// P18-E54: מגבלה יומית להעברות
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export async function transferWithLimit(pool: Pool, fromId: number, toId: number, amount: number, dailyLimit: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const acc = await client.query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE", [fromId]);
+    if (acc.rowCount === 0) throw new AppError("ACCOUNT_NOT_FOUND");
+    const { rows } = await client.query(
+      "SELECT COALESCE(SUM(amount), 0) AS sent FROM transfers WHERE from_id = $1 AND created_at >= date_trunc('day', now())",
+      [fromId],
+    );
+    if (Number(rows[0].sent) + amount > dailyLimit) throw new AppError("DAILY_LIMIT");
+    await client.query("UPDATE accounts SET balance = balance - $1 WHERE id = $2", [amount, fromId]);
+    await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
+    const t = await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3) RETURNING id", [fromId, toId, amount]);
+    await client.query("COMMIT");
+    return t.rows[0].id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>הנעילה על שורת החשבון משמשת "מנעול" לכל ההעברות שלו — גם אם החוק הוא על שורות ב־<code>transfers</code>. זו התבנית לכל "מגבלה על סכום של כמה שורות" (מגבלת אשראי, מכסת API, "עד 3 תורים לשבוע").</p>
+@mistakes
+<ul><li>לנעול את שורות ה־<code>transfers</code> של היום (<code>SELECT ... FOR UPDATE</code> עליהן) — בתחילת היום אין שורות, אז אין מה לנעול, וכולם עוברים.</li><li>להשוות עם <code>Date</code> מ־Node במקום <code>now()</code> של המסד — שני שעונים, ושני אזורי זמן.</li></ul>
+
+@@ P18-E55 | 2 | ‏index על שתי עמודות — מתי הוא עוזר? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>יש index על <code>(status, created_at)</code> בלבד. לכל אחת מארבע השאילתות — האם התוכנית תשתמש בו? נחש לפני שאתה מסתכל.</p>
+```sql
+CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' AND created_at >= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'cancelled';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE created_at >= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 5;
+```
+@hint1
+<p>ה־index ממוין קודם לפי <code>status</code>, ובתוך כל status — לפי <code>created_at</code>. כמו ספר טלפונים: שם משפחה, ואז שם פרטי.</p>
+@hint2
+<p>שאילתה 2: כמה מההזמנות הן <code>cancelled</code>? (אחת מכל שש.) כשהרבה שורות מתאימות, Bitmap — "אסוף את המיקומים, וקרא בלוקים לפי הסדר".</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' AND created_at >= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'cancelled';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE created_at >= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 5;
+```
+```out
+CREATE INDEX
+                                                       QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: ((status = 'pending'::text) AND (created_at >= '2025-12-20 00:00:00+02'::timestamp with time zone))
+   ->  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: ((status = 'pending'::text) AND (created_at >= '2025-12-20 00:00:00+02'::timestamp with time zone))
+(4 rows)
+
+                        QUERY PLAN
+----------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (status = 'cancelled'::text)
+   ->  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: (status = 'cancelled'::text)
+(4 rows)
+
+                                       QUERY PLAN
+----------------------------------------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (created_at >= '2025-12-20 00:00:00+02'::timestamp with time zone)
+   ->  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: (created_at >= '2025-12-20 00:00:00+02'::timestamp with time zone)
+(4 rows)
+
+                                 QUERY PLAN
+-----------------------------------------------------------------------------
+ Limit
+   ->  Index Scan Backward using big_orders_status_created_idx on big_orders
+         Index Cond: (status = 'pending'::text)
+(3 rows)
+```
+<p>1 — כן, שתי העמודות בתנאי (שוויון ואז טווח). 2 — כן, דרך העמודה הראשונה. 3 — מפתיע: כן, אבל בלי "לקפוץ". ‏<code>created_at</code> לבד הוא "שם פרטי בלי שם משפחה" — הערכים מפוזרים בין כל ה־status־ים, אז המסד עובר על <strong>כל</strong> ה־index ובודק כל ערך (ה־Index Cond כאן הוא סינון, לא חיפוש). זה עדיין זול מסריקת הטבלה, כי ה־index קטן ממנה — אבל index שמתחיל ב־<code>created_at</code> היה מוצא את הטווח בקפיצה. 4 — כן, ובלי מיון: בתוך <code>pending</code> השורות כבר ממוינות לפי תאריך, והמסד פשוט קורא את העץ מהסוף (<code>Backward</code>).</p>
+@mistakes
+<ul><li>להוסיף index נפרד לכל עמודה ב־WHERE "ליתר ביטחון" — index מרובה עמודות בסדר הנכון עדיף כמעט תמיד על שניים נפרדים.</li></ul>
+
+@@ P18-E56 | 2 | ‏index שהשאילתה "מסתירה" ממנו | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>יש index על <code>customer_id</code>. שלוש שאילתות מחפשות את אותו לקוח. לאיזו מהן המסד ישתמש ב־index?</p>
+```sql
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id + 0 = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id::text = '42';
+```
+@hint1
+<p>ה־index ממוין לפי <code>customer_id</code>. האם הוא ממוין גם לפי <code>customer_id + 0</code>? (אנחנו יודעים שזה אותו דבר — המסד לא מנסה להוכיח את זה.)</p>
+@hint2
+<p>מיון של מספרים כטקסט: <code>'10' &lt; '9'</code>.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id + 0 = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id::text = '42';
+```
+```out
+CREATE INDEX
+                      QUERY PLAN
+-------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (customer_id = 42)
+   ->  Bitmap Index Scan on big_orders_customer_id_idx
+         Index Cond: (customer_id = 42)
+(4 rows)
+
+                QUERY PLAN
+------------------------------------------
+ Gather
+   Workers Planned: 1
+   ->  Parallel Seq Scan on big_orders
+         Filter: ((customer_id + 0) = 42)
+(4 rows)
+
+                     QUERY PLAN
+----------------------------------------------------
+ Gather
+   Workers Planned: 1
+   ->  Parallel Seq Scan on big_orders
+         Filter: ((customer_id)::text = '42'::text)
+(4 rows)
+```
+<p>רק הראשונה. כל פונקציה או חישוב על <strong>העמודה</strong> — ‏<code>+ 0</code>, ‏<code>::text</code>, ‏<code>lower(email)</code>, ‏<code>date_trunc(...)</code> — הופכים אותה לערך אחר, שה־index לא ממוין לפיו. הכלל: את החישוב עושים על הצד של <strong>הערך</strong>, והעמודה נשארת "חשופה" (או יוצרים index על הביטוי עצמו, כמו <code>lower(owner)</code> ב־P18-E12). זו בדיוק התקלה של P18-E22.</p>
+@mistakes
+<ul><li>ORM ששולח את המזהה כטקסט ועושה <code>CAST</code> על העמודה — השאילתה "עובדת" ואיטית פי אלף.</li></ul>
+
+@@ P18-E57 | 1 | איזה indexes כבר יש? | 5 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>לא יצרנו אף index על <code>shop_orders</code> ו־<code>shop_order_lines</code>. מה תחזיר השאילתה? מאיפה הגיע כל אחד — ואיזה index <strong>חסר</strong> לפי השיעור?</p>
+```sql
+SELECT tablename, indexname
+FROM pg_indexes
+WHERE schemaname = current_schema() AND tablename IN ('shop_orders', 'shop_order_lines')
+ORDER BY tablename, indexname;
+```
+<p>(זכור את ההגדרות: <code>shop_orders</code> — ‏<code>id</code> מפתח ראשי ו־<code>idempotency_key ... UNIQUE</code>; ‏<code>shop_order_lines</code> — ‏<code>PRIMARY KEY (order_id, product_id)</code> ו־FK ל־<code>catalog</code>.)</p>
+@hint1
+<p>מפתח ראשי ו־UNIQUE מקבלים index אוטומטית — כך המסד בודק כפילויות מהר.</p>
+@hint2
+<p>FK לא מקבל index אוטומטית. איזה FK לא "מכוסה" ב־index שמתחיל בו?</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+SELECT tablename, indexname
+FROM pg_indexes
+WHERE schemaname = current_schema() AND tablename IN ('shop_orders', 'shop_order_lines')
+ORDER BY tablename, indexname;
+```
+```out
+    tablename     |            indexname
+------------------+---------------------------------
+ shop_order_lines | shop_order_lines_pkey
+ shop_orders      | shop_orders_idempotency_key_key
+ shop_orders      | shop_orders_pkey
+(3 rows)
+```
+<p>שלושה, כולם מהאילוצים: מפתח ראשי ו־UNIQUE ב־<code>shop_orders</code>, ומפתח ראשי של הזוג ב־<code>shop_order_lines</code>. ה־FK <code>order_id</code> מכוסה — הוא העמודה הראשונה במפתח הראשי. אבל <code>product_id</code> (FK ל־<code>catalog</code>) <strong>לא</strong>: "כל השורות של מוצר X" ומחיקת מוצר מ־catalog יסרקו את כל <code>shop_order_lines</code>. חסר <code>CREATE INDEX ON shop_order_lines (product_id)</code> (כמו ב־P18-E16).</p>
+@mistakes
+<ul><li>להוסיף index על <code>order_id</code> לבד — כפילות של המפתח הראשי (שמתחיל בו); עוד עלות כתיבה, בלי תועלת.</li></ul>
+
+@@ P18-E58 | 2 | למה המסד מתעלם מה־index? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>שתי שאילתות על מפתח ראשי — כלומר יש index. מה תהיה כל תוכנית? איך יכול להיות שהמסד בוחר לא להשתמש ב־index שקיים?</p>
+```sql
+EXPLAIN (COSTS OFF) SELECT owner FROM accounts WHERE id = 2;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id > 1000;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id > 199000;
+```
+@hint1
+<p>ב־<code>accounts</code> יש 4 שורות — דף אחד בדיסק.</p>
+@hint2
+<p><code>id &gt; 1000</code> מחזיר 99.5% מהטבלה. כמה עולה לקפוץ ב־index 199,000 פעמים, לעומת לקרוא את הטבלה ברצף?</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+EXPLAIN (COSTS OFF) SELECT owner FROM accounts WHERE id = 2;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id > 1000;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id > 199000;
+```
+```out
+      QUERY PLAN
+----------------------
+ Seq Scan on accounts
+   Filter: (id = 2)
+(2 rows)
+
+       QUERY PLAN
+------------------------
+ Seq Scan on big_orders
+   Filter: (id > 1000)
+(2 rows)
+
+                     QUERY PLAN
+-----------------------------------------------------
+ Index Only Scan using big_orders_pkey on big_orders
+   Index Cond: (id > 199000)
+(2 rows)
+```
+<p>המסד לא "חייב" להשתמש ב־index — הוא מעריך עלות (לפי סטטיסטיקות שנאספות ב־<code>ANALYZE</code>) ובוחר את הזולה. בטבלה של 4 שורות, וכשהתנאי מחזיר כמעט הכול — לקרוא הכול ברצף זול יותר. רק כשהתנאי בררני (1,000 מתוך 200,000) — index. Seq Scan בתוכנית הוא לא באג בפני עצמו; הוא באג כשהטבלה גדולה <strong>והתנאי מחזיר מעט</strong>.</p>
+@mistakes
+<ul><li>"לכפות" index (יש מסדים עם hints) — ברוב המקרים המסד צודק, ואם לא — הסטטיסטיקות ישנות (<code>ANALYZE</code>), לא האופטימייזר.</li></ul>
+
+@@ P18-E59 | 1 | באיזה סדר העמודות? | 10 | שיעור 3
+@lesson 3
+@part 1
+@kind understand
+@task
+<p>"ההזמנות של לקוח X מהחודש האחרון": <code>WHERE customer_id = $1 AND created_at &gt;= $2</code>. שתי הצעות:</p>
+<ol><li><code>CREATE INDEX ON big_orders (customer_id, created_at);</code></li><li><code>CREATE INDEX ON big_orders (created_at, customer_id);</code></li></ol>
+<p>איזה עדיף לשאילתה הזו, ולמה? ואיזה מהם עוזר גם ל־<code>WHERE customer_id = $1</code> לבד?</p>
+@hint1
+<p>חשוב על ספר טלפונים ממוין לפי (עיר, שם) מול (שם, עיר) — כשאתה מחפש "כל ה־Cohen בחיפה".</p>
+@hint2
+<p>בהצעה 2, כל ההזמנות מהחודש האחרון (של <strong>כל</strong> הלקוחות) הן רצף אחד בעץ. בתוכו — הלקוחות מעורבבים.</p>
+@solution
+<p><strong>הצעה 1.</strong> בעץ ממוין לפי <code>(customer_id, created_at)</code>, כל ההזמנות של לקוח 42 הן רצף אחד, ובתוכו ממוינות לפי תאריך — המסד קופץ ל"לקוח 42, מהתאריך הזה" וקורא רק את מה שצריך. בהצעה 2 הוא קופץ לתחילת החודש וצריך לעבור על ההזמנות של <strong>כל</strong> הלקוחות מאז, ולסנן. הכלל מהשיעור: עמודות השוויון קודם, עמודת הטווח/המיון בסוף. והצעה 1 עוזרת גם ל־<code>customer_id = $1</code> לבד (העמודה הראשונה) — כך שהיא מחליפה גם index על <code>customer_id</code> בלבד.</p>
+@mistakes
+<ul><li>"העמודה עם הכי הרבה ערכים שונים ראשונה" — כלל אצבע נפוץ, אבל מה שקובע הוא איך השאילתה משתמשת בעמודות: שוויון ← טווח.</li></ul>
+
+@@ P18-E60 | 1 | ‏index לחיפוש לפי סכום 🤖 | 5 | שיעור 3
+@lesson 3
+@part 1
+@type warmup
+@task
+<p>שירות הלקוחות מחפש הזמנה לפי הסכום ששולם: <code>SELECT id, customer_id FROM big_orders WHERE total = $1</code>. בקובץ <code>18-consistency/starter/P18-E60.sql</code> צור index אחד כך שהשאילתה לא תסרוק את הטבלה.</p>
+```term
+% npm run check P18-E60
+```
+@hint1
+<p>על איזו עמודה התנאי?</p>
+@hint2
+<p><code>CREATE INDEX big_orders_total_idx ON big_orders (total);</code></p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E60.sql
+CREATE INDEX big_orders_total_idx ON big_orders (total);
+EXPLAIN (COSTS OFF) SELECT id, customer_id FROM big_orders WHERE total = 123.45;
+```
+```out
+CREATE INDEX
+                   QUERY PLAN
+-------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (total = 123.45)
+   ->  Bitmap Index Scan on big_orders_total_idx
+         Index Cond: (total = 123.45)
+(4 rows)
+```
+<p>שם ל־index (<code>טבלה_עמודה_idx</code>) הוא לא חובה — אבל כשתראה אותו ב־EXPLAIN או בהודעת שגיאה, תדע מיד מה הוא.</p>
+@mistakes
+<ul><li>index על <code>(customer_id, total)</code> — השאילתה לא מסננת לפי לקוח, אז העמודה הראשונה לא עוזרת.</li></ul>
+
+@@ P18-E61 | 2 | ‏"ההזמנות ששולמו" של לקוח 🤖 | 10 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>המסך "ההזמנות ששולמו ומחכות למשלוח" של לקוח מריץ:</p>
+```sql
+SELECT id, total, created_at FROM big_orders
+WHERE customer_id = $1 AND status = 'paid'
+ORDER BY created_at DESC LIMIT 5;
+```
+<p>בקובץ <code>18-consistency/starter/P18-E61.sql</code> צור index אחד, כך שהתוכנית תשתמש בו <strong>בלי</strong> שלב מיון (<code>Sort</code>).</p>
+```term
+% npm run check P18-E61
+```
+@hint1
+<p>שתי עמודות בשוויון, ועמודה אחת למיון.</p>
+@hint2
+<p>שוויון קודם (בכל סדר), המיון בסוף: <code>(customer_id, status, created_at)</code>.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E61.sql
+CREATE INDEX big_orders_customer_status_created_idx ON big_orders (customer_id, status, created_at);
+EXPLAIN (COSTS OFF)
+SELECT id, total, created_at FROM big_orders
+WHERE customer_id = 42 AND status = 'paid'
+ORDER BY created_at DESC LIMIT 5;
+```
+```out
+CREATE INDEX
+                                      QUERY PLAN
+--------------------------------------------------------------------------------------
+ Limit
+   ->  Index Scan Backward using big_orders_customer_status_created_idx on big_orders
+         Index Cond: ((customer_id = 42) AND (status = 'paid'::text))
+(3 rows)
+```
+<p>"לקוח 42, סטטוס paid" הם רצף אחד בעץ, ממוין לפי תאריך — המסד קורא אותו מהסוף, חמש שורות, ועוצר. בלי <code>created_at</code> ב־index הוא היה מוצא את כל ההזמנות ששולמו של הלקוח וממיין אותן.</p>
+@mistakes
+<ul><li><code>(created_at, customer_id, status)</code> — המיון ראשון; המסד יקרא את כל ההזמנות לפי תאריך עד שימצא חמש של הלקוח.</li></ul>
+
+@@ P18-E62 | 3 | בעלים ייחודי — רק לחשבונות פתוחים 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>חשבון שנסגר נשאר במסד (היסטוריה), ומותר לפתוח לאותו אדם חשבון חדש. אבל לא שני חשבונות <strong>פתוחים</strong> לאותו בעלים (בלי תלות באותיות). בקובץ <code>18-consistency/starter/P18-E62.sql</code>:</p>
+<ol><li>הוסף ל־<code>accounts</code> עמודה <code>closed_at timestamptz</code> (לא חובה; NULL = פתוח).</li><li>צור index ייחודי <strong>חלקי</strong> שאוכף את הכלל.</li></ol>
+```term
+% npm run check P18-E62
+```
+@hint1
+<p>שני רעיונות מהשיעור ביחד: <code>UNIQUE INDEX ... (lower(owner))</code> ו־<code>WHERE ...</code> בסוף ה־index.</p>
+@hint2
+```sql
+CREATE UNIQUE INDEX accounts_open_owner_key ON accounts (lower(owner)) WHERE closed_at IS NULL;
+```
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E62.sql
+ALTER TABLE accounts ADD COLUMN closed_at timestamptz;
+CREATE UNIQUE INDEX accounts_open_owner_key ON accounts (lower(owner)) WHERE closed_at IS NULL;
+```
+```out
+ALTER TABLE
+CREATE INDEX
+```
+<p>ה־index מכיל רק חשבונות פתוחים, ולכן ה"ייחודיות" חלה רק עליהם. חשבון שנסגר "יוצא" מה־index, ואפשר לפתוח חדש. אותו טריק לכל "אחד פעיל בכל רגע": כתובת ברירת מחדל אחת ללקוח, משמרת פתוחה אחת לעובד, עגלה פתוחה אחת למשתמש.</p>
+@mistakes
+<ul><li><code>UNIQUE (owner, closed_at)</code> — ב־UNIQUE רגיל שני NULLים נחשבים שונים, אז שני חשבונות פתוחים עוברים.</li></ul>
+
+@@ P18-E63 | 2 | חיפוש "מכיל" ב־endpoint | 10 | פרק 15, פרק 16, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>ל־<code>GET /customers?q=...</code> (פרק 15) יש שאילתה עם <code>ILIKE</code> (פרק 16). הטבלה גדלה למיליון לקוחות, ויש index על <code>full_name</code>. מה התוכנית של כל אחת?</p>
+```sql
+CREATE INDEX people_full_name_idx ON people (full_name);
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name = 'Customer #4242';
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name ILIKE '%4242%';
+```
+<p>ומה אפשר לעשות כדי שהחיפוש יהיה מהיר?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> query string מפרק 15 ו־<code>ILIKE</code> מפרק 16 — והשיעור: <code>LIKE '%...'</code> בטבלת ה"לא יעזור".</p>
+@hint1
+<p>בעץ ממוין לפי שם — איפה "מתחילים לחפש" כשאתה לא יודע את תחילת השם?</p>
+@hint2
+<p>יש indexes מסוג אחר (לא B-tree) שבנויים לחיפוש "מכיל": ‏trigram ‏(<code>pg_trgm</code>), וחיפוש טקסט מלא.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+CREATE INDEX people_full_name_idx ON people (full_name);
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name = 'Customer #4242';
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name ILIKE '%4242%';
+```
+```out
+CREATE INDEX
+                     QUERY PLAN
+----------------------------------------------------
+ Index Scan using people_full_name_idx on people
+   Index Cond: (full_name = 'Customer #4242'::text)
+(2 rows)
+
+                QUERY PLAN
+------------------------------------------
+ Seq Scan on people
+   Filter: (full_name ~~* '%4242%'::text)
+(2 rows)
+```
+<p>שוויון — דרך ה־index. "מכיל" — סריקה של כל הטבלה, לכל חיפוש. כמה אפשרויות, לפי הצורך: (1) חיפוש לפי <strong>תחילת</strong> השם (<code>LIKE 'Dan%'</code>) — אפשר עם B-tree (עם <code>text_pattern_ops</code>); (2) "מכיל" — index מסוג GIN עם התוסף <code>pg_trgm</code>; (3) חיפוש מילים בטקסט ארוך — full-text search של PostgreSQL, או מנוע חיפוש חיצוני. ובכל מקרה: אורך מינימלי ל־<code>q</code> ב־Zod (<code>min(2)</code>) ו־LIMIT, כדי שחיפוש של אות אחת לא יחזיר מיליון שורות.</p>
+@mistakes
+<ul><li>להוסיף index רגיל על <code>full_name</code> ולהניח שהחיפוש "מאונדקס" — ה־EXPLAIN יראה שלא.</li></ul>
+
+@@ P18-E64 | 2 | ‏JOIN ו־index על ה־FK | 10 | פרק 17, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>"ההזמנות של הלקוח עם השם X" — JOIN מפרק 17 בין <code>people</code> ל־<code>big_orders</code>. מה התוכנית לפני ה־index ואחריו? באיזה צד של ה־JOIN ה־index חשוב?</p>
+```sql
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> JOIN על FK מפרק 17 — והשיעור: PostgreSQL לא יוצר index ל־FK אוטומטית.</p>
+@hint1
+<p>את הלקוח המסד מוצא מהר (מפתח ראשי). השאלה היא איך הוא מוצא את ההזמנות שלו.</p>
+@hint2
+<p><code>Nested Loop</code> — לכל שורה בצד אחד, חפש בצד השני (כמו ה־<code>leftJoin</code> מ־P17-E57).</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+```
+```out
+                     QUERY PLAN
+-----------------------------------------------------
+ Nested Loop
+   ->  Index Only Scan using people_pkey on people p
+         Index Cond: (id = 42)
+   ->  Seq Scan on big_orders o
+         Filter: (customer_id = 42)
+(5 rows)
+
+CREATE INDEX
+                         QUERY PLAN
+-------------------------------------------------------------
+ Nested Loop
+   ->  Index Only Scan using people_pkey on people p
+         Index Cond: (id = 42)
+   ->  Bitmap Heap Scan on big_orders o
+         Recheck Cond: (customer_id = 42)
+         ->  Bitmap Index Scan on big_orders_customer_id_idx
+               Index Cond: (customer_id = 42)
+(7 rows)
+```
+<p>לפני: הלקוח נמצא ב־index של המפתח הראשי, אבל <code>big_orders</code> נסרקת כולה. אחרי: גם ההזמנות נמצאות דרך index. בכל JOIN, הצד ה"רבים" (העמודה עם ה־FK) הוא זה שצריך index — הצד של ה־<code>id</code> כבר מאונדקס כמפתח ראשי.</p>
+@mistakes
+<ul><li>להניח ש"יש FK, אז יש index" — ב־MySQL זה נכון (יחידה 25v); ב־PostgreSQL לא.</li></ul>
+
+@@ P18-E65 | 2 | ‏"עמוד 1 מתוך 10,000" — כמה עולה המספר? | 10 | פרק 16, שיעור 3
+@lesson 3
+@part 2
+@kind understand
+@task
+<p>כל טעינה של רשימת ההזמנות מציגה "עמוד 1 מתוך N" — ולשם כך מריצה <code>SELECT COUNT(*) FROM big_orders</code>. מה התוכנית? האם index יעזור? הצע חלופה לממשק.</p>
+```sql
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders;
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders WHERE customer_id = 42;
+SELECT reltuples::bigint AS estimate FROM pg_class WHERE oid = 'big_orders'::regclass;
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>COUNT</code> ו־<code>LIMIT/OFFSET</code> מפרק 16 — והשיעור: מה index יכול ומה לא.</p>
+@hint1
+<p>לספור את <strong>כל</strong> השורות — צריך לעבור על כולן (או על index שלם).</p>
+@hint2
+<p>האם המשתמש באמת צריך את המספר המדויק?</p>
+@solution
+```sql run db=18-consistency/files/bank.sql
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders;
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders WHERE customer_id = 42;
+SELECT reltuples::bigint AS estimate FROM pg_class WHERE oid = 'big_orders'::regclass;
+```
+```out
+          QUERY PLAN
+------------------------------
+ Aggregate
+   ->  Seq Scan on big_orders
+(2 rows)
+
+             QUERY PLAN
+------------------------------------
+ Aggregate
+   ->  Seq Scan on big_orders
+         Filter: (customer_id = 42)
+(3 rows)
+
+ estimate
+----------
+   200000
+(1 row)
+```
+<p><code>COUNT(*)</code> של כל הטבלה תמיד עובר על כל השורות (אולי במקביל, עם כמה workers) — index לא חוסך את זה, כי המסד צריך לבדוק כל שורה. חלופות: (1) "יש עוד" במקום "מתוך N" — לבקש <code>LIMIT 21</code> ולהציג 20 (keyset — שיעור 4); (2) הערכה מהסטטיסטיקות (<code>reltuples</code>) — "כ־200,000"; (3) מונה ששומרים בטבלה נפרדת ומעדכנים. ספירה של לקוח אחד עם index על <code>customer_id</code> — זולה.</p>
+@mistakes
+<ul><li>להריץ <code>COUNT(*)</code> על כל הטבלה בכל בקשה "כי זה רק מספר" — בטבלה של 50 מיליון שורות זו השאילתה הכי יקרה בעמוד.</li></ul>
+
+@@ P18-E66 | 3 | האם השאילתה משתמשת ב־index? — בקוד 🤖 | 25 | פרק 7, פרק 13, פרק 16, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>כלי לבדיקות אוטומטיות: "השאילתה הזו לא סורקת את הטבלה". ‏<code>EXPLAIN (FORMAT JSON)</code> מחזיר את התוכנית כעץ: כל צומת עם <code>"Node Type"</code>, ולפעמים <code>"Relation Name"</code> ו־<code>"Index Name"</code>, וילדים ב־<code>"Plans"</code>. בקובץ <code>18-consistency/starter/P18-E66.ts</code> כתוב וייצא:</p>
+```ts
+export type PlanSummary = { nodes: string[]; seqScans: string[]; indexes: string[] };
+export async function planSummary(pool: Pool, sql: string, params?: unknown[]): Promise<PlanSummary>
+```
+<ul><li>מריצה <code>EXPLAIN (FORMAT JSON) </code> + השאילתה (עם הפרמטרים). ה־JSON מגיע בשורה הראשונה, בעמודה <code>"QUERY PLAN"</code>; התוכנית — ב־<code>[0].Plan</code>.</li><li><code>nodes</code> — כל ה־<code>Node Type</code> בעץ, לפי סדר "קודם הצומת, אחר כך הילדים שלו לפי הסדר".</li><li><code>seqScans</code> — ה־<code>Relation Name</code> של כל צומת <code>Seq Scan</code>. ‏<code>indexes</code> — כל <code>Index Name</code> בעץ, בלי כפילויות.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E66.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E66
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> רקורסיה על אובייקטים מקוננים (פרק 7), JSON (פרק 13), ‏<code>pool.query</code> עם פרמטרים (פרק 16) — והשיעור: לקרוא תוכנית, הפעם בקוד.</p>
+@hint1
+```ts
+const { rows } = await pool.query(`EXPLAIN (FORMAT JSON) ${sql}`, params); const root = rows[0]["QUERY PLAN"][0].Plan;
+```
+<p>(‏<code>pg</code> כבר מפענח את ה־JSON.)</p>
+@hint2
+<p>פונקציה רקורסיבית:</p>
+```ts
+function walk(node: any) { ...; for (const child of node.Plans ?? []) walk(child); }
+```
+@solution
+```ts save=solutions/P18-E66.ts
+// P18-E66: האם השאילתה משתמשת ב־index? — בקוד
+import type { Pool } from "pg";
+
+export type PlanSummary = { nodes: string[]; seqScans: string[]; indexes: string[] };
+
+export async function planSummary(pool: Pool, sql: string, params: unknown[] = []): Promise<PlanSummary> {
+  const { rows } = await pool.query(`EXPLAIN (FORMAT JSON) ${sql}`, params);
+  const root = rows[0]["QUERY PLAN"][0].Plan;
+  const summary: PlanSummary = { nodes: [], seqScans: [], indexes: [] };
+  const walk = (node: any) => {
+    summary.nodes.push(node["Node Type"]);
+    if (node["Node Type"] === "Seq Scan") summary.seqScans.push(node["Relation Name"]);
+    if (node["Index Name"] && !summary.indexes.includes(node["Index Name"])) summary.indexes.push(node["Index Name"]);
+    for (const child of node.Plans ?? []) walk(child);
+  };
+  walk(root);
+  return summary;
+}
+```
+<p>עם הכלי הזה, בדיקה אוטומטית יכולה לוודא "השאילתה של מסך ההזמנות לא עושה Seq Scan על big_orders" — ואם מישהו ימחק index או ישנה את השאילתה, הבדיקה תיכשל לפני שהלקוחות ירגישו. (הבודקים של הפרק הזה עושים משהו דומה, עם טקסט במקום JSON.)</p>
+@mistakes
+<ul><li>לחפש "Seq Scan" בטקסט של התוכנית — עובד, אבל לא אומר על איזו טבלה; ב־JSON יש <code>Relation Name</code>.</li><li>להעביר את הפרמטרים בתוך המחרוזת — <code>EXPLAIN</code> מקבל <code>$1</code> כמו כל שאילתה.</li></ul>
+
+@@ P18-E67 | 3 | ‏"index" ממוין בזיכרון 🤖 | 25 | פרק 5, פרק 6, פרק 11, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>מה B-tree עושה, בקטן: מערך ממוין וחיפוש בינארי — במקום לעבור על הכול. בקובץ <code>18-consistency/starter/P18-E67.ts</code> כתוב וייצא:</p>
+```ts
+export function createIndex<T>(rows: T[], key: (row: T) => number): { eq(value: number): T[]; range(from: number, to: number): T[]; comparisons(): number }
+```
+<ul><li>בזמן היצירה — ממיינת <strong>עותק</strong> של השורות לפי <code>key</code> (המקור לא משתנה). בשוויון — הסדר המקורי נשמר.</li><li><code>eq(v)</code> — כל השורות עם <code>key === v</code>. ‏<code>range(from, to)</code> — כל השורות עם <code>from &lt;= key &lt; to</code>. שתיהן לפי הסדר הממוין.</li><li>החיפוש — בינארי: <code>comparisons()</code> מחזירה כמה השוואות של מפתחות נעשו בחיפושים עד עכשיו (בלי המיון). הבודק מוודא שעל 100,000 שורות, <code>eq</code> עושה לכל היותר 40 השוואות (ולא 100,000).</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E67.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E67
+```
+<p>🔗 <strong>איך זה מתחבר:</strong> closures (פרק 5), ‏<code>sort</code> ו־<code>slice</code> (פרק 6), generics (פרק 11) — והשיעור: למה index מוצא 100 שורות מתוך 200,000 בכמה קפיצות.</p>
+@hint1
+<p>חיפוש בינארי של "האינדקס הראשון שבו המפתח &gt;= v": ‏<code>lo = 0, hi = n</code>; כל עוד <code>lo &lt; hi</code> — ‏<code>mid</code>, השוואה אחת, וחצי מהטווח נזרק. ‏<code>range(from, to)</code> = מ"הראשון ש־&gt;= from" עד "הראשון ש־&gt;= to". ול־<code>eq(v)</code> צריך גם "הראשון ש־&gt; v".</p>
+@hint2
+<p>שמור את המפתחות במערך נפרד (<code>keys</code>) אחרי המיון, כדי לא לקרוא ל־<code>key()</code> בכל השוואה.</p>
+@solution
+```ts save=solutions/P18-E67.ts
+// P18-E67: "index" ממוין בזיכרון
+export function createIndex<T>(rows: T[], key: (row: T) => number) {
+  const sorted = rows.map((row, i) => ({ row, k: key(row), i })).sort((a, b) => a.k - b.k || a.i - b.i);
+  const keys = sorted.map((s) => s.k);
+  let count = 0;
+
+  // האינדקס הראשון שבו keys[i] >= v (או > v כש־strict)
+  const bound = (v: number, strict: boolean) => {
+    let lo = 0;
+    let hi = keys.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      count++;
+      if (strict ? keys[mid] <= v : keys[mid] < v) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const slice = (a: number, b: number) => sorted.slice(a, Math.max(a, b)).map((s) => s.row);
+
+  return {
+    eq: (v: number) => slice(bound(v, false), bound(v, true)),
+    range: (from: number, to: number) => slice(bound(from, false), bound(to, false)),
+    comparisons: () => count,
+  };
+}
+```
+<p>שני חיפושים בינאריים — "איפה מתחיל" ו"איפה נגמר" — ואז <code>slice</code> של רצף. זה בדיוק "Index Cond" ב־EXPLAIN: קפיצה לתחילת הטווח וקריאה ברצף. ‏<code>log2(100,000)</code> ≈ 17, כך ש־<code>eq</code> עושה כ־34 השוואות. המחיר: מיון אחד בהתחלה, וכל הוספה לנתונים מחייבת לשמור על הסדר — "כל כתיבה מעדכנת את ה־index".</p>
+@mistakes
+<ul><li><code>sorted.filter(...)</code> בתוך <code>eq</code> — נכון, אבל 100,000 השוואות לכל חיפוש: Seq Scan בתחפושת.</li><li>למיין את <code>rows</code> עצמו (<code>rows.sort</code>) — משנה את המערך של מי שקרא לפונקציה.</li></ul>
+
+@@ P18-E68 | 3 | דוח יומי לשבוע, עם index 🤖 | 20 | פרק 17, שיעור 3
+@lesson 3
+@part 2
+@task
+<p>דוח: לכל יום בשבוע הראשון של יוני 2025 (<code>created_at &gt;= '2025-06-01'</code> ו־<code>&lt; '2025-06-08'</code>), בלי מבוטלות — <code>day</code> (תאריך), ‏<code>orders</code>, ‏<code>revenue</code> (סכום <code>total</code>) — לפי יום. בקובץ <code>18-consistency/starter/P18-E68.sql</code>:</p>
+<ol><li>צור index שיאפשר למסד למצוא את השבוע הזה בלי לסרוק את כל 200,000 השורות.</li><li>כתוב את השאילתה (הפקודה האחרונה בקובץ).</li></ol>
+```term
+% npm run check P18-E68
+```
+<p>הבודק משווה את התוצאה, ובודק שהתוכנית של השאילתה שלך משתמשת ב־index.</p>
+@hint1
+<p>הטווח על <code>created_at</code> — וה־WHERE צריך להשאיר את העמודה "חשופה" (P18-E56, ‏P18-E22). את ההמרה ל־<code>::date</code> עושים רק ב־SELECT וב־GROUP BY.</p>
+@hint2
+<p><code>GROUP BY 1 ORDER BY 1</code> — כמו בפרק 17.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E68.sql
+CREATE INDEX big_orders_created_at_idx ON big_orders (created_at);
+
+SELECT created_at::date AS day, COUNT(*) AS orders, SUM(total) AS revenue
+FROM big_orders
+WHERE created_at >= '2025-06-01' AND created_at < '2025-06-08' AND status <> 'cancelled'
+GROUP BY 1
+ORDER BY 1;
+```
+```out
+CREATE INDEX
+    day     | orders |  revenue
+------------+--------+-----------
+ 2025-06-01 |    458 | 152309.51
+ 2025-06-02 |    459 | 101582.90
+ 2025-06-03 |    459 | 110125.19
+ 2025-06-04 |    458 | 163622.01
+ 2025-06-05 |    459 |  67505.90
+ 2025-06-06 |    459 | 161048.56
+ 2025-06-07 |    458 |  89434.51
+(7 rows)
+```
+<p>ה־index מצמצם את העבודה לשבוע אחד (כ־3,800 שורות מתוך 200,000), ושאר העבודה — סינון המבוטלות והקיבוץ — רצה על המעט הזה. ‏<code>WHERE created_at::date BETWEEN ...</code> היה מחזיר אותה תוצאה, אבל סורק הכול.</p>
+@mistakes
+<ul><li>index על <code>(status, created_at)</code> — התנאי על status הוא "שונה מ־", לא שוויון; העמודה הראשונה לא עוזרת לקפוץ.</li></ul>
+
+@@ P18-E69 | 1 | למצוא N+1 ביומן | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>זה יומן השאילתות של בקשה אחת ל־<code>GET /orders?limit=4</code>. מה הקוד עושה? כמה שאילתות יהיו ב־<code>limit=50</code>? ואיך זה ייראה אחרי תיקון?</p>
+```term
+.. 12:00:01.002  SELECT id, customer_id, total FROM big_orders ORDER BY created_at DESC LIMIT 4
+.. 12:00:01.004  SELECT full_name FROM people WHERE id = $1   [1544]
+.. 12:00:01.005  SELECT full_name FROM people WHERE id = $1   [1463]
+.. 12:00:01.007  SELECT full_name FROM people WHERE id = $1   [1544]
+.. 12:00:01.008  SELECT full_name FROM people WHERE id = $1   [1302]
+```
+@hint1
+<p>אותה שאילתה, עם פרמטר שונה, פעם לכל שורה מהשאילתה הראשונה.</p>
+@hint2
+<p>שים לב גם ל־1544 שמופיע פעמיים.</p>
+@solution
+<p>שאילתה לרשימה, ואז לולאה עם <code>await</code> ששולפת את שם הלקוח לכל הזמנה — N+1. ב־<code>limit=50</code>: ‏51 שאילתות. ולקוח שמופיע פעמיים נשלף פעמיים. אחרי תיקון — אחת משתיים:</p>
+```term
+.. SELECT o.id, o.total, p.full_name FROM big_orders o JOIN people p ON p.id = o.customer_id ORDER BY o.created_at DESC LIMIT 4
+```
+<p>או שתיים (ה־id־ים <strong>בלי כפילויות</strong>, ב־<code>ANY</code>):</p>
+```term
+.. SELECT id, customer_id, total FROM big_orders ORDER BY created_at DESC LIMIT 4
+.. SELECT id, full_name FROM people WHERE id = ANY($1)   [[1544, 1463, 1302]]
+```
+<p>הסימן ביומן תמיד אותו סימן: "גל" של שאילתות זהות שרק הפרמטר משתנה בהן.</p>
+@mistakes
+<ul><li>"כל שאילתה לוקחת מילישנייה" — וכל אחת היא גם נסיעה ברשת ותור ב־pool. 51 קטנות איטיות מאחת בינונית.</li></ul>
+
+@@ P18-E70 | 2 | ‏OFFSET ושורה חדשה בין עמודים | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>פיד "החדשים קודם", 3 בכל עמוד. המשתמש קורא את עמוד 1, בינתיים נוספת הודעה, והוא לוחץ "הבא". מה יראה בעמוד 2 עם OFFSET, ומה עם cursor?</p>
+```sql
+CREATE TABLE feed (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, body text NOT NULL);
+INSERT INTO feed (body) SELECT 'post ' || i FROM generate_series(1, 8) AS i;
+
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 0;      -- עמוד 1
+INSERT INTO feed (body) VALUES ('post 9 (new)');
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 3;      -- עמוד 2, עם OFFSET
+SELECT id, body FROM feed WHERE id < 6 ORDER BY id DESC LIMIT 3;  -- עמוד 2, עם cursor (האחרון בעמוד 1 היה 6)
+```
+@hint1
+<p>OFFSET 3 = "דלג על 3 הראשונות <strong>עכשיו</strong>". מי הן עכשיו?</p>
+@hint2
+<p>ה־cursor אומר "אחרי מה שכבר ראיתי" — שורה חדשה בראש לא משנה אותו.</p>
+@solution
+```sql run
+CREATE TABLE feed (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, body text NOT NULL);
+INSERT INTO feed (body) SELECT 'post ' || i FROM generate_series(1, 8) AS i;
+
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 0;      -- עמוד 1
+INSERT INTO feed (body) VALUES ('post 9 (new)');
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 3;      -- עמוד 2, עם OFFSET
+SELECT id, body FROM feed WHERE id < 6 ORDER BY id DESC LIMIT 3;  -- עמוד 2, עם cursor (האחרון בעמוד 1 היה 6)
+```
+```out
+CREATE TABLE
+INSERT 0 8
+ id |  body
+----+--------
+  8 | post 8
+  7 | post 7
+  6 | post 6
+(3 rows)
+
+INSERT 0 1
+ id |  body
+----+--------
+  6 | post 6
+  5 | post 5
+  4 | post 4
+(3 rows)
+
+ id |  body
+----+--------
+  5 | post 5
+  4 | post 4
+  3 | post 3
+(3 rows)
+```
+<p>עם OFFSET, ההודעה החדשה "דחפה" הכול אחד למטה — ו־post 6 מופיע שוב בראש עמוד 2. (ובמחיקה — הפוך: שורה מדלגת ולא מוצגת אף פעם.) עם cursor — בדיוק ההמשך.</p>
+@mistakes
+<ul><li>"לתקן" עם הסרת כפילויות ב־frontend — מטפל בהוספה, לא במחיקה (שורות שנעלמות).</li></ul>
+
+@@ P18-E71 | 2 | ‏cursor בלי שובר שוויון | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>מיון לפי <code>created_at</code> (יורד), 2 בכל עמוד. ‏<code>c</code> ו־<code>d</code> נוצרו באותו רגע. מה יחזיר עמוד 2 בכל אחת מהגרסאות? איזה פוסט "נעלם"?</p>
+```sql
+CREATE TABLE posts (id integer PRIMARY KEY, title text, created_at timestamptz);
+INSERT INTO posts VALUES (1, 'a', '2026-01-01 10:00+02'), (2, 'b', '2026-01-01 11:00+02'),
+  (3, 'c', '2026-01-01 12:00+02'), (4, 'd', '2026-01-01 12:00+02'), (5, 'e', '2026-01-01 13:00+02');
+
+SELECT id, title FROM posts ORDER BY created_at DESC, id DESC LIMIT 2;           -- עמוד 1: e, d
+SELECT id, title FROM posts
+WHERE created_at < '2026-01-01 12:00+02'
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, רק לפי זמן
+SELECT id, title FROM posts
+WHERE (created_at, id) < ('2026-01-01 12:00+02', 4)
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, עם שובר שוויון
+```
+@hint1
+<p>האחרון בעמוד 1 הוא d (12:00, id 4). מה עוד יש ב־12:00?</p>
+@hint2
+<p><code>(a, b) &lt; (x, y)</code> — כמו השוואת מילים במילון: קודם a מול x; אם שווים — b מול y.</p>
+@solution
+```sql run
+CREATE TABLE posts (id integer PRIMARY KEY, title text, created_at timestamptz);
+INSERT INTO posts VALUES (1, 'a', '2026-01-01 10:00+02'), (2, 'b', '2026-01-01 11:00+02'),
+  (3, 'c', '2026-01-01 12:00+02'), (4, 'd', '2026-01-01 12:00+02'), (5, 'e', '2026-01-01 13:00+02');
+
+SELECT id, title FROM posts ORDER BY created_at DESC, id DESC LIMIT 2;           -- עמוד 1: e, d
+SELECT id, title FROM posts
+WHERE created_at < '2026-01-01 12:00+02'
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, רק לפי זמן
+SELECT id, title FROM posts
+WHERE (created_at, id) < ('2026-01-01 12:00+02', 4)
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, עם שובר שוויון
+```
+```out
+CREATE TABLE
+INSERT 0 5
+ id | title
+----+-------
+  5 | e
+  4 | d
+(2 rows)
+
+ id | title
+----+-------
+  2 | b
+  1 | a
+(2 rows)
+
+ id | title
+----+-------
+  3 | c
+  2 | b
+(2 rows)
+```
+<p>"רק לפי זמן" דילג על c — היא לא "לפני 12:00", היא <em>ב־</em>12:00. השוואת זוגות שואלת "האם השורה באה אחרי (12:00, 4) בסדר המיון" — ו־c (12:00, 3) באה. בגלל זה ה־cursor הוא שני ערכים, וה־ORDER BY חייב לכלול את שובר השוויון. (ו־P18-E31: כל השורות של transaction אחד מקבלות אותו <code>now()</code> — שוויון ב־<code>created_at</code> נפוץ יותר משנדמה.)</p>
+@mistakes
+<ul><li><code>&lt;=</code> במקום <code>&lt;</code> ב"רק לפי זמן" — עכשיו d (שכבר הוצג) חוזר. אין דרך נכונה בלי שובר שוויון.</li></ul>
+
+@@ P18-E72 | 2 | ‏ANY($1) מול IN משורשר | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>שתי דרכים לשלוף רשימת לקוחות לפי id. מה הבעיות בראשונה? ואיך נראית השנייה מבחינת המסד, כשיש 3 id־ים וכשיש 500?</p>
+```ts
+// א
+const sql = `SELECT id, full_name FROM people WHERE id IN (${ids.join(",")})`;
+await pool.query(sql);
+// ב
+await pool.query("SELECT id, full_name FROM people WHERE id = ANY($1)", [ids]);
+```
+@hint1
+<p>מה יקרה ב־א׳ כש־<code>ids</code> ריק? וכש־ids הגיעו מה־query string?</p>
+@hint2
+<p>ב־ב׳, <code>pg</code> שולח מערך JavaScript כפרמטר אחד מסוג מערך של PostgreSQL.</p>
+@solution
+<ul><li><strong>א׳</strong>: (1) <code>ids = []</code> ← <code>IN ()</code> — שגיאת תחביר. (2) אם ids הגיעו מהמשתמש (<code>?ids=1,2)%20OR%20(1=1</code>) — SQL injection. (3) לכל אורך רשימה טקסט שאילתה אחר — המסד לא יכול למחזר תוכניות, ויומני השאילתות מתמלאים בגרסאות.</li><li><strong>ב׳</strong>: טקסט שאילתה אחד תמיד, ופרמטר אחד — מערך. ריק ← אפס שורות, בלי שגיאה. אותו טקסט ל־3 ול־500 id־ים, והערכים לעולם לא הופכים לקוד.</li></ul>
+<p>זה מה שהשיעור השתמש בו בתיקון של N+1, ומה ש־<code>WHERE id IN</code> של ORMs מייצר מאחורי הקלעים.</p>
+@mistakes
+<ul><li>"ids הם מספרים, אז אין injection" — רק אם <strong>וידאת</strong> שהם מספרים (Zod). ב־ב׳ לא צריך לסמוך על זה.</li></ul>
+
+@@ P18-E73 | 2 | ‏JOIN או שתי שאילתות? | 10 | שיעור 4
+@lesson 4
+@part 1
+@kind understand
+@task
+<p>מסך: 20 לקוחות, ולכל אחד כל ההזמנות שלו (כ־100 לכל לקוח). לכל לקוח יש גם שדה <code>bio</code> של 5KB. שתי הצעות בלי N+1:</p>
+<ol><li>JOIN אחד: <code>people</code> ⟵ <code>big_orders</code>, ‏<code>SELECT p.*, o.*</code>.</li><li>שתי שאילתות: 20 הלקוחות; ואז <code>WHERE customer_id = ANY($1)</code> לכל ההזמנות, וחיבור ב־<code>Map</code>.</li></ol>
+<p>כמה שורות מחזירה כל אחת? כמה פעמים עובר כל <code>bio</code> ברשת? מתי כל אחת עדיפה?</p>
+@hint1
+<p>JOIN של אחד־לרבים מחזיר שורה לכל <strong>הזמנה</strong> — עם כל עמודות הלקוח בכל אחת.</p>
+@hint2
+<p>20 × 100 = ?</p>
+@solution
+<ol><li>JOIN: ‏2,000 שורות, וכל <code>bio</code> עובר 100 פעמים — 20 × 100 × 5KB ≈ 10MB של כפילויות, רק בשביל הביו.</li><li>שתי שאילתות: 20 + 2,000 שורות; כל <code>bio</code> פעם אחת. נסיעה אחת נוספת למסד.</li></ol>
+<p>כשהצד ה"אחד" צר והקשר קטן (הזמנה ← הלקוח שלה; שם, אימייל) — JOIN. כשהצד ה"אחד" רחב או שיש כמה קשרים של "רבים" (לקוח ← הזמנות <strong>וגם</strong> כתובות — JOIN של שניהם הוא מכפלה, P17-E03) — שאילתה לכל קשר. זה בדיוק מה ש־Prisma עושה עם <code>include</code> (פרק 19).</p>
+@mistakes
+<ul><li>"JOIN תמיד מהיר יותר כי זו שאילתה אחת" — לא כשהוא מכפיל את הנתונים שעוברים ברשת פי מאה.</li></ul>
+
+@@ P18-E74 | 2 | העמוד הבא, אחרי (זמן, id) 🤖 | 15 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>פיד ההזמנות, מהחדשות לישנות, 10 בכל עמוד. העמוד הקודם הסתיים בהזמנה עם <code>created_at = '2025-06-01 12:00:00+00'</code> ו־<code>id = 100000</code>. בקובץ <code>18-consistency/starter/P18-E74.sql</code>:</p>
+<ol><li>צור index שמתאים למיון של הפיד.</li><li>שאילתה (הפקודה האחרונה): העמוד הבא — <code>id</code>, ‏<code>created_at</code>, ‏<code>total</code> — עם השוואת זוגות ושובר שוויון (P18-E71).</li></ol>
+```term
+% npm run check P18-E74
+```
+<p>הבודק משווה את התוצאה (גם אחרי שהוא מוסיף הזמנות באותו רגע בדיוק), ובודק שהתוכנית בלי Seq Scan ובלי Sort.</p>
+@hint1
+<p><code>ORDER BY created_at DESC, id DESC</code> ← index על <code>(created_at, id)</code> — המסד יקרא אותו מהסוף.</p>
+@hint2
+<p><code>WHERE (created_at, id) &lt; ('2025-06-01 12:00:00+00', 100000)</code></p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E74.sql
+CREATE INDEX big_orders_created_id_idx ON big_orders (created_at, id);
+
+SELECT id, created_at, total
+FROM big_orders
+WHERE (created_at, id) < ('2025-06-01 12:00:00+00', 100000)
+ORDER BY created_at DESC, id DESC
+LIMIT 10;
+```
+```out
+CREATE INDEX
+  id   |       created_at       | total
+-------+------------------------+--------
+ 83373 | 2025-06-01 14:59:21+03 | 358.01
+ 83372 | 2025-06-01 14:56:44+03 | 357.64
+ 83371 | 2025-06-01 14:54:07+03 | 357.27
+ 83370 | 2025-06-01 14:51:30+03 | 356.90
+ 83369 | 2025-06-01 14:48:53+03 | 356.53
+ 83368 | 2025-06-01 14:46:16+03 | 356.16
+ 83367 | 2025-06-01 14:43:39+03 | 355.79
+ 83366 | 2025-06-01 14:41:02+03 | 355.42
+ 83365 | 2025-06-01 14:38:25+03 | 355.05
+ 83364 | 2025-06-01 14:35:48+03 | 354.68
+(10 rows)
+```
+<p>שלושה חלקים שחייבים להתאים: ה־ORDER BY, ההשוואה ב־WHERE (אותן עמודות, אותו סדר), וה־index. כשהם מתאימים — המסד קופץ ב־index לנקודה וקורא 10 שורות, בעמוד 1 כמו בעמוד 10,000.</p>
+@mistakes
+<ul><li><code>WHERE created_at &lt; ... OR (created_at = ... AND id &lt; ...)</code> — נכון לוגית, אבל קשה יותר לקרוא, ובגרסאות ישנות המסד לא תמיד ידע להשתמש ב־index.</li></ul>
+
+@@ P18-E75 | 3 | הזמנות עם השורות שלהן — שתי שאילתות 🤖 | 25 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>מסך "ההזמנות שלי" מעל <code>shop_orders</code>, ‏<code>shop_order_lines</code> ו־<code>catalog</code>. בקובץ <code>18-consistency/starter/P18-E75.ts</code> כתוב וייצא:</p>
+```ts
+export type OrderWithLines = { id: number; total: number; lines: { product: string; quantity: number; unitPrice: number }[] };
+export async function ordersWithLines(pool: Pool, orderIds: number[]): Promise<OrderWithLines[]>
+```
+<ul><li><strong>בדיוק שתי שאילתות</strong>, תמיד (גם ל־1 וגם ל־200 הזמנות): ההזמנות (<code>id = ANY($1)</code>), ואז כל השורות שלהן עם שם המוצר (JOIN ל־<code>catalog</code>).</li><li>הסדר — כמו ב־<code>orderIds</code>; id שלא קיים — מדלגים; id שמופיע פעמיים ברשימה — פעם אחת (בפעם הראשונה). שורות כל הזמנה — לפי שם המוצר.</li><li>מספרים — <code>number</code>. מערך ריק ← <code>[]</code>, בלי שאילתות.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E75.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E75
+```
+@hint1
+<p><code>WHERE l.order_id = ANY($1) ORDER BY l.order_id, c.name</code> — ואז <code>Map</code> של order_id ← מערך שורות.</p>
+@hint2
+<p>לסדר הסופי: <code>[...new Set(orderIds)]</code>, ולכל id — ה־<code>Map</code> של ההזמנות (ודילוג אם אין).</p>
+@solution
+```ts save=solutions/P18-E75.ts
+// P18-E75: הזמנות עם השורות שלהן — שתי שאילתות
+import type { Pool } from "pg";
+
+export type OrderWithLines = { id: number; total: number; lines: { product: string; quantity: number; unitPrice: number }[] };
+
+export async function ordersWithLines(pool: Pool, orderIds: number[]): Promise<OrderWithLines[]> {
+  if (orderIds.length === 0) return [];
+  const ids = [...new Set(orderIds)];
+  const orders = await pool.query("SELECT id, total FROM shop_orders WHERE id = ANY($1)", [ids]);
+  const lines = await pool.query(
+    `SELECT l.order_id, c.name AS product, l.quantity, l.unit_price
+     FROM shop_order_lines l JOIN catalog c ON c.id = l.product_id
+     WHERE l.order_id = ANY($1)
+     ORDER BY l.order_id, c.name`,
+    [ids],
+  );
+  const byOrder = new Map<number, OrderWithLines["lines"]>();
+  for (const l of lines.rows) {
+    if (!byOrder.has(l.order_id)) byOrder.set(l.order_id, []);
+    byOrder.get(l.order_id)!.push({ product: l.product, quantity: l.quantity, unitPrice: Number(l.unit_price) });
+  }
+  const found = new Map<number, number>(orders.rows.map((o) => [o.id, Number(o.total)]));
+  return ids.filter((id) => found.has(id)).map((id) => ({ id, total: found.get(id)!, lines: byOrder.get(id) ?? [] }));
+}
+```
+<p>מספר השאילתות לא תלוי בכמות — זה כל העניין. הסדר מגיע מ־<code>orderIds</code> (ולא מהמסד, שמחזיר את <code>ANY</code> בסדר כלשהו).</p>
+@mistakes
+<ul><li>לסמוך על הסדר של <code>ANY</code> — המסד לא מבטיח סדר בלי ORDER BY.</li><li>JOIN אחד של שלוש הטבלאות — אפשרי, אבל אז צריך לקבץ שורות שטוחות (P17-E55), והזמנה בלי שורות דורשת LEFT JOIN.</li></ul>
+
+@@ P18-E76 | 3 | פיד עם cursor אטום 🤖 | 30 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>ה־API לא חושף ללקוח "זמן ו־id"; הוא נותן מחרוזת אטומה. בקובץ <code>18-consistency/starter/P18-E76.ts</code> כתוב וייצא <code>class AppError</code> (עם <code>code</code>) ו־:</p>
+```ts
+export function encodeCursor(createdAt: Date, id: number): string
+export function decodeCursor(cursor: string): { createdAt: Date; id: number }
+export async function feed(pool: Pool, opts: { customerId: number; cursor?: string; limit?: number }): Promise<{ data: { id: number; total: number }[]; nextCursor: string | null }>
+```
+<ul><li>cursor = ‏<code>base64url</code> של <code>`${createdAt.toISOString()}|${id}`</code> (‏<code>Buffer.from(s).toString("base64url")</code>).</li><li><code>decodeCursor</code> — מחרוזת שלא מפוענחת לתאריך תקין ו־id שלם חיובי ← <code>AppError("BAD_CURSOR")</code>.</li><li><code>feed</code> — ההזמנות של <code>customerId</code> מ־<code>big_orders</code>, מהחדשה לישנה (<code>created_at DESC, id DESC</code>), אחרי ה־cursor אם נשלח. ‏<code>limit</code> ברירת מחדל 20 (1–100, אחרת <code>AppError("BAD_LIMIT")</code>).</li><li><code>nextCursor</code> — של השורה האחרונה, אם יש עוד שורות אחריה; אחרת <code>null</code>. (טריק: בקש <code>limit + 1</code>.)</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E76.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E76
+```
+@hint1
+<p><code>Buffer.from(cursor, "base64url").toString()</code>, ‏<code>split("|")</code>, ‏<code>new Date(...)</code> ו־<code>Number.isNaN(d.getTime())</code>.</p>
+@hint2
+<p>שתי גרסאות של WHERE: עם cursor — <code>customer_id = $1 AND (created_at, id) &lt; ($2, $3)</code>; בלי — רק <code>customer_id = $1</code>.</p>
+@solution
+```ts save=solutions/P18-E76.ts
+// P18-E76: פיד עם cursor אטום
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export function encodeCursor(createdAt: Date, id: number): string {
+  return Buffer.from(`${createdAt.toISOString()}|${id}`).toString("base64url");
+}
+
+export function decodeCursor(cursor: string): { createdAt: Date; id: number } {
+  const [iso, idText, ...rest] = Buffer.from(cursor, "base64url").toString().split("|");
+  const createdAt = new Date(iso);
+  const id = Number(idText);
+  if (rest.length > 0 || !iso || Number.isNaN(createdAt.getTime()) || !Number.isInteger(id) || id <= 0) throw new AppError("BAD_CURSOR");
+  return { createdAt, id };
+}
+
+export async function feed(pool: Pool, { customerId, cursor, limit = 20 }: { customerId: number; cursor?: string; limit?: number }) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AppError("BAD_LIMIT");
+  const params: unknown[] = [customerId];
+  let where = "customer_id = $1";
+  if (cursor !== undefined) {
+    const c = decodeCursor(cursor);
+    params.push(c.createdAt, c.id);
+    where += " AND (created_at, id) < ($2, $3)";
+  }
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT id, total, created_at FROM big_orders WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT $${params.length}`,
+    params,
+  );
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    data: page.map((r) => ({ id: r.id, total: Number(r.total) })),
+    nextCursor: rows.length > limit && last ? encodeCursor(last.created_at, last.id) : null,
+  };
+}
+```
+<p>‏<code>limit + 1</code> עונה על "יש עוד?" בלי שאילתת COUNT (P18-E65). ה־cursor האטום נותן חופש: מחר אפשר לשנות את המיון או להוסיף שדה, והלקוחות לא נשברים — הם רק מעבירים את המחרוזת חזרה.</p>
+@mistakes
+<ul><li><code>nextCursor</code> תמיד (גם בעמוד האחרון) — הלקוח מבקש עוד עמוד ומקבל ריק. עובד, אבל בקשה מיותרת בכל רשימה.</li><li>לסמוך על ה־cursor בלי לבדוק — <code>new Date("garbage")</code> הוא Invalid Date, ו־<code>pg</code> נכשל בשגיאה לא ברורה (500 במקום 400).</li></ul>
+
+@@ P18-E77 | 2 | לקוחות עם ספירת הזמנות — בשאילתה אחת 🤖 | 15 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>התיקון של P18-E23 — הפעם כ־SQL. בקובץ <code>18-consistency/starter/P18-E77.sql</code>: עבור האנשים עם <code>id</code> בין 1 ל־10 ב־<code>people</code> — <code>id</code>, ‏<code>full_name</code>, ‏<code>orders</code> (כמה הזמנות ב־<code>big_orders</code>, 0 אם אין), ‏<code>last_order</code> (ה־<code>created_at</code> המאוחר, NULL אם אין) — לפי <code>id</code>. שאילתה אחת.</p>
+```term
+% npm run check P18-E77
+```
+<p>הבודק משנה את הנתונים ומשווה שוב.</p>
+@hint1
+<p>LEFT JOIN — כדי שגם מי שאין לו הזמנות יופיע (פרק 17, ‏P17-E10).</p>
+@hint2
+<p><code>COUNT(o.id)</code> ולא <code>COUNT(*)</code> (המלכודת מפרק 17). ‏<code>MAX(o.created_at)</code>.</p>
+@solution
+```sql run db=18-consistency/files/bank.sql save=solutions/P18-E77.sql
+SELECT p.id, p.full_name, COUNT(o.id) AS orders, MAX(o.created_at) AS last_order
+FROM people p
+LEFT JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id BETWEEN 1 AND 10
+GROUP BY p.id
+ORDER BY p.id;
+```
+```out
+ id |  full_name   | orders |       last_order
+----+--------------+--------+------------------------
+  1 | Customer #1  |    100 | 2025-12-30 12:13:20+02
+  2 | Customer #2  |    100 | 2025-12-29 22:13:23+02
+  3 | Customer #3  |    100 | 2025-12-29 08:13:26+02
+  4 | Customer #4  |    100 | 2025-12-28 18:13:29+02
+  5 | Customer #5  |    100 | 2025-12-28 04:13:32+02
+  6 | Customer #6  |    100 | 2025-12-27 14:13:35+02
+  7 | Customer #7  |    100 | 2025-12-27 00:13:38+02
+  8 | Customer #8  |    100 | 2025-12-30 01:27:01+02
+  9 | Customer #9  |    100 | 2025-12-29 11:27:04+02
+ 10 | Customer #10 |    100 | 2025-12-28 21:27:07+02
+(10 rows)
+```
+<p>שאילתה אחת במקום 20 (שתיים לכל לקוח). שים לב: לכל לקוח בנתונים יש בדיוק 100 הזמנות — לכן הבודק גם מוחק ומוסיף, כדי לוודא שהספירה באמת נספרת.</p>
+@mistakes
+<ul><li>JOIN רגיל — לקוח שמחקו לו את כל ההזמנות נעלם מהדוח.</li></ul>
+
+@@ P18-E78 | 3 | הכנסת אלפי שורות — בכמה פקודות? 🤖 | 25 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>"N+1" של כתיבה: INSERT לכל שורה. בקובץ <code>18-consistency/starter/P18-E78.ts</code> כתוב וייצא:</p>
+```ts
+export async function insertTransfers(pool: Pool, rows: { from: number; to: number; amount: number }[]): Promise<number[]>
+```
+<ul><li>מכניסה את כל השורות ל־<code>transfers</code> ומחזירה את ה־id־ים, <strong>לפי סדר הקלט</strong>.</li><li>INSERT אחד עם הרבה <code>VALUES</code> — לכל היותר 1,000 שורות בפקודה (‏2,500 שורות ← 3 פקודות INSERT). ערכים — רק כפרמטרים (<code>($1, $2, $3), ($4, $5, $6), ...</code>).</li><li>הכול ב־transaction אחד: שורה אחת לא חוקית ← אף אחת לא נכנסת, והשגיאה נזרקת. מערך ריק ← <code>[]</code> בלי לפנות למסד.</li></ul>
+<p>📄 כותבים בקובץ <code>18-consistency/starter/P18-E78.ts</code> (יש בו רק הערה), ובודקים:</p>
+```term
+% npm run check P18-E78
+```
+@hint1
+<p>חלוקה לקבוצות:</p>
+```ts
+for (let i = 0; i < rows.length; i += 1000) { const chunk = rows.slice(i, i + 1000); ... }
+```
+@hint2
+<p>לכל שורה <code>j</code> בקבוצה: <code>`($${j * 3 + 1}, $${j * 3 + 2}, $${j * 3 + 3})`</code>. ‏<code>RETURNING id</code> מחזיר את השורות בסדר שבו הוכנסו.</p>
+@solution
+```ts save=solutions/P18-E78.ts
+// P18-E78: הכנסת אלפי שורות — בכמה פקודות?
+import type { Pool } from "pg";
+
+export async function insertTransfers(pool: Pool, rows: { from: number; to: number; amount: number }[]): Promise<number[]> {
+  if (rows.length === 0) return [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ids: number[] = [];
+    for (let i = 0; i < rows.length; i += 1000) {
+      const chunk = rows.slice(i, i + 1000);
+      const values = chunk.map((_, j) => `($${j * 3 + 1}, $${j * 3 + 2}, $${j * 3 + 3})`).join(", ");
+      const params = chunk.flatMap((r) => [r.from, r.to, r.amount]);
+      const { rows: inserted } = await client.query(`INSERT INTO transfers (from_id, to_id, amount) VALUES ${values} RETURNING id`, params);
+      ids.push(...inserted.map((r) => r.id));
+    }
+    await client.query("COMMIT");
+    return ids;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+<p>2,500 שורות: 3 פקודות במקום 2,500 — מאות פעמים מהר יותר (כל פקודה היא נסיעה למסד). למה לא אחת ענקית? לפקודה יש תקרה של 65,535 פרמטרים, ופקודות ענקיות קשות למסד ולרשת — קבוצות של מאות עד אלפים הן הפשרה הנפוצה.</p>
+@mistakes
+<ul><li>לבנות את ה־VALUES עם הערכים עצמם בטקסט — "מהיר" ופתוח ל־injection (ומסוכן גם עם מספרים, אם מישהו העביר מחרוזת).</li><li>להכניס כל קבוצה ב־transaction משלה — קבוצה שלישית נכשלת, ושתי הראשונות כבר נשמרו.</li></ul>
+
+@@ P18-E79 | 2 | ‏N+1 בצד הדפדפן | 10 | יחידה 15.5, פרק 15, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>דף HTML (יחידה 15.5) מציג 20 הזמנות. ה־API מחזיר להזמנה רק <code>customerId</code>, אז ה־JavaScript בדף עושה:</p>
+```js
+const orders = await (await fetch("/api/orders?limit=20")).json();
+for (const o of orders) {
+  const c = await (await fetch(`/api/customers/${o.customerId}`)).json();
+  render(o, c.fullName);
+}
+```
+<ol><li>כמה בקשות HTTP לטעינת הדף? כמה שאילתות למסד, אם כל endpoint עושה שאילתה אחת?</li><li>למה זה גרוע עוד יותר מ־N+1 בשרת?</li><li>הצע שני תיקונים בצד ה־API (פרק 15).</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>fetch</code> בדפדפן מיחידה 15.5 ו־routes מפרק 15 — והשיעור: אותו N+1, רק שכל "שאילתה" היא עכשיו בקשת HTTP דרך האינטרנט.</p>
+@hint1
+<p>כל <code>fetch</code> בלולאה מחכה לקודם (<code>await</code>), וכל אחד עובר דרך האינטרנט — לא דרך רשת פנימית.</p>
+@hint2
+<p>מי יודע יותר טוב איזה מידע הדף צריך — הדף, או ה־API?</p>
+@solution
+<ol><li>21 בקשות HTTP ו־21 שאילתות.</li><li>כל בקשה עוברת מהטלפון של המשתמש לשרת — עשרות עד מאות מילישניות כל אחת (לעומת מילישנייה בין שרת למסד בתוך אותו data center). 20 × 80ms ברצף ≈ ‏1.6 שניות של המתנה, לפני שהמסד בכלל עבד. ועל כל בקשה — middleware, אימות, לוגים.</li><li>(א) להחזיר את מה שהמסך צריך: <code>/api/orders</code> מחזיר <code>customer: { id, fullName }</code> בתוך כל הזמנה (JOIN או batch בשרת). (ב) endpoint של batch: <code>/api/customers?ids=1,2,3</code> (עם <code>ANY($1)</code> — P18-E72), כך שהדף עושה 2 בקשות. (וזו גם הבעיה ש־GraphQL נבנה לפתור.)</li></ol>
+@mistakes
+<ul><li><code>Promise.all</code> על 20 ה־fetch־ים — הדף מהיר יותר, אבל השרת מקבל 21 בקשות מכל משתמש בבת אחת. התיקון הוא פחות בקשות.</li></ul>
+
+@@ P18-E80 | 2 | ‏N+1 בעומס: חשבון של pool | 10 | פרק 10, פרק 14, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>endpoint עם N+1 שולח 21 שאילתות לבקשה, כל אחת 2ms (כולל רשת), אחת אחרי השנייה. ל־pool יש 10 חיבורים, וכל בקשה מחזיקה חיבור אחד כל הזמן שלה. בממוצע מגיעות 300 בקשות בשנייה.</p>
+<ol><li>כמה זמן כל בקשה מחזיקה חיבור? כמה בקשות בשנייה ה־pool יכול לשרת לכל היותר?</li><li>מה קורה עם 300 בקשות בשנייה?</li><li>ואחרי התיקון לשתי שאילתות?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> async ותור של בקשות מפרק 10, זמני תגובה ו־503 מפרק 14 — והשיעור: N+1 הוא לא רק "איטי", הוא מוריד את כמות הבקשות שהשרת מסוגל לשרת.</p>
+@hint1
+<p>21 × 2ms. וכמה "חלונות" כאלה נכנסים בשנייה, בכל אחד מ־10 החיבורים?</p>
+@hint2
+<p>מה קורה לתור כשנכנסים יותר ממה שיוצא?</p>
+@solution
+<ol><li>42ms לבקשה. חיבור אחד משרת כ־1000 ÷ 42 ≈ 23 בקשות בשנייה; עשרה — כ־238 בשנייה.</li><li>נכנסות 300, יוצאות 238: התור ל־pool גדל בכ־60 בקשות בכל שנייה, וזמני התגובה עולים בלי סוף — עד timeouts ו־503. מבחוץ זה נראה כמו "המסד איטי", אבל המסד כמעט לא עובד; כולם מחכים בתור.</li><li>2 × 2ms = 4ms ← כ־2,500 בקשות בשנייה. פי עשרה יותר קיבולת, מאותו מסד ואותו שרת.</li></ol>
+@mistakes
+<ul><li>להגדיל את ה־pool ל־100 — המסד מקבל פי 10 חיבורים ותהליכים, וכל אחד מהם מריץ את אותן 21 שאילתות. מזיזים את צוואר הבקבוק, לא מורידים אותו.</li></ul>
+
+@@ P18-E81 | 2 | מה הלקוח יכול לעשות עם ה־cursor? | 10 | פרק 13, פרק 15, שיעור 4
+@lesson 4
+@part 2
+@kind understand
+@task
+<p>ה־cursor מ־P18-E76 הוא <code>base64url</code> של <code>"2025-06-01T12:00:00.000Z|100000"</code>.</p>
+<ol><li>האם הוא "מוצפן"? מה לקוח סקרן יכול לעשות איתו?</li><li>הלקוח שולח cursor שבנה בעצמו, עם <code>id</code> של הזמנה של לקוח <strong>אחר</strong>. האם הוא יקבל הזמנות שאינן שלו? למה?</li><li>מה יקרה אם <code>decodeCursor</code> לא הייתה בודקת כלום, והלקוח שולח <code>"abc"</code>?</li><li>מתי כדאי לחתום את ה־cursor (HMAC — פרק 21)?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>Buffer</code> ו־base64 מפרק 13, ולידציה של קלט מפרק 15 — והשיעור: ה־cursor הוא קלט מהמשתמש כמו כל קלט.</p>
+@hint1
+<p><code>Buffer.from(cursor, "base64url").toString()</code> — כל אחד יכול להריץ את זה.</p>
+@hint2
+<p>מה מגביל את השאילתה ללקוח הנוכחי — ה־cursor, או ה־<code>WHERE customer_id = $1</code>?</p>
+@solution
+<ol><li>לא. base64 הוא קידוד, לא הצפנה — כל אחד מפענח ורואה זמן ו־id. הוא יכול לבנות cursor משלו כדי "לקפוץ" לנקודה כלשהי בזמן.</li><li>לא. ה־cursor רק קובע <strong>מאיפה</strong> להתחיל; ה־<code>customer_id</code> מגיע מהשרת (מהמשתמש המחובר, פרק 21), וה־WHERE מסנן לפיו. הכלל: מה שקובע הרשאה — לעולם לא מתוך ה־cursor.</li><li><code>new Date("abc")</code> ← Invalid Date ← <code>pg</code> נכשל עם שגיאה פנימית ← 500. עם הבדיקה ← 400 <code>BAD_CURSOR</code>.</li><li>כשה־cursor מכיל משהו שאסור לשנות: מזהה של חיפוש שמור, פילטרים שהשרת קבע, או כשלא רוצים שלקוחות יבנו cursors בעצמם (ואז מסתמכים על הפורמט שלהם). חתימה עם סוד של השרת ← אם שינו תו — החתימה לא מתאימה.</li></ol>
+@mistakes
+<ul><li>לשים ב־cursor את <code>customer_id</code> ולסמוך עליו — "הלקוח שלח, אז זה הוא". זו פרצה מ־OWASP API Top 10 (פרק 21).</li></ul>

@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 18</a> ‹ תרגול שיעור 3</div>
   <h1>✍️ תרגול שיעור 3 — Indexes ו־EXPLAIN</h1>
-  <p class="subtitle">פרק 18 · 6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־70 דק׳</p>
+  <p class="subtitle">פרק 18 · 20 שאלות · 9 הבנה · 11 קוד · ⏱ כ־245 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,12 +21,61 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 3: Indexes ו־EXPLAIN</h2>
-  <p class="subtitle">6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־70 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־145 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P18-E04">
     <h3>P18-E04 · index או לא?</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
 <p>טבלת <code>orders</code> עם 10 מיליון שורות. לכל שאילתה — האם index יעזור, ואיזה?</p>
 <ol><li><code class="mid">WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 20</code></li><li><code>WHERE status = 'shipped'</code> (95% מההזמנות)</li><li><code class="mid">WHERE lower(coupon_code) = $1</code></li><li><code>WHERE note LIKE '%gift%'</code></li><li><code class="mid">WHERE created_at &gt;= now() - interval '1 day'</code></li><li>טבלת <code>countries</code> עם 200 שורות, <code>WHERE code = 'IL'</code></li></ol>
+
+  </div>
+<div class="ex" id="P18-E55">
+    <h3>P18-E55 · ‏index על שתי עמודות — מתי הוא עוזר?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>יש index על <code>(status, created_at)</code> בלבד. לכל אחת מארבע השאילתות — האם התוכנית תשתמש בו? נחש לפני שאתה מסתכל.</p>
+<pre><code class="lang-sql">CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' AND created_at &gt;= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'cancelled';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE created_at &gt;= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 5;</code></pre>
+
+  </div>
+<div class="ex" id="P18-E56">
+    <h3>P18-E56 · ‏index שהשאילתה "מסתירה" ממנו</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>יש index על <code>customer_id</code>. שלוש שאילתות מחפשות את אותו לקוח. לאיזו מהן המסד ישתמש ב־index?</p>
+<pre><code class="lang-sql">CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id + 0 = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id::text = '42';</code></pre>
+
+  </div>
+<div class="ex" id="P18-E57">
+    <h3>P18-E57 · איזה indexes כבר יש?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 5 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>לא יצרנו אף index על <code>shop_orders</code> ו־<code>shop_order_lines</code>. מה תחזיר השאילתה? מאיפה הגיע כל אחד — ואיזה index <strong>חסר</strong> לפי השיעור?</p>
+<pre><code class="lang-sql">SELECT tablename, indexname
+FROM pg_indexes
+WHERE schemaname = current_schema() AND tablename IN ('shop_orders', 'shop_order_lines')
+ORDER BY tablename, indexname;</code></pre>
+<p>(זכור את ההגדרות: <code>shop_orders</code> — ‏<code>id</code> מפתח ראשי ו־<code>idempotency_key ... UNIQUE</code>; ‏<code>shop_order_lines</code> — ‏<code class="mid">PRIMARY KEY (order_id, product_id)</code> ו־FK ל־<code>catalog</code>.)</p>
+
+  </div>
+<div class="ex" id="P18-E58">
+    <h3>P18-E58 · למה המסד מתעלם מה־index?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>שתי שאילתות על מפתח ראשי — כלומר יש index. מה תהיה כל תוכנית? איך יכול להיות שהמסד בוחר לא להשתמש ב־index שקיים?</p>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF) SELECT owner FROM accounts WHERE id = 2;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id &gt; 1000;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id &gt; 199000;</code></pre>
+
+  </div>
+<div class="ex" id="P18-E59">
+    <h3>P18-E59 · באיזה סדר העמודות?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>"ההזמנות של לקוח X מהחודש האחרון": <code class="mid">WHERE customer_id = $1 AND created_at &gt;= $2</code>. שתי הצעות:</p>
+<ol><li><code class="mid">CREATE INDEX ON big_orders (customer_id, created_at);</code></li><li><code class="mid">CREATE INDEX ON big_orders (created_at, customer_id);</code></li></ol>
+<p>איזה עדיף לשאילתה הזו, ולמה? ואיזה מהם עוזר גם ל־<code>WHERE customer_id = $1</code> לבד?</p>
 
   </div>
 <div class="ex" id="P18-E11">
@@ -59,7 +108,103 @@
 <p>בקובץ <code class="mid">18-consistency/starter/P18-E22.sql</code> יש index על <code>created_at</code>, ושאילתה של "הזמנות מ־1 ביוני 2025" (לפי שעון ישראל). השאילתה מחזירה את התוצאה הנכונה — אבל סורקת את כל הטבלה. תקן את <strong>השאילתה</strong> (לא את ה־index) כך שתשתמש בו ותחזיר אותן שורות.</p>
 
   </div>
+<div class="ex typed" id="P18-E60">
+    <h3>P18-E60 · ‏index לחיפוש לפי סכום 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type warmup">🔥 חימום</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 5 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>שירות הלקוחות מחפש הזמנה לפי הסכום ששולם: <code class="mid">SELECT id, customer_id FROM big_orders WHERE total = $1</code>. בקובץ <code class="mid">18-consistency/starter/P18-E60.sql</code> צור index אחד כך שהשאילתה לא תסרוק את הטבלה.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E60</pre>
 
+  </div>
+<div class="ex" id="P18-E61">
+    <h3>P18-E61 · ‏"ההזמנות ששולמו" של לקוח 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>המסך "ההזמנות ששולמו ומחכות למשלוח" של לקוח מריץ:</p>
+<pre><code class="lang-sql">SELECT id, total, created_at FROM big_orders
+WHERE customer_id = $1 AND status = 'paid'
+ORDER BY created_at DESC LIMIT 5;</code></pre>
+<p>בקובץ <code class="mid">18-consistency/starter/P18-E61.sql</code> צור index אחד, כך שהתוכנית תשתמש בו <strong>בלי</strong> שלב מיון (<code>Sort</code>).</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E61</pre>
+
+  </div>
+<div class="ex" id="P18-E62">
+    <h3>P18-E62 · בעלים ייחודי — רק לחשבונות פתוחים 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 3</span></div>
+<p>חשבון שנסגר נשאר במסד (היסטוריה), ומותר לפתוח לאותו אדם חשבון חדש. אבל לא שני חשבונות <strong>פתוחים</strong> לאותו בעלים (בלי תלות באותיות). בקובץ <code class="mid">18-consistency/starter/P18-E62.sql</code>:</p>
+<ol><li>הוסף ל־<code>accounts</code> עמודה <code>closed_at timestamptz</code> (לא חובה; NULL = פתוח).</li><li>צור index ייחודי <strong>חלקי</strong> שאוכף את הכלל.</li></ol>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E62</pre>
+
+  </div>
+  <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
+  <p class="subtitle">6 שאלות · 3 הבנה · 3 קוד · ⏱ כ־100 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P18-E63">
+    <h3>P18-E63 · חיפוש "מכיל" ב־endpoint</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 15, פרק 16, שיעור 3</span></div>
+<p>ל־<code>GET /customers?q=...</code> (פרק 15) יש שאילתה עם <code>ILIKE</code> (פרק 16). הטבלה גדלה למיליון לקוחות, ויש index על <code>full_name</code>. מה התוכנית של כל אחת?</p>
+<pre><code class="lang-sql">CREATE INDEX people_full_name_idx ON people (full_name);
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name = 'Customer #4242';
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name ILIKE '%4242%';</code></pre>
+<p>ומה אפשר לעשות כדי שהחיפוש יהיה מהיר?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> query string מפרק 15 ו־<code>ILIKE</code> מפרק 16 — והשיעור: <code>LIKE '%...'</code> בטבלת ה"לא יעזור".</p>
+
+  </div>
+<div class="ex" id="P18-E64">
+    <h3>P18-E64 · ‏JOIN ו־index על ה־FK</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 17, שיעור 3</span></div>
+<p>"ההזמנות של הלקוח עם השם X" — JOIN מפרק 17 בין <code>people</code> ל־<code>big_orders</code>. מה התוכנית לפני ה־index ואחריו? באיזה צד של ה־JOIN ה־index חשוב?</p>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> JOIN על FK מפרק 17 — והשיעור: PostgreSQL לא יוצר index ל־FK אוטומטית.</p>
+
+  </div>
+<div class="ex" id="P18-E65">
+    <h3>P18-E65 · ‏"עמוד 1 מתוך 10,000" — כמה עולה המספר?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 16, שיעור 3</span></div>
+<p>כל טעינה של רשימת ההזמנות מציגה "עמוד 1 מתוך N" — ולשם כך מריצה <code class="mid">SELECT COUNT(*) FROM big_orders</code>. מה התוכנית? האם index יעזור? הצע חלופה לממשק.</p>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders;
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders WHERE customer_id = 42;
+SELECT reltuples::bigint AS estimate FROM pg_class WHERE oid = 'big_orders'::regclass;</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>COUNT</code> ו־<code>LIMIT/OFFSET</code> מפרק 16 — והשיעור: מה index יכול ומה לא.</p>
+
+  </div>
+<div class="ex" id="P18-E66">
+    <h3>P18-E66 · האם השאילתה משתמשת ב־index? — בקוד 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 7, פרק 13, פרק 16, שיעור 3</span></div>
+<p>כלי לבדיקות אוטומטיות: "השאילתה הזו לא סורקת את הטבלה". ‏<code>EXPLAIN (FORMAT JSON)</code> מחזיר את התוכנית כעץ: כל צומת עם <code>"Node Type"</code>, ולפעמים <code>"Relation Name"</code> ו־<code>"Index Name"</code>, וילדים ב־<code>"Plans"</code>. בקובץ <code class="mid">18-consistency/starter/P18-E66.ts</code> כתוב וייצא:</p>
+<pre><code class="lang-ts">export type PlanSummary = { nodes: string[]; seqScans: string[]; indexes: string[] };
+export async function planSummary(pool: Pool, sql: string, params?: unknown[]): Promise&lt;PlanSummary&gt;</code></pre>
+<ul><li>מריצה <code>EXPLAIN (FORMAT JSON) </code> + השאילתה (עם הפרמטרים). ה־JSON מגיע בשורה הראשונה, בעמודה <code>"QUERY PLAN"</code>; התוכנית — ב־<code>[0].Plan</code>.</li><li><code>nodes</code> — כל ה־<code>Node Type</code> בעץ, לפי סדר "קודם הצומת, אחר כך הילדים שלו לפי הסדר".</li><li><code>seqScans</code> — ה־<code>Relation Name</code> של כל צומת <code>Seq Scan</code>. ‏<code>indexes</code> — כל <code>Index Name</code> בעץ, בלי כפילויות.</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E66.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E66</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> רקורסיה על אובייקטים מקוננים (פרק 7), JSON (פרק 13), ‏<code>pool.query</code> עם פרמטרים (פרק 16) — והשיעור: לקרוא תוכנית, הפעם בקוד.</p>
+
+  </div>
+<div class="ex" id="P18-E67">
+    <h3>P18-E67 · ‏"index" ממוין בזיכרון 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 5, פרק 6, פרק 11, שיעור 3</span></div>
+<p>מה B-tree עושה, בקטן: מערך ממוין וחיפוש בינארי — במקום לעבור על הכול. בקובץ <code class="mid">18-consistency/starter/P18-E67.ts</code> כתוב וייצא:</p>
+<pre><code class="lang-ts">export function createIndex&lt;T&gt;(rows: T[], key: (row: T) =&gt; number): { eq(value: number): T[]; range(from: number, to: number): T[]; comparisons(): number }</code></pre>
+<ul><li>בזמן היצירה — ממיינת <strong>עותק</strong> של השורות לפי <code>key</code> (המקור לא משתנה). בשוויון — הסדר המקורי נשמר.</li><li><code>eq(v)</code> — כל השורות עם <code>key === v</code>. ‏<code>range(from, to)</code> — כל השורות עם <code>from &lt;= key &lt; to</code>. שתיהן לפי הסדר הממוין.</li><li>החיפוש — בינארי: <code>comparisons()</code> מחזירה כמה השוואות של מפתחות נעשו בחיפושים עד עכשיו (בלי המיון). הבודק מוודא שעל 100,000 שורות, <code>eq</code> עושה לכל היותר 40 השוואות (ולא 100,000).</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E67.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E67</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> closures (פרק 5), ‏<code>sort</code> ו־<code>slice</code> (פרק 6), generics (פרק 11) — והשיעור: למה index מוצא 100 שורות מתוך 200,000 בכמה קפיצות.</p>
+
+  </div>
+<div class="ex" id="P18-E68">
+    <h3>P18-E68 · דוח יומי לשבוע, עם index 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: פרק 17, שיעור 3</span></div>
+<p>דוח: לכל יום בשבוע הראשון של יוני 2025 (<code>created_at &gt;= '2025-06-01'</code> ו־<code>&lt; '2025-06-08'</code>), בלי מבוטלות — <code>day</code> (תאריך), ‏<code>orders</code>, ‏<code>revenue</code> (סכום <code>total</code>) — לפי יום. בקובץ <code class="mid">18-consistency/starter/P18-E68.sql</code>:</p>
+<ol><li>צור index שיאפשר למסד למצוא את השבוע הזה בלי לסרוק את כל 200,000 השורות.</li><li>כתוב את השאילתה (הפקודה האחרונה בקובץ).</li></ol>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E68</pre>
+<p>הבודק משווה את התוצאה, ובודק שהתוכנית של השאילתה שלך משתמשת ב־index.</p>
+
+  </div>
 <div class="pager"><a href="lesson-03-indexes.html"><small>חזרה לשיעור</small>שיעור 3 — Indexes ו־EXPLAIN</a><a href="lesson-04-performance.html"><small>הבא</small>שיעור 4 — N+1 ו־pagination מהירה</a></div>
 </main>
 </body>

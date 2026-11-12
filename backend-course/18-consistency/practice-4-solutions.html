@@ -48,6 +48,173 @@ for (const o of orders) {
 
 </div></details>
   </div>
+<div class="ex" id="P18-E69">
+    <h3>P18-E69 · למצוא N+1 ביומן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אותה שאילתה, עם פרמטר שונה, פעם לכל שורה מהשאילתה הראשונה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שים לב גם ל־1544 שמופיע פעמיים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>שאילתה לרשימה, ואז לולאה עם <code>await</code> ששולפת את שם הלקוח לכל הזמנה — N+1. ב־<code>limit=50</code>: ‏51 שאילתות. ולקוח שמופיע פעמיים נשלף פעמיים. אחרי תיקון — אחת משתיים:</p>
+<pre class="terminal"><span class="dim">SELECT o.id, o.total, p.full_name FROM big_orders o JOIN people p ON p.id = o.customer_id ORDER BY o.created_at DESC LIMIT 4</span></pre>
+<p>או שתיים (ה־id־ים <strong>בלי כפילויות</strong>, ב־<code>ANY</code>):</p>
+<pre class="terminal"><span class="dim">SELECT id, customer_id, total FROM big_orders ORDER BY created_at DESC LIMIT 4</span>
+<span class="dim">SELECT id, full_name FROM people WHERE id = ANY($1)   [[1544, 1463, 1302]]</span></pre>
+<p>הסימן ביומן תמיד אותו סימן: "גל" של שאילתות זהות שרק הפרמטר משתנה בהן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"כל שאילתה לוקחת מילישנייה" — וכל אחת היא גם נסיעה ברשת ותור ב־pool. 51 קטנות איטיות מאחת בינונית.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E70">
+    <h3>P18-E70 · ‏OFFSET ושורה חדשה בין עמודים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>OFFSET 3 = "דלג על 3 הראשונות <strong>עכשיו</strong>". מי הן עכשיו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־cursor אומר "אחרי מה שכבר ראיתי" — שורה חדשה בראש לא משנה אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE feed (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, body text NOT NULL);
+INSERT INTO feed (body) SELECT 'post ' || i FROM generate_series(1, 8) AS i;
+
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 0;      -- עמוד 1
+INSERT INTO feed (body) VALUES ('post 9 (new)');
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 3;      -- עמוד 2, עם OFFSET
+SELECT id, body FROM feed WHERE id &lt; 6 ORDER BY id DESC LIMIT 3;  -- עמוד 2, עם cursor (האחרון בעמוד 1 היה 6)</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 8
+ id |  body
+----+--------
+  8 | post 8
+  7 | post 7
+  6 | post 6
+(3 rows)
+
+INSERT 0 1
+ id |  body
+----+--------
+  6 | post 6
+  5 | post 5
+  4 | post 4
+(3 rows)
+
+ id |  body
+----+--------
+  5 | post 5
+  4 | post 4
+  3 | post 3
+(3 rows)</pre>
+<p>עם OFFSET, ההודעה החדשה "דחפה" הכול אחד למטה — ו־post 6 מופיע שוב בראש עמוד 2. (ובמחיקה — הפוך: שורה מדלגת ולא מוצגת אף פעם.) עם cursor — בדיוק ההמשך.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם הסרת כפילויות ב־frontend — מטפל בהוספה, לא במחיקה (שורות שנעלמות).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E71">
+    <h3>P18-E71 · ‏cursor בלי שובר שוויון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האחרון בעמוד 1 הוא d (12:00, id 4). מה עוד יש ב־12:00?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>(a, b) &lt; (x, y)</code> — כמו השוואת מילים במילון: קודם a מול x; אם שווים — b מול y.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE posts (id integer PRIMARY KEY, title text, created_at timestamptz);
+INSERT INTO posts VALUES (1, 'a', '2026-01-01 10:00+02'), (2, 'b', '2026-01-01 11:00+02'),
+  (3, 'c', '2026-01-01 12:00+02'), (4, 'd', '2026-01-01 12:00+02'), (5, 'e', '2026-01-01 13:00+02');
+
+SELECT id, title FROM posts ORDER BY created_at DESC, id DESC LIMIT 2;           -- עמוד 1: e, d
+SELECT id, title FROM posts
+WHERE created_at &lt; '2026-01-01 12:00+02'
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, רק לפי זמן
+SELECT id, title FROM posts
+WHERE (created_at, id) &lt; ('2026-01-01 12:00+02', 4)
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, עם שובר שוויון</code></pre>
+<pre class="terminal">CREATE TABLE
+INSERT 0 5
+ id | title
+----+-------
+  5 | e
+  4 | d
+(2 rows)
+
+ id | title
+----+-------
+  2 | b
+  1 | a
+(2 rows)
+
+ id | title
+----+-------
+  3 | c
+  2 | b
+(2 rows)</pre>
+<p>"רק לפי זמן" דילג על c — היא לא "לפני 12:00", היא <em>ב־</em>12:00. השוואת זוגות שואלת "האם השורה באה אחרי (12:00, 4) בסדר המיון" — ו־c (12:00, 3) באה. בגלל זה ה־cursor הוא שני ערכים, וה־ORDER BY חייב לכלול את שובר השוויון. (ו־P18-E31: כל השורות של transaction אחד מקבלות אותו <code>now()</code> — שוויון ב־<code>created_at</code> נפוץ יותר משנדמה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>&lt;=</code> במקום <code>&lt;</code> ב"רק לפי זמן" — עכשיו d (שכבר הוצג) חוזר. אין דרך נכונה בלי שובר שוויון.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E72">
+    <h3>P18-E72 · ‏ANY($1) מול IN משורשר <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה יקרה ב־א׳ כש־<code>ids</code> ריק? וכש־ids הגיעו מה־query string?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ב׳, <code>pg</code> שולח מערך JavaScript כפרמטר אחד מסוג מערך של PostgreSQL.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>א׳</strong>: (1) <code>ids = []</code> ← <code>IN ()</code> — שגיאת תחביר. (2) אם ids הגיעו מהמשתמש (<code>?ids=1,2)%20OR%20(1=1</code>) — SQL injection. (3) לכל אורך רשימה טקסט שאילתה אחר — המסד לא יכול למחזר תוכניות, ויומני השאילתות מתמלאים בגרסאות.</li><li><strong>ב׳</strong>: טקסט שאילתה אחד תמיד, ופרמטר אחד — מערך. ריק ← אפס שורות, בלי שגיאה. אותו טקסט ל־3 ול־500 id־ים, והערכים לעולם לא הופכים לקוד.</li></ul>
+<p>זה מה שהשיעור השתמש בו בתיקון של N+1, ומה ש־<code>WHERE id IN</code> של ORMs מייצר מאחורי הקלעים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ids הם מספרים, אז אין injection" — רק אם <strong>וידאת</strong> שהם מספרים (Zod). ב־ב׳ לא צריך לסמוך על זה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E73">
+    <h3>P18-E73 · ‏JOIN או שתי שאילתות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>JOIN של אחד־לרבים מחזיר שורה לכל <strong>הזמנה</strong> — עם כל עמודות הלקוח בכל אחת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>20 × 100 = ?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>JOIN: ‏2,000 שורות, וכל <code>bio</code> עובר 100 פעמים — 20 × 100 × 5KB ≈ 10MB של כפילויות, רק בשביל הביו.</li><li>שתי שאילתות: 20 + 2,000 שורות; כל <code>bio</code> פעם אחת. נסיעה אחת נוספת למסד.</li></ol>
+<p>כשהצד ה"אחד" צר והקשר קטן (הזמנה ← הלקוח שלה; שם, אימייל) — JOIN. כשהצד ה"אחד" רחב או שיש כמה קשרים של "רבים" (לקוח ← הזמנות <strong>וגם</strong> כתובות — JOIN של שניהם הוא מכפלה, P17-E03) — שאילתה לכל קשר. זה בדיוק מה ש־Prisma עושה עם <code>include</code> (פרק 19).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"JOIN תמיד מהיר יותר כי זו שאילתה אחת" — לא כשהוא מכפיל את הנתונים שעוברים ברשת פי מאה.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P18-E17">
     <h3>P18-E17 · בלי N+1 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -139,6 +306,411 @@ export async function customersWithOrderCounts(pool: Pool, ids: number[]) {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>countById.get(id)</code> בלי <code>?? 0</code> — לקוח בלי הזמנות יקבל <code>undefined</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E74">
+    <h3>P18-E74 · העמוד הבא, אחרי (זמן, id) 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">ORDER BY created_at DESC, id DESC</code> ← index על <code>(created_at, id)</code> — המסד יקרא אותו מהסוף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">WHERE (created_at, id) &lt; ('2025-06-01 12:00:00+00', 100000)</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_created_id_idx ON big_orders (created_at, id);
+
+SELECT id, created_at, total
+FROM big_orders
+WHERE (created_at, id) &lt; ('2025-06-01 12:00:00+00', 100000)
+ORDER BY created_at DESC, id DESC
+LIMIT 10;</code></pre>
+<pre class="terminal">CREATE INDEX
+  id   |       created_at       | total
+-------+------------------------+--------
+ 83373 | 2025-06-01 14:59:21+03 | 358.01
+ 83372 | 2025-06-01 14:56:44+03 | 357.64
+ 83371 | 2025-06-01 14:54:07+03 | 357.27
+ 83370 | 2025-06-01 14:51:30+03 | 356.90
+ 83369 | 2025-06-01 14:48:53+03 | 356.53
+ 83368 | 2025-06-01 14:46:16+03 | 356.16
+ 83367 | 2025-06-01 14:43:39+03 | 355.79
+ 83366 | 2025-06-01 14:41:02+03 | 355.42
+ 83365 | 2025-06-01 14:38:25+03 | 355.05
+ 83364 | 2025-06-01 14:35:48+03 | 354.68
+(10 rows)</pre>
+<p>שלושה חלקים שחייבים להתאים: ה־ORDER BY, ההשוואה ב־WHERE (אותן עמודות, אותו סדר), וה־index. כשהם מתאימים — המסד קופץ ב־index לנקודה וקורא 10 שורות, בעמוד 1 כמו בעמוד 10,000.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">WHERE created_at &lt; ... OR (created_at = ... AND id &lt; ...)</code> — נכון לוגית, אבל קשה יותר לקרוא, ובגרסאות ישנות המסד לא תמיד ידע להשתמש ב־index.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E75">
+    <h3>P18-E75 · הזמנות עם השורות שלהן — שתי שאילתות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">WHERE l.order_id = ANY($1) ORDER BY l.order_id, c.name</code> — ואז <code>Map</code> של order_id ← מערך שורות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לסדר הסופי: <code>[...new Set(orderIds)]</code>, ולכל id — ה־<code>Map</code> של ההזמנות (ודילוג אם אין).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E75: הזמנות עם השורות שלהן — שתי שאילתות
+import type { Pool } from "pg";
+
+export type OrderWithLines = { id: number; total: number; lines: { product: string; quantity: number; unitPrice: number }[] };
+
+export async function ordersWithLines(pool: Pool, orderIds: number[]): Promise&lt;OrderWithLines[]&gt; {
+  if (orderIds.length === 0) return [];
+  const ids = [...new Set(orderIds)];
+  const orders = await pool.query("SELECT id, total FROM shop_orders WHERE id = ANY($1)", [ids]);
+  const lines = await pool.query(
+    `SELECT l.order_id, c.name AS product, l.quantity, l.unit_price
+     FROM shop_order_lines l JOIN catalog c ON c.id = l.product_id
+     WHERE l.order_id = ANY($1)
+     ORDER BY l.order_id, c.name`,
+    [ids],
+  );
+  const byOrder = new Map&lt;number, OrderWithLines["lines"]&gt;();
+  for (const l of lines.rows) {
+    if (!byOrder.has(l.order_id)) byOrder.set(l.order_id, []);
+    byOrder.get(l.order_id)!.push({ product: l.product, quantity: l.quantity, unitPrice: Number(l.unit_price) });
+  }
+  const found = new Map&lt;number, number&gt;(orders.rows.map((o) =&gt; [o.id, Number(o.total)]));
+  return ids.filter((id) =&gt; found.has(id)).map((id) =&gt; ({ id, total: found.get(id)!, lines: byOrder.get(id) ?? [] }));
+}</code></pre>
+<p>מספר השאילתות לא תלוי בכמות — זה כל העניין. הסדר מגיע מ־<code>orderIds</code> (ולא מהמסד, שמחזיר את <code>ANY</code> בסדר כלשהו).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על הסדר של <code>ANY</code> — המסד לא מבטיח סדר בלי ORDER BY.</li><li>JOIN אחד של שלוש הטבלאות — אפשרי, אבל אז צריך לקבץ שורות שטוחות (P17-E55), והזמנה בלי שורות דורשת LEFT JOIN.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E76">
+    <h3>P18-E76 · פיד עם cursor אטום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Buffer.from(cursor, "base64url").toString()</code>, ‏<code>split("|")</code>, ‏<code>new Date(...)</code> ו־<code>Number.isNaN(d.getTime())</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי גרסאות של WHERE: עם cursor — <code class="mid">customer_id = $1 AND (created_at, id) &lt; ($2, $3)</code>; בלי — רק <code>customer_id = $1</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E76: פיד עם cursor אטום
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export function encodeCursor(createdAt: Date, id: number): string {
+  return Buffer.from(`${createdAt.toISOString()}|${id}`).toString("base64url");
+}
+
+export function decodeCursor(cursor: string): { createdAt: Date; id: number } {
+  const [iso, idText, ...rest] = Buffer.from(cursor, "base64url").toString().split("|");
+  const createdAt = new Date(iso);
+  const id = Number(idText);
+  if (rest.length &gt; 0 || !iso || Number.isNaN(createdAt.getTime()) || !Number.isInteger(id) || id &lt;= 0) throw new AppError("BAD_CURSOR");
+  return { createdAt, id };
+}
+
+export async function feed(pool: Pool, { customerId, cursor, limit = 20 }: { customerId: number; cursor?: string; limit?: number }) {
+  if (!Number.isInteger(limit) || limit &lt; 1 || limit &gt; 100) throw new AppError("BAD_LIMIT");
+  const params: unknown[] = [customerId];
+  let where = "customer_id = $1";
+  if (cursor !== undefined) {
+    const c = decodeCursor(cursor);
+    params.push(c.createdAt, c.id);
+    where += " AND (created_at, id) &lt; ($2, $3)";
+  }
+  params.push(limit + 1);
+  const { rows } = await pool.query(
+    `SELECT id, total, created_at FROM big_orders WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT $${params.length}`,
+    params,
+  );
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    data: page.map((r) =&gt; ({ id: r.id, total: Number(r.total) })),
+    nextCursor: rows.length &gt; limit &amp;&amp; last ? encodeCursor(last.created_at, last.id) : null,
+  };
+}</code></pre>
+<p>‏<code>limit + 1</code> עונה על "יש עוד?" בלי שאילתת COUNT (P18-E65). ה־cursor האטום נותן חופש: מחר אפשר לשנות את המיון או להוסיף שדה, והלקוחות לא נשברים — הם רק מעבירים את המחרוזת חזרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>nextCursor</code> תמיד (גם בעמוד האחרון) — הלקוח מבקש עוד עמוד ומקבל ריק. עובד, אבל בקשה מיותרת בכל רשימה.</li><li>לסמוך על ה־cursor בלי לבדוק — <code>new Date("garbage")</code> הוא Invalid Date, ו־<code>pg</code> נכשל בשגיאה לא ברורה (500 במקום 400).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E77">
+    <h3>P18-E77 · לקוחות עם ספירת הזמנות — בשאילתה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>LEFT JOIN — כדי שגם מי שאין לו הזמנות יופיע (פרק 17, ‏P17-E10).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>COUNT(o.id)</code> ולא <code>COUNT(*)</code> (המלכודת מפרק 17). ‏<code>MAX(o.created_at)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT p.id, p.full_name, COUNT(o.id) AS orders, MAX(o.created_at) AS last_order
+FROM people p
+LEFT JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id BETWEEN 1 AND 10
+GROUP BY p.id
+ORDER BY p.id;</code></pre>
+<pre class="terminal"> id |  full_name   | orders |       last_order
+----+--------------+--------+------------------------
+  1 | Customer #1  |    100 | 2025-12-30 12:13:20+02
+  2 | Customer #2  |    100 | 2025-12-29 22:13:23+02
+  3 | Customer #3  |    100 | 2025-12-29 08:13:26+02
+  4 | Customer #4  |    100 | 2025-12-28 18:13:29+02
+  5 | Customer #5  |    100 | 2025-12-28 04:13:32+02
+  6 | Customer #6  |    100 | 2025-12-27 14:13:35+02
+  7 | Customer #7  |    100 | 2025-12-27 00:13:38+02
+  8 | Customer #8  |    100 | 2025-12-30 01:27:01+02
+  9 | Customer #9  |    100 | 2025-12-29 11:27:04+02
+ 10 | Customer #10 |    100 | 2025-12-28 21:27:07+02
+(10 rows)</pre>
+<p>שאילתה אחת במקום 20 (שתיים לכל לקוח). שים לב: לכל לקוח בנתונים יש בדיוק 100 הזמנות — לכן הבודק גם מוחק ומוסיף, כדי לוודא שהספירה באמת נספרת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>JOIN רגיל — לקוח שמחקו לו את כל ההזמנות נעלם מהדוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E78">
+    <h3>P18-E78 · הכנסת אלפי שורות — בכמה פקודות? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חלוקה לקבוצות:</p>
+<pre><code class="lang-ts">for (let i = 0; i &lt; rows.length; i += 1000) { const chunk = rows.slice(i, i + 1000); ... }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לכל שורה <code>j</code> בקבוצה: <code><code class="mid">($${j * 3 + 1}, $${j * 3 + 2}, $${j * 3 + 3})</code></code>. ‏<code>RETURNING id</code> מחזיר את השורות בסדר שבו הוכנסו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E78: הכנסת אלפי שורות — בכמה פקודות?
+import type { Pool } from "pg";
+
+export async function insertTransfers(pool: Pool, rows: { from: number; to: number; amount: number }[]): Promise&lt;number[]&gt; {
+  if (rows.length === 0) return [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ids: number[] = [];
+    for (let i = 0; i &lt; rows.length; i += 1000) {
+      const chunk = rows.slice(i, i + 1000);
+      const values = chunk.map((_, j) =&gt; `($${j * 3 + 1}, $${j * 3 + 2}, $${j * 3 + 3})`).join(", ");
+      const params = chunk.flatMap((r) =&gt; [r.from, r.to, r.amount]);
+      const { rows: inserted } = await client.query(`INSERT INTO transfers (from_id, to_id, amount) VALUES ${values} RETURNING id`, params);
+      ids.push(...inserted.map((r) =&gt; r.id));
+    }
+    await client.query("COMMIT");
+    return ids;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>2,500 שורות: 3 פקודות במקום 2,500 — מאות פעמים מהר יותר (כל פקודה היא נסיעה למסד). למה לא אחת ענקית? לפקודה יש תקרה של 65,535 פרמטרים, ופקודות ענקיות קשות למסד ולרשת — קבוצות של מאות עד אלפים הן הפשרה הנפוצה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבנות את ה־VALUES עם הערכים עצמם בטקסט — "מהיר" ופתוח ל־injection (ומסוכן גם עם מספרים, אם מישהו העביר מחרוזת).</li><li>להכניס כל קבוצה ב־transaction משלה — קבוצה שלישית נכשלת, ושתי הראשונות כבר נשמרו.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P18-E79">
+    <h3>P18-E79 · ‏N+1 בצד הדפדפן <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל <code>fetch</code> בלולאה מחכה לקודם (<code>await</code>), וכל אחד עובר דרך האינטרנט — לא דרך רשת פנימית.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי יודע יותר טוב איזה מידע הדף צריך — הדף, או ה־API?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>21 בקשות HTTP ו־21 שאילתות.</li><li>כל בקשה עוברת מהטלפון של המשתמש לשרת — עשרות עד מאות מילישניות כל אחת (לעומת מילישנייה בין שרת למסד בתוך אותו data center). 20 × 80ms ברצף ≈ ‏1.6 שניות של המתנה, לפני שהמסד בכלל עבד. ועל כל בקשה — middleware, אימות, לוגים.</li><li>(א) להחזיר את מה שהמסך צריך: <code>/api/orders</code> מחזיר <code>customer: { id, fullName }</code> בתוך כל הזמנה (JOIN או batch בשרת). (ב) endpoint של batch: <code>/api/customers?ids=1,2,3</code> (עם <code>ANY($1)</code> — P18-E72), כך שהדף עושה 2 בקשות. (וזו גם הבעיה ש־GraphQL נבנה לפתור.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Promise.all</code> על 20 ה־fetch־ים — הדף מהיר יותר, אבל השרת מקבל 21 בקשות מכל משתמש בבת אחת. התיקון הוא פחות בקשות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E80">
+    <h3>P18-E80 · ‏N+1 בעומס: חשבון של pool <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>21 × 2ms. וכמה "חלונות" כאלה נכנסים בשנייה, בכל אחד מ־10 החיבורים?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה קורה לתור כשנכנסים יותר ממה שיוצא?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>42ms לבקשה. חיבור אחד משרת כ־1000 ÷ 42 ≈ 23 בקשות בשנייה; עשרה — כ־238 בשנייה.</li><li>נכנסות 300, יוצאות 238: התור ל־pool גדל בכ־60 בקשות בכל שנייה, וזמני התגובה עולים בלי סוף — עד timeouts ו־503. מבחוץ זה נראה כמו "המסד איטי", אבל המסד כמעט לא עובד; כולם מחכים בתור.</li><li>2 × 2ms = 4ms ← כ־2,500 בקשות בשנייה. פי עשרה יותר קיבולת, מאותו מסד ואותו שרת.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל את ה־pool ל־100 — המסד מקבל פי 10 חיבורים ותהליכים, וכל אחד מהם מריץ את אותן 21 שאילתות. מזיזים את צוואר הבקבוק, לא מורידים אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E81">
+    <h3>P18-E81 · מה הלקוח יכול לעשות עם ה־cursor? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Buffer.from(cursor, "base64url").toString()</code> — כל אחד יכול להריץ את זה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה מגביל את השאילתה ללקוח הנוכחי — ה־cursor, או ה־<code>WHERE customer_id = $1</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא. base64 הוא קידוד, לא הצפנה — כל אחד מפענח ורואה זמן ו־id. הוא יכול לבנות cursor משלו כדי "לקפוץ" לנקודה כלשהי בזמן.</li><li>לא. ה־cursor רק קובע <strong>מאיפה</strong> להתחיל; ה־<code>customer_id</code> מגיע מהשרת (מהמשתמש המחובר, פרק 21), וה־WHERE מסנן לפיו. הכלל: מה שקובע הרשאה — לעולם לא מתוך ה־cursor.</li><li><code>new Date("abc")</code> ← Invalid Date ← <code>pg</code> נכשל עם שגיאה פנימית ← 500. עם הבדיקה ← 400 <code>BAD_CURSOR</code>.</li><li>כשה־cursor מכיל משהו שאסור לשנות: מזהה של חיפוש שמור, פילטרים שהשרת קבע, או כשלא רוצים שלקוחות יבנו cursors בעצמם (ואז מסתמכים על הפורמט שלהם). חתימה עם סוד של השרת ← אם שינו תו — החתימה לא מתאימה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים ב־cursor את <code>customer_id</code> ולסמוך עליו — "הלקוח שלח, אז זה הוא". זו פרצה מ־OWASP API Top 10 (פרק 21).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E24">
+    <h3>P18-E24 · אתגר: checkout אמיתי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בדיקת מפתח קיים בהתחלה + UNIQUE על <code>idempotency_key</code> לטיפול במרוץ: אם ה־INSERT של ההזמנה נכשל ב־<code>23505</code> — ROLLBACK, ואז קרא את ההזמנה הקיימת והחזר אותה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>סדר: מאחדים items ← BEGIN ← SELECT ... FOR UPDATE לכל המוצרים ← בדיקות ← INSERT להזמנה ← שורות ← עדכוני מלאי ← COMMIT.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E24
+import type { Pool } from "pg";
+
+export class AppError extends Error {
+  code: string;
+  productId?: number;
+  constructor(code: string, message = code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+interface Item { productId: number; quantity: number }
+
+async function existingOrder(pool: Pool, key: string) {
+  const { rows } = await pool.query("SELECT id, total FROM shop_orders WHERE idempotency_key = $1", [key]);
+  return rows[0] &amp;&amp; { orderId: rows[0].id, total: Number(rows[0].total), replayed: true };
+}
+
+export async function checkout(pool: Pool, { customerId, items, idempotencyKey }: { customerId: number; items: Item[]; idempotencyKey: string }) {
+  if (items.length === 0) throw new AppError("EMPTY_CART");
+  const before = await existingOrder(pool, idempotencyKey);
+  if (before) return before;
+
+  const qty = new Map&lt;number, number&gt;();
+  for (const i of items) qty.set(i.productId, (qty.get(i.productId) ?? 0) + i.quantity);
+  const ids = [...qty.keys()].sort((a, b) =&gt; a - b);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: products } = await client.query("SELECT id, price, stock FROM catalog WHERE id = ANY($1) ORDER BY id FOR UPDATE", [ids]);
+    if (products.length !== ids.length) throw new AppError("PRODUCT_NOT_FOUND");
+    for (const p of products) {
+      if (p.stock &lt; qty.get(p.id)!) {
+        const err = new AppError("OUT_OF_STOCK");
+        err.productId = p.id;
+        throw err;
+      }
+    }
+    const total = products.reduce((sum, p) =&gt; sum + Number(p.price) * qty.get(p.id)!, 0);
+    let orderId: number;
+    try {
+      const { rows } = await client.query(
+        "INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES ($1, $2, $3) RETURNING id",
+        [customerId, idempotencyKey, total.toFixed(2)]
+      );
+      orderId = rows[0].id;
+    } catch (err) {
+      if ((err as { code?: string }).code !== "23505") throw err;
+      await client.query("ROLLBACK");
+      return (await existingOrder(pool, idempotencyKey))!; // בקשה מקבילה עם אותו מפתח ניצחה
+    }
+    for (const p of products) {
+      await client.query("INSERT INTO shop_order_lines (order_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4)", [orderId, p.id, qty.get(p.id), p.price]);
+      await client.query("UPDATE catalog SET stock = stock - $1 WHERE id = $2", [qty.get(p.id), p.id]);
+    }
+    await client.query("COMMIT");
+    return { orderId, total: Number(total.toFixed(2)), replayed: false };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>זה הלב של פרויקט הדגל, בגרסה מוקטנת. (ROLLBACK כפול — אחד ב־catch הפנימי ואחד בחיצוני — לא קורה, כי ה־return יוצא לפני. אבל אם תשנה את הזרימה, שים לב: ROLLBACK בלי transaction פתוח מחזיר רק אזהרה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק idempotency רק בהתחלה — שתי לחיצות באותה מילישנייה עוברות שתיהן את הבדיקה. ה־UNIQUE הוא מה שבאמת מגן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E25">
+    <h3>P18-E25 · אתגר: שלוש שאילתות, שני indexes 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאילתות 2 ו־3 הן אותה "צורה": שוויון על status, טווח על created_at.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>(customer_id, created_at)</code> ו־<code>(status, created_at)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_customer_created_idx ON big_orders (customer_id, created_at);
+CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);</code></pre>
+<pre class="terminal">CREATE INDEX
+CREATE INDEX</pre>
+<p>שני indexes מכסים שלוש שאילתות, כי index על <code>(a, b)</code> משרת כל שאילתה ששוויון על a, ואולי טווח/מיון על b. חשיבה כזו ("אילו indexes מכסים את השאילתות שבאמת רצות") עדיפה על index לכל שאילתה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>שלושה indexes — אחד לכל שאילתה — כשאחד מהם מיותר. כל INSERT משלם עליו.</li></ul>
 
 
 </div></details>
@@ -246,117 +818,6 @@ ORDER BY month, place;</code></pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>RANK()</code> במקום <code>ROW_NUMBER()</code> — בתיקו שני לקוחות מקבלים אותו מקום, ויכולים לחזור ארבעה.</li><li><code>created_at &lt;= '2025-03-31'</code> — זה <code>2025-03-31 00:00</code>, ורוב היום האחרון נחתך.</li><li><code>PARTITION BY customer_id</code> — מדרג חודשים לכל לקוח, במקום לקוחות לכל חודש.</li></ul>
-
-
-</div></details>
-  </div>
-  <h2>🔗 חלק 2</h2>
-<div class="ex" id="P18-E24">
-    <h3>P18-E24 · אתגר: checkout אמיתי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>בדיקת מפתח קיים בהתחלה + UNIQUE על <code>idempotency_key</code> לטיפול במרוץ: אם ה־INSERT של ההזמנה נכשל ב־<code>23505</code> — ROLLBACK, ואז קרא את ההזמנה הקיימת והחזר אותה.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>סדר: מאחדים items ← BEGIN ← SELECT ... FOR UPDATE לכל המוצרים ← בדיקות ← INSERT להזמנה ← שורות ← עדכוני מלאי ← COMMIT.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P18-E24
-import type { Pool } from "pg";
-
-export class AppError extends Error {
-  code: string;
-  productId?: number;
-  constructor(code: string, message = code) {
-    super(message);
-    this.code = code;
-  }
-}
-
-interface Item { productId: number; quantity: number }
-
-async function existingOrder(pool: Pool, key: string) {
-  const { rows } = await pool.query("SELECT id, total FROM shop_orders WHERE idempotency_key = $1", [key]);
-  return rows[0] &amp;&amp; { orderId: rows[0].id, total: Number(rows[0].total), replayed: true };
-}
-
-export async function checkout(pool: Pool, { customerId, items, idempotencyKey }: { customerId: number; items: Item[]; idempotencyKey: string }) {
-  if (items.length === 0) throw new AppError("EMPTY_CART");
-  const before = await existingOrder(pool, idempotencyKey);
-  if (before) return before;
-
-  const qty = new Map&lt;number, number&gt;();
-  for (const i of items) qty.set(i.productId, (qty.get(i.productId) ?? 0) + i.quantity);
-  const ids = [...qty.keys()].sort((a, b) =&gt; a - b);
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: products } = await client.query("SELECT id, price, stock FROM catalog WHERE id = ANY($1) ORDER BY id FOR UPDATE", [ids]);
-    if (products.length !== ids.length) throw new AppError("PRODUCT_NOT_FOUND");
-    for (const p of products) {
-      if (p.stock &lt; qty.get(p.id)!) {
-        const err = new AppError("OUT_OF_STOCK");
-        err.productId = p.id;
-        throw err;
-      }
-    }
-    const total = products.reduce((sum, p) =&gt; sum + Number(p.price) * qty.get(p.id)!, 0);
-    let orderId: number;
-    try {
-      const { rows } = await client.query(
-        "INSERT INTO shop_orders (customer_id, idempotency_key, total) VALUES ($1, $2, $3) RETURNING id",
-        [customerId, idempotencyKey, total.toFixed(2)]
-      );
-      orderId = rows[0].id;
-    } catch (err) {
-      if ((err as { code?: string }).code !== "23505") throw err;
-      await client.query("ROLLBACK");
-      return (await existingOrder(pool, idempotencyKey))!; // בקשה מקבילה עם אותו מפתח ניצחה
-    }
-    for (const p of products) {
-      await client.query("INSERT INTO shop_order_lines (order_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4)", [orderId, p.id, qty.get(p.id), p.price]);
-      await client.query("UPDATE catalog SET stock = stock - $1 WHERE id = $2", [qty.get(p.id), p.id]);
-    }
-    await client.query("COMMIT");
-    return { orderId, total: Number(total.toFixed(2)), replayed: false };
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}</code></pre>
-<p>זה הלב של פרויקט הדגל, בגרסה מוקטנת. (ROLLBACK כפול — אחד ב־catch הפנימי ואחד בחיצוני — לא קורה, כי ה־return יוצא לפני. אבל אם תשנה את הזרימה, שים לב: ROLLBACK בלי transaction פתוח מחזיר רק אזהרה.)</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>לבדוק idempotency רק בהתחלה — שתי לחיצות באותה מילישנייה עוברות שתיהן את הבדיקה. ה־UNIQUE הוא מה שבאמת מגן.</li></ul>
-
-
-</div></details>
-  </div>
-<div class="ex" id="P18-E25">
-    <h3>P18-E25 · אתגר: שלוש שאילתות, שני indexes 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>שאילתות 2 ו־3 הן אותה "צורה": שוויון על status, טווח על created_at.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p><code>(customer_id, created_at)</code> ו־<code>(status, created_at)</code>.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-sql">CREATE INDEX big_orders_customer_created_idx ON big_orders (customer_id, created_at);
-CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);</code></pre>
-<pre class="terminal">CREATE INDEX
-CREATE INDEX</pre>
-<p>שני indexes מכסים שלוש שאילתות, כי index על <code>(a, b)</code> משרת כל שאילתה ששוויון על a, ואולי טווח/מיון על b. חשיבה כזו ("אילו indexes מכסים את השאילתות שבאמת רצות") עדיפה על index לכל שאילתה.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>שלושה indexes — אחד לכל שאילתה — כשאחד מהם מיותר. כל INSERT משלם עליו.</li></ul>
 
 
 </div></details>

@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 18</a> ‹ תרגול שיעור 4</div>
   <h1>✍️ תרגול שיעור 4 — N+1 ו־pagination מהירה</h1>
-  <p class="subtitle">פרק 18 · 8 שאלות · 1 הבנה · 7 קוד · ⏱ כ־210 דק׳</p>
+  <p class="subtitle">פרק 18 · 21 שאלות · 9 הבנה · 12 קוד · ⏱ כ־400 דק׳</p>
 <div class="box goal">
     <span class="box-title">איך עובדים עם התרגול</span>
     <ul>
@@ -21,7 +21,7 @@
     </ul>
   </div>
   <h2>🎯 חלק 1 — שיעור 4: N+1 ו־pagination מהירה</h2>
-  <p class="subtitle">6 שאלות · 1 הבנה · 5 קוד · ⏱ כ־120 דק׳ · רק על מה שלמדת בשיעור הזה</p>
+  <p class="subtitle">14 שאלות · 6 הבנה · 8 קוד · ⏱ כ־230 דק׳ · רק על מה שלמדת בשיעור הזה</p>
 <div class="ex" id="P18-E05">
     <h3>P18-E05 · כמה שאילתות?</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
@@ -34,6 +34,66 @@ for (const o of orders) {
     item.product = (await pool.query("SELECT * FROM products WHERE id = $1", [item.product_id])).rows[0];
   }
 }</code></pre>
+
+  </div>
+<div class="ex" id="P18-E69">
+    <h3>P18-E69 · למצוא N+1 ביומן</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l1">רמה 1</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>זה יומן השאילתות של בקשה אחת ל־<code>GET /orders?limit=4</code>. מה הקוד עושה? כמה שאילתות יהיו ב־<code>limit=50</code>? ואיך זה ייראה אחרי תיקון?</p>
+<pre class="terminal"><span class="dim">12:00:01.002  SELECT id, customer_id, total FROM big_orders ORDER BY created_at DESC LIMIT 4</span>
+<span class="dim">12:00:01.004  SELECT full_name FROM people WHERE id = $1   [1544]</span>
+<span class="dim">12:00:01.005  SELECT full_name FROM people WHERE id = $1   [1463]</span>
+<span class="dim">12:00:01.007  SELECT full_name FROM people WHERE id = $1   [1544]</span>
+<span class="dim">12:00:01.008  SELECT full_name FROM people WHERE id = $1   [1302]</span></pre>
+
+  </div>
+<div class="ex" id="P18-E70">
+    <h3>P18-E70 · ‏OFFSET ושורה חדשה בין עמודים</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>פיד "החדשים קודם", 3 בכל עמוד. המשתמש קורא את עמוד 1, בינתיים נוספת הודעה, והוא לוחץ "הבא". מה יראה בעמוד 2 עם OFFSET, ומה עם cursor?</p>
+<pre><code class="lang-sql">CREATE TABLE feed (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, body text NOT NULL);
+INSERT INTO feed (body) SELECT 'post ' || i FROM generate_series(1, 8) AS i;
+
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 0;      -- עמוד 1
+INSERT INTO feed (body) VALUES ('post 9 (new)');
+SELECT id, body FROM feed ORDER BY id DESC LIMIT 3 OFFSET 3;      -- עמוד 2, עם OFFSET
+SELECT id, body FROM feed WHERE id &lt; 6 ORDER BY id DESC LIMIT 3;  -- עמוד 2, עם cursor (האחרון בעמוד 1 היה 6)</code></pre>
+
+  </div>
+<div class="ex" id="P18-E71">
+    <h3>P18-E71 · ‏cursor בלי שובר שוויון</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מיון לפי <code>created_at</code> (יורד), 2 בכל עמוד. ‏<code>c</code> ו־<code>d</code> נוצרו באותו רגע. מה יחזיר עמוד 2 בכל אחת מהגרסאות? איזה פוסט "נעלם"?</p>
+<pre><code class="lang-sql">CREATE TABLE posts (id integer PRIMARY KEY, title text, created_at timestamptz);
+INSERT INTO posts VALUES (1, 'a', '2026-01-01 10:00+02'), (2, 'b', '2026-01-01 11:00+02'),
+  (3, 'c', '2026-01-01 12:00+02'), (4, 'd', '2026-01-01 12:00+02'), (5, 'e', '2026-01-01 13:00+02');
+
+SELECT id, title FROM posts ORDER BY created_at DESC, id DESC LIMIT 2;           -- עמוד 1: e, d
+SELECT id, title FROM posts
+WHERE created_at &lt; '2026-01-01 12:00+02'
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, רק לפי זמן
+SELECT id, title FROM posts
+WHERE (created_at, id) &lt; ('2026-01-01 12:00+02', 4)
+ORDER BY created_at DESC, id DESC LIMIT 2;                                        -- עמוד 2, עם שובר שוויון</code></pre>
+
+  </div>
+<div class="ex" id="P18-E72">
+    <h3>P18-E72 · ‏ANY($1) מול IN משורשר</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>שתי דרכים לשלוף רשימת לקוחות לפי id. מה הבעיות בראשונה? ואיך נראית השנייה מבחינת המסד, כשיש 3 id־ים וכשיש 500?</p>
+<pre><code class="lang-ts">// א
+const sql = `SELECT id, full_name FROM people WHERE id IN (${ids.join(",")})`;
+await pool.query(sql);
+// ב
+await pool.query("SELECT id, full_name FROM people WHERE id = ANY($1)", [ids]);</code></pre>
+
+  </div>
+<div class="ex" id="P18-E73">
+    <h3>P18-E73 · ‏JOIN או שתי שאילתות?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מסך: 20 לקוחות, ולכל אחד כל ההזמנות שלו (כ־100 לכל לקוח). לכל לקוח יש גם שדה <code>bio</code> של 5KB. שתי הצעות בלי N+1:</p>
+<ol><li>JOIN אחד: <code>people</code> ⟵ <code>big_orders</code>, ‏<code>SELECT p.*, o.*</code>.</li><li>שתי שאילתות: 20 הלקוחות; ואז <code class="mid">WHERE customer_id = ANY($1)</code> לכל ההזמנות, וחיבור ב־<code>Map</code>.</li></ol>
+<p>כמה שורות מחזירה כל אחת? כמה פעמים עובר כל <code>bio</code> ברשת? מתי כל אחת עדיפה?</p>
 
   </div>
 <div class="ex" id="P18-E17">
@@ -55,35 +115,93 @@ for (const o of orders) {
 <p>בקובץ <code class="mid">18-consistency/starter/P18-E23.ts</code>, <code class="mid">customersWithOrderCounts(pool, ids)</code> מחזירה לכל id ברשימה <code>{ id, fullName, orders }</code> (כמה הזמנות ב־big_orders), באותו סדר כמו ids. היא עובדת — אבל שולחת 2 שאילתות לכל לקוח. תקן לכל היותר ל־2 שאילתות בסך הכול (הבדיקה סופרת). id שלא קיים — לא בתוצאה.</p>
 
   </div>
-<div class="ex typed" id="P18-E27">
-    <h3>P18-E27 · מאחד שליפות (batch loader) 🤖</h3>
-    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 30 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
-<p><strong>🔁 חזרה על closures (פרק 5), ‏<code>Map</code> (פרק 7) ו־<code>new Promise</code> עם <code>setTimeout</code> (פרק 10)</strong>. ב־P18-E17 פתרת N+1 כשכל המזהים היו ידועים מראש. אבל לפעמים כמה חלקים נפרדים בקוד מבקשים כל אחד אדם אחד, באותו רגע, ואף אחד מהם לא יודע על האחרים. הפתרון המקובל הוא <strong>batch loader</strong> (כך עובדת הספרייה DataLoader): אוספים את כל הבקשות שהגיעו "באותו סיבוב", ושולחים שאילתה אחת.</p>
-<p>כתוב וייצא <code class="mid">type Person = { id: number; full_name: string }</code> ו־<code>createPersonLoader(pool)</code>, שמחזירה פונקציה <code class="mid">load(id): Promise&lt;Person | null&gt;</code>:</p>
-<ul><li>כל הקריאות ל־<code>load</code> שנעשו באותו סיבוב (לפני ש־<code>setTimeout(..., 0)</code> רץ) ← שאילתה <strong>אחת</strong>: <code class="mid">SELECT id, full_name FROM people WHERE id = ANY($1)</code>, עם מערך המזהים.</li><li>כל קורא מקבל את האדם שלו. ‏id שלא נמצא ← <code>null</code>. אותו id כמה פעמים ← נשלח פעם אחת בשאילתה, וכל הקוראים מקבלים את התשובה.</li><li>השאילתה נכשלה ← כל ה־Promises של אותו סיבוב נדחים עם אותה שגיאה.</li><li>קריאות בסיבוב הבא (אחרי <code>await</code>) ← שאילתה חדשה.</li></ul>
-<pre><code class="lang-ts">const load = createPersonLoader(pool);
-const [a, b, c] = await Promise.all([load(7), load(3), load(7)]); // שאילתה אחת: ids [7, 3]</code></pre>
-<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E27.ts</code> (יש בו רק הערה), ובודקים:</p>
-<pre class="terminal"><span class="prompt">% </span>npm run check P18-E27</pre>
-<p>הבודק סופר שאילתות (כמו ב־P18-E17), ובודק גם שגיאה מ־pool מזויף.</p>
+<div class="ex" id="P18-E74">
+    <h3>P18-E74 · העמוד הבא, אחרי (זמן, id) 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>פיד ההזמנות, מהחדשות לישנות, 10 בכל עמוד. העמוד הקודם הסתיים בהזמנה עם <code class="mid">created_at = '2025-06-01 12:00:00+00'</code> ו־<code>id = 100000</code>. בקובץ <code class="mid">18-consistency/starter/P18-E74.sql</code>:</p>
+<ol><li>צור index שמתאים למיון של הפיד.</li><li>שאילתה (הפקודה האחרונה): העמוד הבא — <code>id</code>, ‏<code>created_at</code>, ‏<code>total</code> — עם השוואת זוגות ושובר שוויון (P18-E71).</li></ol>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E74</pre>
+<p>הבודק משווה את התוצאה (גם אחרי שהוא מוסיף הזמנות באותו רגע בדיוק), ובודק שהתוכנית בלי Seq Scan ובלי Sort.</p>
 
   </div>
-<div class="ex typed" id="P18-E28">
-    <h3>P18-E28 · שלושת הלקוחות המובילים בכל חודש 🤖</h3>
-    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
-<p><strong>🔁 חזרה על <code>GROUP BY</code> ו־<code>date_trunc</code> (‏P17-E14) ועל <code>ROW_NUMBER</code> עם <code>PARTITION BY</code> (‏P17-E18)</strong>, על טבלה של 200,000 שורות. בקובץ <code class="mid">18-consistency/starter/P18-E28.sql</code>: מתוך <code>big_orders</code>, רק הזמנות בסטטוס <code>paid</code> או <code>shipped</code>, ברבעון הראשון של 2025 (מ־1 בינואר ועד לפני 1 באפריל). לכל חודש — שלושת הלקוחות שההכנסה מהם הכי גבוהה:</p>
-<ul><li>העמודות: <code>month</code> (תחילת החודש, כ־<code>date</code>), ‏<code>place</code> (1–3), ‏<code>customer_id</code>, ‏<code>revenue</code> (סכום <code>total</code>).</li><li>בתיקו בהכנסה — ה־<code>customer_id</code> הקטן במקום הגבוה יותר.</li><li>מיון: לפי <code>month</code>, ואחר כך <code>place</code>.</li></ul>
-<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E28.sql</code> (יש בו רק הערה), ובודקים:</p>
-<pre class="terminal"><span class="prompt">% </span>npm run check P18-E28</pre>
+<div class="ex" id="P18-E75">
+    <h3>P18-E75 · הזמנות עם השורות שלהן — שתי שאילתות 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>מסך "ההזמנות שלי" מעל <code>shop_orders</code>, ‏<code>shop_order_lines</code> ו־<code>catalog</code>. בקובץ <code class="mid">18-consistency/starter/P18-E75.ts</code> כתוב וייצא:</p>
+<pre><code class="lang-ts">export type OrderWithLines = { id: number; total: number; lines: { product: string; quantity: number; unitPrice: number }[] };
+export async function ordersWithLines(pool: Pool, orderIds: number[]): Promise&lt;OrderWithLines[]&gt;</code></pre>
+<ul><li><strong>בדיוק שתי שאילתות</strong>, תמיד (גם ל־1 וגם ל־200 הזמנות): ההזמנות (<code>id = ANY($1)</code>), ואז כל השורות שלהן עם שם המוצר (JOIN ל־<code>catalog</code>).</li><li>הסדר — כמו ב־<code>orderIds</code>; id שלא קיים — מדלגים; id שמופיע פעמיים ברשימה — פעם אחת (בפעם הראשונה). שורות כל הזמנה — לפי שם המוצר.</li><li>מספרים — <code>number</code>. מערך ריק ← <code>[]</code>, בלי שאילתות.</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E75.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E75</pre>
+
+  </div>
+<div class="ex" id="P18-E76">
+    <h3>P18-E76 · פיד עם cursor אטום 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 30 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>ה־API לא חושף ללקוח "זמן ו־id"; הוא נותן מחרוזת אטומה. בקובץ <code class="mid">18-consistency/starter/P18-E76.ts</code> כתוב וייצא <code>class AppError</code> (עם <code>code</code>) ו־:</p>
+<pre><code class="lang-ts">export function encodeCursor(createdAt: Date, id: number): string
+export function decodeCursor(cursor: string): { createdAt: Date; id: number }
+export async function feed(pool: Pool, opts: { customerId: number; cursor?: string; limit?: number }): Promise&lt;{ data: { id: number; total: number }[]; nextCursor: string | null }&gt;</code></pre>
+<ul><li>cursor = ‏<code>base64url</code> של <code><code class="mid">${createdAt.toISOString()}|${id}</code></code> (‏<code class="mid">Buffer.from(s).toString("base64url")</code>).</li><li><code>decodeCursor</code> — מחרוזת שלא מפוענחת לתאריך תקין ו־id שלם חיובי ← <code>AppError("BAD_CURSOR")</code>.</li><li><code>feed</code> — ההזמנות של <code>customerId</code> מ־<code>big_orders</code>, מהחדשה לישנה (<code>created_at DESC, id DESC</code>), אחרי ה־cursor אם נשלח. ‏<code>limit</code> ברירת מחדל 20 (1–100, אחרת <code>AppError("BAD_LIMIT")</code>).</li><li><code>nextCursor</code> — של השורה האחרונה, אם יש עוד שורות אחריה; אחרת <code>null</code>. (טריק: בקש <code>limit + 1</code>.)</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E76.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E76</pre>
+
+  </div>
+<div class="ex" id="P18-E77">
+    <h3>P18-E77 · לקוחות עם ספירת הזמנות — בשאילתה אחת 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 15 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>התיקון של P18-E23 — הפעם כ־SQL. בקובץ <code class="mid">18-consistency/starter/P18-E77.sql</code>: עבור האנשים עם <code>id</code> בין 1 ל־10 ב־<code>people</code> — <code>id</code>, ‏<code>full_name</code>, ‏<code>orders</code> (כמה הזמנות ב־<code>big_orders</code>, 0 אם אין), ‏<code>last_order</code> (ה־<code>created_at</code> המאוחר, NULL אם אין) — לפי <code>id</code>. שאילתה אחת.</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E77</pre>
+<p>הבודק משנה את הנתונים ומשווה שוב.</p>
+
+  </div>
+<div class="ex" id="P18-E78">
+    <h3>P18-E78 · הכנסת אלפי שורות — בכמה פקודות? 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p>"N+1" של כתיבה: INSERT לכל שורה. בקובץ <code class="mid">18-consistency/starter/P18-E78.ts</code> כתוב וייצא:</p>
+<pre><code class="lang-ts">export async function insertTransfers(pool: Pool, rows: { from: number; to: number; amount: number }[]): Promise&lt;number[]&gt;</code></pre>
+<ul><li>מכניסה את כל השורות ל־<code>transfers</code> ומחזירה את ה־id־ים, <strong>לפי סדר הקלט</strong>.</li><li>INSERT אחד עם הרבה <code>VALUES</code> — לכל היותר 1,000 שורות בפקודה (‏2,500 שורות ← 3 פקודות INSERT). ערכים — רק כפרמטרים (<code class="mid">($1, $2, $3), ($4, $5, $6), ...</code>).</li><li>הכול ב־transaction אחד: שורה אחת לא חוקית ← אף אחת לא נכנסת, והשגיאה נזרקת. מערך ריק ← <code>[]</code> בלי לפנות למסד.</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E78.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E78</pre>
 
   </div>
   <h2>🔗 חלק 2 — משלבים עם מה שלמדת עד עכשיו</h2>
-  <p class="subtitle">2 שאלות · 0 הבנה · 2 קוד · ⏱ כ־90 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+  <p class="subtitle">7 שאלות · 3 הבנה · 4 קוד · ⏱ כ־170 דק׳ · השיעור הזה יחד עם שיעורים ופרקים קודמים</p>
+<div class="ex" id="P18-E79">
+    <h3>P18-E79 · ‏N+1 בצד הדפדפן</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: יחידה 15.5, פרק 15, שיעור 4</span></div>
+<p>דף HTML (יחידה 15.5) מציג 20 הזמנות. ה־API מחזיר להזמנה רק <code>customerId</code>, אז ה־JavaScript בדף עושה:</p>
+<pre><code class="lang-js">const orders = await (await fetch("/api/orders?limit=20")).json();
+for (const o of orders) {
+  const c = await (await fetch(`/api/customers/${o.customerId}`)).json();
+  render(o, c.fullName);
+}</code></pre>
+<ol><li>כמה בקשות HTTP לטעינת הדף? כמה שאילתות למסד, אם כל endpoint עושה שאילתה אחת?</li><li>למה זה גרוע עוד יותר מ־N+1 בשרת?</li><li>הצע שני תיקונים בצד ה־API (פרק 15).</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>fetch</code> בדפדפן מיחידה 15.5 ו־routes מפרק 15 — והשיעור: אותו N+1, רק שכל "שאילתה" היא עכשיו בקשת HTTP דרך האינטרנט.</p>
+
+  </div>
+<div class="ex" id="P18-E80">
+    <h3>P18-E80 · ‏N+1 בעומס: חשבון של pool</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 10, פרק 14, שיעור 4</span></div>
+<p>endpoint עם N+1 שולח 21 שאילתות לבקשה, כל אחת 2ms (כולל רשת), אחת אחרי השנייה. ל־pool יש 10 חיבורים, וכל בקשה מחזיקה חיבור אחד כל הזמן שלה. בממוצע מגיעות 300 בקשות בשנייה.</p>
+<ol><li>כמה זמן כל בקשה מחזיקה חיבור? כמה בקשות בשנייה ה־pool יכול לשרת לכל היותר?</li><li>מה קורה עם 300 בקשות בשנייה?</li><li>ואחרי התיקון לשתי שאילתות?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> async ותור של בקשות מפרק 10, זמני תגובה ו־503 מפרק 14 — והשיעור: N+1 הוא לא רק "איטי", הוא מוריד את כמות הבקשות שהשרת מסוגל לשרת.</p>
+
+  </div>
+<div class="ex" id="P18-E81">
+    <h3>P18-E81 · מה הלקוח יכול לעשות עם ה־cursor?</h3>
+    <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l2">רמה 2</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 13, פרק 15, שיעור 4</span></div>
+<p>ה־cursor מ־P18-E76 הוא <code>base64url</code> של <code class="mid">"2025-06-01T12:00:00.000Z|100000"</code>.</p>
+<ol><li>האם הוא "מוצפן"? מה לקוח סקרן יכול לעשות איתו?</li><li>הלקוח שולח cursor שבנה בעצמו, עם <code>id</code> של הזמנה של לקוח <strong>אחר</strong>. האם הוא יקבל הזמנות שאינן שלו? למה?</li><li>מה יקרה אם <code>decodeCursor</code> לא הייתה בודקת כלום, והלקוח שולח <code>"abc"</code>?</li><li>מתי כדאי לחתום את ה־cursor (HMAC — פרק 21)?</li></ol>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>Buffer</code> ו־base64 מפרק 13, ולידציה של קלט מפרק 15 — והשיעור: ה־cursor הוא קלט מהמשתמש כמו כל קלט.</p>
+
+  </div>
 <div class="ex" id="P18-E24">
     <h3>P18-E24 · אתגר: checkout אמיתי 🤖</h3>
     <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag l5">רמה 5</span><span class="tag">⏱ 60 דק׳</span><span class="tag">ידע נדרש: כל הפרק</span></div>
 <p>בקובץ <code class="mid">18-consistency/starter/P18-E24.ts</code> השלם <code class="mid">checkout(pool, { customerId, items, idempotencyKey })</code> מעל <code>catalog</code>, <code>shop_orders</code>, <code>shop_order_lines</code>. <code>items</code>: <code>[{ productId, quantity }]</code>.</p>
 <ul><li><code>items</code> ריק ← <code>AppError("EMPTY_CART")</code>. אותו מוצר פעמיים ← מאחדים כמויות.</li><li>הכול ב־transaction אחד: נעילת המוצרים (FOR UPDATE, לפי id), מוצר חסר ← <code class="mid">AppError("PRODUCT_NOT_FOUND")</code>, מלאי לא מספיק לאחד מהם ← <code>AppError("OUT_OF_STOCK")</code> עם <code>productId</code> על השגיאה — ואז <strong>אף</strong> מלאי לא משתנה.</li><li>מחיר נשמר ב־<code>unit_price</code> מהקטלוג ברגע ההזמנה; <code>total</code> = סכום השורות. מחזירה <code class="mid">{ orderId, total, replayed: false }</code> (total כמספר).</li><li><strong>Idempotency</strong>: אם כבר יש הזמנה עם אותו <code>idempotencyKey</code> — מחזירה אותה (<code>replayed: true</code>) בלי לשנות כלום. גם כששתי בקשות עם אותו מפתח מגיעות יחד.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> כל הפרק — transaction (שיעור 1), נעילה בסדר קבוע ו־idempotency (שיעור 2) — עם מחלקת שגיאה מפרק 8 ו־Map מפרק 7, ב־checkout אחד כמו בחנות אמיתית.</p>
 
   </div>
 <div class="ex" id="P18-E25">
@@ -96,6 +214,31 @@ SELECT id, total FROM big_orders WHERE customer_id = 42 ORDER BY created_at DESC
 SELECT id FROM big_orders WHERE status = 'pending' AND created_at &gt;= '2025-12-24' ORDER BY created_at;
 -- 3: כמה בוטלו מאז דצמבר
 SELECT COUNT(*) FROM big_orders WHERE status = 'cancelled' AND created_at &gt;= '2025-12-01';</code></pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> index מרובה עמודות וחלקי (שיעור 3) מול שאילתות של דשבורד אמיתי — שוויון, טווח, מיון ו־COUNT מפרקים 16–17.</p>
+
+  </div>
+<div class="ex typed" id="P18-E27">
+    <h3>P18-E27 · מאחד שליפות (batch loader) 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 30 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p><strong>🔁 חזרה על closures (פרק 5), ‏<code>Map</code> (פרק 7) ו־<code>new Promise</code> עם <code>setTimeout</code> (פרק 10)</strong>. ב־P18-E17 פתרת N+1 כשכל המזהים היו ידועים מראש. אבל לפעמים כמה חלקים נפרדים בקוד מבקשים כל אחד אדם אחד, באותו רגע, ואף אחד מהם לא יודע על האחרים. הפתרון המקובל הוא <strong>batch loader</strong> (כך עובדת הספרייה DataLoader): אוספים את כל הבקשות שהגיעו "באותו סיבוב", ושולחים שאילתה אחת.</p>
+<p>כתוב וייצא <code class="mid">type Person = { id: number; full_name: string }</code> ו־<code>createPersonLoader(pool)</code>, שמחזירה פונקציה <code class="mid">load(id): Promise&lt;Person | null&gt;</code>:</p>
+<ul><li>כל הקריאות ל־<code>load</code> שנעשו באותו סיבוב (לפני ש־<code>setTimeout(..., 0)</code> רץ) ← שאילתה <strong>אחת</strong>: <code class="mid">SELECT id, full_name FROM people WHERE id = ANY($1)</code>, עם מערך המזהים.</li><li>כל קורא מקבל את האדם שלו. ‏id שלא נמצא ← <code>null</code>. אותו id כמה פעמים ← נשלח פעם אחת בשאילתה, וכל הקוראים מקבלים את התשובה.</li><li>השאילתה נכשלה ← כל ה־Promises של אותו סיבוב נדחים עם אותה שגיאה.</li><li>קריאות בסיבוב הבא (אחרי <code>await</code>) ← שאילתה חדשה.</li></ul>
+<pre><code class="lang-ts">const load = createPersonLoader(pool);
+const [a, b, c] = await Promise.all([load(7), load(3), load(7)]); // שאילתה אחת: ids [7, 3]</code></pre>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E27.ts</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E27</pre>
+<p>הבודק סופר שאילתות (כמו ב־P18-E17), ובודק גם שגיאה מ־pool מזויף.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> closures מפרק 5, ‏<code>Map</code> מפרק 7 ו־Promise עם <code>setTimeout</code> מפרק 10 — כדי לאחד שאילתות ולפתור N+1 מהשיעור גם כשהבקשות מגיעות מחלקים שונים בקוד.</p>
+
+  </div>
+<div class="ex typed" id="P18-E28">
+    <h3>P18-E28 · שלושת הלקוחות המובילים בכל חודש 🤖</h3>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 20 דק׳</span><span class="tag">ידע נדרש: שיעור 4</span></div>
+<p><strong>🔁 חזרה על <code>GROUP BY</code> ו־<code>date_trunc</code> (‏P17-E14) ועל <code>ROW_NUMBER</code> עם <code>PARTITION BY</code> (‏P17-E18)</strong>, על טבלה של 200,000 שורות. בקובץ <code class="mid">18-consistency/starter/P18-E28.sql</code>: מתוך <code>big_orders</code>, רק הזמנות בסטטוס <code>paid</code> או <code>shipped</code>, ברבעון הראשון של 2025 (מ־1 בינואר ועד לפני 1 באפריל). לכל חודש — שלושת הלקוחות שההכנסה מהם הכי גבוהה:</p>
+<ul><li>העמודות: <code>month</code> (תחילת החודש, כ־<code>date</code>), ‏<code>place</code> (1–3), ‏<code>customer_id</code>, ‏<code>revenue</code> (סכום <code>total</code>).</li><li>בתיקו בהכנסה — ה־<code>customer_id</code> הקטן במקום הגבוה יותר.</li><li>מיון: לפי <code>month</code>, ואחר כך <code>place</code>.</li></ul>
+<p>📄 כותבים בקובץ <code class="mid">18-consistency/starter/P18-E28.sql</code> (יש בו רק הערה), ובודקים:</p>
+<pre class="terminal"><span class="prompt">% </span>npm run check P18-E28</pre>
+<p>🔗 <strong>איך זה מתחבר:</strong> GROUP BY, ‏<code>date_trunc</code> ו־<code>ROW_NUMBER</code> מפרק 17 — הפעם על 200,000 שורות, כמו בדוחות של השיעור.</p>
 
   </div>
 <div class="pager"><a href="lesson-04-performance.html"><small>חזרה לשיעור</small>שיעור 4 — N+1 ו־pagination מהירה</a><a href="index.html#pass"><small>סוף הפרק</small>🏁 מבחן מעבר</a></div>

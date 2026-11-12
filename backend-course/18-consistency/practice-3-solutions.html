@@ -34,6 +34,200 @@
 
 </div></details>
   </div>
+<div class="ex" id="P18-E55">
+    <h3>P18-E55 · ‏index על שתי עמודות — מתי הוא עוזר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־index ממוין קודם לפי <code>status</code>, ובתוך כל status — לפי <code>created_at</code>. כמו ספר טלפונים: שם משפחה, ואז שם פרטי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאילתה 2: כמה מההזמנות הן <code>cancelled</code>? (אחת מכל שש.) כשהרבה שורות מתאימות, Bitmap — "אסוף את המיקומים, וקרא בלוקים לפי הסדר".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_status_created_idx ON big_orders (status, created_at);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' AND created_at &gt;= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'cancelled';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE created_at &gt;= '2025-12-20';
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 5;</code></pre>
+<pre class="terminal">CREATE INDEX
+                                                       QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: ((status = 'pending'::text) AND (created_at &gt;= '2025-12-20 00:00:00+02'::timestamp with time zone))
+   -&gt;  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: ((status = 'pending'::text) AND (created_at &gt;= '2025-12-20 00:00:00+02'::timestamp with time zone))
+(4 rows)
+
+                        QUERY PLAN
+----------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (status = 'cancelled'::text)
+   -&gt;  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: (status = 'cancelled'::text)
+(4 rows)
+
+                                       QUERY PLAN
+----------------------------------------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (created_at &gt;= '2025-12-20 00:00:00+02'::timestamp with time zone)
+   -&gt;  Bitmap Index Scan on big_orders_status_created_idx
+         Index Cond: (created_at &gt;= '2025-12-20 00:00:00+02'::timestamp with time zone)
+(4 rows)
+
+                                 QUERY PLAN
+-----------------------------------------------------------------------------
+ Limit
+   -&gt;  Index Scan Backward using big_orders_status_created_idx on big_orders
+         Index Cond: (status = 'pending'::text)
+(3 rows)</pre>
+<p>1 — כן, שתי העמודות בתנאי (שוויון ואז טווח). 2 — כן, דרך העמודה הראשונה. 3 — מפתיע: כן, אבל בלי "לקפוץ". ‏<code>created_at</code> לבד הוא "שם פרטי בלי שם משפחה" — הערכים מפוזרים בין כל ה־status־ים, אז המסד עובר על <strong>כל</strong> ה־index ובודק כל ערך (ה־Index Cond כאן הוא סינון, לא חיפוש). זה עדיין זול מסריקת הטבלה, כי ה־index קטן ממנה — אבל index שמתחיל ב־<code>created_at</code> היה מוצא את הטווח בקפיצה. 4 — כן, ובלי מיון: בתוך <code>pending</code> השורות כבר ממוינות לפי תאריך, והמסד פשוט קורא את העץ מהסוף (<code>Backward</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף index נפרד לכל עמודה ב־WHERE "ליתר ביטחון" — index מרובה עמודות בסדר הנכון עדיף כמעט תמיד על שניים נפרדים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E56">
+    <h3>P18-E56 · ‏index שהשאילתה "מסתירה" ממנו <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־index ממוין לפי <code>customer_id</code>. האם הוא ממוין גם לפי <code>customer_id + 0</code>? (אנחנו יודעים שזה אותו דבר — המסד לא מנסה להוכיח את זה.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון של מספרים כטקסט: <code>'10' &lt; '9'</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id + 0 = 42;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE customer_id::text = '42';</code></pre>
+<pre class="terminal">CREATE INDEX
+                      QUERY PLAN
+-------------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (customer_id = 42)
+   -&gt;  Bitmap Index Scan on big_orders_customer_id_idx
+         Index Cond: (customer_id = 42)
+(4 rows)
+
+                QUERY PLAN
+------------------------------------------
+ Gather
+   Workers Planned: 1
+   -&gt;  Parallel Seq Scan on big_orders
+         Filter: ((customer_id + 0) = 42)
+(4 rows)
+
+                     QUERY PLAN
+----------------------------------------------------
+ Gather
+   Workers Planned: 1
+   -&gt;  Parallel Seq Scan on big_orders
+         Filter: ((customer_id)::text = '42'::text)
+(4 rows)</pre>
+<p>רק הראשונה. כל פונקציה או חישוב על <strong>העמודה</strong> — ‏<code>+ 0</code>, ‏<code>::text</code>, ‏<code>lower(email)</code>, ‏<code>date_trunc(...)</code> — הופכים אותה לערך אחר, שה־index לא ממוין לפיו. הכלל: את החישוב עושים על הצד של <strong>הערך</strong>, והעמודה נשארת "חשופה" (או יוצרים index על הביטוי עצמו, כמו <code>lower(owner)</code> ב־P18-E12). זו בדיוק התקלה של P18-E22.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ORM ששולח את המזהה כטקסט ועושה <code>CAST</code> על העמודה — השאילתה "עובדת" ואיטית פי אלף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E57">
+    <h3>P18-E57 · איזה indexes כבר יש? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מפתח ראשי ו־UNIQUE מקבלים index אוטומטית — כך המסד בודק כפילויות מהר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>FK לא מקבל index אוטומטית. איזה FK לא "מכוסה" ב־index שמתחיל בו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT tablename, indexname
+FROM pg_indexes
+WHERE schemaname = current_schema() AND tablename IN ('shop_orders', 'shop_order_lines')
+ORDER BY tablename, indexname;</code></pre>
+<pre class="terminal">    tablename     |            indexname
+------------------+---------------------------------
+ shop_order_lines | shop_order_lines_pkey
+ shop_orders      | shop_orders_idempotency_key_key
+ shop_orders      | shop_orders_pkey
+(3 rows)</pre>
+<p>שלושה, כולם מהאילוצים: מפתח ראשי ו־UNIQUE ב־<code>shop_orders</code>, ומפתח ראשי של הזוג ב־<code>shop_order_lines</code>. ה־FK <code>order_id</code> מכוסה — הוא העמודה הראשונה במפתח הראשי. אבל <code>product_id</code> (FK ל־<code>catalog</code>) <strong>לא</strong>: "כל השורות של מוצר X" ומחיקת מוצר מ־catalog יסרקו את כל <code>shop_order_lines</code>. חסר <code class="mid">CREATE INDEX ON shop_order_lines (product_id)</code> (כמו ב־P18-E16).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף index על <code>order_id</code> לבד — כפילות של המפתח הראשי (שמתחיל בו); עוד עלות כתיבה, בלי תועלת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E58">
+    <h3>P18-E58 · למה המסד מתעלם מה־index? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>accounts</code> יש 4 שורות — דף אחד בדיסק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>id &gt; 1000</code> מחזיר 99.5% מהטבלה. כמה עולה לקפוץ ב־index 199,000 פעמים, לעומת לקרוא את הטבלה ברצף?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF) SELECT owner FROM accounts WHERE id = 2;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id &gt; 1000;
+EXPLAIN (COSTS OFF) SELECT id FROM big_orders WHERE id &gt; 199000;</code></pre>
+<pre class="terminal">      QUERY PLAN
+----------------------
+ Seq Scan on accounts
+   Filter: (id = 2)
+(2 rows)
+
+       QUERY PLAN
+------------------------
+ Seq Scan on big_orders
+   Filter: (id &gt; 1000)
+(2 rows)
+
+                     QUERY PLAN
+-----------------------------------------------------
+ Index Only Scan using big_orders_pkey on big_orders
+   Index Cond: (id &gt; 199000)
+(2 rows)</pre>
+<p>המסד לא "חייב" להשתמש ב־index — הוא מעריך עלות (לפי סטטיסטיקות שנאספות ב־<code>ANALYZE</code>) ובוחר את הזולה. בטבלה של 4 שורות, וכשהתנאי מחזיר כמעט הכול — לקרוא הכול ברצף זול יותר. רק כשהתנאי בררני (1,000 מתוך 200,000) — index. Seq Scan בתוכנית הוא לא באג בפני עצמו; הוא באג כשהטבלה גדולה <strong>והתנאי מחזיר מעט</strong>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לכפות" index (יש מסדים עם hints) — ברוב המקרים המסד צודק, ואם לא — הסטטיסטיקות ישנות (<code>ANALYZE</code>), לא האופטימייזר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E59">
+    <h3>P18-E59 · באיזה סדר העמודות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חשוב על ספר טלפונים ממוין לפי (עיר, שם) מול (שם, עיר) — כשאתה מחפש "כל ה־Cohen בחיפה".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בהצעה 2, כל ההזמנות מהחודש האחרון (של <strong>כל</strong> הלקוחות) הן רצף אחד בעץ. בתוכו — הלקוחות מעורבבים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p><strong>הצעה 1.</strong> בעץ ממוין לפי <code>(customer_id, created_at)</code>, כל ההזמנות של לקוח 42 הן רצף אחד, ובתוכו ממוינות לפי תאריך — המסד קופץ ל"לקוח 42, מהתאריך הזה" וקורא רק את מה שצריך. בהצעה 2 הוא קופץ לתחילת החודש וצריך לעבור על ההזמנות של <strong>כל</strong> הלקוחות מאז, ולסנן. הכלל מהשיעור: עמודות השוויון קודם, עמודת הטווח/המיון בסוף. והצעה 1 עוזרת גם ל־<code>customer_id = $1</code> לבד (העמודה הראשונה) — כך שהיא מחליפה גם index על <code>customer_id</code> בלבד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"העמודה עם הכי הרבה ערכים שונים ראשונה" — כלל אצבע נפוץ, אבל מה שקובע הוא איך השאילתה משתמשת בעמודות: שוויון ← טווח.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P18-E11">
     <h3>P18-E11 · index להזמנות של לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -172,7 +366,341 @@ WHERE created_at &gt;= '2025-06-01' AND created_at &lt; '2025-06-02';</code></pr
 
 </div></details>
   </div>
+<div class="ex typed" id="P18-E60">
+    <h3>P18-E60 · ‏index לחיפוש לפי סכום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>על איזו עמודה התנאי?</p>
 
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">CREATE INDEX big_orders_total_idx ON big_orders (total);</code></p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_total_idx ON big_orders (total);
+EXPLAIN (COSTS OFF) SELECT id, customer_id FROM big_orders WHERE total = 123.45;</code></pre>
+<pre class="terminal">CREATE INDEX
+                   QUERY PLAN
+-------------------------------------------------
+ Bitmap Heap Scan on big_orders
+   Recheck Cond: (total = 123.45)
+   -&gt;  Bitmap Index Scan on big_orders_total_idx
+         Index Cond: (total = 123.45)
+(4 rows)</pre>
+<p>שם ל־index (<code>טבלה_עמודה_idx</code>) הוא לא חובה — אבל כשתראה אותו ב־EXPLAIN או בהודעת שגיאה, תדע מיד מה הוא.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>index על <code>(customer_id, total)</code> — השאילתה לא מסננת לפי לקוח, אז העמודה הראשונה לא עוזרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E61">
+    <h3>P18-E61 · ‏"ההזמנות ששולמו" של לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי עמודות בשוויון, ועמודה אחת למיון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שוויון קודם (בכל סדר), המיון בסוף: <code class="mid">(customer_id, status, created_at)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_customer_status_created_idx ON big_orders (customer_id, status, created_at);
+EXPLAIN (COSTS OFF)
+SELECT id, total, created_at FROM big_orders
+WHERE customer_id = 42 AND status = 'paid'
+ORDER BY created_at DESC LIMIT 5;</code></pre>
+<pre class="terminal">CREATE INDEX
+                                      QUERY PLAN
+--------------------------------------------------------------------------------------
+ Limit
+   -&gt;  Index Scan Backward using big_orders_customer_status_created_idx on big_orders
+         Index Cond: ((customer_id = 42) AND (status = 'paid'::text))
+(3 rows)</pre>
+<p>"לקוח 42, סטטוס paid" הם רצף אחד בעץ, ממוין לפי תאריך — המסד קורא אותו מהסוף, חמש שורות, ועוצר. בלי <code>created_at</code> ב־index הוא היה מוצא את כל ההזמנות ששולמו של הלקוח וממיין אותן.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">(created_at, customer_id, status)</code> — המיון ראשון; המסד יקרא את כל ההזמנות לפי תאריך עד שימצא חמש של הלקוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E62">
+    <h3>P18-E62 · בעלים ייחודי — רק לחשבונות פתוחים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני רעיונות מהשיעור ביחד: <code class="mid">UNIQUE INDEX ... (lower(owner))</code> ו־<code>WHERE ...</code> בסוף ה־index.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">CREATE UNIQUE INDEX accounts_open_owner_key ON accounts (lower(owner)) WHERE closed_at IS NULL;</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">ALTER TABLE accounts ADD COLUMN closed_at timestamptz;
+CREATE UNIQUE INDEX accounts_open_owner_key ON accounts (lower(owner)) WHERE closed_at IS NULL;</code></pre>
+<pre class="terminal">ALTER TABLE
+CREATE INDEX</pre>
+<p>ה־index מכיל רק חשבונות פתוחים, ולכן ה"ייחודיות" חלה רק עליהם. חשבון שנסגר "יוצא" מה־index, ואפשר לפתוח חדש. אותו טריק לכל "אחד פעיל בכל רגע": כתובת ברירת מחדל אחת ללקוח, משמרת פתוחה אחת לעובד, עגלה פתוחה אחת למשתמש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>UNIQUE (owner, closed_at)</code> — ב־UNIQUE רגיל שני NULLים נחשבים שונים, אז שני חשבונות פתוחים עוברים.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P18-E63">
+    <h3>P18-E63 · חיפוש "מכיל" ב־endpoint <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בעץ ממוין לפי שם — איפה "מתחילים לחפש" כשאתה לא יודע את תחילת השם?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>יש indexes מסוג אחר (לא B-tree) שבנויים לחיפוש "מכיל": ‏trigram ‏(<code>pg_trgm</code>), וחיפוש טקסט מלא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX people_full_name_idx ON people (full_name);
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name = 'Customer #4242';
+EXPLAIN (COSTS OFF) SELECT id FROM people WHERE full_name ILIKE '%4242%';</code></pre>
+<pre class="terminal">CREATE INDEX
+                     QUERY PLAN
+----------------------------------------------------
+ Index Scan using people_full_name_idx on people
+   Index Cond: (full_name = 'Customer #4242'::text)
+(2 rows)
+
+                QUERY PLAN
+------------------------------------------
+ Seq Scan on people
+   Filter: (full_name ~~* '%4242%'::text)
+(2 rows)</pre>
+<p>שוויון — דרך ה־index. "מכיל" — סריקה של כל הטבלה, לכל חיפוש. כמה אפשרויות, לפי הצורך: (1) חיפוש לפי <strong>תחילת</strong> השם (<code>LIKE 'Dan%'</code>) — אפשר עם B-tree (עם <code>text_pattern_ops</code>); (2) "מכיל" — index מסוג GIN עם התוסף <code>pg_trgm</code>; (3) חיפוש מילים בטקסט ארוך — full-text search של PostgreSQL, או מנוע חיפוש חיצוני. ובכל מקרה: אורך מינימלי ל־<code>q</code> ב־Zod (<code>min(2)</code>) ו־LIMIT, כדי שחיפוש של אות אחת לא יחזיר מיליון שורות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף index רגיל על <code>full_name</code> ולהניח שהחיפוש "מאונדקס" — ה־EXPLAIN יראה שלא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E64">
+    <h3>P18-E64 · ‏JOIN ו־index על ה־FK <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>את הלקוח המסד מוצא מהר (מפתח ראשי). השאלה היא איך הוא מוצא את ההזמנות שלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>Nested Loop</code> — לכל שורה בצד אחד, חפש בצד השני (כמו ה־<code>leftJoin</code> מ־P17-E57).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;
+
+CREATE INDEX big_orders_customer_id_idx ON big_orders (customer_id);
+
+EXPLAIN (COSTS OFF)
+SELECT o.id, o.total FROM people p JOIN big_orders o ON o.customer_id = p.id
+WHERE p.id = 42;</code></pre>
+<pre class="terminal">                     QUERY PLAN
+-----------------------------------------------------
+ Nested Loop
+   -&gt;  Index Only Scan using people_pkey on people p
+         Index Cond: (id = 42)
+   -&gt;  Seq Scan on big_orders o
+         Filter: (customer_id = 42)
+(5 rows)
+
+CREATE INDEX
+                         QUERY PLAN
+-------------------------------------------------------------
+ Nested Loop
+   -&gt;  Index Only Scan using people_pkey on people p
+         Index Cond: (id = 42)
+   -&gt;  Bitmap Heap Scan on big_orders o
+         Recheck Cond: (customer_id = 42)
+         -&gt;  Bitmap Index Scan on big_orders_customer_id_idx
+               Index Cond: (customer_id = 42)
+(7 rows)</pre>
+<p>לפני: הלקוח נמצא ב־index של המפתח הראשי, אבל <code>big_orders</code> נסרקת כולה. אחרי: גם ההזמנות נמצאות דרך index. בכל JOIN, הצד ה"רבים" (העמודה עם ה־FK) הוא זה שצריך index — הצד של ה־<code>id</code> כבר מאונדקס כמפתח ראשי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להניח ש"יש FK, אז יש index" — ב־MySQL זה נכון (יחידה 25v); ב־PostgreSQL לא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E65">
+    <h3>P18-E65 · ‏"עמוד 1 מתוך 10,000" — כמה עולה המספר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לספור את <strong>כל</strong> השורות — צריך לעבור על כולן (או על index שלם).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>האם המשתמש באמת צריך את המספר המדויק?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders;
+EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM big_orders WHERE customer_id = 42;
+SELECT reltuples::bigint AS estimate FROM pg_class WHERE oid = 'big_orders'::regclass;</code></pre>
+<pre class="terminal">          QUERY PLAN
+------------------------------
+ Aggregate
+   -&gt;  Seq Scan on big_orders
+(2 rows)
+
+             QUERY PLAN
+------------------------------------
+ Aggregate
+   -&gt;  Seq Scan on big_orders
+         Filter: (customer_id = 42)
+(3 rows)
+
+ estimate
+----------
+   200000
+(1 row)</pre>
+<p><code>COUNT(*)</code> של כל הטבלה תמיד עובר על כל השורות (אולי במקביל, עם כמה workers) — index לא חוסך את זה, כי המסד צריך לבדוק כל שורה. חלופות: (1) "יש עוד" במקום "מתוך N" — לבקש <code>LIMIT 21</code> ולהציג 20 (keyset — שיעור 4); (2) הערכה מהסטטיסטיקות (<code>reltuples</code>) — "כ־200,000"; (3) מונה ששומרים בטבלה נפרדת ומעדכנים. ספירה של לקוח אחד עם index על <code>customer_id</code> — זולה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להריץ <code>COUNT(*)</code> על כל הטבלה בכל בקשה "כי זה רק מספר" — בטבלה של 50 מיליון שורות זו השאילתה הכי יקרה בעמוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E66">
+    <h3>P18-E66 · האם השאילתה משתמשת ב־index? — בקוד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const { rows } = await pool.query(`EXPLAIN (FORMAT JSON) ${sql}`, params); const root = rows[0]["QUERY PLAN"][0].Plan;</code></pre>
+<p>(‏<code>pg</code> כבר מפענח את ה־JSON.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פונקציה רקורסיבית:</p>
+<pre><code class="lang-ts">function walk(node: any) { ...; for (const child of node.Plans ?? []) walk(child); }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E66: האם השאילתה משתמשת ב־index? — בקוד
+import type { Pool } from "pg";
+
+export type PlanSummary = { nodes: string[]; seqScans: string[]; indexes: string[] };
+
+export async function planSummary(pool: Pool, sql: string, params: unknown[] = []): Promise&lt;PlanSummary&gt; {
+  const { rows } = await pool.query(`EXPLAIN (FORMAT JSON) ${sql}`, params);
+  const root = rows[0]["QUERY PLAN"][0].Plan;
+  const summary: PlanSummary = { nodes: [], seqScans: [], indexes: [] };
+  const walk = (node: any) =&gt; {
+    summary.nodes.push(node["Node Type"]);
+    if (node["Node Type"] === "Seq Scan") summary.seqScans.push(node["Relation Name"]);
+    if (node["Index Name"] &amp;&amp; !summary.indexes.includes(node["Index Name"])) summary.indexes.push(node["Index Name"]);
+    for (const child of node.Plans ?? []) walk(child);
+  };
+  walk(root);
+  return summary;
+}</code></pre>
+<p>עם הכלי הזה, בדיקה אוטומטית יכולה לוודא "השאילתה של מסך ההזמנות לא עושה Seq Scan על big_orders" — ואם מישהו ימחק index או ישנה את השאילתה, הבדיקה תיכשל לפני שהלקוחות ירגישו. (הבודקים של הפרק הזה עושים משהו דומה, עם טקסט במקום JSON.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש "Seq Scan" בטקסט של התוכנית — עובד, אבל לא אומר על איזו טבלה; ב־JSON יש <code>Relation Name</code>.</li><li>להעביר את הפרמטרים בתוך המחרוזת — <code>EXPLAIN</code> מקבל <code>$1</code> כמו כל שאילתה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E67">
+    <h3>P18-E67 · ‏"index" ממוין בזיכרון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חיפוש בינארי של "האינדקס הראשון שבו המפתח &gt;= v": ‏<code>lo = 0, hi = n</code>; כל עוד <code>lo &lt; hi</code> — ‏<code>mid</code>, השוואה אחת, וחצי מהטווח נזרק. ‏<code>range(from, to)</code> = מ"הראשון ש־&gt;= from" עד "הראשון ש־&gt;= to". ול־<code>eq(v)</code> צריך גם "הראשון ש־&gt; v".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור את המפתחות במערך נפרד (<code>keys</code>) אחרי המיון, כדי לא לקרוא ל־<code>key()</code> בכל השוואה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E67: "index" ממוין בזיכרון
+export function createIndex&lt;T&gt;(rows: T[], key: (row: T) =&gt; number) {
+  const sorted = rows.map((row, i) =&gt; ({ row, k: key(row), i })).sort((a, b) =&gt; a.k - b.k || a.i - b.i);
+  const keys = sorted.map((s) =&gt; s.k);
+  let count = 0;
+
+  // האינדקס הראשון שבו keys[i] &gt;= v (או &gt; v כש־strict)
+  const bound = (v: number, strict: boolean) =&gt; {
+    let lo = 0;
+    let hi = keys.length;
+    while (lo &lt; hi) {
+      const mid = (lo + hi) &gt;&gt; 1;
+      count++;
+      if (strict ? keys[mid] &lt;= v : keys[mid] &lt; v) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const slice = (a: number, b: number) =&gt; sorted.slice(a, Math.max(a, b)).map((s) =&gt; s.row);
+
+  return {
+    eq: (v: number) =&gt; slice(bound(v, false), bound(v, true)),
+    range: (from: number, to: number) =&gt; slice(bound(from, false), bound(to, false)),
+    comparisons: () =&gt; count,
+  };
+}</code></pre>
+<p>שני חיפושים בינאריים — "איפה מתחיל" ו"איפה נגמר" — ואז <code>slice</code> של רצף. זה בדיוק "Index Cond" ב־EXPLAIN: קפיצה לתחילת הטווח וקריאה ברצף. ‏<code>log2(100,000)</code> ≈ 17, כך ש־<code>eq</code> עושה כ־34 השוואות. המחיר: מיון אחד בהתחלה, וכל הוספה לנתונים מחייבת לשמור על הסדר — "כל כתיבה מעדכנת את ה־index".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>sorted.filter(...)</code> בתוך <code>eq</code> — נכון, אבל 100,000 השוואות לכל חיפוש: Seq Scan בתחפושת.</li><li>למיין את <code>rows</code> עצמו (<code>rows.sort</code>) — משנה את המערך של מי שקרא לפונקציה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P18-E68">
+    <h3>P18-E68 · דוח יומי לשבוע, עם index 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הטווח על <code>created_at</code> — וה־WHERE צריך להשאיר את העמודה "חשופה" (P18-E56, ‏P18-E22). את ההמרה ל־<code>::date</code> עושים רק ב־SELECT וב־GROUP BY.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>GROUP BY 1 ORDER BY 1</code> — כמו בפרק 17.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE INDEX big_orders_created_at_idx ON big_orders (created_at);
+
+SELECT created_at::date AS day, COUNT(*) AS orders, SUM(total) AS revenue
+FROM big_orders
+WHERE created_at &gt;= '2025-06-01' AND created_at &lt; '2025-06-08' AND status &lt;&gt; 'cancelled'
+GROUP BY 1
+ORDER BY 1;</code></pre>
+<pre class="terminal">CREATE INDEX
+    day     | orders |  revenue
+------------+--------+-----------
+ 2025-06-01 |    458 | 152309.51
+ 2025-06-02 |    459 | 101582.90
+ 2025-06-03 |    459 | 110125.19
+ 2025-06-04 |    458 | 163622.01
+ 2025-06-05 |    459 |  67505.90
+ 2025-06-06 |    459 | 161048.56
+ 2025-06-07 |    458 |  89434.51
+(7 rows)</pre>
+<p>ה־index מצמצם את העבודה לשבוע אחד (כ־3,800 שורות מתוך 200,000), ושאר העבודה — סינון המבוטלות והקיבוץ — רצה על המעט הזה. ‏<code class="mid">WHERE created_at::date BETWEEN ...</code> היה מחזיר אותה תוצאה, אבל סורק הכול.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>index על <code>(status, created_at)</code> — התנאי על status הוא "שונה מ־", לא שוויון; העמודה הראשונה לא עוזרת לקפוץ.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-performance.html"><small>הבא</small>שיעור 4 — N+1 ו־pagination מהירה</a></div>
 </main>
 </body>

@@ -1,0 +1,6 @@
+-- P18-E74: העמוד הבא, אחרי (זמן, id)
+-- 1. index שמתאים ל־ORDER BY created_at DESC, id DESC
+-- 2. העמוד הבא אחרי created_at = '2025-06-01 12:00:00+00', id = 100000: id, created_at, total — 10 שורות
+--    עם השוואת זוגות ושובר שוויון
+--
+-- בדיקה:  npm run check P18-E74
