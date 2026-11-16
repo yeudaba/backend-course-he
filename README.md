@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **196** | **2978** | **1693** | **1605** |
+| **42** | **196** | **3353** | **1860** | **1607** |
 
 ## מה שונה כאן
 
@@ -391,12 +391,12 @@
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 27](backend-course/27-algorithms/index.html) | אלגוריתמים וראיונות | 5 | 102 | 57 | ✔ |
-| [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 28 | 23 | ✔ |
-| [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 28 | 23 | ✔ |
-| [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 28 | 23 | ✔ |
-| [יחידה 29.5](backend-course/29w-agents/index.html) | סוכני AI בפרודקשן | 5 | 28 | 23 | ✔ |
+| [פרק 28](backend-course/28-system-design/index.html) | תכנון מערכת ברמת Junior | 5 | 100 | 55 | ✔ |
+| [יחידה 28.5](backend-course/28w-scale/index.html) | ביצועים ונתונים בקנה מידה | 5 | 100 | 55 | ✔ |
+| [פרק 29](backend-course/29-ai-backend/index.html) | AI ב־Backend: לשלב מודל שפה בשרת | 5 | 100 | 55 | ✔ |
+| [יחידה 29.5](backend-course/29w-agents/index.html) | סוכני AI בפרודקשן | 5 | 100 | 55 | ✔ |
 | [פרויקט 4](backend-course/29x-project-events/index.html) | מערכת אירועים ואנליטיקה | 7 | — | 6 | ✔ |
-| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 6 | 33 | 27 | ✔ |
+| [פרק 30](backend-course/30-career/index.html) | תיק עבודות וחיפוש עבודה | 6 | 120 | 66 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
