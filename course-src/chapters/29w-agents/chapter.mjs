@@ -8,8 +8,9 @@ export default {
   part: "חטיבה ה׳ — ראיונות והרחבות",
   checker: true,
   testTimeout: 30000,
+  database: true, // P29.5-E40 ועוד: PostgreSQL
   time: "3 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 100,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> פרק 29 — הקריאה ל־Claude, structured output, ולולאת כלים בסיסית.</p>
 <p><strong>מה מתקינים עכשיו:</strong> <code>npm install</code> בתיקיית הקורס — מוסיף את <code>@modelcontextprotocol/sdk</code>, ה־SDK הרשמי של MCP ל־TypeScript (שרתים ו־clients).</p>
 ${copyStep("29w-agents")}
