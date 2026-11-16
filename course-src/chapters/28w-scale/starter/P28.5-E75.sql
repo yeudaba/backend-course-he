@@ -1,0 +1,5 @@
+-- P28.5-E75: מדינות — הזמנות, לקוחות ודירוג
+-- לכל מדינה: country, orders, customers (שונים), avg_order (בשקלים, 2 ספרות), rank (לפי הכנסה) — מיון לפי rank
+-- הטבלה: orders (files/orders.parquet)
+--
+-- בדיקה:  npm run check P28.5-E75
