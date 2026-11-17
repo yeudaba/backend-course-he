@@ -10,7 +10,7 @@ export default {
   database: true, // E15, E17, E23, E25 — outbox ואידמפוטנטיות ב־PostgreSQL
   testTimeout: 60000,
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 100,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop, PostgreSQL מפרק 16, ו־LocalStack מיחידה 26.3 (לתרגילי SQS).</p>
 <p><strong>מה מתקינים / מריצים עכשיו</strong> (פעם אחת; אחר כך <code>docker start rabbitmq kafka</code>):</p>
 <ul>

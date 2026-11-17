@@ -7,9 +7,10 @@ export default {
   title: "ענן ו־Kubernetes: AWS, Kubernetes, Helm, Jenkins ו־Argo CD",
   part: "חטיבה ד׳ — רמת תעשייה",
   checker: true,
+  database: true, // P26.3-E46: דוח עלויות ב־SQL
   testTimeout: 60000,
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 101,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop (פרק 23), ופרק 25 — ה־CI וה־deploy של פרויקט 2.</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>

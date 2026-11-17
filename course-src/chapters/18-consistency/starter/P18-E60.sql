@@ -1,0 +1,4 @@
+-- P18-E60: index לחיפוש לפי סכום
+-- index אחד, כך ש־SELECT id, customer_id FROM big_orders WHERE total = $1 לא תסרוק את הטבלה
+--
+-- בדיקה:  npm run check P18-E60

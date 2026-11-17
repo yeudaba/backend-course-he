@@ -1,0 +1,4 @@
+-- P18-E77: לקוחות עם ספירת הזמנות — בשאילתה אחת
+-- people עם id בין 1 ל־10: id, full_name, orders (0 אם אין), last_order (NULL אם אין) — לפי id
+--
+-- בדיקה:  npm run check P18-E77

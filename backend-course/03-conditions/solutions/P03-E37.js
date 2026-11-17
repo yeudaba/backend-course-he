@@ -1,0 +1,10 @@
+const password = "abc12345";
+const isLongEnough = password.length >= 8;
+const isNotPassword = password.toLowerCase() !== "password";
+const hasAt = password.includes("@");
+const startsWithAbc = password.startsWith("abc");
+console.log(`אורך: ${password.length}`);
+console.log(`ארוכה מספיק (8+)? ${isLongEnough}`);
+console.log(`שונה מ־password? ${isNotPassword}`);
+console.log(`מכילה @? ${hasAt}`);
+console.log(`מתחילה ב־abc? ${startsWithAbc}`);

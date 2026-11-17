@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "2–3 מפגשים (במסלול המהיר: מפגש אחד)",
-  expectedExercises: 28,
+  expectedExercises: 64,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+ ותוסף Error Lens (פרק 0).</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום. <strong>מה חדש: הבודק האוטומטי.</strong> רוב תרגילי הכתיבה באים עם קובץ מוכן ב־<code>starter/</code> (שיש בו רק הערה עם המשימה) ועם בדיקה. אתה כותב את הקוד בקובץ, ופקודה אחת אומרת לך אם הפלט נכון.</p>
 <ol class="steps">

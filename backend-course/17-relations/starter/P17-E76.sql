@@ -1,0 +1,5 @@
+-- P17-E76: ממוצע הזמנה לפי עיר
+-- עם WITH: city (NULL ← 'unknown'), orders (הזמנות שלא בוטלו), avg_order (מעוגל ל־2)
+-- מיון: avg_order יורד, ואז city
+--
+-- בדיקה:  npm run check P17-E76

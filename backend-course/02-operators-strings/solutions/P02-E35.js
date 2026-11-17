@@ -1,0 +1,11 @@
+let cart = 0;
+cart += 45;
+console.log("אחרי פריט 1:", cart);
+cart += 30;
+console.log("אחרי פריט 2:", cart);
+cart += 25;
+console.log("אחרי פריט 3:", cart);
+cart -= 20;
+console.log("אחרי קופון:", cart);
+cart *= 2;
+console.log("הזמנה כפולה:", cart);

@@ -1,0 +1,4 @@
+-- P27-E77: מרוויחים יותר מהמנהל — self join
+-- employees: employee, salary, manager, manager_salary — מי שמרוויח לפחות כמו המנהל הישיר · לפי employee
+--
+-- בדיקה:  npm run check P27-E77

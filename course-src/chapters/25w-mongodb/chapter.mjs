@@ -10,7 +10,7 @@ export default {
   database: true, // E25 מעביר מ־PostgreSQL ל־MongoDB
   testTimeout: 120000,
   time: "3 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 100,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop (פרק 23), ו־PostgreSQL מפרק 16 (לתרגיל E25).</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>

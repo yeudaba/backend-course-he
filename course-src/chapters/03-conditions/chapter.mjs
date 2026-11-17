@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "3 מפגשים (במסלול המהיר: 1–2)",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, Error Lens, Prettier.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
 <p><strong>🤖 הבודק האוטומטי:</strong> תרגילי הכתיבה נבדקים כמו בפרק 1 — <code>npm run check P03-E06</code> (לפי מזהה התרגיל). אם דילגת על פרק 1: העתק פעם אחת את <code>package.json</code> ואת התיקייה <code>tools</code> (ראה קופסת 🧰 של פרק 1).</p>

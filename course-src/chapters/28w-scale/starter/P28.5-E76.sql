@@ -1,0 +1,5 @@
+-- P28.5-E76: הכנסה יומית ומצטברת
+-- לכל יום (UTC): day, revenue, running (מצטבר), vs_prev_pct (מול היום הקודם, ספרה אחת) — מיון לפי day
+-- הטבלה: orders (files/orders.parquet)
+--
+-- בדיקה:  npm run check P28.5-E76

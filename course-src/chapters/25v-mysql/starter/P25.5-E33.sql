@@ -1,0 +1,4 @@
+-- P25.5-E33: מחיר עם מע״מ, וקרטונים
+-- מוצרי beans: name, price, price_with_vat (×1.18, 2 ספרות), full_boxes (של 6), loose — מהיקר לזול
+--
+-- בדיקה:  npm run check P25.5-E33

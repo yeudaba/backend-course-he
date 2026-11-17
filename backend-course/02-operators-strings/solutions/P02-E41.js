@@ -1,0 +1,10 @@
+let balance = 1000;
+console.log("יתרה התחלתית:", balance);
+balance += 250;
+console.log("אחרי הפקדה:", balance);
+balance -= 400;
+console.log("אחרי משיכה:", balance);
+balance -= 15;
+console.log("אחרי עמלה:", balance);
+balance = Math.max(0, balance - 1000);
+console.log("אחרי משיכה גדולה:", balance);

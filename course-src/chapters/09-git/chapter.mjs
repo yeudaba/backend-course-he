@@ -6,7 +6,7 @@ export default {
   title: "Git ו־GitHub",
   part: "חטיבה א׳ — יסודות JavaScript",
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <div class="table-wrap"><table>

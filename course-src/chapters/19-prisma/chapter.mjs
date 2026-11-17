@@ -9,7 +9,7 @@ export default {
   database: true,
   prismaProjects: ["files", "solutions/tasks-api"],
   time: "5 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 88,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> PostgreSQL, מסד <code>course</code>, <code>.env</code> (פרק 16).</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>

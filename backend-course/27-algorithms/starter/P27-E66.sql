@@ -1,0 +1,4 @@
+-- P27-E66: כל מי שמתחת למנהלת — WITH RECURSIVE
+-- employees (מ־files/interview.sql): name, depth של כל העובדים תחת Dana (id = 1), כולל אותה · לפי depth ואז name
+--
+-- בדיקה:  npm run check P27-E66

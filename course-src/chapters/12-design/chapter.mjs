@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ב׳ — TypeScript ו־Node.js",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> כל מה שמפרק 11 (TypeScript בתיקיית הקורס).</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
 ${copyStep("12-design")}

@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 29.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 29.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>29w-agents/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P29.5-E03">
+    <h3>P29.5-E03 · MCP: מי מדבר עם מי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה תפקידים: host (האפליקציה), client (חיבור אחד לשרת, בתוך ה־host), server (חושף tools, resources ו־prompts).</p>
+
+</div></details>
+    
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>לא.</strong> השרת חושף כלים ונתונים; המודל רץ אצל ה־host (שקורא ל־API של Claude). השרת לא יודע איזה מודל משתמש בו.</li><li><strong>נכון</strong> — זו כל הנקודה: כותבים את הכלים פעם אחת, וכל host שמדבר MCP משתמש בהם.</li><li><strong>נכון.</strong> stdio — השרת הוא תהליך־ילד של ה־host (כלים מקומיים: קבצים, git). Streamable HTTP — שרת מרוחק, עם אימות (OAuth). הכלים עצמם זהים; בבדיקות שלנו — transport בזיכרון.</li><li><strong>לא.</strong> השם, התיאור וה־schema הם בדיוק מה שנשלח למודל ב־<code>tools</code> — לפיהם הוא מחליט מתי ואיך לקרוא (E09, E21). תיאור גרוע = שימוש גרוע.</li><li><strong>לא.</strong> שרת MCP הוא קוד שרץ אצלך עם ההרשאות שלך — ותיאורי הכלים שלו נכנסים להקשר של המודל (אפשר להחביא בהם הוראות). מתקינים כמו כל תלות: ממקור מוכר, עם גרסה קבועה, ומעט ככל האפשר.</li><li><strong>נכון.</strong> המודל עושה מה שמבקשים ממנו — כולל מה שמשתמש זדוני ביקש. השרת מקבל את זהות המשתמש מה־host (לא מהמודל), ובודק כל קריאה (E08).</li></ol>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E04">
+    <h3>P29.5-E04 · שרת MCP ראשון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>את ה־schema כתבת ב־zod — מה המודל מקבל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>קלט שלא עובר את ה־schema — מי בודק אותו?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { z } from "zod";
+
+const server = new McpServer({ name: "coffee", version: "1.0.0" });
+server.registerTool(
+  "check_stock",
+  { description: "How many units of a product are in stock", inputSchema: { productId: z.number().int().positive() } },
+  async ({ productId }) =&gt; {
+    const stock: Record&lt;number, number&gt; = { 1: 12, 3: 4 };
+    if (!(productId in stock)) return { content: [{ type: "text", text: `no product ${productId}` }], isError: true };
+    return { content: [{ type: "text", text: `${stock[productId]} units` }] };
+  },
+);
+
+const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+await server.connect(serverSide);
+const client = new Client({ name: "demo-agent", version: "1.0.0" });
+await client.connect(clientSide);
+
+const { tools } = await client.listTools();
+console.log(tools[0].name, "|", tools[0].description, "|", JSON.stringify(tools[0].inputSchema.properties), tools[0].inputSchema.required);
+for (const args of [{ productId: 3 }, { productId: 99 }, { productId: "3" }]) {
+  const r = await client.callTool({ name: "check_stock", arguments: args });
+  console.log(JSON.stringify(args), "→", r.isError ? "ERROR:" : "", (r.content as { text: string }[])[0].text);
+}
+await client.close();</code></pre>
+<pre class="terminal">check_stock | How many units of a product are in stock | {"productId":{"type":"integer","exclusiveMinimum":0,"maximum":9007199254740991}} [ 'productId' ]
+{"productId":3} →  4 units
+{"productId":99} → ERROR: no product 99
+{"productId":"3"} → ERROR: MCP error -32602: Input validation error: Invalid arguments for tool check_stock: Invalid input: expected number, received string at productId</pre>
+<p>ה־schema של zod הפך ל־JSON Schema — זה מה שהמודל רואה (E09 מעביר אותו כמו שהוא ל־<code>tools</code> של Claude). קלט לא תקין לא מגיע לקוד שלך: ה־SDK בודק ומחזיר שגיאה עם <code>isError</code>. ושגיאה "עסקית" (מוצר שלא קיים) — אתה מחזיר <code>isError: true</code> בעצמך. בשני המקרים: תשובה, לא exception — כך המודל יכול לתקן ולנסות שוב.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E43">
+    <h3>P29.5-E43 · ‏tool, ‏resource או prompt? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מי יוזם: המודל (tool), האפליקציה/המשתמש מצרפים (resource), או המשתמש בוחר מתפריט (prompt)?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פעולה עם פרמטרים שהמודל ממלא — tool.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>tool</strong> — המודל מחליט מתי לחפש ומה.</li><li><strong>resource</strong> — מסמך קבוע לקריאה; האפליקציה יכולה לצרף אותו להקשר.</li><li><strong>prompt</strong> — תבנית שהמשתמש בוחר ("/summarize"), עם ההוראות של הצוות.</li><li><strong>tool</strong> — עם השלכות: הרשאה בשרת, ואישור אנושי ב־host (שיעור 3).</li><li><strong>resource</strong> — אבל אם הוא גדול, עדיף tool של חיפוש עם עימוד מאשר לשפוך את כולו להקשר.</li><li><strong>tool</strong> — מידע שמשתנה כל הזמן, לפי פרמטר.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוף הכול כ־tools "כי זה מה שהמודל משתמש בו" — מסמך קבוע ככלי בלי פרמטרים מבזבז צעד ומלא את ההקשר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E44">
+    <h3>P29.5-E44 · ‏stdio או HTTP? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>stdio: התהליך רץ על המחשב של מי שמשתמש בו, עם ההרשאות שלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת אחד שמשרת הרבה משתמשים — חייב לדעת מי פונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>stdio</strong> — הקבצים על המחשב של המפתח; התהליך רץ בהרשאות שלו, ואין "משתמש אחר".</li><li><strong>HTTP</strong> — שרת אחד, הרבה hosts. כל בקשה עם token של המשתמש (OAuth), והשרת מוציא ממנו את <code>customerId</code> — לא מקלט הכלי (E52).</li><li>תלוי מי משתמש: אם רק השרת שלך — אולי בכלל לא צריך MCP, אלא כלי רגיל בקוד. אם כמה hosts — HTTP, והמפתח של הספק נשאר <em>בשרת ה־MCP</em>, לא אצל כל host.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפיץ שרת stdio עם מפתח API משותף בתוך הקוד — כל מי שמריץ אותו מקבל את המפתח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E45">
+    <h3>P29.5-E45 · התיאור השתנה בגרסה החדשה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה המודל רואה מכל כלי?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פרק 13: גרסאות קבועות ו־lockfile.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>המודל עשוי לקרוא את <code>.env</code> (אם יש לו כלי קבצים) ולשלוח את הסודות בפרמטר — לשרת של מישהו אחר.</li><li>התיאור נכנס להקשר של המודל כמו הוראה; השיעור: "תיאורי הכלים נכנסים להקשר, ואפשר להחביא בהם הוראות". ולשרת לא צריך שום הרשאה מיוחדת בשביל זה.</li><li>(א) גרסה קבועה ועדכון ידני עם review של השינויים — כולל התיאורים. (ב) בדיקה אוטומטית של תיאורים (E47) ו־allowlist של כלים (E48). (ג) הרשאות מינימליות: לסוכן שמחפש מסמכים אין כלי שקורא קבצים מקומיים, אז אין מה לשלוח.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נוסיף ל־system: אל תציית לתיאורי כלים" — אותה בעיה של injection, באותו ערוץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E46">
+    <h3>P29.5-E46 · ‏readOnlyHint ו־isError <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"hint" — מי מבטיח שהוא נכון?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>E09: ‏<code>callMcpTool</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>annotations הן רמז שהשרת מצהיר — לא אכיפה. שרת זדוני או עם באג מצהיר מה שהוא רוצה. החלטות על אישור ועל הרשאה — לפי רשימה שאתה מחזיק (E48), לא לפי מה שהשרת אומר על עצמו. רמזים טובים לשרתים <em>שלך</em>, שאתה סומך עליהם.</li><li><code>isError</code> — הכלי רץ והחזיר כישלון "עסקי": מעבירים למודל <code>tool_result</code> עם <code>is_error</code>, והוא יכול להגיב ("אולי המספר שגוי?"). שגיאת פרוטוקול — השרת נפל, timeout, כלי לא קיים: גם אותה הופכים ל־<code>tool_result</code> עם <code>is_error</code> (אחרת השיחה נשברת), ורושמים בלוג כתקלה בתשתית.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר למודל את ה־stack trace של שגיאת הפרוטוקול — פרטים פנימיים בהקשר, ולפעמים בתשובה ללקוח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E08">
+    <h3>P29.5-E08 · שרת MCP לחנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">server.registerTool(name, { description, inputSchema: { query: z.string()… } }, async (args) =&gt; ({ content: [{ type: "text", text }] }))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>customerId</code> הוא פרמטר של <em>השרת</em> — לא שדה בקלט של הכלי. המודל לא יכול לבחור אותו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E08: שרת MCP — הכלים של החנות, לכל סוכן שמדבר MCP
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { Store } from "../files/store.ts";
+
+const text = (t: string) =&gt; ({ content: [{ type: "text" as const, text: t }] });
+const error = (t: string) =&gt; ({ ...text(t), isError: true });
+
+// customerId מגיע מהשרת (מי מחובר), לא מהמודל — המודל לא יכול לבקש הזמנה של לקוח אחר
+export function createCoffeeMcpServer(store: Store, customerId: number): McpServer {
+  const server = new McpServer({ name: "coffee-shop", version: "1.0.0" });
+
+  server.registerTool(
+    "search_products",
+    {
+      description: "Search the coffee shop catalog by name. Returns id, name, price in ILS and whether it is in stock.",
+      inputSchema: { query: z.string().min(2).max(50) },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ query }) =&gt; {
+      const q = query.toLowerCase();
+      const found = store.products
+        .filter((p) =&gt; p.name.toLowerCase().includes(q))
+        .map((p) =&gt; ({ id: p.id, name: p.name, price: p.priceCents / 100, inStock: p.stock &gt; 0 }));
+      return text(JSON.stringify(found));
+    },
+  );
+
+  server.registerTool(
+    "get_order",
+    {
+      description: "Get one of the signed-in customer's orders by order id: status, total in ILS and items.",
+      inputSchema: { orderId: z.number().int().positive() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      // הזמנה של לקוח אחר — בדיוק כמו "לא קיימת": לא מגלים שהיא קיימת
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`);
+      return text(JSON.stringify({ id: o.id, status: o.status, total: o.totalCents / 100, items: o.items }));
+    },
+  );
+
+  server.registerTool(
+    "list_my_orders",
+    {
+      description: "List the signed-in customer's orders (id, status, total in ILS), newest first.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () =&gt; {
+      const mine = [...store.orders.values()].filter((o) =&gt; o.customerId === customerId).sort((a, b) =&gt; b.id - a.id);
+      return text(JSON.stringify(mine.map((o) =&gt; ({ id: o.id, status: o.status, total: o.totalCents / 100 }))));
+    },
+  );
+  return server;
+}</code></pre>
+<p>להריץ את השרת הזה ב־Claude Code או בכל host אחר — מוסיפים בסוף <code class="mid">await server.connect(new StdioServerTransport())</code> (מ־<code class="mid">@modelcontextprotocol/sdk/server/stdio.js</code>), ומגדירים את הפקודה בהגדרות ה־MCP של ה־host. ושימו לב ל־<code>annotations</code>: <code>readOnlyHint</code> אומר ל־host שהכלי לא משנה כלום — host יכול להחליט לא לבקש עליו אישור.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E09">
+    <h3>P29.5-E09 · גשר MCP ← Claude 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">await mcp.listTools({ cursor })</code>, <code class="mid">await mcp.callTool({ name, arguments })</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>prefix (<code>shop_</code>, <code>crm_</code>) מונע התנגשות כששני שרתים חושפים כלי באותו שם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E09: גשר בין MCP ל־Messages API — הכלים של שרת MCP, כלים של Claude
+import type Anthropic from "@anthropic-ai/sdk";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+
+export async function mcpToolsForClaude(mcp: Client, { prefix = "" } = {}): Promise&lt;Anthropic.Tool[]&gt; {
+  const out: Anthropic.Tool[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await mcp.listTools(cursor ? { cursor } : {}); // שרת יכול להחזיר רשימה בעמודים
+    for (const t of page.tools) {
+      const { $schema, ...schema } = t.inputSchema as Record&lt;string, unknown&gt;;
+      out.push({ name: prefix + t.name, description: t.description ?? "", input_schema: schema as Anthropic.Tool.InputSchema });
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return out;
+}
+
+export async function callMcpTool(mcp: Client, call: Anthropic.ToolUseBlock, { prefix = "" } = {}): Promise&lt;Anthropic.ToolResultBlockParam&gt; {
+  const name = call.name.startsWith(prefix) ? call.name.slice(prefix.length) : call.name;
+  try {
+    const res = await mcp.callTool({ name, arguments: call.input as Record&lt;string, unknown&gt; });
+    const content = (res.content as { type: string; text?: string }[])
+      .map((c) =&gt; (c.type === "text" ? c.text : `[${c.type}]`))
+      .join("\n");
+    return { type: "tool_result", tool_use_id: call.id, content, ...(res.isError ? { is_error: true } : {}) };
+  } catch (err) {
+    // שרת שנפל / timeout — עדיין tool_result, כדי שהשיחה תישאר תקינה
+    return { type: "tool_result", tool_use_id: call.id, content: `שרת ה־MCP נכשל: ${(err as Error).message}`, is_error: true };
+  }
+}</code></pre>
+<p>(ה־Messages API יודע גם להתחבר לשרתי MCP מרוחקים בעצמו — "MCP connector", עם <code>mcp_servers</code> ו־<code>mcp_toolset</code>. הגשר כאן נחוץ כשהשרת מקומי, או כשאתה רוצה לשלוט בכל קריאה: אישורים, הרשאות, logging.)</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P29.5-E21">
+    <h3>P29.5-E21 · שרת MCP — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני הכלים בודקים בעלות?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"Cancel order" — מתי מותר לבטל? המודל יודע?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E21: שרת MCP של הזמנות — אחרי התיקון
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { Store } from "../files/store.ts";
+
+const text = (t: string) =&gt; ({ content: [{ type: "text" as const, text: t }] });
+const error = (t: string) =&gt; ({ ...text(t), isError: true });
+
+export function createOrdersMcpServer(store: Store, customerId: number): McpServer {
+  const server = new McpServer({ name: "orders", version: "1.0.0" });
+  server.registerTool(
+    "get_order",
+    { description: "Get one of the signed-in customer's orders by id: status, total in ILS, items.", inputSchema: { orderId: z.number().int().positive() } },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`); // תיקון 1: רק הזמנות של הלקוח המחובר
+      return text(JSON.stringify({ id: o.id, status: o.status, total: o.totalCents / 100 }));
+    },
+  );
+  server.registerTool(
+    "cancel_order",
+    {
+      // תיקון 2: בלי תיאור המודל מנחש מתי להשתמש בכלי, ומה הוא עושה
+      description: "Cancel one of the signed-in customer's orders. Only orders that were not shipped yet (status placed or paid) can be cancelled.",
+      inputSchema: { orderId: z.number().int().positive() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ orderId }) =&gt; {
+      const o = store.orders.get(orderId);
+      if (!o || o.customerId !== customerId) return error(`הזמנה ${orderId} לא נמצאה`);
+      if (o.status !== "placed" &amp;&amp; o.status !== "paid") return error(`אי אפשר לבטל הזמנה בסטטוס ${o.status}`); // תיקון 3
+      o.status = "cancelled";
+      return text(`הזמנה ${orderId} בוטלה`);
+    },
+  );
+  return server;
+}</code></pre>
+
+
+</div></details>
+    
+  </div>
+<div class="ex typed" id="P29.5-E47">
+    <h3>P29.5-E47 · בדיקה של תיאורי כלים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const d = t.description ?? ""</code>, ורשימה של <code>[regex, קוד]</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">Object.keys(t.inputSchema.properties ?? {})</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E47: בדיקה של תיאורי כלים
+type McpTool = { name: string; description?: string; inputSchema: { properties?: Record&lt;string, unknown&gt; } };
+
+const RULES: [RegExp, string][] = [
+  [/ignore (all |any )?(previous|prior) instructions|before (using|calling)|do not (tell|mention)|&lt;important&gt;|system prompt/i, "hidden_instructions"],
+  [/~\/\.ssh|\.env\b|id_rsa|api[_-]?key/i, "secret_paths"],
+  [/https?:\/\//i, "url"],
+];
+
+export function auditMcpTools(tools: McpTool[]) {
+  const out: { tool: string; problems: string[] }[] = [];
+  for (const t of tools) {
+    const d = t.description ?? "";
+    const problems: string[] = [];
+    if (d.trim().length &lt; 20) problems.push("short_description");
+    for (const [re, code] of RULES) if (re.test(d)) problems.push(code);
+    if (Object.keys(t.inputSchema.properties ?? {}).some((p) =&gt; /^(user|customer|owner)_?id$/i.test(p))) problems.push("identity_param");
+    if (problems.length) out.push({ tool: t.name, problems });
+  }
+  return out;
+}</code></pre>
+<p>זה לא מסנן שתופס הכול — זה מה שמסמן לבן אדם "תסתכל פה". שלב ב־CI: מריצים על <code>listTools</code> של כל שרת אחרי כל עדכון גרסה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את התיאור של הכלי — גם תיאורים של <em>פרמטרים</em> בתוך ה־schema נכנסים להקשר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E48">
+    <h3>P29.5-E48 · רק הכלים שאישרנו 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const ok = new Set(allowed)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לולאת <code>do … while (cursor)</code> כמו ב־E09.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E48: רק הכלים שאישרנו
+type ToolsClient = {
+  listTools(params?: { cursor?: string }): Promise&lt;{ tools: { name: string }[]; nextCursor?: string }&gt;;
+  callTool(p: { name: string; arguments?: Record&lt;string, unknown&gt; }): Promise&lt;{ content: unknown[]; isError?: boolean }&gt;;
+};
+
+export function allowlist(client: ToolsClient, allowed: string[]): ToolsClient {
+  const ok = new Set(allowed);
+  return {
+    async listTools() {
+      const tools: { name: string }[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await client.listTools(cursor ? { cursor } : {});
+        tools.push(...page.tools.filter((t) =&gt; ok.has(t.name)));
+        cursor = page.nextCursor;
+      } while (cursor);
+      return { tools };
+    },
+    async callTool(p) {
+      if (!ok.has(p.name)) return { content: [{ type: "text", text: `tool not allowed: ${p.name}` }], isError: true };
+      return client.callTool(p);
+    },
+  };
+}</code></pre>
+<p>המודל לא <em>רואה</em> את שאר הכלים (פחות הקשר, פחות תיאורים שצריך לסמוך עליהם), וגם אם ביקש — לא רץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסנן רק את <code>listTools</code> — מודל שראה את שם הכלי בתוכן (או מנחש) עדיין יכול להפעיל אותו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E49">
+    <h3>P29.5-E49 · שרת MCP לשאלות נפוצות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">inputSchema: { query: z.string().min(2).max(100), limit: z.number().int().min(1).max(10).optional() }</code></pre>
+<p>קלט לא תקין — ה־SDK כבר מחזיר כשגיאה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E49: שרת MCP לשאלות נפוצות
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+type Faq = { id: string; q: string; a: string };
+
+export function createFaqMcpServer(faqs: Faq[]) {
+  const server = new McpServer({ name: "faq", version: "1.0.0" });
+  server.registerTool(
+    "search_faq",
+    {
+      description: "Search the shop FAQ by free text. Returns up to `limit` matching questions with their answers, as JSON.",
+      inputSchema: { query: z.string().min(2).max(100), limit: z.number().int().min(1).max(10).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ query, limit = 3 }) =&gt; {
+      const words = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])];
+      const hits = faqs
+        .map((f) =&gt; {
+          const text = `${f.q} ${f.a}`.toLowerCase();
+          return { f, score: words.filter((w) =&gt; text.includes(w)).length };
+        })
+        .filter((h) =&gt; h.score &gt; 0)
+        .sort((x, y) =&gt; y.score - x.score || (x.f.id &lt; y.f.id ? -1 : x.f.id &gt; y.f.id ? 1 : 0))
+        .slice(0, limit)
+        .map(({ f }) =&gt; ({ id: f.id, q: f.q, a: f.a }));
+      return { content: [{ type: "text" as const, text: hits.length ? JSON.stringify(hits) : "no results" }] };
+    },
+  );
+  return server;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אין תוצאות" כ־<code>isError</code> — זו תשובה תקינה; המודל יכול לנסח אחרת או לענות שאין מידע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E50">
+    <h3>P29.5-E50 · כמה שרתים, שמות בלי התנגשות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">Map&lt;string, { prefix, tool }&gt;</code> — גם בודק כפילויות, וגם משמש את <code>route</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">const { $schema, ...schema } = t.inputSchema</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E50: כמה שרתים, שמות בלי התנגשות
+import type Anthropic from "@anthropic-ai/sdk";
+
+type ServerTools = { prefix: string; tools: { name: string; description?: string; inputSchema: Record&lt;string, unknown&gt; }[] };
+
+export function mergeTools(servers: ServerTools[]) {
+  const routes = new Map&lt;string, { prefix: string; tool: string }&gt;();
+  const tools: Anthropic.Tool[] = [];
+  for (const s of servers) {
+    if (!/^[a-z][a-z0-9]*$/.test(s.prefix)) throw new Error(`prefix לא חוקי: ${s.prefix}`);
+    for (const t of s.tools) {
+      const name = `${s.prefix}_${t.name}`;
+      if (name.length &gt; 64 || !/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error(`שם כלי לא חוקי: ${name}`);
+      if (routes.has(name)) throw new Error(`שם כפול: ${name}`);
+      routes.set(name, { prefix: s.prefix, tool: t.name });
+      const { $schema, ...schema } = t.inputSchema;
+      tools.push({ name, description: t.description ?? "", input_schema: schema as Anthropic.Tool.InputSchema });
+    }
+  }
+  return { tools, route: (name: string) =&gt; routes.get(name) ?? null };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>route</code> עם <code>name.split("_")</code> — שם כלי כמו <code>get_order</code> מתפרק לשלושה חלקים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E100">
+    <h3>P29.5-E100 · מה השתנה בכלים אחרי העדכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">new Map(before.map((t) =&gt; [t.name, t]))</code>, ואותו דבר ל־<code>after</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>להשוואת סכמות: <code>stableKey</code> מ־E26 על שתיהן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E100: מה השתנה בכלים אחרי העדכון
+type Tool = { name: string; description?: string; inputSchema: unknown };
+
+function stableKey(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableKey).join(",")}]`;
+  if (v &amp;&amp; typeof v === "object") {
+    const o = v as Record&lt;string, unknown&gt;;
+    return `{${Object.keys(o).sort().map((k) =&gt; `${JSON.stringify(k)}:${stableKey(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
+export function toolsDiff(before: Tool[], after: Tool[]) {
+  const b = new Map(before.map((t) =&gt; [t.name, t]));
+  const a = new Map(after.map((t) =&gt; [t.name, t]));
+  const added = [...a.keys()].filter((n) =&gt; !b.has(n)).sort();
+  const removed = [...b.keys()].filter((n) =&gt; !a.has(n)).sort();
+  const both = [...a.keys()].filter((n) =&gt; b.has(n)).sort();
+  const description = both.filter((n) =&gt; (b.get(n)!.description ?? "") !== (a.get(n)!.description ?? ""));
+  const schema = both.filter((n) =&gt; stableKey(b.get(n)!.inputSchema) !== stableKey(a.get(n)!.inputSchema));
+  return { added, removed, description, schema };
+}</code></pre>
+<p>ב־CI: אם יש משהו ב־<code>added</code> או ב־<code>description</code> — העדכון לא נכנס בלי שבן אדם קרא את הטקסט החדש.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות רק שמות — התקיפה של E45 משנה תיאור של כלי קיים, בלי להוסיף כלום.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P29.5-E51">
+    <h3>P29.5-E51 · שרת MCP מ־npm <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>npx</code> מוריד את הגרסה האחרונה אם אין עותק מקומי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תהליך stdio רץ עם ההרשאות של ה־host.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מוריד ומריץ את הגרסה <em>האחרונה</em> — גרסה חדשה (או חשבון npm שנפרץ) נכנסת לייצור בלי שום review.</li><li>הכול: לקרוא קבצים ומשתני סביבה (כולל <code>DATABASE_URL</code>), לפתוח חיבורי רשת, להריץ פקודות. הכלים הם רק מה שהוא <em>מציע</em> למודל.</li><li>גרסה קבועה (‏<code>some-db-mcp@1.4.2</code>) או התקנה כתלות עם lockfile ו־<code>npm ci</code>; ‏<code>DATABASE_URL</code> של משתמש DB עם הרשאות קריאה לטבלאות שצריך בלבד (ועדיף replica); ‏<code>${VAR}</code> במקום ערך בקובץ (E54); ובפרודקשן — קונטיינר נפרד בלי גישה לשאר הסודות.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה שרת פופולרי עם הרבה כוכבים" — גם חבילות פופולריות נפרצו (פרק 13).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E52">
+    <h3>P29.5-E52 · שרת MCP מרוחק: מי הלקוח? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>MCP מרוחק משתמש ב־OAuth.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>token קצר מועד, וביטול.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מה־token של הבקשה: ה־host עובר OAuth מול שרת האימות שלך, ושולח <code>Authorization: Bearer …</code>. השרת מאמת, ולוקח את <code>customerId</code> מה־token — כמו middleware של JWT בפרק 21. הכלים מקבלים אותו מה־context, לא מהקלט.</li><li>מפתח משותף = כולם אותו משתמש: אין דרך לדעת של מי ההזמנה, אין דרך לבטל גישה של אחד, ודליפה אחת פותחת הכול.</li><li>ביטול הרשאה (revoke) ל־token שלו; access token קצר ו־refresh שנבדק מול מצב החשבון. ‏scopes (‏<code>orders:read</code>) — כך שגם token שדלף מוגבל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמוך על <code>customerId</code> שה־host שולח בשדה משלו — ה־host הוא קוד של מישהו אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E53">
+    <h3>P29.5-E53 · שרת אחד גדול, או כמה קטנים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה הנזק אם הסוכן שמשתמש בשרת הזה השתכנע ממייל זדוני?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת לכל יכולת, ו־credentials לכל שרת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כל סוכן שמחובר לשרת מקבל את כל היכולות, וכל injection שמצליח — מגיע עד מחיקת חשבונות. וה־credentials של admin נמצאים בתהליך אחד שמדבר עם מודל.</li><li><code>orders-read</code> (משתמש DB לקריאה), ‏<code>refunds</code> (משתמש עם הרשאה לטבלת ההחזרים בלבד, ותמיד מאחורי אישור), ‏<code>email</code> (שליחה רק לכתובת של הלקוח מההזמנה). מחיקת חשבונות — לא דרך סוכן. כל סוכן מתחבר רק לשרתים שהוא צריך.</li><li>אותו עיקרון: role לכל שירות עם ההרשאות שהוא צריך — לא <code>AdministratorAccess</code> לכולם. כאן ה"שירות" הוא שרת MCP, וה"משתמש" הוא סוכן.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נסמן <code>destructiveHint</code> על המחיקה" — רמז, לא הרשאה (E46).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P29.5-E27">
+    <h3>P29.5-E27 · בודק קלט של כלי לפי JSON Schema 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>switch (schema.type)</code>. בכל <code>case</code>, ‏TypeScript יודע איזה חלק של ה־union זה: ב־<code>case "array"</code> יש <code>schema.items</code>, וב־<code>case "object"</code> יש <code>schema.properties</code>. מערך: <code>value.flatMap((item, i) =&gt; validate(schema.items, item, <code>${path}[${i}]</code>))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אובייקט: קודם <code class="mid">for (const key of schema.required ?? [])</code> ← חסרים. אחר כך <code class="mid">for (const key of Object.keys(obj))</code>: אין <code>properties[key]</code> ← "שדה לא מוכר", ואחרת <code>errors.push(...validate(sub, obj[key], <code>${path}.${key}</code>))</code>. ‏<code class="mid">case "number": case "integer": { ... }</code> — שני case עם אותו קוד, וסוגריים בגלל ה־<code>const</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E27 — בודק קלט של כלי לפי JSON Schema (חלק קטן)
+export type Schema =
+  | { type: "string"; enum?: string[] }
+  | { type: "number" | "integer"; minimum?: number; maximum?: number }
+  | { type: "boolean" }
+  | { type: "array"; items: Schema }
+  | { type: "object"; properties: Record&lt;string, Schema&gt;; required?: string[] };
+
+export function validate(schema: Schema, value: unknown, path = "input"): string[] {
+  switch (schema.type) {
+    case "string":
+      if (typeof value !== "string") return [`${path}: צריך להיות string`];
+      if (schema.enum &amp;&amp; !schema.enum.includes(value)) return [`${path}: חייב להיות אחד מ־${schema.enum.join(", ")}`];
+      return [];
+    case "number":
+    case "integer": {
+      if (typeof value !== "number" || !Number.isFinite(value)) return [`${path}: צריך להיות number`];
+      if (schema.type === "integer" &amp;&amp; !Number.isInteger(value)) return [`${path}: צריך להיות מספר שלם`];
+      if (schema.minimum !== undefined &amp;&amp; value &lt; schema.minimum) return [`${path}: לפחות ${schema.minimum}`];
+      if (schema.maximum !== undefined &amp;&amp; value &gt; schema.maximum) return [`${path}: לכל היותר ${schema.maximum}`];
+      return [];
+    }
+    case "boolean":
+      return typeof value === "boolean" ? [] : [`${path}: צריך להיות boolean`];
+    case "array":
+      if (!Array.isArray(value)) return [`${path}: צריך להיות array`];
+      return value.flatMap((item, i) =&gt; validate(schema.items, item, `${path}[${i}]`));
+    case "object": {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return [`${path}: צריך להיות object`];
+      const obj = value as Record&lt;string, unknown&gt;;
+      const errors: string[] = [];
+      for (const key of schema.required ?? []) if (!(key in obj)) errors.push(`${path}.${key}: חסר`);
+      for (const key of Object.keys(obj)) {
+        const sub = schema.properties[key];
+        if (!sub) errors.push(`${path}.${key}: שדה לא מוכר`);
+        else errors.push(...validate(sub, obj[key], `${path}.${key}`));
+      }
+      return errors;
+    }
+  }
+}
+
+const createOrder: Schema = {
+  type: "object",
+  required: ["customerEmail", "items"],
+  properties: {
+    customerEmail: { type: "string" },
+    items: {
+      type: "array",
+      items: { type: "object", required: ["productId", "qty"], properties: { productId: { type: "integer" }, qty: { type: "integer", minimum: 1, maximum: 10 } } },
+    },
+    shipping: { type: "string", enum: ["standard", "express"] },
+  },
+};
+console.log(validate(createOrder, { customerEmail: "dana@example.com", items: [{ productId: 3, qty: 2 }] }));
+console.log(validate(createOrder, { items: [{ productId: 3, qty: 0 }, { productId: "4", qty: 1.5 }], shipping: "drone", discount: 100 }));</code></pre>
+<pre class="terminal">[]
+[
+  'input.customerEmail: חסר',
+  'input.items[0].qty: לפחות 1',
+  'input.items[1].productId: צריך להיות number',
+  'input.items[1].qty: צריך להיות מספר שלם',
+  'input.shipping: חייב להיות אחד מ־standard, express',
+  'input.discount: שדה לא מוכר'
+]</pre>
+<p>שש שגיאות בבת אחת, כל אחת עם נתיב מדויק. זה מה שמחזירים למודל ב־<code>tool_result</code> עם <code>is_error: true</code>. מודל שמקבל "input.items[1].productId: צריך להיות number" מתקן בניסיון הבא. מודל שמקבל "invalid input" מנחש.</p>
+<p>הרקורסיה היא העיקר: <code>validate</code> של אובייקט קוראת ל־<code>validate</code> על כל שדה, וזו של מערך על כל איבר. כך מבנה בכל עומק עובד עם אותן חמש שורות. זה גם ה־"discriminated union" של פרק 11 במיטבו: ‏<code>switch</code> על <code>type</code>, ו־TypeScript מוודא שלא שכחת אף מקרה (אם תוסיף <code>"null"</code> ל־union ולא תטפל בו, ‏tsc יתלונן שהפונקציה לא מחזירה ערך).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>typeof value === "object"</code> בלבד — ‏<code>null</code> ומערכים עוברים כאובייקט.</li><li>לעצור בשגיאה הראשונה — המודל מתקן שגיאה אחת בכל סיבוב, וכל סיבוב עולה כסף.</li><li>להתעלם משדות לא מוכרים — המודל שולח <code>discount: 100</code>, והקוד שלך מתעלם ממנו בשקט, או גרוע מזה, מעביר אותו הלאה.</li><li><code>typeof value === "number"</code> בלי <code>Number.isFinite</code> — ‏<code>NaN</code> עובר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E54">
+    <h3>P29.5-E54 · בדיקה להגדרות שרתי MCP 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">Object.entries(cfg.mcpServers)</code> שומר את הסדר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">(s.args ?? []).find((a) =&gt; !a.startsWith("-"))</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E54: בדיקה להגדרות שרתי MCP
+type ServerCfg = { command: string; args?: string[]; env?: Record&lt;string, string&gt; };
+
+export function checkMcpConfig(cfg: { mcpServers: Record&lt;string, ServerCfg&gt; }): string[] {
+  const problems: string[] = [];
+  for (const [name, s] of Object.entries(cfg.mcpServers)) {
+    if (s.command !== "node" &amp;&amp; s.command !== "npx") problems.push(`${name}:command`);
+    if (s.command === "npx") {
+      const pkg = (s.args ?? []).find((a) =&gt; !a.startsWith("-"));
+      if (!pkg || !/^(@[\w.-]+\/)?[\w.-]+@\d+\.\d+\.\d+$/.test(pkg)) problems.push(`${name}:unpinned`);
+    }
+    for (const [key, value] of Object.entries(s.env ?? {})) {
+      if (/KEY|TOKEN|SECRET|PASSWORD/i.test(key) &amp;&amp; !/^\$\{[A-Z0-9_]+\}$/.test(value)) problems.push(`${name}:inline_secret:${key}`);
+    }
+  }
+  return problems;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק <code>@latest</code> — גם <code>^1.4.0</code> ובלי גרסה בכלל מורידים משהו שלא בדקת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P29.5-E55">
+    <h3>P29.5-E55 · לוג ביקורת לכלי MCP 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">Object.fromEntries(Object.entries(args).map(([k, v]) =&gt; [k, hide.has(k) ? "[REDACTED]" : v]))</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שורת לוג אחת — לכן <code>log</code> בכל ענף, לא ב־<code>finally</code> וגם בענף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29.5-E55: לוג ביקורת לכלי MCP
+type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
+type Handler&lt;A&gt; = (args: A) =&gt; Promise&lt;Result&gt;;
+
+export function audited&lt;A extends Record&lt;string, unknown&gt;&gt;(
+  tool: string,
+  handler: Handler&lt;A&gt;,
+  opts: { log: (entry: object) =&gt; void; customerId: number; now?: () =&gt; number; redact?: string[] },
+): Handler&lt;A&gt; {
+  const now = opts.now ?? Date.now;
+  const hide = new Set(opts.redact ?? []);
+  return async (args: A) =&gt; {
+    const safeArgs = Object.fromEntries(Object.entries(args).map(([k, v]) =&gt; [k, hide.has(k) ? "[REDACTED]" : v]));
+    const start = now();
+    const base = { msg: "mcp_tool", tool, customerId: opts.customerId };
+    try {
+      const r = await handler(args);
+      opts.log({ ...base, ms: now() - start, isError: r.isError === true, args: safeArgs });
+      return r;
+    } catch (err) {
+      opts.log({ ...base, ms: now() - start, isError: true, args: safeArgs, error: (err as Error).message });
+      return { content: [{ type: "text", text: "internal error" }], isError: true };
+    }
+  };
+}</code></pre>
+<p>בשרת:</p>
+<pre><code class="lang-ts">server.registerTool("get_order", def, audited("get_order", handler, { log: logger.info.bind(logger), customerId }));</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשנות את <code>args</code> עצמו כדי להסתיר — ה־handler מקבל <code>"[REDACTED]"</code> במקום הערך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-safety.html"><small>הבא</small>שיעור 3 — אישורים, guardrails ותוכן לא אמין</a></div>
+</main>
+</body>
+</html>

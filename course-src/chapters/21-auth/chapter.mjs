@@ -10,7 +10,7 @@ export default {
   prismaProjects: ["solutions/tasks-api"],
   nestProjects: ["solutions/tasks-api"],
   time: "5 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 100,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+, VS Code, PostgreSQL, ופרויקט 2 בשלב ג׳ (NestJS).</p>
 <p><strong>מה מתקינים עכשיו:</strong> שתי חבילות — הן כבר רשומות ב־<code>package.json</code> של תיקיית הקורס (<code>npm install</code>), ובפרויקט מתקינים אותן בשיעור 5:</p>
 <ul>

@@ -1,0 +1,4 @@
+-- P25.5-E49: סכום מצטבר לכל לקוח
+-- הזמנות paid/shipped: customer, order_id, created_at, total, running_total, nth — לפי שם, זמן ו־id
+--
+-- בדיקה:  npm run check P25.5-E49

@@ -1,0 +1,4 @@
+-- P17-E51: מי קנה ספלים?
+-- ההזמנות עם 'Ceramic Mug' (לפי שם המוצר): order_id, full_name, ordered_on (date), quantity — לפי order_id
+--
+-- בדיקה:  npm run check P17-E51

@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 28.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>28w-scale/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P28.5-E03">
+    <h3>P28.5-E03 · מי חוסם את ה־event loop? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־event loop הוא thread אחד. timer יכול לרוץ רק כשה־JavaScript הנוכחי מסתיים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>pbkdf2 עם callback רץ ב־thread pool של libuv — לא ב־thread של JavaScript.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { pbkdf2, pbkdf2Sync } from "node:crypto";
+
+// מתזמנים timer של 10ms, ומיד מתחילים עבודה. השאלה: ה־timer רץ בזמן העבודה, או רק אחריה?
+function measure(label: string, work: (done: () =&gt; void) =&gt; void) {
+  return new Promise&lt;void&gt;((resolve) =&gt; {
+    let timerAt = 0;
+    let doneAt = 0;
+    const report = () =&gt; {
+      if (!timerAt || !doneAt) return;
+      console.log(`${label.padEnd(16)} ${timerAt &lt; doneAt ? "timer fired while the work was running" : "timer waited until the work finished"}`);
+      resolve();
+    };
+    setTimeout(() =&gt; ((timerAt = performance.now()), report()), 10);
+    work(() =&gt; ((doneAt = performance.now()), report()));
+  });
+}
+
+await measure("pbkdf2Sync", (done) =&gt; {
+  pbkdf2Sync("pw", "salt", 1_000_000, 32, "sha256");
+  done();
+});
+await measure("pbkdf2 (async)", (done) =&gt; pbkdf2("pw", "salt", 1_000_000, 32, "sha256", () =&gt; done()));
+await measure("busy loop", (done) =&gt; {
+  let x = 0;
+  for (let i = 0; i &lt; 300_000_000; i++) x += i;
+  done();
+});</code></pre>
+<pre class="terminal">pbkdf2Sync       timer waited until the work finished
+pbkdf2 (async)   timer fired while the work was running
+busy loop        timer waited until the work finished</pre>
+<p><code>pbkdf2Sync</code> ולולאת החישוב תופסים את ה־thread היחיד של JavaScript — שום timer, שום בקשת HTTP ושום health check לא ייענו עד שיסתיימו. ב־API עם 100 משתמשים, התחברות אחת "מקפיאה" את כולם. <code>pbkdf2</code> האסינכרוני עושה בדיוק את אותה עבודה — ב־thread אחר. עבודת CPU של JavaScript עצמו (הלולאה) — מעבירים ל־worker thread (E13).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E42">
+    <h3>P28.5-E42 · חוסם או לא? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חסימה = הקוד שלך רץ על ה־thread הראשי ולא משחרר אותו. "לוקח זמן" ≠ "חוסם".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שאל גם: כמה זמן, וכמה פעמים בשנייה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>חוסם, אבל לא בעיה: פעם אחת, לפני שיש בקשות.</li><li>חוסם ובעיה: עשרות ms לכל העלאה, וכל השרת מחכה.</li><li>לא חוסם (thread pool). אבל 40MB בזיכרון לכל בקשה — עדיף stream (שיעור 3).</li><li>חוסם, זניח: מיקרו־שניות.</li><li>חוסם ובעיה: מאות ms עד שניות של CPU, ומחרוזת ענקית בזיכרון. ‏stream של NDJSON, או עימוד.</li><li>לא חוסם: ה־await מחכה; השרת משרת אחרים. (400ms זו בעיה אחרת — אינדקס.)</li><li>חוסם, זניח.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"async = לא חוסם" — <code>async function</code> שמריצה לולאה של שנייה חוסמת שנייה. ה־await רק משחרר כשמחכים למשהו חיצוני.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E43">
+    <h3>P28.5-E43 · ארבעה threads ומאה התחברויות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־thread pool: ארבעה threads כברירת מחדל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>fs</code> משתמש באותו pool.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏4 — גודל ה־thread pool.</li><li>‏100 / 4 = 25 "סבבים" × 80ms ≈ 2 שניות.</li><li><code>/health</code> — כן: ה־event loop פנוי. אבל <code>fs.readFile</code> נכנס לאותו תור של ה־pool — ומחכה מאחורי ה־scrypt. גם <code>dns.lookup</code> (כל <code>fetch</code> לשם מתחם).</li><li>64 threads מתחרים על 2 ליבות: כל אחד מקבל פחות זמן, ההתחברויות לא מסתיימות מהר יותר בסך הכול, וה־event loop עצמו מקבל פחות CPU. מגדילים pool עד בערך מספר הליבות; מעבר לזה — הגבלת concurrency (‏E49) והגבלת קצב על login.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהגרסה האסינכרונית "חינם" — היא משחררת את ה־event loop, לא את ה־CPU.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E44">
+    <h3>P28.5-E44 · ‏worker לכל בקשה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>עשרות מילישניות ו־10MB לכל worker.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>1,000 workers בו־זמנית — כמה זיכרון?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>עשרות ms ו־~10MB לכל אחד. ב־200 בשנייה — מאות ms של CPU בשנייה רק על יצירה, ואיסוף זבל.</li><li>א׳: 1,000 workers ← כ־10GB זיכרון — התהליך נהרג. ב׳: 4 עובדים, 996 בתור — איטי אבל יציב; ואפשר להגביל את התור ולהחזיר 503 כשהוא מלא.</li><li>כשהעבודה לא צריכה תשובה מיד (התמונה יכולה להיות מוכנה בעוד דקה) — תור (BullMQ, פרק 26) ותהליך worker נפרד שאפשר להגדיל בלי לגעת ב־API.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>pool בלי גבול על התור — במקום זיכרון של workers, זיכרון של בקשות שמחכות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E45">
+    <h3>P28.5-E45 · ‏regex שמפיל שרת <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>(x+)+</code> — יש מספר עצום של דרכים לחלק את ה־a־ים בין שתי הלולאות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כשההתאמה מצליחה, המנוע עוצר מיד. רק כישלון מכריח לנסות את כל החלוקות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>backtracking קטסטרופלי: המנוע מנסה כ־2³⁰ חלוקות לפני שהוא מוותר — שניות עד דקות של CPU.</li><li>בלי ה־<code>!</code> ההתאמה מצליחה מיד. הכישלון בסוף מכריח אותו לנסות כל אפשרות.</li><li>ה־event loop חסום — כל השרת לא עונה. בקשה אחת = מניעת שירות (ReDoS).</li><li>לכתוב <code>/^[a-z0-9]+$/</code> (בלי קבוצה מקוננת); להגביל אורך <em>לפני</em> ה־regex (‏<code>z.string().max(30)</code>); ולא לבנות regex מקלט של משתמש בלי escape (‏E50).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"זה עבד בבדיקות" — עם קלט תקין זה תמיד מהיר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E46">
+    <h3>P28.5-E46 · לקרוא גרף של event loop lag <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>lag = כמה זמן timer מחכה מעבר למה שביקש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם המסד מהיר וה־lag גבוה — הבעיה בקוד שלך.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>משהו סינכרוני ב־thread הראשי צורך CPU: כל בקשה מחכה עד 400ms לפני שהקוד שלה בכלל רץ. זה מסביר את רוב העלייה.</li><li>CPU profile תחת עומס (‏<code>--cpu-prof</code>, ‏clinic flame) — מה רחב בראש ה־flame graph. ובדיקה מה השתנה ב־14:00: deploy? endpoint חדש? קלט חריג (JSON ענק, regex)?</li><li>מחוץ לתהליך: המסד, שירות חיצוני, ה־thread pool (מלא ב־scrypt — ה־event loop פנוי אבל מחכים לו), או חיבורים שנגמרו ב־pool של המסד.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להגדיל עותקים לפני שמבינים — אם בקשה אחת עם קלט חריג חוסמת, היא תחסום כל עותק שהיא מגיעה אליו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E13">
+    <h3>P28.5-E13 · worker threads 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">new Worker(WORKER_CODE, { eval: true })</code>, <code class="mid">worker.postMessage([from, to])</code>, <code>worker.on("message", …)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תור משותף של טווחים: כל worker שמסיים — מקבל את הבא. Promise לכל worker שמסתיים כשהתור ריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E13: עבודת CPU ב־worker threads — כדי שה־event loop ימשיך לענות
+import { Worker } from "node:worker_threads";
+
+// הקוד שרץ בכל worker (מוכן): מקבל [from, to] ומחזיר כמה ראשוניים יש בטווח
+export const WORKER_CODE = `
+const { parentPort } = require("node:worker_threads");
+parentPort.on("message", ([from, to]) =&gt; {
+  let count = 0;
+  for (let n = Math.max(2, from); n &lt; to; n++) {
+    let prime = true;
+    for (let d = 2; d * d &lt;= n; d++) if (n % d === 0) { prime = false; break; }
+    if (prime) count++;
+  }
+  parentPort.postMessage(count);
+});`;
+
+export async function countPrimesParallel(limit: number, { threads = 4, chunks = 16 } = {}): Promise&lt;number&gt; {
+  const size = Math.ceil(limit / chunks);
+  const ranges: [number, number][] = Array.from({ length: chunks }, (_, i) =&gt; [i * size, Math.min(limit, (i + 1) * size)]);
+  let next = 0;
+  let total = 0;
+  const workers = Array.from({ length: Math.min(threads, ranges.length) }, () =&gt; new Worker(WORKER_CODE, { eval: true }));
+  try {
+    // כל worker לוקח את הטווח הבא כשהוא מסיים — כך אף אחד לא יושב בטל
+    await Promise.all(
+      workers.map(
+        (w) =&gt;
+          new Promise&lt;void&gt;((resolve, reject) =&gt; {
+            const giveNext = () =&gt; {
+              if (next &gt;= ranges.length) return resolve();
+              w.postMessage(ranges[next++]);
+            };
+            w.on("message", (count: number) =&gt; {
+              total += count;
+              giveNext();
+            });
+            w.on("error", reject);
+            giveNext();
+          }),
+      ),
+    );
+  } finally {
+    await Promise.all(workers.map((w) =&gt; w.terminate()));
+  }
+  return total;
+}</code></pre>
+<p>worker threads הם לא "async": כל worker הוא thread נוסף עם V8 משלו (כ־10MB זיכרון, ועשרות ms לעלות). לכן — pool קבוע, לא worker לכל בקשה (בפרודקשן: <code>piscina</code>). ולעבודה ש־Node כבר מריץ ב־thread pool (crypto, zlib, fs) — מספיקה הגרסה האסינכרונית (E03, E23).</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E14">
+    <h3>P28.5-E14 · מוניטור ל־event loop 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ה־histogram מודד בננו־שניות: <code>h.max / 1e6</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>timer.unref()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E14: מוניטור ל־event loop — מתריע כשמשהו חוסם
+import { monitorEventLoopDelay } from "node:perf_hooks";
+
+export interface LagReport {
+  p99Ms: number;
+  maxMs: number;
+}
+
+export function startLagMonitor({ thresholdMs, intervalMs = 1000, onLag }: { thresholdMs: number; intervalMs?: number; onLag: (r: LagReport) =&gt; void }): () =&gt; void {
+  const h = monitorEventLoopDelay({ resolution: 10 });
+  h.enable();
+  const timer = setInterval(() =&gt; {
+    const report = { p99Ms: Math.round(h.percentile(99) / 1e6), maxMs: Math.round(h.max / 1e6) }; // ננו־שניות ← מילי
+    h.reset(); // כל חלון נמדד בנפרד
+    if (report.maxMs &gt;= thresholdMs) onLag(report);
+  }, intervalMs);
+  timer.unref(); // מוניטור לא אמור להשאיר את התהליך חי
+  return () =&gt; {
+    clearInterval(timer);
+    h.disable();
+  };
+}</code></pre>
+<p>בפרודקשן מייצאים את זה כמדד (<code class="mid">nodejs_eventloop_lag_seconds</code> ב־prom-client) ומתריעים עליו: p99 lag של 200ms אומר שכל בקשה בשרת הזה מחכה עד 200ms — לפני שהקוד שלה בכלל התחיל.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E23">
+    <h3>P28.5-E23 · שרת שנתקע — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל פונקציה שנגמרת ב־<code>Sync</code> רצה על ה־event loop.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">import { setTimeout as sleep } from "node:timers/promises"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E23: שרת שה־event loop שלו פנוי — אחרי התיקון
+import http from "node:http";
+import { pbkdf2 } from "node:crypto";
+import { gzip } from "node:zlib";
+import { promisify } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const pbkdf2Async = promisify(pbkdf2);
+const gzipAsync = promisify(gzip);
+const SALT = "coffee-salt";
+const EXPORT = Buffer.from(JSON.stringify(Array.from({ length: 200_000 }, (_, i) =&gt; ({ id: i, name: `order-${i}`, total: i % 997 }))));
+
+export function createServer(): http.Server {
+  return http.createServer(async (req, res) =&gt; {
+    try {
+      if (req.url === "/health") return void res.end("ok");
+      if (req.url === "/login") {
+        // תיקון 1: pbkdf2 האסינכרוני רץ ב־thread pool של libuv, לא על ה־event loop
+        const hash = await pbkdf2Async("secret-password", SALT, 200_000, 32, "sha256");
+        return void res.end(hash.toString("hex").slice(0, 8));
+      }
+      if (req.url === "/export") {
+        const body = await gzipAsync(EXPORT); // תיקון 2: גם gzip — ב־thread pool
+        res.setHeader("content-encoding", "gzip");
+        return void res.end(body);
+      }
+      if (req.url === "/slow") {
+        await sleep(300); // תיקון 3: המתנה שלא חוסמת (במקום while על Date.now)
+        return void res.end("done");
+      }
+      res.statusCode = 404;
+      res.end();
+    } catch {
+      res.statusCode = 500;
+      res.end();
+    }
+  });
+}</code></pre>
+<p>איך מוצאים את זה בפרודקשן: מוניטור lag (E14) מראה שה־event loop נחסם; ואז <code>node --cpu-prof</code> (או <code>clinic flame</code>) — פרופיל שמראה באיזו פונקציה ה־CPU בילה. <code>pbkdf2Sync</code> בראש ה־flame graph — וזהו.</p>
+
+
+</div></details>
+    
+  </div>
+<div class="ex" id="P28.5-E47">
+    <h3>P28.5-E47 · לעבד מערך גדול בלי לחסום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const pause = () =&gt; new Promise((r) =&gt; setImmediate(r))</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>async function</code> עם לולאת <code>for</code>, ו־<code class="mid">if ((i + 1) % chunkSize === 0) await pause()</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E47: לעבד מערך גדול בלי לחסום
+const pause = () =&gt; new Promise&lt;void&gt;((resolve) =&gt; setImmediate(resolve));
+
+export async function mapInChunks&lt;T, R&gt;(items: T[], fn: (item: T, index: number) =&gt; R, chunkSize = 1000): Promise&lt;R[]&gt; {
+  if (!Number.isInteger(chunkSize) || chunkSize &lt;= 0) throw new RangeError("chunkSize חייב להיות שלם חיובי");
+  const out: R[] = [];
+  for (let i = 0; i &lt; items.length; i++) {
+    out.push(fn(items[i], i));
+    if ((i + 1) % chunkSize === 0) await pause();
+  }
+  return out;
+}</code></pre>
+<p>‏<code>setImmediate</code> ולא <code>await Promise.resolve()</code>: ‏microtask רץ לפני שה־event loop ממשיך לבקשות אחרות — כלומר הוא לא משחרר כלום. ‏<code>setImmediate</code> נותן ל־I/O ול־timers לרוץ.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>await null</code> בין חתיכות — נראה כמו הפסקה, אבל זה microtask: השרת עדיין חסום.</li><li>הזמן הכולל ארוך קצת יותר — זה המחיר. העבודה לא נהיית קלה יותר; היא רק מפסיקה לחסום.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E48">
+    <h3>P28.5-E48 · מי הכי רחב ב־flame graph? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני Maps: ‏<code>self</code> ו־<code>total</code>. לכל דגימה: ‏<code>new Set(stack)</code> ל־total, ו־<code>stack.at(-1)</code> ל־self.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אחוז: <code class="mid">Math.round((n / samples.length) * 1000) / 10</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E48: מי הכי רחב ב־flame graph?
+export function hotFunctions(samples: string[][], top = 5) {
+  const self = new Map&lt;string, number&gt;();
+  const total = new Map&lt;string, number&gt;();
+  for (const stack of samples) {
+    for (const name of new Set(stack)) total.set(name, (total.get(name) ?? 0) + 1);
+    const leaf = stack.at(-1);
+    if (leaf !== undefined) self.set(leaf, (self.get(leaf) ?? 0) + 1);
+  }
+  const pct = (n: number) =&gt; Math.round((n / samples.length) * 1000) / 10;
+  return [...total.keys()]
+    .map((name) =&gt; ({ name, self: pct(self.get(name) ?? 0), total: pct(total.get(name)!) }))
+    .sort((a, b) =&gt; b.self - a.self || b.total - a.total || (a.name &lt; b.name ? -1 : a.name &gt; b.name ? 1 : 0))
+    .slice(0, top);
+}</code></pre>
+<p>‏<code>total</code> גבוה ו־<code>self</code> נמוך (כמו <code>handleRequest</code>) — פונקציה שקוראת לדבר היקר. ‏<code>self</code> גבוה — היא עצמה היקרה. בדרך כלל מחפשים את השנייה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לספור פונקציה רקורסיבית כמה פעמים באותה דגימה — ה־total עובר 100%.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E49">
+    <h3>P28.5-E49 · ‏semaphore: לכל היותר N בבת אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מונה <code>running</code> ומערך <code>queue</code> של פונקציות "התחל אותי".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>run</code>:</p>
+<pre><code class="lang-ts">if (running &gt;= max) await new Promise&lt;void&gt;((r) =&gt; queue.push(r))</code></pre>
+<p><code>running++</code>;</p>
+<pre><code class="lang-ts">try { return await fn() } finally { running--; queue.shift()?.() }</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E49: semaphore — לכל היותר N בבת אחת
+export function createSemaphore(max: number, maxQueue = Infinity) {
+  if (!Number.isInteger(max) || max &lt;= 0) throw new RangeError("max חייב להיות שלם חיובי");
+  let running = 0;
+  const queue: (() =&gt; void)[] = [];
+
+  async function run&lt;T&gt;(fn: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+    if (running &gt;= max) {
+      if (queue.length &gt;= maxQueue) throw new Error("busy: התור מלא");
+      await new Promise&lt;void&gt;((resolve) =&gt; queue.push(resolve));
+    }
+    running++;
+    try {
+      return await fn();
+    } finally {
+      running--;
+      queue.shift()?.();
+    }
+  }
+
+  return { run, active: () =&gt; running, waiting: () =&gt; queue.length };
+}</code></pre>
+<p>הסדר חשוב: ‏<code>running++</code> קורה רק אחרי שהגיע התור — וה־<code>finally</code> מעיר את הבא רק אחרי <code>running--</code>. כך המונה לא עובר את <code>max</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשחרר בתוך <code>then</code> ולא ב־<code>finally</code> — ‏<code>fn</code> שנכשלת לא משחררת, ואחרי <code>max</code> כישלונות הכול תקוע לנצח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E50">
+    <h3>P28.5-E50 · חיפוש עם regex בטוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&amp;")</code> — ‏<code>$&amp;</code> הוא "מה שהתאים".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"כל המילים, בכל סדר": lookahead לכל מילה — <code>(?=.*milk)(?=.*oat)</code>, עם הדגל <code>i</code>. ‏lookahead עם <code>.*</code> ומילה קבועה הוא לינארי — אין קינון.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E50: חיפוש עם regex בטוח
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&amp;");
+}
+
+export function buildSearch(q: string): RegExp {
+  const trimmed = q.trim();
+  if (!trimmed || trimmed.length &gt; 50) throw new RangeError("חיפוש ריק או ארוך מדי");
+  const words = trimmed.split(/\s+/).map(escapeRegex);
+  return new RegExp(words.map((w) =&gt; `(?=.*${w})`).join(""), "i");
+}</code></pre>
+<p>במסד עושים את אותו דבר עם <code>ILIKE</code> ופרמטר — וגם שם צריך escape ל־<code>%</code> ו־<code>_</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח את <code>\</code> עצמו ברשימה — <code>"a\\"</code> הופך ל־regex שבור.</li><li>‏<code>new RegExp(q, "g")</code> עם <code>test</code> — דגל <code>g</code> זוכר <code>lastIndex</code> בין קריאות, והתוצאות מתחלפות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E51">
+    <h3>P28.5-E51 · ‏JSON ענק בחתיכות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">for (let i = 0; i &lt; items.length; i += perChunk)</code>, ובכל צעד</p>
+<pre><code class="lang-ts">items.slice(i, i + perChunk).map((x) =&gt; JSON.stringify(x)).join(",")</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפני כל חתיכה: <code>i === 0 ? "[" : ","</code>. אחרי האחרונה: <code>"]"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E51: JSON ענק בחתיכות
+export function* jsonArrayChunks(items: unknown[], perChunk = 500): Generator&lt;string&gt; {
+  if (items.length === 0) {
+    yield "[]";
+    return;
+  }
+  for (let i = 0; i &lt; items.length; i += perChunk) {
+    const body = items.slice(i, i + perChunk).map((x) =&gt; JSON.stringify(x) ?? "null").join(",");
+    const last = i + perChunk &gt;= items.length;
+    yield (i === 0 ? "[" : ",") + body + (last ? "]" : "");
+  }
+}</code></pre>
+<p>‏<code>?? "null"</code>: ‏<code>JSON.stringify(undefined)</code> מחזיר <code>undefined</code>, אבל בתוך מערך, ‏<code>JSON.stringify</code> כותב <code>null</code>. ככה התוצאה זהה גם במקרה הזה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>פסיק אחרי האיבר האחרון — ‏<code>[1,2,]</code> אינו JSON תקין.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P28.5-E52">
+    <h3>P28.5-E52 · ‏bcryptjs תחת עומס <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>20 × 250ms = 5 שניות של CPU בכל שנייה — על thread אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"לא חוסם" ≠ "זול".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>חסימה מלאה: ה־event loop עסוק כל הזמן בהשוואות, כל בקשה אחרת מחכה, ו־health checks נכשלים. וגם — העבודה אף פעם לא מספיקה: 5 שניות CPU בשנייה.</li><li>לא — אותה כמות CPU (וקצת יותר). מה משתפר: בקשות אחרות מקבלות תור בין החתיכות, ו־<code>/health</code> עונה. אבל השרת עדיין לא יכול לעשות יותר מ־4 הרשמות בשנייה לליבה. לכן: הגבלת קצב על register/login (פרק 24), ו־semaphore (‏E49).</li><li>cost הוא פשרה: כל +1 מכפיל את הזמן. 12 ≈ 250ms — יקר לתוקף שמנסה מיליארדים, נסבל לשרת. 16 ≈ 4 שניות להתחברות אחת — מניעת שירות עצמית.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוריד את ה־cost כדי "לפתור" עומס — זה מחליש את האבטחה של כל הסיסמאות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E53">
+    <h3>P28.5-E53 · ה־thread pool משותף <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>fetch</code> לשם מתחם מתחיל ב־<code>dns.lookup</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ארבעה threads — לכולם.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>שלושתם רצים על אותו thread pool של 4: ‏<code>dns.lookup</code>, ‏<code>fs</code>, ו־<code>pbkdf2</code>.</li><li>ה־event loop פנוי — הוא רק מחכה. התור הוא בתוך ה־pool: ה־<code>readFile</code> עומד מאחורי <code>pbkdf2</code> ו־DNS איטיים.</li><li>לטעון את התבניות לזיכרון פעם אחת בעלייה; להגביל concurrency של ההתחברויות (‏E49) או להעביר hashing ל־worker; cache ל־DNS (או <code>UV_THREADPOOL_SIZE</code> מעט גדול יותר, עד מספר הליבות).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחפש את הבעיה ב־event loop lag בלבד — רוויה של ה־thread pool לא נראית שם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E54">
+    <h3>P28.5-E54 · ייצוא של חצי מיליון שורות מ־Prisma <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מיליוני אובייקטים ב־JavaScript — כמה מאות בתים כל אחד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>res.json</code> קורא ל־<code>JSON.stringify</code> על הכול, בבת אחת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>כל ההזמנות והפריטים כאובייקטים — גיגה־בייטים; ואז מחרוזת JSON ענקית נוספת. התהליך עלול להיהרג (OOM).</li><li>בהמרה של Prisma לאובייקטים, וב־<code>JSON.stringify</code> — שניות של CPU רצוף.</li><li>ה־admin מחכה הרבה (ואולי מקבל 502). כל השאר — השרת "קפא" לשניות, ו־health checks נכשלים.</li><li>עימוד בקבוצות עם cursor (‏<code>cursor</code>, ‏<code>take: 1000</code>), וכתיבה הדרגתית של NDJSON או CSV ל־<code>res</code> עם <code>await</code> בין קבוצות (backpressure). ואם הייצוא גדול באמת — job ברקע שכותב קובץ ל־S3 ושולח קישור.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעלות את מגבלת הזיכרון של Node — דוחה את הבעיה לייצוא הבא, הגדול יותר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E55">
+    <h3>P28.5-E55 · ‏/health עונה גם באמצע דוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאה על האינדקסים, ו־</p>
+<pre><code class="lang-ts">if (i % 20_000 === 0) await new Promise((r) =&gt; setImmediate(r))</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">app.get("/report", async (req, res) =&gt; { ... })</code> — Express 5 תופס שגיאות מ־handler אסינכרוני.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E55: /health עונה גם באמצע דוח
+import express from "express";
+
+export function score(v: number): number {
+  let x = v;
+  for (let i = 0; i &lt; 200; i++) x = (x * 1103515245 + 12345) % 2147483647;
+  return x % 1000;
+}
+
+const pause = () =&gt; new Promise&lt;void&gt;((resolve) =&gt; setImmediate(resolve));
+
+export function reportApp(values: number[]) {
+  const app = express();
+  app.get("/health", (req, res) =&gt; res.json({ ok: true }));
+  app.get("/report", async (req, res) =&gt; {
+    let sum = 0;
+    let max = -Infinity;
+    for (let i = 0; i &lt; values.length; i++) {
+      const s = score(values[i]);
+      sum += s;
+      if (s &gt; max) max = s;
+      if (i % 20_000 === 19_999) await pause();
+    }
+    res.json({ count: values.length, sum, max: values.length ? max : null });
+  });
+  return app;
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>חתיכות גדולות מדי (מיליון בבת אחת) — ההפסקות קיימות, אבל כל חתיכה עדיין חוסמת חצי שנייה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E56">
+    <h3>P28.5-E56 · ‏load shedding לפי event loop lag 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const lag = Math.round(opts.getLagMs())</code>; ‏<code class="mid">res.set("X-Lag-Ms", String(lag))</code> לפני כל החלטה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ברירת מחדל ב־destructuring: <code class="mid">const { exempt = ["/health", "/ready"] } = opts</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E56: load shedding לפי event loop lag
+import type { Request, Response, NextFunction } from "express";
+
+export function shedLoad(opts: { getLagMs: () =&gt; number; maxLagMs: number; exempt?: string[] }) {
+  const { getLagMs, maxLagMs, exempt = ["/health", "/ready"] } = opts;
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const lag = getLagMs();
+    res.set("X-Lag-Ms", String(Math.round(lag)));
+    if (exempt.includes(req.path) || lag &lt;= maxLagMs) return next();
+    res.set("Retry-After", "2").status(503).json({ error: "overloaded" });
+  };
+}</code></pre>
+<p>בפרודקשן <code>getLagMs</code> מגיע מ־<code>monitorEventLoopDelay</code> (‏E14), למשל p99 של השנייה האחרונה. ו־503 עם <code>Retry-After</code> אומר ל־load balancer ולקוחות טובים "נסה שרת אחר / עוד רגע".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לא לפטור את <code>/health</code> — הפלטפורמה רואה 503, מחליטה שהעותק מת, ומפעילה אותו מחדש בדיוק כשהוא הכי צריך לעבוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P28.5-E57">
+    <h3>P28.5-E57 · ‏pbkdf2 בלי לחסום, עם הגבלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">const derive = (pw) =&gt; new Promise((resolve, reject) =&gt; pbkdf2(pw, salt, 100_000, 32, "sha256", (err, key) =&gt; (err ? reject(err) : resolve(key.toString("hex")))))</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"limit עובדים": ‏<code>let next = 0</code>, ו־<code>limit</code> לולאות אסינכרוניות שכל אחת לוקחת את האינדקס הבא עד שנגמר; ‏<code>await Promise.all(workers)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E57: pbkdf2 בלי לחסום, עם הגבלה
+import { pbkdf2 } from "node:crypto";
+
+const derive = (password: string, salt: string) =&gt;
+  new Promise&lt;string&gt;((resolve, reject) =&gt; {
+    pbkdf2(password, salt, 100_000, 32, "sha256", (err, key) =&gt; (err ? reject(err) : resolve(key.toString("hex"))));
+  });
+
+export async function deriveAll(passwords: string[], salt: string, limit = 2): Promise&lt;string[]&gt; {
+  const out: string[] = new Array(passwords.length);
+  let next = 0;
+  async function worker() {
+    while (next &lt; passwords.length) {
+      const i = next++;
+      out[i] = await derive(passwords[i], salt);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, passwords.length) }, worker));
+  return out;
+}</code></pre>
+<p>‏<code>const i = next++</code> בטוח: JavaScript רץ על thread אחד, ואין שום <code>await</code> בין הקריאה להגדלה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code class="mid">Promise.all(passwords.map(derive))</code> — מהיר, אבל תופס את כל ה־pool; ‏<code>readFile</code> בבקשה אחרת מחכה.</li><li>‏<code>pbkdf2Sync</code> בתוך <code>async</code> — חוסם בדיוק כמו בלי async.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-streams.html"><small>הבא</small>שיעור 3 — נתונים גדולים בזרם</a></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 24</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 24</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>24-production/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P24-E04">
+    <h3>P24-E04 · מה בטוח לשלוח פעמיים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Idempotent = לבצע פעם אחת או עשר — אותו מצב בשרת בסוף. (לא בהכרח אותה תשובה.)</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"קבע ל־X" מול "שנה ב־X".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>בטוח.</strong> GET לא משנה כלום (safe).</li><li><strong>בטוח.</strong> PUT = "המצב הוא בדיוק זה". פעמיים — אותו מצב.</li><li><strong>בטוח</strong> כאן — "קבע status ל־done". PATCH לא מובטח idempotent לפי התקן, אבל הזה כן.</li><li><strong>לא!</strong> "הורד 100" פעמיים = הורדנו 200. אותו PATCH, תוצאה אחרת — לכן מעדיפים "קבע" על "שנה ב־", או מוסיפים Idempotency-Key.</li><li><strong>בטוח</strong> במצב: אחרי הראשון — המשימה לא קיימת, והשני מחזיר 404. התשובה שונה, המצב אותו.</li><li><strong>לא.</strong> שתי משימות "לקנות חלב". מעצבן.</li><li><strong>לא — וזה המקרה החשוב.</strong> חיוב כפול. זו בדיוק הסיבה ש־Stripe ודומיו דורשים <code>Idempotency-Key</code> ב־POST.</li></ol>
+<p>"לא לשלוח שוב" לא עובד כי הלקוח באמת לא יודע אם זה קרה. אין לו דרך להבחין בין "השרת לא קיבל" ל"השרת ביצע והתשובה אבדה". וגם — אפליקציות מובייל, proxies וספריות HTTP שולחים שוב לבד. הפתרון: הלקוח מייצר מפתח <strong>לפני</strong> השליחה הראשונה (UUID), ושולח אותו בכל ניסיון. השרת מבצע פעם אחת לכל מפתח.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לייצר מפתח חדש בכל ניסיון — ואז כל ניסיון נראה כמו בקשה חדשה. המפתח שייך ל<em>פעולה</em>, לא לבקשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E60">
+    <h3>P24-E60 · איך הופכים פעולה ל־idempotent? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלוש טכניקות: (א) לנסח כ"קבע ל־X" במקום "שנה ב־X"; (ב) מזהה ייחודי (מהלקוח, או אילוץ UNIQUE) שהמסד דוחה פעם שנייה; (ג) Idempotency-Key.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפעמים "כמעט נכון" מספיק — ספירת צפיות לא חייבת להיות מדויקת. ולפעמים לא — העברת כסף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>לא — פעמיים = כמות 2. אפשר <code>PUT /cart/items/7</code> ‏<code>{"quantity": 1}</code> ("הכמות היא 1"), או Idempotency-Key.</li><li>לא. שומרים <code>welcome_sent_at</code> במשתמש ושולחים רק אם הוא ריק — בעדכון אטומי (<code class="mid">UPDATE ... WHERE welcome_sent_at IS NULL RETURNING</code>), כדי ששני workers לא ישלחו יחד.</li><li>לא — אבל אולי זה בסדר: צפייה כפולה נדירה לא שווה מנגנון. אם כן חשוב — מזהה צפייה מהלקוח עם UNIQUE.</li><li>כן — "קבע ל־true".</li><li>לא, וזה הכי מסוכן. Idempotency-Key חובה (או <code>transferId</code> מהלקוח עם UNIQUE).</li><li>כמעט: ה־UNIQUE על email מונע כפילות — אבל הניסיון השני מקבל 409 "כבר קיים" במקום ה־201 שהלקוח מחכה לו. Idempotency-Key נותן את אותה תשובה בדיוק.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אוסיף UNIQUE על כל הטבלה" — לפעמים שתי פעולות זהות הן באמת שתי פעולות (שתי העברות של 100 לאותו אדם).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E61">
+    <h3>P24-E61 · מפתח חדש בכל ניסיון <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>המפתח מזהה את <em>הפעולה</em>. כמה פעולות יש כאן — אחת או שלוש?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לחיצה שנייה = קריאה שנייה ל־<code>pay</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>מפתח חדש בכל ניסיון — לשרת זה נראה כמו שלושה תשלומים שונים. הניסיון הראשון בוצע, התשובה אבדה, השני מבצע שוב — חיוב כפול. המנגנון כולו לא עושה כלום.</li><li><code class="mid">const key = crypto.randomUUID()</code> פעם אחת לפני הלולאה, ובכל ניסיון — אותו <code>key</code> (E67).</li><li>לא — כל קריאה ל־<code>pay</code> מייצרת מפתח חדש. צריך שהמפתח יהיה של "הטופס": נוצר כשהטופס נפתח (או בלחיצה הראשונה), ומתחלף רק אחרי הצלחה. ובנוסף, ב־UI — לנטרל את הכפתור בזמן שליחה (E102).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהשרת "יזהה" שזה אותו תשלום לפי הסכום — שני תשלומים זהים יכולים להיות לגיטימיים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E62">
+    <h3>P24-E62 · למה לא שומרים תשובת 5xx? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בשביל מה הלקוח שולח שוב בכלל?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בקשה לא תקינה (422) — האם שליחה חוזרת שלה יכולה להצליח?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>הניסיון השני מקבל replay של 503 — לנצח (או עד שהמפתח פג). הלקוח עשה בדיוק את מה שהמנגנון נועד לו, והוא תקוע. (זו אחת התקלות של P24-E22.) 5xx אומר "לא הצלחנו לבצע" — אז המפתח משתחרר (release), והניסיון הבא מבצע באמת.</p>
+<p>4xx (למשל 422 על <code>dueDate</code> בעבר) — אותה בקשה תיכשל שוב בכל מקרה, אז אפשר לשמור. ובפרויקט בחרנו release גם לשגיאה עסקית, כדי שהלקוח יוכל לתקן את הבקשה ולשלוח עם אותו מפתח (E92) — שתי הגישות קיימות בעולם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור "רק 2xx" ולשכוח את המצב "בטיפול" — ואז אחרי קריסה באמצע, המפתח תקוע ב־409 לנצח. צריך תוקף גם לרשומה בטיפול.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E63">
+    <h3>P24-E63 · ‏409 IN_PROGRESS — ומה עכשיו? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>חיבור שמחכה תופס משאבים בשרת. כמה ניסיונות כאלה יכולים להצטבר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>רשומה "בטיפול" שאף אחד כבר לא מטפל בה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>409 <code>IDEMPOTENCY_IN_PROGRESS</code>. לחכות בשרת = חיבור פתוח וזיכרון לכל ניסיון; לקוח עם timeout קצר יכול לייצר עשרות כאלה. פשוט יותר ובטוח יותר: לענות מיד, ולתת ללקוח להחליט.</li><li>מחכה קצת (backoff) ושולח שוב <strong>עם אותו מפתח</strong>. בסוף יקבל replay של התוצאה האמיתית. (409 הוא בין התשובות ששווה לנסות עליהן שוב — E67.)</li><li>הרשומה נשארת "בטיפול". לכן יש תוקף: אחרי ה־TTL הרשומה נחשבת לא קיימת, והניסיון הבא מבצע. (יש מערכות שנותנות לרשומה "בטיפול" תוקף קצר בהרבה מ־24 שעות — דקות.)</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר 500 ל"בטיפול" — הלקוח חושב שנכשל, ואולי מייצר מפתח חדש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E64">
+    <h3>P24-E64 · מה נכנס לטביעת האצבע? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה שקובע הוא "האם השרת היה עושה אותו דבר".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>JSON.stringify</code> שומר על סדר המפתחות כמו שהגיעו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>אותה בקשה — אבל <code>JSON.stringify</code> נותן מחרוזות שונות. צריך JSON <strong>קנוני</strong>: מפתחות ממוינים (E65).</li><li>אותה בקשה, אם מחשבים את הטביעה <em>אחרי</em> ה־validation (כמו בפרויקט). לפני — הן "שונות", והלקוח מקבל 422 בלי סיבה.</li><li>שונות — פעולות שונות לגמרי. לכן גם method ונתיב נכנסים לטביעה (או להיקף של המפתח).</li><li>אותה בקשה. headers כמו User-Agent ו־Date לא משנים את הפעולה ולא נכנסים.</li><li>שונות — במערך, הסדר הוא חלק מהתוכן. מיון מפתחות — כן; מיון מערכים — לא.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>טביעה על הגוף הגולמי (המחרוזת שהגיעה) — רווח או ירידת שורה אחרת = 422.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E14">
+    <h3>P24-E14 · מאגר של Idempotency-Key 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Map מ־id לרשומה <code class="mid">{ fingerprint, response: null | {...}, createdAt }</code>. <code>response === null</code> = בטיפול.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>id בטוח: <code class="mid">JSON.stringify([scope, key])</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E14
+export interface StoredResponse {
+  status: number;
+  body: unknown;
+}
+export type Begin =
+  | { kind: "new" }
+  | { kind: "replay"; response: StoredResponse }
+  | { kind: "mismatch" }
+  | { kind: "in_progress" };
+
+interface Entry {
+  fingerprint: string;
+  response: StoredResponse | null; // null = עדיין בטיפול
+  createdAt: number;
+}
+
+export class IdempotencyStore {
+  #entries = new Map&lt;string, Entry&gt;();
+  #ttlMs: number;
+  #now: () =&gt; number;
+
+  constructor({ ttlMs = 24 * 3600_000, now = () =&gt; Date.now() }: { ttlMs?: number; now?: () =&gt; number } = {}) {
+    this.#ttlMs = ttlMs;
+    this.#now = now;
+  }
+
+  // scope = מי (בדרך כלל userId). אותו key של שני משתמשים — שתי רשומות נפרדות
+  #id(scope: string, key: string) {
+    return JSON.stringify([scope, key]); // לא `${scope}:${key}` — "a:b"+"c" ו־"a"+"b:c" היו מתנגשים
+  }
+
+  #live(id: string): Entry | undefined {
+    const e = this.#entries.get(id);
+    if (e &amp;&amp; this.#now() - e.createdAt &gt;= this.#ttlMs) {
+      this.#entries.delete(id);
+      return undefined;
+    }
+    return e;
+  }
+
+  begin(scope: string, key: string, fingerprint: string): Begin {
+    const id = this.#id(scope, key);
+    const e = this.#live(id);
+    if (!e) {
+      this.#entries.set(id, { fingerprint, response: null, createdAt: this.#now() });
+      return { kind: "new" };
+    }
+    if (e.fingerprint !== fingerprint) return { kind: "mismatch" };
+    if (e.response === null) return { kind: "in_progress" };
+    return { kind: "replay", response: e.response };
+  }
+
+  complete(scope: string, key: string, response: StoredResponse) {
+    const e = this.#entries.get(this.#id(scope, key));
+    if (!e) throw new Error("אין בקשה כזו בטיפול");
+    e.response = response;
+  }
+
+  release(scope: string, key: string) {
+    const id = this.#id(scope, key);
+    if (this.#entries.get(id)?.response === null) this.#entries.delete(id); // רק מה שלא הושלם
+  }
+
+  // מוחק רשומות שפג תוקפן; מחזיר כמה נמחקו. בשרת — כל כמה דקות
+  sweep(): number {
+    let removed = 0;
+    for (const id of [...this.#entries.keys()]) if (!this.#live(id)) removed++;
+    return removed;
+  }
+
+  get size() {
+    return this.#entries.size;
+  }
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר <code>replay</code> בלי לבדוק טביעה — לקוח עם באג ששולח מפתח קבוע יקבל לנצח את התשובה של הבקשה הראשונה, בלי שגיאה (E22).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E15">
+    <h3>P24-E15 · middleware של Idempotency-Key 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">const json = res.json.bind(res); res.json = (body) =&gt; { ...; return json(body); }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>res.on("close", ...)</code> רץ תמיד בסוף; דגל <code>done</code> אומר אם כבר טיפלנו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E15
+import { createHash } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
+
+export interface StoredResponse {
+  status: number;
+  body: unknown;
+}
+export interface Store {
+  begin(scope: string, key: string, fingerprint: string): { kind: "new" } | { kind: "replay"; response: StoredResponse } | { kind: "mismatch" } | { kind: "in_progress" };
+  complete(scope: string, key: string, response: StoredResponse): void;
+  release(scope: string, key: string): void;
+}
+
+const VALID_KEY = /^[A-Za-z0-9_-]{8,100}$/;
+
+export function idempotency({ store, scope = (req) =&gt; req.get("x-user-id") ?? "anonymous" }: { store: Store; scope?: (req: Request) =&gt; string }) {
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const key = req.get("idempotency-key");
+    if (req.method !== "POST" || key === undefined) return next(); // GET/PUT/DELETE כבר idempotent; בלי מפתח — רגיל
+    if (!VALID_KEY.test(key)) return res.status(400).json({ error: "Idempotency-Key לא תקין" });
+
+    const who = scope(req);
+    // אותו מפתח לבקשה אחרת (נתיב או גוף אחר) — זו טעות של הלקוח, לא "ניסיון חוזר"
+    const fingerprint = createHash("sha256").update(JSON.stringify([req.method, req.path, req.body ?? null])).digest("hex");
+    const r = store.begin(who, key, fingerprint);
+    if (r.kind === "mismatch") return res.status(422).json({ error: "המפתח כבר שימש לבקשה אחרת" });
+    if (r.kind === "in_progress") return res.status(409).json({ error: "בקשה עם המפתח הזה עדיין בטיפול" });
+    if (r.kind === "replay") return res.status(r.response.status).set("Idempotent-Replayed", "true").json(r.response.body);
+
+    let done = false;
+    const json = res.json.bind(res);
+    res.json = (body: unknown) =&gt; {
+      done = true;
+      // 5xx — תקלה אצלנו, לא תשובה: משחררים, כדי שניסיון חוזר באמת ינסה שוב
+      if (res.statusCode &gt;= 500) store.release(who, key);
+      else store.complete(who, key, { status: res.statusCode, body });
+      return json(body);
+    };
+    // נגמר בלי res.json (חריגה ← טיפול השגיאות של Express, או החיבור נסגר) — משחררים
+    res.on("close", () =&gt; {
+      if (!done) store.release(who, key);
+    });
+    next();
+  };
+}</code></pre>
+<p>למה 4xx כן נשמר? כי זו תשובה סופית ונכונה — שליחה חוזרת של אותה בקשה לא תקינה תקבל את אותה תשובה בכל מקרה. 5xx — "לא הצלחנו", וניסיון חוזר הוא בדיוק מה שאנחנו רוצים שיקרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>טביעה רק של ה־body — אותו מפתח ל־<code>POST /orders</code> ול־<code>POST /refunds</code> יחזיר את ההזמנה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E16">
+    <h3>P24-E16 · מרוץ במסד: תשלום אחד בלבד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"קודם SELECT, ואם אין — INSERT" לא עובד: שתי טרנזקציות עושות SELECT באותו רגע, ושתיהן לא מוצאות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>טרנזקציה אחת: <code class="long">INSERT INTO idempotency_keys ... ON CONFLICT (user_id, key) DO NOTHING RETURNING key</code> ראשון. אם חזרה שורה — אתה "זכית". אם לא — מישהו אחר כבר יצר, ומותר לקרוא את מה שהוא שמר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E16
+import type pg from "pg";
+
+export interface Payment {
+  id: number;
+  userId: number;
+  amountCents: number;
+}
+
+export async function createPayment(pool: pg.Pool, userId: number, key: string, amountCents: number): Promise&lt;{ replayed: boolean; payment: Payment }&gt; {
+  const fingerprint = JSON.stringify({ amountCents });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // שתי טרנזקציות עם אותו (user_id, key): השנייה *מחכה* כאן עד שהראשונה מסתיימת (נעילה על ה־PRIMARY KEY),
+    // ואז — אם הראשונה עשתה COMMIT — DO NOTHING ולא מחזירה שורה
+    const claimed = await client.query(
+      "INSERT INTO idempotency_keys (user_id, key, fingerprint) VALUES ($1, $2, $3) ON CONFLICT (user_id, key) DO NOTHING RETURNING key",
+      [userId, key, fingerprint],
+    );
+    if (claimed.rowCount === 1) {
+      const { rows } = await client.query("INSERT INTO payments (user_id, amount_cents) VALUES ($1, $2) RETURNING id", [userId, amountCents]);
+      await client.query("UPDATE idempotency_keys SET payment_id = $1 WHERE user_id = $2 AND key = $3", [rows[0].id, userId, key]);
+      await client.query("COMMIT");
+      return { replayed: false, payment: { id: rows[0].id, userId, amountCents } };
+    }
+    // המפתח כבר קיים (ו־committed — אחרת היינו עדיין מחכים): מחזירים את מה שנוצר אז
+    const { rows } = await client.query(
+      `SELECT k.fingerprint, p.id, p.amount_cents FROM idempotency_keys k JOIN payments p ON p.id = k.payment_id
+       WHERE k.user_id = $1 AND k.key = $2`,
+      [userId, key],
+    );
+    await client.query("COMMIT");
+    if (rows[0].fingerprint !== fingerprint) throw new Error("IDEMPOTENCY_KEY_REUSED");
+    return { replayed: true, payment: { id: rows[0].id, userId, amountCents: rows[0].amount_cents } };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() =&gt; {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>הקסם הוא ב־PRIMARY KEY: כשטרנזקציה א׳ הכניסה מפתח ועדיין לא עשתה COMMIT, טרנזקציה ב׳ שמנסה להכניס את אותו מפתח <strong>מחכה</strong>. אם א׳ עושה COMMIT — ב׳ מקבלת DO NOTHING ורואה את השורה. אם א׳ עושה ROLLBACK — ב׳ מכניסה ו"זוכה". המסד עושה את התיאום, לא הקוד.</p>
+<p>ומה עושה הגרסה הנאיבית (SELECT ואז INSERT, בלי טרנזקציה) עם 20 קריאות במקביל? הרצנו (פלט אמיתי): בקשה אחת הצליחה, 19 נכשלו עם <code class="long">duplicate key value violates unique constraint "idempotency_keys_pkey"</code> — ו־<strong>20 שורות ב־payments</strong>. הלקוח קיבל שגיאות, וחויב 20 פעמים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>INSERT לתשלום <em>לפני</em> המפתח — ואז ה־CONFLICT מגיע אחרי שכבר חייבת.</li><li>לשכוח <code>client.release()</code> ב־finally — אחרי 10 שגיאות ה־pool ריק, וכל בקשה נתקעת.</li></ul>
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E22">
+    <h3>P24-E22 · Idempotency עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה המפתח ב־Map? ושימו לב למשתנה שמוגדר ולא משומש.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תשובה שנשמרת — אילו status־ים צריכים להישמר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E22
+import { createHash } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
+
+export function idempotency() {
+  const saved = new Map&lt;string, { fingerprint: string; status: number; body: unknown }&gt;();
+
+  return (req: Request, res: Response, next: NextFunction) =&gt; {
+    const key = req.get("idempotency-key");
+    if (req.method !== "POST" || !key) return next();
+    const userId = req.get("x-user-id") ?? "anonymous";
+    // תקלה 1: המפתח היה גלובלי — יוסי עם אותו מפתח כמו דנה קיבל את ההזמנה של דנה (דליפת מידע!)
+    const id = JSON.stringify([userId, key]);
+    // תקלה 2: בלי טביעת אצבע — אותו מפתח עם גוף אחר החזיר בשקט את התשובה הישנה
+    const fingerprint = createHash("sha256").update(JSON.stringify([req.path, req.body ?? null])).digest("hex");
+
+    const hit = saved.get(id);
+    if (hit &amp;&amp; hit.fingerprint !== fingerprint) return res.status(422).json({ error: "המפתח כבר שימש לבקשה אחרת" });
+    if (hit) return res.status(hit.status).set("Idempotent-Replayed", "true").json(hit.body);
+
+    const json = res.json.bind(res);
+    res.json = (body: unknown) =&gt; {
+      // תקלה 3: גם 500 נשמר — וכל ניסיון חוזר קיבל את אותה שגיאה לנצח, בלי לנסות באמת
+      if (res.statusCode &lt; 500) saved.set(id, { fingerprint, status: res.statusCode, body });
+      return json(body);
+    };
+    next();
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>תקלה 1 היא לא רק באג — היא דליפת מידע. בראיון: "מפתח idempotency תמיד בהיקף של המשתמש".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E65">
+    <h3>P24-E65 · טביעת אצבע קנונית 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>רקורסיה: מערך ← <code class="mid">"[" + items.map(canonicalJson).join(",") + "]"</code>; אובייקט ← מפתחות ממוינים; כל השאר ← <code>JSON.stringify(value)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">createHash("sha256").update(text).digest("hex")</code> מ־<code>node:crypto</code> (פרק 21).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E65: טביעת אצבע קנונית
+import { createHash } from "node:crypto";
+
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((v) =&gt; (v === undefined ? "null" : canonicalJson(v))).join(",")}]`;
+  if (value !== null &amp;&amp; typeof value === "object") {
+    const obj = value as Record&lt;string, unknown&gt;;
+    const keys = Object.keys(obj).filter((k) =&gt; obj[k] !== undefined).sort();
+    return `{${keys.map((k) =&gt; `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function fingerprint(method: string, path: string, body: unknown): string {
+  return createHash("sha256").update(`${method.toUpperCase()} ${path}\n${canonicalJson(body)}`).digest("hex");
+}
+
+console.log(canonicalJson({ b: 1, a: { d: [3, { z: 1, y: 2 }], c: undefined } }));
+console.log(fingerprint("post", "/tasks", { title: "חלב", priority: 1 }) === fingerprint("POST", "/tasks", { priority: 1, title: "חלב" }));</code></pre>
+<pre class="terminal">{"a":{"d":[3,{"y":2,"z":1}]},"b":1}
+true</pre>
+<p>מערך עם <code>undefined</code> בתוכו — <code>JSON.stringify</code> כותב <code>null</code>, וגם אנחנו. (באובייקט — השדה נעלם.) ‏<code>JSON.stringify(k)</code> על המפתח — כדי שמפתח עם מרכאות יקבל escaping.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">JSON.stringify(obj, Object.keys(obj).sort())</code> — הרשימה השנייה היא "אילו מפתחות לכלול" בכל העומקים, ומפתחות פנימיים שלא ברשימה נעלמים.</li><li>למיין גם מערכים — ואז <code>["b","a"]</code> ו־<code>["a","b"]</code> נחשבים אותה בקשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E66">
+    <h3>P24-E66 · מה עושים עם הבקשה? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הסדר של ה־<code>if</code>ים חשוב: קודם תוקף, אחר כך טביעה, ורק אז "בטיפול".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">now - entry.createdAt &gt;= ttlMs</code> — "בת ttlMs ומעלה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E66: מה עושים עם הבקשה?
+export type Entry = { fingerprint: string; status: number | null; body?: unknown; createdAt: number };
+export type Decision =
+  | { action: "execute" }
+  | { action: "replay"; status: number; body: unknown }
+  | { action: "reject"; status: 409 | 422; code: string };
+
+export function decide(entry: Entry | undefined, fp: string, now: number, ttlMs: number): Decision {
+  if (!entry || now - entry.createdAt &gt;= ttlMs) return { action: "execute" }; // פג תוקף = כאילו לא קיים
+  if (entry.fingerprint !== fp) return { action: "reject", status: 422, code: "IDEMPOTENCY_KEY_REUSED" };
+  if (entry.status === null) return { action: "reject", status: 409, code: "IDEMPOTENCY_IN_PROGRESS" };
+  return { action: "replay", status: entry.status, body: entry.body };
+}
+
+export function shouldStore(status: number): boolean {
+  return status &gt;= 200 &amp;&amp; status &lt; 500; // 5xx = "לא הצלחנו" ← release, כדי שאפשר יהיה לנסות שוב
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק "בטיפול" לפני הטביעה — לקוח ששלח תוכן אחר מקבל 409, מחכה ומנסה שוב, ורק אחרי סיבוב מיותר מגלה שהבקשה שלו שגויה. ההודעה הנכונה (422) צריכה להגיע מיד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E67">
+    <h3>P24-E67 · לקוח שמנסה שוב — עם אותו מפתח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לולאת <code class="mid">for (let attempt = 1; attempt &lt;= retries + 1; attempt++)</code>, עם <code>try/catch</code> סביב <code>await send(...)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שמור <code>lastError</code> ו־<code>lastResponse</code>. בכל סיבוב מאפסים את מה שלא קרה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E67: לקוח שמנסה שוב — עם אותו מפתח
+export type Send = (body: unknown, key: string) =&gt; Promise&lt;{ status: number; body: unknown }&gt;;
+
+const retryable = (status: number) =&gt; status &gt;= 500 || status === 409;
+
+export async function sendWithRetry(
+  send: Send,
+  body: unknown,
+  { retries, sleep, newKey }: { retries: number; sleep: (ms: number) =&gt; Promise&lt;void&gt;; newKey: () =&gt; string },
+) {
+  const key = newKey(); // מפתח אחד לפעולה — לא לניסיון
+  let lastError: unknown;
+  let lastResponse: { status: number; body: unknown } | undefined;
+  for (let attempt = 1; attempt &lt;= retries + 1; attempt++) {
+    if (attempt &gt; 1) await sleep(200 * 2 ** (attempt - 2));
+    try {
+      lastResponse = await send(body, key);
+      lastError = undefined;
+      if (!retryable(lastResponse.status)) return { ...lastResponse, attempts: attempt, key };
+    } catch (err) {
+      lastError = err;
+      lastResponse = undefined;
+    }
+    if (attempt === retries + 1) {
+      if (lastResponse) return { ...lastResponse, attempts: attempt, key };
+      throw lastError;
+    }
+  }
+  throw new Error("unreachable");
+}</code></pre>
+<p>אותו מפתח בכל ניסיון — זה כל הסוד. השרת רואה פעולה אחת: הניסיון הראשון ביצע, והבאים מקבלים 409 (בזמן שהוא רץ) או replay (אחרי).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לנסות שוב על 400 או 422 — הבקשה לא תקינה, היא תיכשל שוב בכל ניסיון.</li><li>לא לנסות שוב על 409 — ואז הלקוח מוותר בדיוק כשהבקשה הראשונה עוד רצה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E68">
+    <h3>P24-E68 · למצוא חיובים כפולים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>Map</code> לפי <code><code>${userId}:${amountCents}</code></code>, ובכל אחד — מערך ממוין לפי זמן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>עוברים על המערך הממוין: אם המרחק מהקודם קטן מהחלון — לאותה קבוצה; אחרת — קבוצה חדשה. בסוף משאירים רק קבוצות עם 2 ומעלה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E68: למצוא חיובים כפולים
+export type Payment = { id: number; userId: number; amountCents: number; createdAt: string };
+
+export function suspectedDuplicates(payments: Payment[], windowMs: number): number[][] {
+  const byKey = new Map&lt;string, Payment[]&gt;();
+  for (const p of payments) {
+    const k = `${p.userId}:${p.amountCents}`;
+    byKey.set(k, [...(byKey.get(k) ?? []), p]);
+  }
+  const groups: Payment[][] = [];
+  for (const list of byKey.values()) {
+    const sorted = [...list].sort((a, b) =&gt; Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    let current: Payment[] = [];
+    for (const p of sorted) {
+      const prev = current.at(-1);
+      if (prev &amp;&amp; Date.parse(p.createdAt) - Date.parse(prev.createdAt) &lt; windowMs) current.push(p);
+      else {
+        if (current.length &gt;= 2) groups.push(current);
+        current = [p];
+      }
+    }
+    if (current.length &gt;= 2) groups.push(current);
+  }
+  return groups
+    .sort((a, b) =&gt; Date.parse(a[0].createdAt) - Date.parse(b[0].createdAt))
+    .map((g) =&gt; g.map((p) =&gt; p.id));
+}
+
+const t = (s: number) =&gt; new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString();
+console.log(suspectedDuplicates([
+  { id: 1, userId: 1, amountCents: 4990, createdAt: t(0) },
+  { id: 2, userId: 1, amountCents: 4990, createdAt: t(40) },
+  { id: 3, userId: 2, amountCents: 4990, createdAt: t(41) },
+  { id: 4, userId: 1, amountCents: 4990, createdAt: t(59) },
+], 60_000));</code></pre>
+<pre class="terminal">[ [ 1, 2, 4 ] ]</pre>
+<p>זו שאילתה שמריצים פעם אחת אחרי תקלה — ובמסד היא נראית כמו</p>
+<pre><code class="lang-sql">LAG(created_at) OVER (PARTITION BY user_id, amount_cents ORDER BY created_at)</code></pre>
+<p>(פרק 17). ה־Idempotency-Key הוא מה שמונע את הצורך בה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>payments.sort(...)</code> על הקלט עצמו — משנה את המערך של מי שקרא לפונקציה.</li><li>להשוות לתשלום <em>הראשון</em> בקבוצה במקום לקודם — ואז שרשרת של 0, 40, 80 נשברת לשתיים.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P24-E69">
+    <h3>P24-E69 · ‏P2002 במקום SELECT לפני INSERT <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בין <code>findUnique</code> ל־<code>create</code> יש "חור" בזמן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>P2002 = ‏"Unique constraint failed".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א: שתיהן לא מוצאות, שתיהן יוצרות — אחת מקבלת שגיאת unique <em>לא מטופלת</em> (500), ואם הבדיקה לא הייתה ב־DB אלא בזיכרון — שתיהן מבצעות. ב: אחת יוצרת, השנייה מקבלת P2002 וקוראת את הרשומה — "בטיפול" ← 409.</li><li>האינדקס הייחודי על <code>(user_id, key)</code> במסד. רק אחת יכולה להכניס; המסד מתאם — לא הקוד.</li><li>שגיאה אחרת (המסד לא זמין, timeout) היא לא "מישהו תפס לפניי". לבלוע אותה = לחשוב שהמפתח קיים כשהוא לא, ולהחזיר תשובה לא נכונה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף את א׳ בטרנזקציה ולחשוב שזה פותר — ב־READ COMMITTED שתי הטרנזקציות עדיין לא רואות את השורה של השנייה. מה שפותר הוא האילוץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E70">
+    <h3>P24-E70 · המפתח נשמר אחרי ה־COMMIT <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>"שתי פעולות שחייבות לקרות יחד" — איפה ראית את זה בפרק 18?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם המפתחות ב־Map בזיכרון ותשלומים ב־PostgreSQL, אפשר בכלל טרנזקציה אחת?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>התשלום במסד, המפתח לא. הניסיון החוזר לא מוצא מפתח ← מבצע שוב ← חיוב כפול. בדיוק התרחיש שהמנגנון אמור למנוע.</li><li>הלקוח מקבל 500, למרות שהתשלום בוצע. הוא ינסה שוב — שוב כפול.</li><li>תפיסת המפתח, התשלום, ושמירת התשובה — באותה טרנזקציה (כמו ב־E16): <code>INSERT</code> למפתח, <code>INSERT</code> לתשלום, <code>UPDATE</code> למפתח, ‏<code>COMMIT</code>. קריסה באמצע ← ROLLBACK של הכול, והניסיון הבא מתחיל נקי. זה דורש שהמפתחות יהיו <strong>באותו מסד</strong> כמו הנתונים — לכן בפרויקט הם טבלה ב־PostgreSQL.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"אחליף את הסדר — קודם מפתח ואז תשלום" — עכשיו קריסה באמצע משאירה מפתח "הושלם" בלי תשלום, והלקוח מקבל replay של הצלחה שלא קרתה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E71">
+    <h3>P24-E71 · ‏webhook שמגיע פעמיים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לספק כבר יש מזהה ייחודי לכל אירוע.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הספק לא מבין "כפול". הוא מבין רק 2xx = "קיבלת".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>eventId</code>. טבלה <code class="mid">processed_events(event_id PRIMARY KEY)</code>.</li><li>בלי הגנה — שני מיילים, ואולי חישוב כפול (נקודות, מלאי). עם הגנה: <code class="mid">INSERT ... ON CONFLICT DO NOTHING</code> ועדכון ההזמנה באותה טרנזקציה; אם לא נכנסה שורה — כבר טופל (E72).</li><li>200. מבחינת הספק — הוא צריך להפסיק לשלוח. 409 יגרום לו לנסות שוב שלושה ימים.</li><li>הספק שולח שוב בזמן שהראשון עוד רץ — ואם אין הגנה, שניהם מטפלים. עם ה־PRIMARY KEY השני ממתין לראשון ומקבל DO NOTHING. ובכלל: עונים 200 מהר — שומרים את האירוע ומעבדים ברקע (תורים — פרק 26).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשתמש ב־<code>orderId</code> כמפתח — אבל לאותה הזמנה יכולים להגיע כמה אירועים שונים (שולם, הוחזר).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E72">
+    <h3>P24-E72 · ‏webhook פעם אחת — במסד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING event_id</code></pre>
+<p>‏<code>rowCount === 0</code> אומר "כבר טופל".</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>UPDATE ... WHERE id = $2</code> עם <code>rowCount === 0</code> ← ההזמנה לא קיימת ← <code>throw</code>, וה־<code>catch</code> עושה ROLLBACK. ‏<code>client.release()</code> ב־<code>finally</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E72: webhook פעם אחת — במסד
+import type { Pool } from "pg";
+
+export async function handlePaymentEvent(pool: Pool, event: { id: string; orderId: number; amountCents: number }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const claimed = await client.query(
+      "INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING event_id",
+      [event.id],
+    );
+    if (claimed.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return "duplicate" as const;
+    }
+    const updated = await client.query(
+      "UPDATE orders SET status = 'paid', paid_cents = paid_cents + $2 WHERE id = $1",
+      [event.orderId, event.amountCents],
+    );
+    if (updated.rowCount === 0) throw new Error("ORDER_NOT_FOUND");
+    await client.query("COMMIT");
+    return "processed" as const;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>במקביל: הראשון מכניס את השורה ומחזיק אותה עד COMMIT. התשעה האחרים מחכים על ה־PRIMARY KEY, ואחרי ה־COMMIT מקבלים DO NOTHING. ואם הראשון עשה ROLLBACK (הזמנה לא קיימת) — אחד מהם "זוכה" ומנסה בעצמו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעדכן את ההזמנה ואז לרשום את האירוע — בין שתי הפעולות, ניסיון שני מעדכן שוב.</li><li><code>pool.query("BEGIN")</code> — כל <code>pool.query</code> יכול לרוץ בחיבור אחר, והטרנזקציה לא באמת עוטפת כלום (פרק 18).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E73">
+    <h3>P24-E73 · ‏PUT עם מזהה מהלקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">const notes = new Map&lt;string, Note&gt;()</code> <em>בתוך</em> <code>notesRouter</code> — כדי שכל אפליקציה תקבל מאגר נקי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">typeof req.body?.text === "string"</code> לפני <code>trim</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E73: PUT עם מזהה מהלקוח
+import { Router } from "express";
+
+type Note = { id: string; text: string; version: number };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function notesRouter() {
+  const notes = new Map&lt;string, Note&gt;();
+  const router = Router();
+  const fail = (code: string, message: string) =&gt; ({ error: { code, message } });
+
+  router.put("/notes/:id", (req, res) =&gt; {
+    const { id } = req.params;
+    if (!UUID.test(id)) {
+      res.status(400).json(fail("INVALID_ID", "המזהה חייב להיות UUID"));
+      return;
+    }
+    const raw = req.body?.text;
+    const text = typeof raw === "string" ? raw.trim() : "";
+    if (!text) {
+      res.status(400).json(fail("VALIDATION_ERROR", "text חייב להיות מחרוזת לא ריקה"));
+      return;
+    }
+    const existing = notes.get(id);
+    if (!existing) {
+      const note = { id, text, version: 1 };
+      notes.set(id, note);
+      res.status(201).location(`/notes/${id}`).json(note);
+      return;
+    }
+    if (existing.text !== text) {
+      existing.text = text;
+      existing.version += 1;
+    }
+    res.json(existing); // אותו תוכן ← אותו מצב, בלי שינוי
+  });
+
+  router.get("/notes/:id", (req, res) =&gt; {
+    const note = notes.get(req.params.id);
+    if (!note) {
+      res.status(404).json(fail("NOT_FOUND", "הפתק לא נמצא"));
+      return;
+    }
+    res.json(note);
+  });
+  return router;
+}</code></pre>
+<p>שליחה חוזרת של אותו PUT לא יוצרת כפילות ולא משנה <code>version</code> — בלי טבלת מפתחות, בלי טביעות. המחיר: הלקוח צריך לייצר מזהים (<code>crypto.randomUUID()</code>), וה־API חושף אותם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעלות <code>version</code> בכל PUT — אז שליחה חוזרת "משנה" משהו, ולקוח שבודק גרסאות יחשוב שמישהו אחר ערך.</li><li><code>const notes = new Map()</code> מחוץ לפונקציה — שתי אפליקציות (או שתי בדיקות) חולקות את אותו מאגר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P24-E74">
+    <h3>P24-E74 · ‏single flight: אותה פעולה, ריצה אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי מפות: <code class="mid">inFlight: Map&lt;string, Promise&lt;T&gt;&gt;</code> ו־<code>done: Map&lt;string, T&gt;</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שומרים את ה־Promise ב־<code>inFlight</code> <em>לפני</em> ה־<code>await</code> — ומוחקים אותה כשהיא נגמרת (גם בכישלון).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P24-E74: single flight — אותה פעולה, ריצה אחת
+export function createSingleFlight&lt;T&gt;() {
+  const inFlight = new Map&lt;string, Promise&lt;T&gt;&gt;();
+  const done = new Map&lt;string, T&gt;();
+  return {
+    run(key: string, fn: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+      if (done.has(key)) return Promise.resolve(done.get(key) as T); // replay
+      const running = inFlight.get(key);
+      if (running) return running; // "בטיפול" — מחכים לאותה ריצה
+      const p = (async () =&gt; {
+        try {
+          const value = await fn();
+          done.set(key, value);
+          return value;
+        } finally {
+          inFlight.delete(key); // גם בכישלון — כדי שהבא ינסה שוב
+        }
+      })();
+      inFlight.set(key, p);
+      return p;
+    },
+    forget(key: string) {
+      done.delete(key);
+    },
+  };
+}</code></pre>
+<p>זה המנגנון של שיעור 3 בקטן — "בטיפול" (ה־Promise ב־<code>inFlight</code>), "הושלם" (ב־<code>done</code>), ושחרור בכישלון. הוא עובד רק בתהליך אחד; עם שני שרתים — שוב צריך מסד (או Redis).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור ב־<code>done</code> גם שגיאות — ואז תקלה רגעית "ננעלת" לתמיד (כמו 5xx שנשמר, E62).</li><li><code>inFlight.set</code> אחרי <code>await</code> — עד שהוא קורה, קריאה שנייה כבר התחילה ריצה משלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-limits.html"><small>הבא</small>שיעור 4 — הגבלת קצב וכיבוי מסודר</a></div>
+</main>
+</body>
+</html>

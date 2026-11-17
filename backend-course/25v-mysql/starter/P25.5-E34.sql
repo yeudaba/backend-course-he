@@ -1,0 +1,4 @@
+-- P25.5-E34: שורת משלוח — CONCAT ו־GROUP_CONCAT
+-- הזמנות paid/shipped: id, line (#1 · Dana Levi · Haifa), items (1× Hand Grinder, ... לפי שם המוצר) — לפי id
+--
+-- בדיקה:  npm run check P25.5-E34

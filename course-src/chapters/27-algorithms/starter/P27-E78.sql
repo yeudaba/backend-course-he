@@ -1,0 +1,4 @@
+-- P27-E78: סכום מצטבר לכל לקוח — window function
+-- orders (רק paid): customer_id, id, created_on, total, running_total · לפי customer_id, created_on, id
+--
+-- בדיקה:  npm run check P27-E78

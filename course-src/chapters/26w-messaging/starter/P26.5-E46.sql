@@ -1,0 +1,5 @@
+-- P26.5-E46: log ב־SQL — מה ה־group קורא עכשיו?
+-- events(id, type, payload) · group_offsets(group_name, last_id)
+-- לכל group: group_name, next_id, lag — ממוין לפי lag (גדול קודם) ואז שם
+--
+-- בדיקה:  npm run check P26.5-E46

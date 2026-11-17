@@ -1,0 +1,6 @@
+-- P17-E36: לקוחה חדשה והזמנה ראשונה
+-- INSERTים בסדר הנכון: Tal Gil (tal@example.com, Eilat, 2026-05-10) ← הזמנה pending (2026-05-10 10:00:00+03)
+-- ← 2 × מוצר 3, 1 × מוצר 10, במחיר של היום
+-- בסוף: SELECT order_id, product_id, quantity, unit_price של ההזמנה החדשה, לפי product_id
+--
+-- בדיקה:  npm run check P17-E36

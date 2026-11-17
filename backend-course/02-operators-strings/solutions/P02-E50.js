@@ -1,0 +1,10 @@
+const item = "חולצה";
+const price = 80;
+const quantity = 3;
+const discountPercent = 10;
+const subtotal = price * quantity;
+const discount = subtotal * discountPercent / 100;
+const toPay = subtotal - discount;
+console.log(`${quantity} x ${item} = ${subtotal} ש״ח`);
+console.log(`הנחה (${discountPercent}%): ${discount} ש״ח`);
+console.log(`לתשלום: ${toPay} ש״ח`);

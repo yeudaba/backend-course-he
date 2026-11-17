@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true,
   time: "5 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> PostgreSQL, מסד <code>course</code>, קובץ <code>.env</code> והתוסף של VS Code (פרק 16).</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום. רק טוענים את נתוני הפרק:</p>
 ${copyStep("17-relations")}

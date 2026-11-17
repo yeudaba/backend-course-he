@@ -1,0 +1,4 @@
+-- P16-E38: מוצר לפי מזהה
+-- id, name, category, price של המוצר ש־id שלו 6
+--
+-- בדיקה:  npm run check P16-E38

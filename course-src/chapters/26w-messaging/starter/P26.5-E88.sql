@@ -1,0 +1,5 @@
+-- P26.5-E88: lag לכל partition ב־SQL
+-- end_offsets(topic, partition, end_offset) · committed_offsets(group_name, topic, partition, committed)
+-- group_name, topic, partition, lag — כולל partitions בלי commit (0) · lag גדול קודם
+--
+-- בדיקה:  npm run check P26.5-E88

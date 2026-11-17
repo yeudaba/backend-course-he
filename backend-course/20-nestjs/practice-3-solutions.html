@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 3 — פרק 20</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ פתרונות שיעור 3</div>
+  <h1>🔒 פתרונות — תרגול שיעור 3</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>20-nestjs/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P20-E03">
+    <h3>P20-E03 · לקרוא שגיאת DI <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>provider "פרטי" ל־module שלו עד שמייצאים אותו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני צדדים: מי שנותן (<code>exports</code>) ומי שמקבל (<code>imports</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>(א) Nest ניסה ליצור את <code>OrdersService</code>; הרשימה בסוגריים היא הפרמטרים של ה־constructor, וה־<code>?</code> מסמן את זה שלא נמצא — הראשון (<code>index [0]</code>), מסוג <code>UsersService</code>. הוא חיפש אותו בהקשר של <code>OrdersModule</code>.</p>
+<p>(ב)</p>
+<pre><code class="lang-ts">@Module({ providers: [UsersService], exports: [UsersService] })
+export class UsersModule {}
+
+@Module({ imports: [UsersModule], providers: [OrdersService] })
+export class OrdersModule {}</code></pre>
+<p>(ג) זה "עובד", אבל יוצר <strong>מופע שני</strong> של <code>UsersService</code> — עם state נפרד (משתמשים בזיכרון, חיבור למסד, cache). ב־Nest כל provider הוא singleton <em>בתוך ה־module שרשם אותו</em>. מייבאים — לא משכפלים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף רק <code>imports</code> בלי <code>exports</code> (או להפך) — אותה שגיאה בדיוק.</li><li>לייבא את ה־service (<code>imports: [UsersService]</code>) במקום את ה־module.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E04">
+    <h3>P20-E04 · מי רץ ומתי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>האיור בשיעור 3: middleware ← guards ← interceptors (לפני) ← pipes ← handler ← interceptors (אחרי). שגיאה — ישר ל־filters.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>חלק ה"אחרי" של interceptor עם <code>tap</code> רץ רק כשה־handler הצליח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>middleware ← guard (מאשר) ← interceptor (לפני) ← ParseIntPipe ← handler ← interceptor (אחרי) ← תשובה. ה־filter לא רץ.</li><li>middleware ← guard זורק <code>UnauthorizedException</code> ← filter ← 401. interceptor, pipe ו־handler <strong>לא רצים</strong>.</li><li>middleware ← guard ← interceptor (לפני) ← ParseIntPipe זורק 400 ← filter. ה־handler לא רץ, וגם ה־<code>tap</code> של ה־interceptor לא (אין ערך מוצלח).</li><li>הכול עד ה־handler ← הוא זורק ← filter ← 404.</li></ol>
+<p>למה זה חשוב: guard הוא המקום לבדיקת הרשאה — כי שום קוד שלך (ואפילו לא ולידציה) לא רץ לפני שהוא אישר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים בדיקת הרשאה בתוך ה־handler — היא רצה מאוחר מדי, אחרי pipes שיכולים לגשת למסד.</li><li>לחשוב ש־middleware רץ אחרי guards — הפוך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E57">
+    <h3>P20-E57 · ‏useValue, ‏useClass או useFactory? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>useValue</code> — ערך מוכן. ‏<code>useClass</code> — Nest יוצר מופע (ומזריק לו תלויות). ‏<code>useFactory</code> — פונקציה שלך (גם async).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מי יכול לקבל תלויות של Nest — ערך מוכן, או class?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>useValue</strong> — אובייקט מוכן, בלי תלויות.</li><li><strong>useClass</strong> — Nest יוצר את <code>PrismaTasksRepository</code> ומזריק לו <code>PrismaService</code>. בבדיקות — <code class="mid">overrideProvider(...).useValue(new InMemory...)</code>.</li><li><strong>useFactory</strong> — <code class="mid">() =&gt; loadConfig(process.env)</code>; אם הפונקציה זורקת, <code>NestFactory.create</code> נכשל, והשרת לא עולה עם הגדרות שגויות (P20-E17).</li><li><strong>useValue</strong> — <code>new Set(["test-key"])</code>.</li><li><strong>useFactory</strong> async — פונקציה שיוצרת client, עושה <code>await client.connect()</code> ומחזירה אותו. Nest מחכה ל־Promise לפני שהוא ממשיך לבנות (יחידה 26).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">useValue: new PrismaTasksRepository(new PrismaService())</code> — עובד, אבל עוקף את ה־DI: ה־PrismaService הזה הוא מופע נוסף, עם pool נוסף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E58">
+    <h3>P20-E58 · ‏exports ו־imports — מה חסר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שני תנאים: המייצא — <code>exports</code>; המשתמש — <code>imports</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ד׳ האפליקציה עולה. אבל כמה מופעים של <code>UsersService</code> יש?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><strong>א</strong> — לא עולה: יש import, אבל <code>UsersModule</code> לא מייצא — ה־provider "פרטי". הוסף <code>exports: [UsersService]</code>.</li><li><strong>ב</strong> — לא עולה: מייצא, אבל <code>OrdersModule</code> לא מייבא. הוסף <code>imports: [UsersModule]</code>.</li><li><strong>ג</strong> — עולה. זו הצורה הנכונה.</li><li><strong>ד</strong> — עולה, אבל עם <strong>שני</strong> מופעים של <code>UsersService</code>: אחד ב־<code>UsersModule</code> ואחד ב־<code>OrdersModule</code> (ה־provider המקומי מנצח). אם יש בו state (מטמון, מונה) — שני העותקים לא מסונכרנים. זה התיקון ה"מפתה" של P20-E03, ובגללו שם כתוב "למה לא".</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף <code>@Global()</code> לכל module כדי "לא לחשוב על imports" — הקשרים בין חלקי האפליקציה נעלמים מהקוד.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E59">
+    <h3>P20-E59 · ‏guard, ‏interceptor, ‏pipe או filter? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איור 1 בשיעור: middleware ← guard ← interceptor (לפני) ← pipe ← handler ← interceptor (אחרי) ← filter.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בקשה שה־guard דחה — האם היא מגיעה ל־interceptor?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>guard</strong> — "מותר או אסור", לפני כל השאר.</li><li><strong>interceptor</strong> (או middleware) — עוטף את התשובה.</li><li><strong>pipe</strong> — משנה/בודק ערך של פרמטר.</li><li><strong>filter</strong> — מתרגם exceptions לתשובה.</li><li><strong>interceptor</strong> — ‏<code>map((data) =&gt; ({ data }))</code> אחרי ה־handler.</li><li><strong>middleware</strong> — רץ ראשון, לפני ה־guard, ורואה כל בקשה (ומאזין ל־<code>res.on("finish")</code>). interceptor לא רץ כשה־guard דוחה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בדיקת הרשאות בתוך interceptor — עובד, אבל הקוד שקורא את הקוד מחפש אותה ב־guards; ו־pipes כבר רצו על הקלט של מי שלא מורשה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E60">
+    <h3>P20-E60 · מה ה־interceptor רואה, ומתי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד לפני <code>next.handle()</code> רץ לפני ה־handler; מה שבתוך <code>pipe(...)</code> — על התוצאה שלו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>map</code> רץ רק על ערך שהגיע. שגיאה "מדלגת" עליו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p><code>GET /x</code>: ‏<code>before</code>, ‏<code>handler</code>, ‏<code>after [ 1, 2 ]</code>. הלקוח מקבל <code>{"data":[1,2]}</code> — ה־interceptor שינה את התשובה. ‏<code>GET /x/fail</code>: ‏<code>before</code>, ‏<code>handler</code> — ו־<code>after</code> לא מודפס; השגיאה עוברת ליד ה־<code>map</code>, ומגיעה ל־filter (404). כדי לפעול גם על שגיאות — <code>catchError</code> (או <code>tap({ error })</code>) ב־pipe.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים לוגיקה של "אחרי" ישר אחרי <code>next.handle()</code> (בלי <code>pipe</code>) — היא רצה <strong>לפני</strong> ה־handler: ה־Observable רק נוצר, הוא עוד לא רץ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E11">
+    <h3>P20-E11 · שעון כ־provider 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>getUTCHours()</code>, לא <code>getHours()</code> — אחרת התוצאה תלויה באזור הזמן של המחשב.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אם לא כתבת <code>@Inject(CLOCK)</code>: <code>Clock</code> הוא interface, ו־Nest לא יודע מה להזריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E11
+import { Controller, Get, Inject, Injectable, Module } from "@nestjs/common";
+
+export const CLOCK = "CLOCK";
+export interface Clock {
+  now(): Date;
+}
+
+@Injectable()
+export class GreetingService {
+  constructor(@Inject(CLOCK) private readonly clock: Clock) {}
+
+  greeting(): string {
+    const hour = this.clock.now().getUTCHours();
+    if (hour &gt;= 5 &amp;&amp; hour &lt; 12) return "בוקר טוב";
+    if (hour &gt;= 12 &amp;&amp; hour &lt; 17) return "צהריים טובים";
+    if (hour &gt;= 17 &amp;&amp; hour &lt; 21) return "ערב טוב";
+    return "לילה טוב";
+  }
+}
+
+@Controller("greeting")
+export class GreetingController {
+  constructor(private readonly greetings: GreetingService) {}
+
+  @Get()
+  get() {
+    return { greeting: this.greetings.greeting() };
+  }
+}
+
+@Module({
+  controllers: [GreetingController],
+  providers: [GreetingService, { provide: CLOCK, useValue: { now: () =&gt; new Date() } }],
+})
+export class GreetingModule {}</code></pre>
+<p>זה אותו רעיון כמו <code>now</code> ב־<code>createApp({ now })</code> של פרויקט 2 — רק ש־Nest מנהל את ההחלפה. קוד שתלוי בזמן אף פעם לא קורא ל־<code>new Date()</code> ישירות: בבדיקה אי אפשר לקבוע מה השעה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>hour &lt;= 12</code> במקום <code>&lt; 12</code> ← 12:00 יוצא "בוקר טוב".</li><li>לקרוא ל־<code>now()</code> פעם אחת ב־constructor ← השעה "קפואה" מרגע עליית השרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E12">
+    <h3>P20-E12 · מבנה שגיאות אחיד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>exception.getResponse()</code> מחזיר את מה שהועבר ל־constructor של ה־exception — מחרוזת או אובייקט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>exceptionFactory</code> מקבלים <code>ValidationError[]</code>: <code>e.property</code> הוא שם השדה, <code>e.constraints</code> — אובייקט של הודעות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E12
+import {
+  ArgumentsHost, BadRequestException, Body, Catch, Controller, ExceptionFilter, Get, HttpException,
+  Module, NotFoundException, Param, ParseIntPipe, Post, ValidationPipe, type ValidationError,
+} from "@nestjs/common";
+import { IsString, Length } from "class-validator";
+import type { Response } from "express";
+
+const CODES: Record&lt;number, string&gt; = { 400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN", 404: "NOT_FOUND", 409: "CONFLICT" };
+
+@Catch(HttpException)
+export class ApiExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const status = exception.getStatus();
+    const body = exception.getResponse();
+    // אם מי שזרק כבר נתן code (למשל ה־exceptionFactory למטה) — משתמשים בו
+    if (typeof body === "object" &amp;&amp; body !== null &amp;&amp; "code" in body) {
+      res.status(status).json({ error: body });
+      return;
+    }
+    res.status(status).json({ error: { code: CODES[status] ?? "ERROR", message: exception.message } });
+  }
+}
+
+export function validationPipe() {
+  return new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    exceptionFactory: (errors: ValidationError[]) =&gt;
+      new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "קלט לא תקין",
+        details: errors.map((e) =&gt; ({ field: e.property, messages: Object.values(e.constraints ?? {}) })),
+      }),
+  });
+}
+
+export class CreateItemDto {
+  @IsString()
+  @Length(1, 50)
+  name: string;
+}
+
+@Controller("items")
+export class ItemsController {
+  private readonly items: { id: number; name: string }[] = [];
+
+  @Post()
+  create(@Body() dto: CreateItemDto) {
+    const item = { id: this.items.length + 1, name: dto.name };
+    this.items.push(item);
+    return item;
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    const item = this.items.find((i) =&gt; i.id === id);
+    if (!item) throw new NotFoundException(`פריט ${id} לא נמצא`);
+    return item;
+  }
+}
+
+@Module({ controllers: [ItemsController] })
+export class ItemsModule {}</code></pre>
+<p>ה־404 של "כתובת לא קיימת" הוא גם <code>NotFoundException</code> שהמסגרת זורקת — ולכן גם הוא עובר דרך ה־filter, בלי שום קוד נוסף. וה־<code>exceptionFactory</code> הוא המקום היחיד שבו ההודעות של class-validator הופכות ל־details — כך הלקוח (הדף מיחידה 15.5) יכול להציג שגיאה ליד כל שדה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשכוח <code>res.status(status)</code> ← כל השגיאות יוצאות 200 (תראה את זה ב־E22).</li><li>לעטוף פעמיים: <code class="mid">{ error: { error: {...} } }</code> כשה־exception כבר מכיל code.</li><li><code>@Catch()</code> בלי פרמטר תופס גם שגיאות שאינן HTTP — ואז <code>getStatus</code> לא קיים. כאן ביקשנו רק <code>HttpException</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E13">
+    <h3>P20-E13 · modules שמדברים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>זה E03, בכתיבה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שני שינויים מעבר לקוד החדש: <code>exports: [UsersService]</code> ב־UsersModule, ו־<code>imports: [UsersModule]</code> ב־OrdersModule (ובנוסף <code>OrdersModule</code> ב־imports של AppModule).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E13
+import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post } from "@nestjs/common";
+
+export interface User {
+  id: number;
+  name: string;
+}
+
+@Injectable()
+export class UsersService {
+  private readonly users: User[] = [
+    { id: 1, name: "Dana" },
+    { id: 2, name: "Yossi" },
+  ];
+
+  findById(id: number): User {
+    const user = this.users.find((u) =&gt; u.id === id);
+    if (!user) throw new NotFoundException(`משתמש ${id} לא נמצא`);
+    return user;
+  }
+}
+
+@Controller("users")
+export class UsersController {
+  constructor(private readonly users: UsersService) {}
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    return this.users.findById(id);
+  }
+}
+
+@Module({ controllers: [UsersController], providers: [UsersService], exports: [UsersService] })
+export class UsersModule {}
+
+export interface Order {
+  id: number;
+  item: string;
+  user: User;
+}
+
+@Injectable()
+export class OrdersService {
+  private readonly orders: Order[] = [];
+
+  constructor(private readonly users: UsersService) {}
+
+  create(userId: number, item: string): Order {
+    const user = this.users.findById(userId); // 404 אם אין משתמש כזה
+    const order = { id: this.orders.length + 1, item, user };
+    this.orders.push(order);
+    return order;
+  }
+}
+
+@Controller("orders")
+export class OrdersController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Post()
+  create(@Body() body: { userId: number; item: string }) {
+    return this.orders.create(body.userId, body.item);
+  }
+}
+
+@Module({ imports: [UsersModule], controllers: [OrdersController], providers: [OrdersService] })
+export class OrdersModule {}
+
+@Module({ imports: [UsersModule, OrdersModule] })
+export class AppModule {}</code></pre>
+<p>ב־<code>AppModule</code> יש <strong>מופע אחד</strong> של <code>UsersService</code> — גם ה־UsersController וגם OrdersService מקבלים אותו. module שמיובא פעמיים (פעם ב־AppModule ופעם ב־OrdersModule) נוצר פעם אחת. בפרויקט אמיתי זה ההבדל בין חיבור אחד למסד לבין עשרה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף את <code>UsersService</code> ל־providers של OrdersModule — "עובד", אבל עם עותק נפרד של המשתמשים.</li><li>לשכוח את <code>OrdersModule</code> ב־imports של AppModule ← <code>POST /orders</code> מחזיר 404.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E14">
+    <h3>P20-E14 · guard של מפתח API 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקוד בשיעור 3 כמעט מוכן. מה שנשאר: לרשום ב־module, ולהחליט איפה לשים <code>@UseGuards</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>@UseGuards(ApiKeyGuard)</code> על המתודה <code>secret</code> בלבד — לא על כל ה־controller.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E14
+import {
+  CanActivate, Controller, ExecutionContext, ForbiddenException, Get, Inject, Injectable, Module,
+  UnauthorizedException, UseGuards,
+} from "@nestjs/common";
+import type { Request } from "express";
+
+export const API_KEYS = "API_KEYS";
+
+@Injectable()
+export class ApiKeyGuard implements CanActivate {
+  constructor(@Inject(API_KEYS) private readonly keys: Set&lt;string&gt;) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest&lt;Request&gt;();
+    const key = req.get("x-api-key");
+    if (!key) throw new UnauthorizedException("חסר X-Api-Key");
+    if (!this.keys.has(key)) throw new ForbiddenException("מפתח לא מוכר");
+    return true;
+  }
+}
+
+@Controller()
+export class SecretController {
+  @Get("public")
+  public() {
+    return { ok: true };
+  }
+
+  @Get("secret")
+  @UseGuards(ApiKeyGuard)
+  secret() {
+    return { secret: 42 };
+  }
+}
+
+@Module({
+  controllers: [SecretController],
+  providers: [ApiKeyGuard, { provide: API_KEYS, useValue: new Set(["dev-key"]) }],
+})
+export class SecretModule {}</code></pre>
+<p>למה המפתחות ב־provider ולא <code class="mid">const KEYS = new Set([...])</code> בקובץ? כי ככה הבדיקה מחליפה אותם, ובפרודקשן הם יגיעו מ־CONFIG (E17) — מה־env, לא מהקוד. ולמה 401 מול 403: 401 — "לא אמרת מי אתה"; 403 — "אמרת, ואין לך הרשאה". תראה את זה שוב בפרק 21 עם JWT.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return false</code> במקום לזרוק ← Nest מחזיר 403 עם הודעה כללית, ואי אפשר להבדיל בין "חסר" ל"שגוי".</li><li><code>req.headers["X-Api-Key"]</code> — ב־Node שמות headers באותיות קטנות. <code>req.get()</code> לא תלוי באותיות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E15">
+    <h3>P20-E15 · interceptor של זמנים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>intercept(context, next)</code>: מה שלפני <code>next.handle()</code> רץ לפני ה־handler. <code>next.handle()</code> מחזיר Observable, ו־<code>.pipe(tap(() =&gt; ...))</code> רץ אחרי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">context.switchToHttp().getResponse()</code> ← <code>res.setHeader(...)</code>. ה־status כבר קבוע ב־<code>res.statusCode</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E15
+import { CallHandler, Controller, ExecutionContext, Get, Inject, Injectable, Module, NestInterceptor } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import type { Request, Response } from "express";
+import { Observable, tap } from "rxjs";
+
+export const LOGGER = "LOGGER";
+export interface Logger {
+  log(line: string): void;
+}
+
+@Injectable()
+export class TimingInterceptor implements NestInterceptor {
+  constructor(@Inject(LOGGER) private readonly logger: Logger) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;unknown&gt; {
+    const start = Date.now();
+    const http = context.switchToHttp();
+    const req = http.getRequest&lt;Request&gt;();
+    const res = http.getResponse&lt;Response&gt;();
+    return next.handle().pipe(
+      tap(() =&gt; {
+        // רץ אחרי ה־handler, לפני ש־Nest שולח את התשובה — לכן עוד אפשר להוסיף header
+        const ms = Date.now() - start;
+        res.setHeader("X-Response-Time", `${ms}ms`);
+        this.logger.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+      }),
+    );
+  }
+}
+
+@Controller()
+export class PingController {
+  @Get("ping")
+  ping() {
+    return { pong: true };
+  }
+
+  @Get("slow")
+  async slow() {
+    await new Promise((resolve) =&gt; setTimeout(resolve, 60));
+    return { done: true };
+  }
+}
+
+@Module({
+  controllers: [PingController],
+  providers: [
+    { provide: LOGGER, useValue: console },
+    { provide: APP_INTERCEPTOR, useClass: TimingInterceptor },
+  ],
+})
+export class PingModule {}</code></pre>
+<p>למה <code>APP_INTERCEPTOR</code> ולא <code class="mid">app.useGlobalInterceptors(new TimingInterceptor(...))</code> ב־main.ts? כי ב־main.ts אין DI — היית צריך ליצור את ה־logger ידנית. דרך ה־module, Nest מזריק את <code>LOGGER</code>, והבדיקה יכולה להחליף אותו. ולמה אפשר עוד לשים header ב־<code>tap</code>? Nest שולח את התשובה רק אחרי שכל ה־interceptors סיימו.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למדוד ב־<code>tap</code> בלי לשמור <code>start</code> לפני <code>next.handle()</code> ← תמיד 0ms.</li><li><code>req.url</code> מול <code>req.originalUrl</code>: כאן זה אותו דבר, אבל עם routers מקוננים רק <code>originalUrl</code> מלא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E17">
+    <h3>P20-E17 · הגדרות עם useFactory 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">{ provide: CONFIG, useFactory: (env) =&gt; loadConfig(env), inject: [ENV] }</code> — <code>inject</code> אומר ל־Nest מה להעביר לפונקציה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Zod 4: <code>.default()</code> מקבל ערך <em>מהפלט</em>. אז ל־DEBUG: <code class="long">z.enum(["true","false"]).transform(v =&gt; v === "true").default(false)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E17
+import { Controller, Get, Inject, Module } from "@nestjs/common";
+import { z } from "zod";
+
+export const ENV = "ENV";
+export const CONFIG = "CONFIG";
+
+export const configSchema = z.object({
+  APP_NAME: z.string().min(1),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  DEBUG: z.enum(["true", "false"]).transform((v) =&gt; v === "true").default(false),
+});
+export type Config = z.infer&lt;typeof configSchema&gt;;
+
+export function loadConfig(env: Record&lt;string, string | undefined&gt;): Config {
+  const result = configSchema.safeParse(env);
+  if (!result.success) {
+    const problems = result.error.issues.map((i) =&gt; `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`הגדרות לא תקינות — ${problems}`);
+  }
+  return result.data;
+}
+
+@Controller("info")
+export class InfoController {
+  constructor(@Inject(CONFIG) private readonly config: Config) {}
+
+  @Get()
+  info() {
+    return { name: this.config.APP_NAME, port: this.config.PORT, debug: this.config.DEBUG };
+  }
+}
+
+@Module({
+  controllers: [InfoController],
+  providers: [
+    { provide: ENV, useValue: process.env },
+    { provide: CONFIG, useFactory: (env: Record&lt;string, string | undefined&gt;) =&gt; loadConfig(env), inject: [ENV] },
+  ],
+})
+export class ConfigModule {}</code></pre>
+<p>למה זה חשוב: שרת עם <code>PORT=abc</code> לא אמור לעלות "בערך" ולהיכשל אחרי שעה בבקשה הראשונה. הוא צריך ליפול <strong>מיד</strong>, עם הודעה שאומרת מה חסר. בדוק בעצמך: <code class="mid">loadConfig({ PORT: "abc" })</code> זורק עם <code class="mid">APP_NAME: Invalid input: expected string, received undefined</code> ו־<code class="mid">PORT: Invalid input: expected number, received NaN</code>. ו־<code>ENV</code> כ־token — כדי שהבדיקה לא תצטרך לגעת ב־<code>process.env</code> האמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>z.coerce.boolean()</code> ל־DEBUG ← <code>"false"</code> הופך ל־<code>true</code> (כי <code>Boolean("false")</code> הוא <code>true</code> — מחרוזת לא ריקה).</li><li><code>z.number()</code> בלי <code>coerce</code> ← כל ערך מה־env נכשל, כי ב־env הכול מחרוזת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E18">
+    <h3>P20-E18 · repository דרך token 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>זה ה־<code>TASKS_REPOSITORY</code> של פרויקט 2, בקטן.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ה־service מכיר רק את ה־interface. אם כתבת בו <code class="mid">new InMemoryNotesRepository()</code> — הבדיקה לא תוכל להחליף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E18
+import { Body, Controller, Get, Inject, Injectable, Module, Post } from "@nestjs/common";
+import { IsString, Length } from "class-validator";
+
+export interface Note {
+  id: number;
+  text: string;
+}
+
+export interface NotesRepository {
+  list(): Promise&lt;Note[]&gt;;
+  add(text: string): Promise&lt;Note&gt;;
+}
+
+export const NOTES_REPOSITORY = "NOTES_REPOSITORY";
+
+export class InMemoryNotesRepository implements NotesRepository {
+  private readonly notes: Note[] = [];
+
+  async list() {
+    return this.notes;
+  }
+
+  async add(text: string) {
+    const note = { id: this.notes.length + 1, text };
+    this.notes.push(note);
+    return note;
+  }
+}
+
+export class CreateNoteDto {
+  @IsString()
+  @Length(1, 500)
+  text: string;
+}
+
+@Injectable()
+export class NotesService {
+  constructor(@Inject(NOTES_REPOSITORY) private readonly repo: NotesRepository) {}
+
+  list() {
+    return this.repo.list();
+  }
+
+  add(text: string) {
+    return this.repo.add(text.trim());
+  }
+}
+
+@Controller("notes")
+export class NotesController {
+  constructor(private readonly notes: NotesService) {}
+
+  @Get()
+  list() {
+    return this.notes.list();
+  }
+
+  @Post()
+  add(@Body() dto: CreateNoteDto) {
+    return this.notes.add(dto.text);
+  }
+}
+
+@Module({
+  controllers: [NotesController],
+  providers: [NotesService, { provide: NOTES_REPOSITORY, useClass: InMemoryNotesRepository }],
+})
+export class NotesModule {}</code></pre>
+<p>זו הסיבה שבגללה עשינו את כל זה: מחר <code>PrismaNotesRepository</code> נכנס ב־<code>useClass</code>, וה־service, ה־controller והבדיקות לא משתנים. בפרויקט 2 בדיוק ככה הבודק מריץ את ה־API שלך בלי מסד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">constructor(private readonly repo: NotesRepository)</code> בלי <code>@Inject</code> ← Nest לא יודע מה להזריק (interface נמחק — E05).</li><li>לנקות רווחים ב־controller ← ה־fake יקבל טקסט עם רווחים. כללים עסקיים — ב־service.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E20">
+    <h3>P20-E20 · שלוש תקלות של DI 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>(1) מי יצר את <code>TasksService</code>, ומה הוא העביר ל־constructor? חזור ל־E05.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(3) <code>console.log(typeof id)</code> בתוך <code>findOne</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E20: מתוקן
+import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post } from "@nestjs/common";
+
+@Injectable()
+export class ClockService {
+  now() {
+    return new Date();
+  }
+}
+
+export interface Task {
+  id: number;
+  title: string;
+  createdAt: string;
+}
+
+@Injectable() // ← תקלה 1: בלי decorator אין design:paramtypes, ו־Nest יוצר את המחלקה בלי ClockService
+export class TasksService {
+  private readonly tasks: Task[] = [];
+
+  constructor(private readonly clock: ClockService) {}
+
+  create(title: string): Task {
+    const task = { id: this.tasks.length + 1, title, createdAt: this.clock.now().toISOString() };
+    this.tasks.push(task);
+    return task;
+  }
+
+  findOne(id: number): Task {
+    const task = this.tasks.find((t) =&gt; t.id === id);
+    if (!task) throw new NotFoundException(`משימה ${id} לא נמצאה`);
+    return task;
+  }
+}
+
+@Controller("tasks")
+export class TasksController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Post()
+  create(@Body() body: { title: string }) {
+    return this.tasks.create(body.title);
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) { // ← תקלה 3: בלי ParseIntPipe, id הוא "1" ו־"1" !== 1
+    return this.tasks.findOne(id);
+  }
+}
+
+@Controller("health")
+export class HealthController {
+  @Get()
+  health() {
+    return { status: "ok" };
+  }
+}
+
+@Module({
+  controllers: [TasksController, HealthController], // ← תקלה 2: HealthController לא היה רשום
+  providers: [TasksService, ClockService],
+})
+export class TasksModule {}</code></pre>
+<p>(1) היא המעניינת: <strong>אין שגיאה בעלייה</strong>. בלי decorator על המחלקה אין <code>design:paramtypes</code>, אז מבחינת Nest ל־constructor אין פרמטרים — והוא יוצר <code>new TasksService()</code>. <code>this.clock</code> הוא <code>undefined</code>, וזה מתפוצץ רק בבקשה הראשונה. כל class שמקבל משהו ב־constructor — <code>@Injectable()</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (1) עם <code>@Inject(ClockService)</code> על הפרמטר — עובד, אבל מסתיר את הבעיה. כלל אצבע: כל provider מקבל <code>@Injectable()</code>.</li><li>לתקן את (3) עם <code>Number(id)</code> בתוך ה־service — עובד, אבל <code>/tasks/abc</code> ייתן 404 במקום 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E22">
+    <h3>P20-E22 · filter שמשקר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>(1) מה ה־service זורק? (2) מה ה־filter שולח, ועם איזה status?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>(3) מה כתוב ב־<code>@Catch(...)</code>, ואיזה exception זורק <code>ParseIntPipe</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E22: מתוקן
+import {
+  ArgumentsHost, Catch, Controller, ExceptionFilter, Get, HttpException, Injectable, Module,
+  NotFoundException, Param, ParseIntPipe,
+} from "@nestjs/common";
+import { APP_FILTER } from "@nestjs/core";
+import type { Response } from "express";
+
+@Catch(HttpException) // ← תקלה 3: היה @Catch(NotFoundException), אז ה־400 של ParseIntPipe יצא במבנה של Nest
+export class ApiExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const status = exception.getStatus();
+    const code = status === 404 ? "NOT_FOUND" : status === 400 ? "BAD_REQUEST" : "ERROR";
+    res.status(status).json({ error: { code, message: exception.message } }); // ← תקלה 2: בלי status — 200
+  }
+}
+
+@Injectable()
+export class OrdersService {
+  private readonly orders = [
+    { id: 1, item: "Espresso cup" },
+    { id: 2, item: "Milk jug" },
+  ];
+
+  findOne(id: number) {
+    const order = this.orders.find((o) =&gt; o.id === id);
+    if (!order) throw new NotFoundException(`הזמנה ${id} לא נמצאה`); // ← תקלה 1: Error רגיל הופך ל־500
+    return order;
+  }
+}
+
+@Controller("orders")
+export class OrdersController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    return this.orders.findOne(id);
+  }
+}
+
+@Module({
+  controllers: [OrdersController],
+  providers: [OrdersService, { provide: APP_FILTER, useClass: ApiExceptionFilter }],
+})
+export class OrdersModule {}</code></pre>
+<p>(2) היא הקשה לזיהוי: הלקוח בודק <code>res.ok</code>, רואה <code>true</code>, ומנסה להציג הזמנה שהיא בעצם הודעת שגיאה. ברגע שכותבים filter — האחריות על ה־status עוברת אליך. בבדיקות תמיד בודקים <strong>גם</strong> status <strong>וגם</strong> גוף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את (3) עם <code>@Catch()</code> ריק — תופס גם שגיאות שאינן HTTP, ואז <code>getStatus()</code> לא קיים ← קריסה בתוך ה־filter.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E23">
+    <h3>P20-E23 · state שדולף 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איפה נשמרים <code>items</code> ו־<code>nextId</code>? מי "הבעלים" שלהם?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>כל אפליקציה יוצרת מופע חדש של <code>CartService</code>. מה <strong>לא</strong> שייך למופע?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E23: מתוקן — כל ה־state בתוך מופע ה־service
+import { Body, Controller, Get, Injectable, Module, Post } from "@nestjs/common";
+
+export interface CartItem {
+  id: number;
+  product: string;
+  qty: number;
+}
+
+@Injectable()
+export class CartService {
+  private readonly items: CartItem[] = []; // ← היה const ברמת הקובץ: משותף לכל האפליקציות שנוצרות באותו תהליך
+  private nextId = 1; // ← היה static: שייך למחלקה, לא למופע
+
+  list() {
+    return this.items;
+  }
+
+  add(product: string, qty: number) {
+    const item = { id: this.nextId++, product, qty };
+    this.items.push(item);
+    return item;
+  }
+}
+
+@Controller("cart")
+export class CartController {
+  constructor(private readonly cart: CartService) {}
+
+  @Get()
+  list() {
+    return this.cart.list();
+  }
+
+  @Post()
+  add(@Body() body: { product: string; qty: number }) {
+    return this.cart.add(body.product, body.qty);
+  }
+}
+
+@Module({ controllers: [CartController], providers: [CartService] })
+export class CartModule {}</code></pre>
+<p><code>const</code> ברמת הקובץ ו־<code>static</code> שייכים ל<strong>מודול של JavaScript</strong> ול<strong>מחלקה</strong> — שנטענים פעם אחת לכל התהליך. Nest יוצר מופע חדש של ה־service לכל אפליקציה, אבל לא יכול "לאפס" משתנים שמחוץ למופע. בפרודקשן זה פחות כואב (אפליקציה אחת), אבל בבדיקות — בדיקה אחת מלכלכת את הבאה, והן עוברות או נכשלות לפי הסדר.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" עם פונקציית <code>reset()</code> שהבדיקות קוראות לה — טיפול בסימפטום. state גר במופע.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E25">
+    <h3>P20-E25 · אתגר: הגבלת קצב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">Map&lt;string, { start, count }&gt;</code> בתוך ה־guard. ה־guard הוא singleton — ה־Map חי כל עוד האפליקציה חיה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>header על שגיאה: <code class="mid">res.setHeader("Retry-After", ...)</code> <strong>לפני</strong> <code>throw</code>. ה־exception filter של Nest לא מוחק headers שכבר נקבעו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E25
+import {
+  CanActivate, Controller, ExecutionContext, Get, HttpException, HttpStatus, Inject, Injectable, Module, UseGuards,
+} from "@nestjs/common";
+import type { Request, Response } from "express";
+
+export const CLOCK = "CLOCK";
+export const RATE_LIMIT = "RATE_LIMIT";
+export interface Clock {
+  now(): Date;
+}
+export interface RateLimitOptions {
+  limit: number; // כמה בקשות מותר בחלון
+  windowMs: number; // אורך החלון
+}
+
+@Injectable()
+export class RateLimitGuard implements CanActivate {
+  // לכל לקוח: מתי התחיל החלון שלו, וכמה בקשות היו בו
+  private readonly windows = new Map&lt;string, { start: number; count: number }&gt;();
+
+  constructor(
+    @Inject(RATE_LIMIT) private readonly options: RateLimitOptions,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const http = context.switchToHttp();
+    const req = http.getRequest&lt;Request&gt;();
+    const res = http.getResponse&lt;Response&gt;();
+    const key = req.get("x-client-id") ?? req.ip ?? "unknown";
+    const now = this.clock.now().getTime();
+
+    let w = this.windows.get(key);
+    if (!w || now &gt;= w.start + this.options.windowMs) {
+      w = { start: now, count: 0 };
+      this.windows.set(key, w);
+    }
+    if (w.count &gt;= this.options.limit) {
+      const seconds = Math.ceil((w.start + this.options.windowMs - now) / 1000);
+      res.setHeader("Retry-After", String(seconds)); // לפני ה־throw: ה־header נשאר על ה־response
+      throw new HttpException({ error: { code: "RATE_LIMITED", message: "יותר מדי בקשות — נסה שוב מאוחר יותר" } }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    w.count++;
+    res.setHeader("X-RateLimit-Remaining", String(this.options.limit - w.count));
+    return true;
+  }
+}
+
+@Controller("data")
+@UseGuards(RateLimitGuard)
+export class DataController {
+  @Get()
+  get() {
+    return { data: [1, 2, 3] };
+  }
+}
+
+@Module({
+  controllers: [DataController],
+  providers: [
+    RateLimitGuard,
+    { provide: RATE_LIMIT, useValue: { limit: 5, windowMs: 60_000 } },
+    { provide: CLOCK, useValue: { now: () =&gt; new Date() } },
+  ],
+})
+export class DataModule {}</code></pre>
+<p>זה אלגוריתם "חלון קבוע" — הפשוט מכולם, עם חיסרון ידוע: 3 בקשות ב־10:00:09.9 ועוד 3 ב־10:00:10.0 ← 6 בשנייה אחת. בפרק 24 נכיר "חלון נע" ו־token bucket, ובפרק 26 נשמור את המונים ב־Redis — כי כשיש שני שרתים, Map בזיכרון של כל אחד לא מספיק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.round</code> במקום <code>Math.ceil</code> ← <code>Retry-After: 0</code> כשנשארה חצי שנייה, והלקוח מנסה מיד שוב.</li><li>מונה אחד לכל השרת ← לקוח אחד חוסם את כולם.</li><li>להשתמש ב־<code>Date.now()</code> במקום ב־CLOCK ← הבדיקה לא יכולה "להזיז את הזמן".</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P20-E61">
+    <h3>P20-E61 · שרשרת middleware מול מחזור החיים של Nest <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־Express הסדר נקבע לפי סדר השורות של <code>app.use</code>. ב־Nest?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>איפה ב־Express אפשר היה לשים את <code>errorHandler</code> במקום הלא נכון?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ul><li><code>express.json()</code> ← מובנה. לוג ← middleware או interceptor. מפתח API ← guard. ‏<code>validate</code> ← pipe (‏ValidationPipe או ZodValidationPipe). handler ← handler. ‏<code>errorHandler</code> ← filter.</li></ul>
+<p>ב־Express הסדר הוא סדר השורות — ו־<code>errorHandler</code> לפני ה־routes, או בדיקת מפתח אחרי <code>validate</code>, הם באגים קלאסיים. ב־Nest הסדר קבוע לפי <strong>סוג</strong> הכלי: guard תמיד לפני pipe, filter תמיד בסוף. מה שנשאר לבחור הוא <strong>היקף</strong>: גלובלי, controller, או מתודה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>@UseGuards</code> מעל <code>@UsePipes</code> בקוד משנה את הסדר — לא; הסדר לפי סוג.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E62">
+    <h3>P20-E62 · ‏token כמחרוזת — ומה אם שניים בחרו אותו שם? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>"CONFIG" === "CONFIG"</code>. ‏<code class="mid">Symbol("CONFIG") === Symbol("CONFIG")</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־Nest, token הוא סתם מפתח ב־Map.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>שני ה־tokens הם <strong>אותו</strong> מפתח, אז אחד דורס את השני: <code>PaymentsService</code> עלול לקבל את ההגדרות של המיילים — בלי שום שגיאה, ורק בייצור יתגלה שהתשלום נשלח לכתובת של שרת המיילים. ‏<code class="mid">export const PAYMENTS_CONFIG = Symbol("PAYMENTS_CONFIG")</code> — כל <code>Symbol</code> ייחודי, גם עם אותו תיאור; מייבאים את הקבוע עצמו, אז אי אפשר להתבלבל. או class (<code class="mid">class PaymentsConfig { ... }</code>) כ־token — ייחודי, ונותן גם טיפוס.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשים prefix בשמות ונזהר" — עובד עד שמישהו מעתיק module לפרויקט אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E63">
+    <h3>P20-E63 · למה tokens עושים בדיקות קלות? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־א׳ — איך מחליפים את <code>new Date()</code>? ואת ה־Prisma?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־ב׳: <code class="mid">.overrideProvider(CLOCK).useValue(...)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<p>א׳: ה־service יוצר בעצמו את ה־repository (עם חיבור למסד!) ומשתמש בשעון של המחשב. כדי לבדוק צריך מסד אמיתי, ו"זמן" — לשנות את השעון של התהליך או לחכות. ב׳: בבדיקה —</p>
+<pre><code class="lang-ts">overrideProvider(TASKS_REPOSITORY).useValue(new InMemoryTasksRepository())</code></pre>
+<p>ו־</p>
+<pre><code class="lang-ts">overrideProvider(CLOCK).useValue({ now: () =&gt; new Date("2026-11-04T10:00:00Z") })</code></pre>
+<p>ובודקים משימה עם <code>dueDate: "2026-11-03"</code>. בדיקה של מילישניות, שתמיד מחזירה אותה תשובה. ה־"<code>new</code>" שמחוץ לקוד שלך הוא מה שמאפשר להחליף.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נבדוק עם <code>dueDate</code> של אתמול לפי <code>new Date()</code> בבדיקה" — הבדיקה נכשלת בחצות, ובאזור זמן אחר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P20-E28">
+    <h3>P20-E28 · סיכום לקוח משני repositories 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הדפוס של P20-E18, פעמיים: <code class="mid">export const CUSTOMERS_REPOSITORY = "CUSTOMERS_REPOSITORY";</code>, ‏<code class="long">constructor(@Inject(CUSTOMERS_REPOSITORY) private readonly customers: CustomersRepository, @Inject(ORDERS_REPOSITORY) ...)</code>, וב־module ‏<code class="long">{ provide: CUSTOMERS_REPOSITORY, useClass: InMemoryCustomersRepository }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">const [customer, orders] = await Promise.all([this.customers.findById(id), this.orders.findByCustomer(id)]);</code>. אחר כך <code>filter</code> ל־paid, ו־<code class="mid">reduce((sum, o) =&gt; sum + Math.round(o.total * 100), 0)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E28: סיכום לקוח — שני repositories במקביל
+import { Controller, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe } from "@nestjs/common";
+
+export interface Customer {
+  id: number;
+  fullName: string;
+}
+
+export interface Order {
+  id: number;
+  customerId: number;
+  total: number;
+  status: "paid" | "cancelled";
+}
+
+export interface CustomersRepository {
+  findById(id: number): Promise&lt;Customer | null&gt;;
+}
+
+export interface OrdersRepository {
+  findByCustomer(customerId: number): Promise&lt;Order[]&gt;;
+}
+
+export const CUSTOMERS_REPOSITORY = "CUSTOMERS_REPOSITORY";
+export const ORDERS_REPOSITORY = "ORDERS_REPOSITORY";
+
+export class InMemoryCustomersRepository implements CustomersRepository {
+  private readonly customers: Customer[] = [{ id: 1, fullName: "Dana Levi" }];
+
+  async findById(id: number) {
+    return this.customers.find((c) =&gt; c.id === id) ?? null;
+  }
+}
+
+export class InMemoryOrdersRepository implements OrdersRepository {
+  private readonly orders: Order[] = [
+    { id: 1, customerId: 1, total: 120.5, status: "paid" },
+    { id: 2, customerId: 1, total: 80, status: "cancelled" },
+  ];
+
+  async findByCustomer(customerId: number) {
+    return this.orders.filter((o) =&gt; o.customerId === customerId);
+  }
+}
+
+@Injectable()
+export class SummaryService {
+  constructor(
+    @Inject(CUSTOMERS_REPOSITORY) private readonly customers: CustomersRepository,
+    @Inject(ORDERS_REPOSITORY) private readonly orders: OrdersRepository,
+  ) {}
+
+  async summary(customerId: number) {
+    const [customer, orders] = await Promise.all([this.customers.findById(customerId), this.orders.findByCustomer(customerId)]);
+    if (!customer) throw new NotFoundException(`לקוח ${customerId} לא נמצא`);
+    const paid = orders.filter((o) =&gt; o.status === "paid");
+    const agorot = paid.reduce((sum, o) =&gt; sum + Math.round(o.total * 100), 0);
+    return { customer, orders: paid.length, total: agorot / 100 };
+  }
+}
+
+@Controller("customers")
+export class SummaryController {
+  constructor(private readonly service: SummaryService) {}
+
+  @Get(":id/summary")
+  summary(@Param("id", ParseIntPipe) id: number) {
+    return this.service.summary(id);
+  }
+}
+
+@Module({
+  controllers: [SummaryController],
+  providers: [
+    SummaryService,
+    { provide: CUSTOMERS_REPOSITORY, useClass: InMemoryCustomersRepository },
+    { provide: ORDERS_REPOSITORY, useClass: InMemoryOrdersRepository },
+  ],
+})
+export class SummaryModule {}</code></pre>
+<p>ה־service לא יודע מאיפה מגיעים הלקוחות וההזמנות. הוא מכיר רק שני interfaces ושני tokens. לכן הבודק יכול להחליף את המימוש במזויף איטי, ולמדוד שהבקשות יצאו יחד: 80ms ולא 160ms.</p>
+<p>את ההזמנות מביאים במקביל ללקוח, גם אם בסוף יתברר שהלקוח לא קיים. זו בחירה: במקרה הנפוץ (הלקוח קיים) חוסכים זמן, ובמקרה הנדיר שולחים שאילתה מיותרת אחת.</p>
+<p>הסכום באגורות שלמות, כמו ב־P17-E28. ‏<code>19.9 × 3</code> בשקלים הוא <code>59.699999999999996</code>.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">new InMemoryOrdersRepository()</code> בתוך ה־service — הבודק לא יכול להחליף אותו, ונכשל בבדיקה ש"עברו דרך ה־repositories".</li><li><code>await</code> לכל repository בנפרד — 160ms.</li><li>לספור גם הזמנות מבוטלות.</li><li>להחזיר <code>null</code> כשהלקוח לא קיים — הלקוח של ה־API מקבל 200 עם גוף ריק.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E64">
+    <h3>P20-E64 · ‏interceptor של idempotency 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>להחזיר תוצאה בלי handler: <code>return of(saved);</code> (‏<code>of</code> מ־<code>rxjs</code>) — במקום <code>next.handle()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לשמור אחרי הצלחה: <code class="mid">next.handle().pipe(tap((body) =&gt; this.store.set(key, body)))</code>. ‏header: <code class="mid">context.switchToHttp().getResponse().setHeader(...)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E64: interceptor של idempotency
+import { Body, CallHandler, Controller, ExecutionContext, Get, Inject, Injectable, Module, NestInterceptor, Post, UseInterceptors } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { Observable, of, tap } from "rxjs";
+
+export const IDEMPOTENCY_STORE = "IDEMPOTENCY_STORE";
+
+@Injectable()
+export class IdempotencyInterceptor implements NestInterceptor {
+  constructor(@Inject(IDEMPOTENCY_STORE) private readonly store: Map&lt;string, unknown&gt;) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;unknown&gt; {
+    const http = context.switchToHttp();
+    const key = http.getRequest&lt;Request&gt;().get("idempotency-key");
+    if (!key) return next.handle();
+    if (this.store.has(key)) {
+      http.getResponse&lt;Response&gt;().setHeader("Idempotent-Replayed", "true");
+      return of(this.store.get(key));
+    }
+    return next.handle().pipe(tap((body) =&gt; this.store.set(key, body)));
+  }
+}
+
+@Controller("payments")
+export class PaymentsController {
+  private payments: { id: number; amount: number }[] = [];
+
+  @Post()
+  @UseInterceptors(IdempotencyInterceptor)
+  create(@Body() body: { amount: number }) {
+    const p = { id: this.payments.length + 1, amount: body.amount };
+    this.payments.push(p);
+    return p;
+  }
+
+  @Get("count")
+  count() {
+    return { count: this.payments.length };
+  }
+}
+
+@Module({
+  controllers: [PaymentsController],
+  providers: [IdempotencyInterceptor, { provide: IDEMPOTENCY_STORE, useFactory: () =&gt; new Map() }],
+})
+export class PaymentsModule {}</code></pre>
+<p>‏<code>of(saved)</code> הוא "תשובה מוכנה" — ה־handler לא רץ, ושום תשלום לא נוצר. ‏<code>tap</code> רץ רק על הצלחה, כך שבקשה שנכשלה לא "נועלת" את המפתח. (במערכת עם כמה שרתים — המטמון צריך להיות משותף: Redis או טבלה עם UNIQUE, P18-E51.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>useValue: new Map()</code> — ה־Map נוצר פעם אחת, כשהקובץ נטען, ושתי אפליקציות באותו תהליך (בבדיקות) חולקות מטמון: מפתח מאפליקציה אחת "משוחזר" בשנייה. הבודק בודק בדיוק את זה.</li><li>לשמור לפני ה־handler (מפתח ← "בטיפול") ולשכוח למחוק בכישלון — המפתח "תקוע".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P20-E65">
+    <h3>P20-E65 · אסטרטגיית תמחור לפי הגדרה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-ts">{ provide: PRICING, useFactory: (cfg: { holiday: boolean }) =&gt; (cfg.holiday ? new HolidayPricing() : new RegularPricing()), inject: [CONFIG] }</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>לפרמטר עשרוני אין <code>ParseIntPipe</code> — <code>ParseFloatPipe</code>, ובדיקה ש־<code>&gt; 0</code> (<code>BadRequestException</code>).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E65: אסטרטגיית תמחור לפי הגדרה
+import { BadRequestException, Controller, Get, Inject, Module, Param, ParseFloatPipe } from "@nestjs/common";
+
+export const CONFIG = "CONFIG";
+export const PRICING = "PRICING";
+
+export interface Pricing {
+  name: string;
+  price(base: number): number;
+}
+
+export class RegularPricing implements Pricing {
+  name = "regular";
+  price(base: number) {
+    return base;
+  }
+}
+
+export class HolidayPricing implements Pricing {
+  name = "holiday";
+  price(base: number) {
+    return Math.round(Math.round(base * 100) * 0.85) / 100;
+  }
+}
+
+@Controller("price")
+export class PriceController {
+  constructor(@Inject(PRICING) private readonly pricing: Pricing) {}
+
+  @Get(":base")
+  get(@Param("base", ParseFloatPipe) base: number) {
+    if (!(base &gt; 0)) throw new BadRequestException("base חייב להיות חיובי");
+    return { base, final: this.pricing.price(base), strategy: this.pricing.name };
+  }
+}
+
+@Module({
+  controllers: [PriceController],
+  providers: [
+    { provide: CONFIG, useValue: { holiday: false } },
+    {
+      provide: PRICING,
+      useFactory: (cfg: { holiday: boolean }) =&gt; (cfg.holiday ? new HolidayPricing() : new RegularPricing()),
+      inject: [CONFIG],
+    },
+  ],
+})
+export class PricingModule {}</code></pre>
+<p>ה־controller לא יודע שיש שתי אסטרטגיות — הוא מקבל <code>Pricing</code>. ההחלטה במקום אחד (ה־factory), לפי הגדרה. מחר — אסטרטגיה שלישית (Black Friday) היא class חדש ושורה ב־factory.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (config.holiday)</code> בתוך ה־controller או ה־service — כל אסטרטגיה חדשה היא עוד <code>if</code> בכל מקום שמחשב מחיר.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-3.html"><small>חזרה</small>תרגול שיעור 3</a><a href="lesson-04-project.html"><small>הבא</small>שיעור 4 — Swagger, בדיקות ופרויקט 2 ב־Nest</a></div>
+</main>
+</body>
+</html>

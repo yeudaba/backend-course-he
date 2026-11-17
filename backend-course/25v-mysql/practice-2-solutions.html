@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 2 — יחידה 25.5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 25.5</a> ‹ פתרונות שיעור 2</div>
+  <h1>🔒 פתרונות — תרגול שיעור 2</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>25v-mysql/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P25.5-E43">
+    <h3>P25.5-E43 · ‏LAST_INSERT_ID — של מי? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>LAST_INSERT_ID()</code> שייך ל<em>חיבור</em>. ‏<code>pool.query</code> — כל קריאה יכולה לקבל חיבור אחר.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת אחר (או בקשה אחרת באותו שרת) יכול להכניס לקוח בין שתי הפקודות.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א — לא. שתי הקריאות יכולות לרוץ על שני חיבורים שונים מה־pool, וה־<code>LAST_INSERT_ID()</code> של החיבור השני הוא של מישהו אחר (או 0). עם <code>getConnection</code> ושתי הפקודות עליו — כן.</li><li>ב — כן. ‏<code>insertId</code> מגיע בתשובה לאותה פקודה. זו הדרך.</li><li>ג — לא. בקשה אחרת יכולה להכניס שורה מיד אחרי — זה מרוץ קלאסי (פרק 18).</li></ol>
+<p>שלוש שורות: <code>insertId</code> (ו־<code>LAST_INSERT_ID()</code>) הוא ה־id של <strong>הראשונה</strong> (שיעור 2). ב־InnoDB עם INSERT פשוט של כמה שורות, המזהים רציפים — <code>insertId</code>, ‏+1, ‏+2. ואם צריך ודאות מלאה — לשאול אחרי, לפי מפתח טבעי (<code>WHERE email IN (?)</code>).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"עובד אצלי" — בבדיקה עם בקשה אחת, ה־pool נותן אותו חיבור. תחת עומס — לא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E44">
+    <h3>P25.5-E44 · ‏upsert על טבלה עם שני מפתחות ייחודיים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏ON DUPLICATE KEY מגיב להתנגשות ב<em>כל</em> מפתח ייחודי — כאן ב־username.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־PostgreSQL: <code>ON CONFLICT (email)</code> — בוחרים את המפתח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">CREATE TABLE accounts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  visits INT NOT NULL DEFAULT 1
+);
+INSERT INTO accounts (email, username) VALUES ('dana@x.com', 'dana'), ('yossi@x.com', 'yossi');
+INSERT INTO accounts (email, username) VALUES ('new@x.com', 'dana') AS n
+  ON DUPLICATE KEY UPDATE visits = accounts.visits + 1, email = n.email;
+SELECT id, email, username, visits FROM accounts ORDER BY id;</code></pre>
+<pre class="terminal">+----+-------------+----------+--------+
+| id | email       | username | visits |
++----+-------------+----------+--------+
+|  1 | new@x.com   | dana     |      2 |
+|  2 | yossi@x.com | yossi    |      1 |
++----+-------------+----------+--------+</pre>
+<p>ה־username <code>dana</code> כבר תפוס ← "התנגשות" ← ה־UPDATE רץ על השורה של דנה: האימייל שלה הוחלף ב־<code>new@x.com</code>. מי שניסה להירשם "השתלט" על חשבון קיים — בלי שגיאה. ב־PostgreSQL: ‏<code class="mid">ON CONFLICT (email) DO UPDATE …</code> — התנגשות ב־username הייתה זורקת שגיאה, כמו שצריך. ב־MySQL: upsert רק על טבלה שיש בה בדיוק מפתח ייחודי אחד רלוונטי — אחרת INSERT רגיל, ותפיסה של שגיאת 1062.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף UNIQUE לטבלה קיימת בלי לבדוק אילו upserts כבר רצים עליה — ה־upsert משנה התנהגות בשקט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E45">
+    <h3>P25.5-E45 · ‏ROW_COUNT אחרי upsert — 0, ‏1 או 2 <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>1 — נוספה שורה. 2 — עודכנה. ומה אם ה־UPDATE לא שינה כלום?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אותו ערך בדיוק — "לא השתנה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 1) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS first;
+INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 3) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS second;
+INSERT INTO cart_items (customer_id, product_id, quantity) VALUES (2, 6, 3) AS n
+  ON DUPLICATE KEY UPDATE quantity = n.quantity;
+SELECT ROW_COUNT() AS third;</code></pre>
+<pre class="terminal">+-------+
+| first |
++-------+
+|     1 |
++-------+
++--------+
+| second |
++--------+
+|      2 |
++--------+
++-------+
+| third |
++-------+
+|     0 |
++-------+</pre>
+<p>ב־CLI: ‏1 = נוצר, 2 = עודכן, 0 = כבר היה בדיוק כך. ב־mysql2 זה <code>affectedRows</code> — אבל mysql2 מבקש מהשרת "found rows" כברירת מחדל, ואז "כבר היה כך" מחזיר <strong>1</strong>, כמו "נוצר" (E71). כלומר: ‏2 ← בטוח עודכן; ‏1 ← נוצר <em>או</em> לא השתנה. אם ה־API חייב להבדיל בין 201 ל־200 — בודקים קיום לפני (בטרנזקציה, עם נעילה), או מחזירים 200 תמיד (‏PUT idempotent, פרק 24).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק <code>affectedRows === 1</code> בתור "הצליח" — עדכון מחזיר 2, ומסומן כ"נכשל".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E46">
+    <h3>P25.5-E46 · ‏ONLY_FULL_GROUP_BY — מה עובר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>עמודה שלא ב־GROUP BY מותרת רק אם היא תלויה פונקציונלית במה שכן — למשל במפתח הראשי.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>ANY_VALUE</code> אומר ל־MySQL "אני יודע שזה ערך כלשהו מהקבוצה".</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT category, COUNT(*) AS n FROM products GROUP BY category;
+SELECT category, name FROM products GROUP BY category;
+SELECT p.id, p.name, SUM(oi.quantity) AS sold FROM products p JOIN order_items oi ON oi.product_id = p.id GROUP BY p.id;
+SELECT category, ANY_VALUE(name) AS some_name, MAX(price) AS top FROM products GROUP BY category;</code></pre>
+<pre class="terminal">+-------------+---+
+| category    | n |
++-------------+---+
+| accessories | 2 |
+| beans       | 3 |
+| brewing     | 4 |
+| grinders    | 2 |
++-------------+---+
+ERROR 1055 (42000): Expression #2 of SELECT list is not in GROUP BY clause and contains nonaggregated column 'snippet.products.name' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by
++----+----------------------+------+
+| id | name                 | sold |
++----+----------------------+------+
+|  1 | Ethiopia Beans 1kg   |    2 |
+|  4 | Hand Grinder         |    1 |
+|  5 | Electric Grinder Pro |    1 |
+|  9 | Paper Filters (100)  |    1 |
+|  6 | French Press 1L      |    3 |
++----+----------------------+------+
++-------------+---------------------+--------+
+| category    | some_name           | top    |
++-------------+---------------------+--------+
+| accessories | Paper Filters (100) | 129.00 |
+| beans       | Ethiopia Beans 1kg  |  89.90 |
+| brewing     | French Press 1L     | 229.00 |
+| grinders    | Hand Grinder        | 649.00 |
++-------------+---------------------+--------+</pre>
+<ol><li>עוברת.</li><li>נכשלת — <code>name</code> לא נקבע לפי <code>category</code>.</li><li>עוברת — <code>p.name</code> תלוי ב־<code>p.id</code>, המפתח הראשי.</li><li>עוברת — אבל <code>some_name</code> הוא שם <em>כלשהו</em> מהקטגוריה, לא בהכרח של המוצר היקר. ‏<code>ANY_VALUE</code> מכבה את הבדיקה; הוא לא מוצא "את השורה של המקסימום". בשביל זה — window function (‏P25.5-E07).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכבות <code>ONLY_FULL_GROUP_BY</code> ב־<code>sql_mode</code> "כי המערכת הישנה עבדה ככה" — הבאגים של התוצאות ה"כלשהן" חוזרים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E47">
+    <h3>P25.5-E47 · ‏‎-&gt;‎ מול ‎-&gt;&gt;‎ <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>-&gt;</code> מחזיר ערך JSON (עם מרכאות, לטקסט). ‏<code>-&gt;&gt;</code> — טקסט רגיל.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>MySQL משווה JSON למחרוזת לפי כללי JSON.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">SELECT name,
+       attributes-&gt;'$.roast' = 'light' AS arrow,
+       attributes-&gt;&gt;'$.roast' = 'light' AS double_arrow,
+       attributes-&gt;'$.weight_g' &gt; 500 AS heavy,
+       attributes-&gt;'$.missing' IS NULL AS missing_is_null
+FROM products WHERE category = 'beans' ORDER BY id;</code></pre>
+<pre class="terminal">+--------------------+-------+--------------+-------+-----------------+
+| name               | arrow | double_arrow | heavy | missing_is_null |
++--------------------+-------+--------------+-------+-----------------+
+| Ethiopia Beans 1kg |     1 |            1 |     1 |               1 |
+| Colombia Beans 1kg |     0 |            0 |     1 |               1 |
+| Brazil Beans 250g  |     0 |            0 |     0 |               1 |
++--------------------+-------+--------------+-------+-----------------+</pre>
+<p>‏<code>-&gt;&gt;</code> לטקסט שמשווים, מציגים או ממיינים כמחרוזת. ‏<code>-&gt;</code> כשרוצים את הערך כ־JSON (מספר שנשאר מספר, אובייקט שעובר הלאה לפונקציות JSON). בספק — <code>-&gt;&gt;</code> עם המרה מפורשת: <code class="mid">CAST(attributes-&gt;&gt;'$.weight_g' AS UNSIGNED)</code>. ומפתח שלא קיים — NULL, כמו ב־PostgreSQL.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להציג <code>attributes-&gt;'$.origin'</code> ב־API — הלקוח מקבל <code>"\"Ethiopia\""</code>, עם מרכאות כפולות בתוך הטקסט.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E48">
+    <h3>P25.5-E48 · ‏FULLTEXT או LIKE? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>LIKE 'abc%'</code> יכול להשתמש באינדקס רגיל. ‏<code>LIKE '%abc%'</code> — לא.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>FULLTEXT ב־InnoDB מפרק לפי רווחים, ויש לו אורך מילה מינימלי (<code>innodb_ft_min_token_size</code>, ברירת מחדל 3) ורשימת מילים שמדלגים עליהן.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><code>LIKE 'pre%'</code> עם אינדקס על <code>name</code> — חיפוש תחילית משתמש ב־B-tree.</li><li>FULLTEXT — ‏<code class="mid">MATCH … AGAINST ('+grinder +ceramic' IN BOOLEAN MODE)</code>. ‏<code>LIKE '%…%'</code> יסרוק 200,000 שורות בכל הקשה.</li><li><code>=</code> עם אינדקס (ובקולציה בינארית — E35). לא חיפוש טקסט בכלל.</li><li>FULLTEXT של InnoDB לא יודע תחיליות של עברית ("ה", "ל" צמודות למילה). צריך parser אחר (‏ngram, עם מחיר), או מנוע חיפוש ייעודי (Elasticsearch/OpenSearch, ‏Meilisearch) — או ב־PostgreSQL, ‏trigram (‏pg_trgm).</li><li>FULLTEXT מוצא — "cup" הוא 3 תווים, בדיוק המינימום. מילה של שתי אותיות ("v6") לא תימצא בלי לשנות את ההגדרה ולבנות את האינדקס מחדש.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף FULLTEXT ולצפות ש־<code>LIKE '%x%'</code> ישתמש בו — הוא לא. רק <code>MATCH … AGAINST</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E07">
+    <h3>P25.5-E07 · היקר ביותר בכל קטגוריה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אין DISTINCT ON. יש window functions.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="long">ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id)</code> בתת־שאילתה, ו־<code>WHERE rn = 1</code> בחוץ.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E07
+-- המוצר היקר ביותר בכל קטגוריה (פעיל ובמלאי); בתיקו — ה־id הקטן. window functions קיימות מ־MySQL 8.0
+SELECT category, name, price
+FROM (
+  SELECT category, name, price,
+         ROW_NUMBER() OVER (PARTITION BY category ORDER BY price DESC, id) AS rn
+  FROM products
+  WHERE is_active AND stock &gt; 0
+) ranked
+WHERE rn = 1
+ORDER BY category;</code></pre>
+<pre class="terminal">+-------------+----------------------+--------+
+| category    | name                 | price  |
++-------------+----------------------+--------+
+| accessories | Paper Filters (100)  |  24.90 |
+| beans       | Ethiopia Beans 1kg   |  89.90 |
+| brewing     | Gooseneck Kettle     | 229.00 |
+| grinders    | Electric Grinder Pro | 649.00 |
++-------------+----------------------+--------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">SELECT category, name, MAX(price) … GROUP BY category</code> — ב־MySQL ישן זה "עבד" ונתן <code>name</code> אקראי; ב־8 עם ONLY_FULL_GROUP_BY — שגיאה. וטוב שכך.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E08">
+    <h3>P25.5-E08 · upsert לעגלה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">INSERT … ON DUPLICATE KEY UPDATE</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>VALUES(quantity)</code> בתוך ה־UPDATE מיושן מ־8.0.20 (warning). במקומו: <code class="long">VALUES (1, 3, 2) AS new … quantity = cart_items.quantity + new.quantity</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E08
+-- "הוסף 2 יחידות של מוצר 3 לעגלה של לקוח 1": אם השורה קיימת — מוסיפים לכמות. ב־PostgreSQL: ON CONFLICT … DO UPDATE.
+-- ב־MySQL: ON DUPLICATE KEY UPDATE, עם alias לשורה החדשה (VALUES() בתוך UPDATE מיושן מ־8.0.20 ומחזיר warning)
+INSERT INTO cart_items (customer_id, product_id, quantity)
+VALUES (1, 3, 2) AS new
+ON DUPLICATE KEY UPDATE quantity = cart_items.quantity + new.quantity;</code></pre>
+<p>שימו לב להבדל מ־PostgreSQL: <code class="mid">ON CONFLICT (customer_id, product_id)</code> בוחר מפתח; <code>ON DUPLICATE KEY</code> מופעל על <em>כל</em> מפתח ייחודי בטבלה. בטבלה עם שני מפתחות ייחודיים זה יכול לעדכן שורה שלא התכוונת אליה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>REPLACE INTO</code> — "upsert" שבעצם מוחק ומכניס מחדש: ה־id משתנה, וטריגרים ומפתחות זרים עם ON DELETE מופעלים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E11">
+    <h3>P25.5-E11 · GROUP BY נכון 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל עמודה ב־SELECT — או ב־GROUP BY, או בתוך פונקציה מצטברת, או <em>תלויה פונקציונלית</em> במה שב־GROUP BY.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>GROUP BY c.id</code> מספיק ל־<code>c.name</code> ו־<code>c.city</code> — כי <code>id</code> הוא המפתח הראשי.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E11
+-- לכל לקוח עם הזמנות ששולמו: כמה, כמה כסף, ומתי האחרונה. ONLY_FULL_GROUP_BY מרשה name ו־city
+-- כי הם תלויים פונקציונלית ב־c.id (המפתח הראשי) — לא צריך להוסיף אותם ל־GROUP BY
+SELECT c.name, c.city,
+       COUNT(*) AS paid_orders,
+       SUM(o.total) AS paid_total,
+       MAX(o.created_at) AS last_order
+FROM customers c
+JOIN orders o ON o.customer_id = c.id AND o.status IN ('paid', 'shipped')
+GROUP BY c.id
+ORDER BY paid_total DESC, c.id;</code></pre>
+<pre class="terminal">+-------------+-----------+-------------+------------+-------------------------+
+| name        | city      | paid_orders | paid_total | last_order              |
++-------------+-----------+-------------+------------+-------------------------+
+| Yossi Cohen | Tel Aviv  |           1 |     649.00 | 2026-03-02 11:30:00.000 |
+| Dana Levi   | Haifa     |           1 |     278.90 | 2026-03-01 09:00:00.000 |
+| Noa Mizrahi | Tel Aviv  |           1 |     238.00 | 2026-03-04 16:45:00.000 |
+| Avi Peretz  | Jerusalem |           1 |     119.00 | 2026-03-06 10:10:00.000 |
++-------------+-----------+-------------+------------+-------------------------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכבות את ONLY_FULL_GROUP_BY ב־<code>sql_mode</code> כי "השאילתה הישנה נשברה". השאילתה הישנה החזירה ערכים שרירותיים — עכשיו פשוט יודעים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E12">
+    <h3>P25.5-E12 · עמודת JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>attributes-&gt;&gt;'$.material'</code> — טקסט; <code>-&gt;</code> — JSON (עם מרכאות).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">CAST(attributes-&gt;&gt;'$.cups' AS UNSIGNED)</code>, ו־<code class="mid">ORDER BY cups IS NULL, cups DESC</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E12
+-- עמודת JSON: -&gt;&gt; מחזיר טקסט (בלי מרכאות), -&gt; מחזיר JSON. מספר — CAST, כדי למיין ולהשוות כמספר
+SELECT name,
+       attributes-&gt;&gt;'$.material' AS material,
+       CAST(attributes-&gt;&gt;'$.cups' AS UNSIGNED) AS cups
+FROM products
+WHERE category = 'brewing'
+  AND attributes-&gt;&gt;'$.material' IS NOT NULL
+ORDER BY cups IS NULL, cups DESC, name;</code></pre>
+<pre class="terminal">+------------------+-----------+------+
+| name             | material  | cups |
++------------------+-----------+------+
+| French Press 1L  | glass     |    8 |
+| Moka Pot 6 Cups  | aluminium |    6 |
+| Gooseneck Kettle | steel     | NULL |
+| V60 Ceramic      | ceramic   | NULL |
++------------------+-----------+------+</pre>
+<p>וכשמחפשים לפי שדה ב־JSON הרבה: עמודה מחושבת (<code class="mid">GENERATED ALWAYS AS (attributes-&gt;&gt;'$.material')</code>) עם אינדקס, או functional index. אבל אם שדה מופיע בכל שורה ומחפשים לפיו — הוא כנראה צריך להיות עמודה רגילה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות <code class="mid">attributes-&gt;'$.material' = 'glass'</code> — ה־<code>-&gt;</code> מחזיר JSON (<code>"glass"</code> עם מרכאות), וההשוואה מתנהגת אחרת ממה שנראה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E20">
+    <h3>P25.5-E20 · שאילתה מ־PostgreSQL — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שלושה דברים ש־MySQL לא מכיר, או מכיר אחרת.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>||</code>, <code>ILIKE</code>, <code>DISTINCT ON</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E20
+-- "השאילתה עבדה ב־PostgreSQL": שלוש בעיות ב־MySQL
+-- תקלה 1: || ב־MySQL הוא OR לוגי (מחזיר 0/1), לא חיבור מחרוזות ← CONCAT
+-- תקלה 2: אין ILIKE ← LIKE, שבקולציה של הטבלה (_ai_ci) כבר לא רגיש לרישיות
+-- תקלה 3: DISTINCT ON לא קיים ← ROW_NUMBER() בתת־שאילתה
+SELECT customer, city, last_total
+FROM (
+  SELECT CONCAT(c.name, ' (', c.email, ')') AS customer,
+         c.city,
+         o.total AS last_total,
+         ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.created_at DESC) AS rn
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id
+  WHERE c.city LIKE '%aviv%'
+) t
+WHERE rn = 1
+ORDER BY customer;</code></pre>
+<pre class="terminal">+---------------------------------+----------+------------+
+| customer                        | city     | last_total |
++---------------------------------+----------+------------+
+| Noa Mizrahi (noa@example.com)   | Tel Aviv |     238.00 |
+| Yossi Cohen (yossi@example.com) | Tel Aviv |      89.90 |
++---------------------------------+----------+------------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להפעיל <code>PIPES_AS_CONCAT</code> ב־sql_mode כדי ש־<code>||</code> יעבוד — עכשיו הקוד תלוי בהגדרת שרת, ושרת אחר יחזיר 0.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E26">
+    <h3>P25.5-E26 · דוח לקוחות ב־MySQL — מקובץ ריק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי טבלאות "רבות" לכל לקוח (הזמנות ועגלה). ‏<code>JOIN</code> לשתיהן יחד מכפיל שורות: לדנה יש שני פריטים בעגלה, וההזמנה שלה נספרת פעמיים. לכן מסכמים כל אחת בנפרד ב־CTE (<code class="mid">WITH spent AS (... GROUP BY customer_id), cart AS (...)</code>), ואז <code>LEFT JOIN</code> ללקוחות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>MySQL: ‏<code>IFNULL(s.spent, 0)</code> (או <code>COALESCE</code>), ‏<code class="mid">DATE_FORMAT(s.last_at, '%d/%m/%Y')</code>. ‏<code>DATE_FORMAT</code> של <code>NULL</code> הוא <code>NULL</code>. בחלון: <code class="long">RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC)</code>, ובסוף <code class="mid">ORDER BY c.city, city_rank, c.name</code> (מותר למיין לפי כינוי של עמודה).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">WITH spent AS (
+  SELECT customer_id, COUNT(*) AS orders, SUM(total) AS spent, MAX(created_at) AS last_at
+  FROM orders
+  WHERE status IN ('paid', 'shipped')
+  GROUP BY customer_id
+),
+cart AS (
+  SELECT customer_id, SUM(quantity) AS units
+  FROM cart_items
+  GROUP BY customer_id
+)
+SELECT
+  c.name,
+  c.city,
+  IFNULL(s.orders, 0) AS orders,
+  IFNULL(s.spent, 0) AS spent,
+  DATE_FORMAT(s.last_at, '%d/%m/%Y') AS last_order,
+  IFNULL(ct.units, 0) AS cart_units,
+  RANK() OVER (PARTITION BY c.city ORDER BY IFNULL(s.spent, 0) DESC) AS city_rank
+FROM customers c
+LEFT JOIN spent s ON s.customer_id = c.id
+LEFT JOIN cart ct ON ct.customer_id = c.id
+ORDER BY c.city, city_rank, c.name;</code></pre>
+<pre class="terminal">+-------------+-----------+--------+--------+------------+------------+-----------+
+| name        | city      | orders | spent  | last_order | cart_units | city_rank |
++-------------+-----------+--------+--------+------------+------------+-----------+
+| Dana Levi   | Haifa     |      1 | 278.90 | 01/03/2026 |          3 |         1 |
+| Maya Katz   | Haifa     |      0 |   0.00 | NULL       |          1 |         2 |
+| Avi Peretz  | Jerusalem |      1 | 119.00 | 06/03/2026 |          0 |         1 |
+| Yossi Cohen | Tel Aviv  |      1 | 649.00 | 02/03/2026 |          0 |         1 |
+| Noa Mizrahi | Tel Aviv  |      1 | 238.00 | 04/03/2026 |          0 |         2 |
++-------------+-----------+--------+--------+------------+------------+-----------+</pre>
+<p>דנה: הזמנה אחת ששולמה (278.90). ההזמנה המבוטלת לא נספרת. בעגלה שלה 2 + 1 = 3 יחידות. מי שמצרף את <code>orders</code> ואת <code>cart_items</code> באותו <code>FROM</code> מקבל לה <code>spent</code> של 557.80, כי כל הזמנה מופיעה פעם לכל פריט בעגלה. זה ה־"fan-out" מפרק 17, והוא נראה בדיוק אותו דבר ב־MySQL.</p>
+<p>מה כאן MySQL ומה לא? ‏CTE, ‏<code>LEFT JOIN</code>, ‏<code>RANK</code> ו־<code>GROUP BY</code> זהים ל־PostgreSQL (מגרסה 8). ההבדלים: ‏<code>DATE_FORMAT</code> עם <code>%d/%m/%Y</code> (ב־PostgreSQL: ‏<code>to_char(..., 'DD/MM/YYYY')</code>), ו־<code>IFNULL</code>, שקיים רק ב־MySQL. ‏<code>COALESCE</code> עובד בשניהם, ולכן הוא בחירה טובה כשכותבים SQL שצריך לרוץ בשני המסדים.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>JOIN</code> במקום <code>LEFT JOIN</code> — מאיה, שעוד לא הזמינה, נעלמת מהדוח.</li><li><code>WHERE o.status IN (...)</code> אחרי <code>LEFT JOIN</code> ל־<code>orders</code> — הופך אותו ל־<code>JOIN</code> רגיל, ומאיה שוב נעלמת. את הסינון שמים בתוך ה־CTE (או בתנאי ה־<code>ON</code>).</li><li><code>ROW_NUMBER</code> במקום <code>RANK</code> — בתיקו אחד מקבל 1 והשני 2, לפי סדר מקרי.</li><li><code>'%d/%m/%y'</code> — ‏<code>y</code> קטנה היא שנה בשתי ספרות (<code>26</code>).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E49">
+    <h3>P25.5-E49 · סכום מצטבר לכל לקוח 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">SUM(o.total) OVER (PARTITION BY o.customer_id ORDER BY o.created_at, o.id)</code></pre>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>ROW_NUMBER()</code> עם אותו <code>OVER</code>. אפשר להגדיר חלון פעם אחת: <code>WINDOW w AS (…)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E49: סכום מצטבר לכל לקוח
+SELECT c.name AS customer, o.id AS order_id, o.created_at, o.total,
+       SUM(o.total) OVER w AS running_total,
+       ROW_NUMBER() OVER w AS nth
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.status IN ('paid', 'shipped')
+WINDOW w AS (PARTITION BY o.customer_id ORDER BY o.created_at, o.id)
+ORDER BY c.name, o.created_at, o.id;</code></pre>
+<pre class="terminal">+-------------+----------+-------------------------+--------+---------------+-----+
+| customer    | order_id | created_at              | total  | running_total | nth |
++-------------+----------+-------------------------+--------+---------------+-----+
+| Avi Peretz  |        5 | 2026-03-06 10:10:00.000 | 119.00 |        119.00 |   1 |
+| Dana Levi   |        1 | 2026-03-01 09:00:00.000 | 278.90 |        278.90 |   1 |
+| Noa Mizrahi |        4 | 2026-03-04 16:45:00.000 | 238.00 |        238.00 |   1 |
+| Yossi Cohen |        2 | 2026-03-02 11:30:00.000 | 649.00 |        649.00 |   1 |
++-------------+----------+-------------------------+--------+---------------+-----+</pre>
+<p>‏<code>WINDOW w AS (…)</code> — שם לחלון, כדי לא לכתוב אותו פעמיים. (גם ב־PostgreSQL.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>ORDER BY</code> בתוך <code>OVER</code> בלי <code>id</code> — שתי הזמנות באותה שנייה מקבלות סדר אקראי, וה־running total "קופץ".</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E50">
+    <h3>P25.5-E50 · ממוצע לפי שדה ב־JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>attributes-&gt;&gt;'$.roast'</code> — ובשביל "יש להם": ‏<code>IS NOT NULL</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אפשר <code>GROUP BY roast</code> לפי ה־alias.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E50: ממוצע לפי שדה ב־JSON
+SELECT attributes-&gt;&gt;'$.roast' AS roast,
+       COUNT(*) AS products,
+       ROUND(AVG(price), 2) AS avg_price,
+       SUM(stock) AS total_stock
+FROM products
+WHERE category = 'beans' AND attributes-&gt;&gt;'$.roast' IS NOT NULL
+GROUP BY roast
+ORDER BY roast;</code></pre>
+<pre class="terminal">+--------+----------+-----------+-------------+
+| roast  | products | avg_price | total_stock |
++--------+----------+-----------+-------------+
+| dark   |        1 |     29.90 |         120 |
+| light  |        1 |     89.90 |          40 |
+| medium |        1 |     84.90 |           0 |
++--------+----------+-----------+-------------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">GROUP BY attributes-&gt;'$.roast'</code> (חץ אחד) — עובד, אבל ה־roast בתוצאה עם מרכאות: <code>"light"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P25.5-E51">
+    <h3>P25.5-E51 · אין RETURNING — מה משתנה בקוד? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>insertId</code>, ‏<code>affectedRows</code> — ואז עוד SELECT.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה צריך כדי שה־SELECT שאחרי יראה בדיוק את מה שה־UPDATE עשה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>INSERT ← <code>insertId</code>, ואז <code>SELECT … WHERE id = ?</code> בשביל ברירות המחדל (status, ‏created_at). שתי פקודות במקום אחת.</li><li>UPDATE ← <code>affectedRows</code> (1 = הצליח, 0 = אין מלאי — P25.5-E13). את המלאי החדש — SELECT, באותה טרנזקציה (ועם <code>FOR UPDATE</code>, אם חשוב שיהיה מדויק).</li><li>DELETE ← אם צריך את ה־ids: קודם <code>SELECT id … FOR UPDATE</code>, ואז DELETE לפיהם, בטרנזקציה. אחרת — רק <code>affectedRows</code>.</li></ol>
+<p>Prisma עושה את זה בשבילך: ב־MySQL ה־<code>create</code> שולח INSERT ואחריו SELECT. המחיר — עוד round trip, שלא רואים בקוד (וב־<code>$queryRaw</code> — כן רואים).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להחזיר ללקוח את ה־body ששלח, עם ה־id, במקום לקרוא מהמסד — ואז ברירות מחדל (status, ‏created_at) חסרות או שגויות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E52">
+    <h3>P25.5-E52 · ‏upsert במקביל — יש מרוץ? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי הבקשות קוראות "אין שורה" — מה עכשיו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>פקודה אחת = נעילה אחת על השורה (או על המפתח).</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>א: (1) שתיהן לא מוצאות ← שתיהן INSERT ← אחת נכשלת עם Duplicate entry (500 למשתמש). (2) שתיהן מוצאות 1 ← שתיהן כותבות 2 ← אחת מהלחיצות "נעלמה" (lost update). ב: שתיהן מצליחות, הכמות 2.</li><li>ה־INSERT וה־UPDATE הם פעולה אחת בתוך InnoDB: ההתנגשות במפתח, הנעילה של השורה הקיימת, והחישוב <code>cart_items.quantity + 1</code> — מהערך העדכני, לא ממה שנקרא קודם.</li><li><code class="mid">INSERT … ON CONFLICT (customer_id, product_id) DO UPDATE</code> עם <code class="mid">quantity = cart_items.quantity + EXCLUDED.quantity</code> — אותו רעיון בדיוק.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לתקן" את א׳ בטרנזקציה בלי <code>FOR UPDATE</code> — ב־REPEATABLE READ שתיהן עדיין קוראות את אותה תמונה (שיעור 3).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E53">
+    <h3>P25.5-E53 · דפדוף ב־MySQL — OFFSET או keyset? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏OFFSET לא "קופץ" — הוא קורא ומדלג.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי הזמנות באותה מילישנייה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>100,020 — קורא ומדלג על כל מה שלפני. ככל שהעמוד רחוק, כך איטי יותר.</li><li>OFFSET: כל השורות "זזות" 3 מקומות — המשתמש רואה שוב 3 הזמנות מהעמוד הקודם. keyset: ממשיך בדיוק מאיפה שעצר — בלי כפילויות (החדשות יופיעו כשיחזור להתחלה).</li><li>‏<code>created_at</code> לא ייחודי. עם cursor רק עליו, הזמנות עם אותו זמן בגבול העמוד — נעלמות או מוכפלות. <code>id</code> שובר את התיקו.</li><li>כמו ב־PostgreSQL: ‏<code class="mid">WHERE (created_at, id) &lt; (?, ?)</code> עם <code class="mid">ORDER BY created_at DESC, id DESC</code> (‏row constructor), עם אינדקס על <code>(created_at, id)</code> (E54).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>cursor שהוא מספר העמוד מוצפן ב־base64 — זה עדיין OFFSET.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P25.5-E27">
+    <h3>P25.5-E27 · INSERT מרובה שורות, עם upsert 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות לא יכולים להיות פרמטרים (<code>?</code> הוא רק לערכים), ולכן בודקים אותם מול רשימה מותרת: פונקציה קטנה <code>ident(name)</code> שזורקת אם ה־regex לא מתאים, ומחזירה את השם עטוף ב־backticks. כל שם עובר דרכה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const columns = Object.keys(rows[0])</code>. השוואת עמודות: <code class="mid">Object.keys(row).sort().join(",")</code> מול אותו דבר בשורה הראשונה. פרמטרים: <code class="mid">rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]))</code>. ‏placeholders: ‏<code class="mid">rows.map(() =&gt; "(?, ?, ?)").join(", ")</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.5-E27 — INSERT מרובה שורות, עם upsert
+type Value = string | number | boolean | null;
+
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+
+function ident(name: string): string {
+  if (!IDENT.test(name)) throw new Error(`שם לא חוקי: ${name}`);
+  return `\`${name}\``;
+}
+
+export function buildBulkInsert(
+  table: string,
+  rows: Record&lt;string, Value&gt;[],
+  options: { add?: string[]; set?: string[] } = {},
+): { sql: string; params: Value[] } {
+  if (rows.length === 0) throw new Error("אין שורות");
+  const columns = Object.keys(rows[0]);
+  const key = [...columns].sort().join(",");
+  for (const row of rows) {
+    if (Object.keys(row).sort().join(",") !== key) throw new Error("לכל השורות צריכות להיות אותן עמודות");
+  }
+
+  const placeholders = `(${columns.map(() =&gt; "?").join(", ")})`;
+  let sql = `INSERT INTO ${ident(table)} (${columns.map(ident).join(", ")}) VALUES ${rows.map(() =&gt; placeholders).join(", ")}`;
+  const params = rows.flatMap((row) =&gt; columns.map((c) =&gt; row[c]));
+
+  const updates = [
+    ...(options.add ?? []).map((c) =&gt; `${ident(c)} = ${ident(table)}.${ident(c)} + new.${ident(c)}`),
+    ...(options.set ?? []).map((c) =&gt; `${ident(c)} = new.${ident(c)}`),
+  ];
+  if (updates.length &gt; 0) sql += ` AS new ON DUPLICATE KEY UPDATE ${updates.join(", ")}`;
+  return { sql, params };
+}
+
+console.log(buildBulkInsert("cart_items", [
+  { customer_id: 1, product_id: 3, quantity: 2 },
+  { product_id: 4, customer_id: 1, quantity: 1 },
+], { add: ["quantity"] }));
+try {
+  buildBulkInsert("products; DROP TABLE orders", [{ id: 1 }]);
+} catch (err) {
+  console.log((err as Error).message);
+}</code></pre>
+<pre class="terminal">{
+  sql: 'INSERT INTO `cart_items` (`customer_id`, `product_id`, `quantity`) VALUES (?, ?, ?), (?, ?, ?) AS new ON DUPLICATE KEY UPDATE `quantity` = `cart_items`.`quantity` + new.`quantity`',
+  params: [ 1, 3, 2, 1, 4, 1 ]
+}
+שם לא חוקי: products; DROP TABLE orders</pre>
+<p>שני חלקים, ולכל אחד הגנה משלו מ־injection. ערכים עוברים תמיד כ־<code>?</code>, ולכן <code class="mid">"x'); DROP TABLE orders; --"</code> נשמר כשם של לקוח. שמות אי אפשר להעביר כפרמטר, ולכן הם עוברים בדיקה מול regex קשוח. שם כמו <code class="mid">products; DROP TABLE orders</code> לא מגיע ל־SQL בכלל.</p>
+<p><code>flatMap</code> לפי <code>columns</code>, ולא <code>Object.values(row)</code>: בשורה השנייה בדוגמה המפתחות כתובים בסדר אחר. ‏<code>Object.values</code> היה מכניס את מספר המוצר לעמודת הלקוח, בלי שום שגיאה.</p>
+<p>‏MySQL מגביל את מספר ה־placeholders בשאילתה (65,535). לכן בטעינה גדולה מחלקים את השורות לקבוצות של כמה מאות, ומריצים כל קבוצה בנפרד.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Object.values(row)</code> — תלוי בסדר שבו המפתחות נכתבו בכל שורה.</li><li>לשרשר ערכים לתוך ה־SQL (<code><code>VALUES ('${name}')</code></code>) — ‏injection, וגם שבירה על כל שם עם גרש (<code>O'Brien</code>).</li><li><code>VALUES(quantity)</code> במקום <code>new.quantity</code> — עובד, אבל deprecated מ־MySQL 8.0.20.</li><li>לבדוק רק שמספר העמודות שווה — ‏<code>{a, b}</code> ו־<code>{a, c}</code> עוברים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E54">
+    <h3>P25.5-E54 · העמוד הבא — keyset ב־MySQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">WHERE (created_at, id) &lt; ('2026-03-04 16:45:00', 4)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code class="mid">ORDER BY created_at DESC, id DESC LIMIT 3</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E54: העמוד הבא — keyset ב־MySQL
+SELECT id, created_at, total
+FROM orders
+WHERE (created_at, id) &lt; ('2026-03-04 16:45:00', 4)
+ORDER BY created_at DESC, id DESC
+LIMIT 3;</code></pre>
+<pre class="terminal">+----+-------------------------+--------+
+| id | created_at              | total  |
++----+-------------------------+--------+
+|  3 | 2026-03-03 14:00:00.000 |  24.90 |
+|  2 | 2026-03-02 11:30:00.000 | 649.00 |
+|  1 | 2026-03-01 09:00:00.000 | 278.90 |
++----+-------------------------+--------+</pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">WHERE created_at &lt; ? OR id &lt; ?</code> — ‏OR במקום השוואה של זוג: מחזיר גם הזמנות חדשות יותר עם id קטן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P25.5-E55">
+    <h3>P25.5-E55 · מעגלה להזמנה — ב־SQL אחד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<pre><code class="lang-sql">INSERT INTO orders (customer_id, status, total) SELECT 1, 'pending_payment', SUM(…) FROM cart_items ci JOIN products p …</code></pre>
+<p>ואז <code class="mid">SET @order_id = LAST_INSERT_ID();</code></p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<pre><code class="lang-sql">INSERT INTO order_items (…) SELECT @order_id, ci.product_id, ci.quantity, p.price FROM …</code></pre>
+<p>משתנה של session (<code>@order_id</code>) חי עד סוף החיבור.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-sql">-- P25.5-E55: מעגלה להזמנה — ב־SQL אחד
+START TRANSACTION;
+INSERT INTO orders (customer_id, status, total)
+  SELECT 1, 'pending_payment', SUM(ci.quantity * p.price)
+  FROM cart_items ci JOIN products p ON p.id = ci.product_id
+  WHERE ci.customer_id = 1;
+SET @order_id = LAST_INSERT_ID();
+INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+  SELECT @order_id, ci.product_id, ci.quantity, p.price
+  FROM cart_items ci JOIN products p ON p.id = ci.product_id
+  WHERE ci.customer_id = 1;
+DELETE FROM cart_items WHERE customer_id = 1;
+COMMIT;
+SELECT o.id, o.customer_id, o.status, o.total,
+       COUNT(*) AS line_count, SUM(oi.quantity) AS units,
+       (SELECT COUNT(*) FROM cart_items WHERE customer_id = 1) AS cart_left
+FROM orders o JOIN order_items oi ON oi.order_id = o.id
+WHERE o.id = @order_id
+GROUP BY o.id;</code></pre>
+<pre class="terminal">+----+-------------+-----------------+-------+------------+-------+-----------+
+| id | customer_id | status          | total | line_count | units | cart_left |
++----+-------------+-----------------+-------+------------+-------+-----------+
+|  7 |           1 | pending_payment | 84.70 |          2 |     3 |         0 |
++----+-------------+-----------------+-------+------------+-------+-----------+</pre>
+<p>‏<code>@order_id</code> — המקום של <code>RETURNING id</code>. בקוד (שיעור 4) זה <code>insertId</code>. ובחנות אמיתית חסרים: נעילת המוצרים ובדיקת מלאי (‏P25.5-E09), ועגלה ריקה (‏P25.5-E24).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>SELECT MAX(id) FROM orders</code> במקום <code>LAST_INSERT_ID()</code> — הזמנה של לקוח אחר באותו רגע, והפריטים מתווספים להזמנה שלו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-2.html"><small>חזרה</small>תרגול שיעור 2</a><a href="lesson-03-transactions.html"><small>הבא</small>שיעור 3 — InnoDB: טרנזקציות, נעילות ו־deadlocks</a></div>
+</main>
+</body>
+</html>

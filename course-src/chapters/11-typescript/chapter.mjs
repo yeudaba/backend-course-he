@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ב׳ — TypeScript ו־Node.js",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, הבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו: TypeScript</strong> — בתוך תיקיית הקורס, לא כתוכנה במחשב.</p>
 <ol class="steps">

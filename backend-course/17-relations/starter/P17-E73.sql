@@ -1,0 +1,5 @@
+-- P17-E73: ההזמנה האחרונה
+-- id, customer_id, status של ההזמנה/ות עם created_at המאוחר ביותר — לפי id
+-- עם תת־שאילתה כערך (לא ORDER BY ... LIMIT 1)
+--
+-- בדיקה:  npm run check P17-E73

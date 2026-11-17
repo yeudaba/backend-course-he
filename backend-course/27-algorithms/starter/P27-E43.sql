@@ -1,0 +1,4 @@
+-- P27-E43: כפילויות ב־SQL, לא בשרת
+-- customers (מ־files/interview.sql): email מנורמל, copies, ids — רק מה שמופיע יותר מפעם אחת, לפי email
+--
+-- בדיקה:  npm run check P27-E43

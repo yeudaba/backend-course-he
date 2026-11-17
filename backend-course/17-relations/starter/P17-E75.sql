@@ -1,0 +1,4 @@
+-- P17-E75: מחכים למשלוח
+-- full_name, email של הלקוחות עם לפחות הזמנה אחת pending — לפי full_name. עם IN ותת־שאילתה
+--
+-- בדיקה:  npm run check P17-E75

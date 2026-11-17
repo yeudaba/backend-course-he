@@ -1,0 +1,3 @@
+-- P30-E118
+-- לכל ערוץ: הגשות, תגובות (שלב שאינו applied), ראיונות (interview/offer), ואחוז תגובה.
+-- עמודות: channel, applications, responses, interviews, response_pct (ספרה אחת) — מהאחוז הגבוה; בתיקו לפי channel.

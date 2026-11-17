@@ -1,0 +1,8 @@
+-- P16-E76: רשימת דיוור
+-- 1. CREATE TABLE subscribers: id (רק המסד ממספר) | email: text, חובה, ייחודי | source: 'site'/'checkout'/'import', חובה, ברירת מחדל 'site'
+--    confirmed: boolean, חובה, ברירת מחדל false | subscribed_on: date, חובה, ברירת מחדל CURRENT_DATE
+-- 2. INSERT אחד: dana (ברירות מחדל), yossi מ־checkout, noa מ־import שנרשמה ב־2026-01-08
+-- 3. UPDATE: מי שהגיע מ־checkout — confirmed
+-- 4. SELECT email, source, confirmed לפי id
+--
+-- בדיקה:  npm run check P16-E76

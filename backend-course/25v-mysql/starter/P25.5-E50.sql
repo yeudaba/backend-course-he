@@ -1,0 +1,4 @@
+-- P25.5-E50: ממוצע לפי שדה ב־JSON
+-- מוצרי beans עם roast: roast, products, avg_price (2 ספרות), total_stock — לפי roast
+--
+-- בדיקה:  npm run check P25.5-E50

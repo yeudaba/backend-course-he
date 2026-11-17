@@ -1,0 +1,7 @@
+-- P17-E34: כתובות ללקוח
+-- 1. CREATE TABLE addresses: id ממוספר, customer_id (חובה, FK ל־customers, מחיקת לקוח ← מוחקת כתובות),
+--    city ו־street (טקסט חובה), is_default (boolean חובה, ברירת מחדל false)
+-- 2. דנה (1): Tel Aviv / Dizengoff 10 (ברירת המחדל שלה), Haifa / Herzl 5. עומר (8): Eilat / Palm 3
+-- 3. SELECT customer_id, city, street, is_default — לפי id
+--
+-- בדיקה:  npm run check P17-E34

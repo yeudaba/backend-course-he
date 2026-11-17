@@ -1,0 +1,5 @@
+-- P26.3-E46: דוח עלויות ב־SQL
+-- costs(day date, service text, usd numeric(10,2))
+-- רק נובמבר 2026: service, total, share (אחוז, ספרה אחת) — מהיקר לזול, בשוויון לפי שם
+--
+-- בדיקה:  npm run check P26.3-E46

@@ -1,0 +1,4 @@
+-- P16-E64: פרופיל של טבלת הלקוחות
+-- שורה אחת: customers, with_phone, without_phone, cities, first_joined, last_joined
+--
+-- בדיקה:  npm run check P16-E64

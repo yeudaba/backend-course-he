@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ב׳ — TypeScript ו־Node.js",
   checker: true,
   time: "3–4 מפגשים",
-  expectedExercises: 28,
+  expectedExercises: 80,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+ (npm מגיע איתו), VS Code, הבודק.</p>
 <p><strong>מה מתקינים עכשיו:</strong> שום תוכנה. בפרק הזה תתקין <em>ספריות</em> לתוך פרויקטים עם <code>npm install</code> — וסוף־סוף תבין מה קרה כשהרצת את זה בפרקים 8 ו־11.</p>
 <p><strong>רשות — nvm (מנהל גרסאות Node):</strong> בעבודה תפגוש פרויקטים שדורשים גרסאות Node שונות. <a href="https://github.com/nvm-sh/nvm#installing-and-updating" target="_blank">nvm</a> מאפשר להחזיק כמה גרסאות. לא חובה בקורס — אם תתקין, עקוב אחרי ההוראות הרשמיות בלבד.</p>

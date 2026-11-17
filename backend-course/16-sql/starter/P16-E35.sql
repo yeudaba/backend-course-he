@@ -1,0 +1,4 @@
+-- P16-E35: כלי חליטה
+-- name, price של המוצרים בקטגוריה brewing, ORDER BY id
+--
+-- בדיקה:  npm run check P16-E35

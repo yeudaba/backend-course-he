@@ -1,0 +1,10 @@
+const budget = 500;
+const price1 = 129.9;
+const price2 = 249;
+const price3 = 99;
+const total = price1 + price2 + price3;
+const isWithinBudget = total <= budget;
+console.log(`סה״כ: ${total.toFixed(2)}`);
+console.log(`בתוך התקציב? ${isWithinBudget}`);
+console.log(`נשאר: ${(budget - total).toFixed(2)}`);
+console.log(`חורג? ${total > budget}`);

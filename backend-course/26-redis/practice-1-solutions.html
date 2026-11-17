@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פתרונות שיעור 1 — פרק 26</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 26</a> ‹ פתרונות שיעור 1</div>
+  <h1>🔒 פתרונות — תרגול שיעור 1</h1>
+  <p class="subtitle">כל שכבה מוסתרת. פתח רק את מה שאתה צריך — רמז 1 קודם.</p>
+  <div class="box warn"><span class="box-title">לפני שאתה פותח פתרון</span>
+  <p>ניסית לפחות 5–10 דקות? קראת שוב את הודעת השגיאה? פתח <strong>רמז 1</strong> בלבד ונסה שוב. קובצי פתרון שאפשר להריץ: <code>26-redis/solutions/</code>.</p></div>
+  <h2>🎯 חלק 1</h2>
+<div class="ex" id="P26-E01">
+    <h3>P26-E01 · Redis או PostgreSQL? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שאלה אחת לכל שורה: מה קורה אם Redis מאבד את המידע (restart בלי persistence, או מחיקה)?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>Redis שומר בזיכרון. הוא <em>יכול</em> לשמור לדיסק — אבל ברוב ההגדרות לא מתייחסים אליו כמקור אמת לכסף.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>PostgreSQL.</strong> כסף, טרנזקציות, constraints, גיבויים. אסור לאבד.</li><li><strong>שניהם:</strong> מקור האמת ב־PostgreSQL, עותק ב־Redis (cache). נמחק? טוענים שוב.</li><li><strong>Redis.</strong> נתון קצר־חיים שמשתנה בכל בקשה, ושכל השרתים צריכים לראות (פרק 24 עשה את זה ב־Map — לשרת אחד). נאבד? הכי גרוע — מישהו קיבל עוד כמה ניסיונות.</li><li><strong>תלוי במוצר.</strong> בפרויקט — PostgreSQL (המשתמש מצפה לראות אותה גם מחר, ממכשיר אחר). אתרים עם המון אורחים — לפעמים ב־Redis עם TTL, עגלה של אורח.</li><li><strong>Redis</strong> — sorted set לכל דקה (E24). סטטיסטיקה "חמה", מקורבת, שמתה לבד.</li><li><strong>תלוי:</strong> בפרויקט — PostgreSQL, כי הוא חלק מאותה טרנזקציה ומאותן החלטות. ב־Redis עם TTL זה עובד ומהיר יותר, אבל אז "ההזמנה נשמרה" ו"המפתח נשמר" כבר לא אטומיים יחד.</li><li><strong>Redis</strong> (BullMQ). העבודה עצמה — המייל — יכולה להיווצר מחדש מהמסד; לכן גם אובדן התור לא שובר נכונות, רק מעכב.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"Redis מהיר, אז הכול שם". מהירות לא שווה הרבה אם נתון שאסור לאבד נעלם ב־restart.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E02">
+    <h3>P26-E02 · איזה מבנה נתונים? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>sorted set = set שכל איבר בו מקבל מספר (score), ונשמר ממוין לפיו.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"הכי חדש ראשון, עד 10" — רשימה שדוחפים לראשה וחותכים את הזנב.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li><strong>string</strong> — <code>SET key json EX 60</code>.</li><li><strong>string</strong> כמספר — <code>INCR</code> (אטומי), או <strong>hash</strong> עם <code>HINCRBY</code> כשיש הרבה מונים קשורים (E08).</li><li><strong>list</strong> — <code>LREM</code> + <code>LPUSH</code> + <code>LTRIM 0 9</code> (E11).</li><li><strong>set</strong> — <code>SADD</code> מחזיר 1 אם נוסף, 0 אם כבר היה. ההחזרה הזו היא כל הבדיקה.</li><li><strong>sorted set</strong> — <code>ZINCRBY</code>, ואז <code>ZREVRANGE 0 9 WITHSCORES</code> (E10).</li><li><strong>hash</strong> — <code>HSET</code> / <code>HGETALL</code>: שדות בשם, אפשר לעדכן אחד בלי לקרוא את כולם.</li><li><strong>sorted set</strong> עם הזמן כ־score — <code>ZADD</code>, <code>ZREMRANGEBYSCORE</code>, <code>ZCARD</code> (E15).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשמור הכול כ־JSON ב־string ולעדכן ב"קרא, שנה, כתוב" — מאבדים את האטומיות שהמבנים נותנים בחינם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E05">
+    <h3>P26-E05 · מה יחזיר Redis? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל מה ש־Redis מחזיר כ"ערך" הוא מחרוזת — גם אחרי <code>INCR</code>. מונים מחזירים מספרים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>SADD</code> מחזיר <em>כמה איברים חדשים</em> נוספו. <code>SET … NX</code> מחזיר <code>"OK"</code> או <code>null</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e05:" });
+await r.del("n", "s", "l", "z");
+console.log(await r.incr("n"), await r.incrby("n", 10), typeof (await r.get("n")));
+console.log(await r.sadd("s", "a", "b", "a"), await r.sadd("s", "a"), await r.scard("s"));
+await r.rpush("l", "1", "2", "3");
+console.log(await r.lrange("l", 0, -1), await r.lpop("l"), await r.llen("l"));
+await r.zadd("z", 30, "yossi", 50, "dana", 10, "noa");
+console.log(await r.zrevrange("z", 0, 1), await r.zscore("z", "dana"));
+console.log(await r.set("x", "1", "NX"), await r.set("x", "2", "NX"), await r.get("x"));
+await r.del("n", "s", "l", "z", "x");
+await r.quit();</code></pre>
+<pre class="terminal">1 11 string
+2 0 2
+[ '1', '2', '3' ] 1 2
+[ 'dana', 'yossi' ] 50
+OK null 1</pre>
+<ul><li><code>INCR</code> מחזיר מספר, אבל <code>GET</code> — מחרוזת. ב־Redis הכול מחרוזות; "מספר" זה רק מחרוזת ש־INCR יודע לקרוא.</li><li><code>SADD s a b a</code> — 2: ה־"a" השני לא נוסף. ושוב <code>a</code> — 0. זה בדיוק "האם כבר הצביע".</li><li><code>ZSCORE</code> מחזיר מחרוזת (<code>"50"</code>).</li><li><code>SET NX</code>: הראשון <code>"OK"</code>, השני <code>null</code>, והערך נשאר <code>"1"</code> — הבסיס של מנעולים (E12).</li></ul>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>if (await r.get("n") > 5)</code> — השוואה של מחרוזת למספר עובדת "במקרה" ב־JavaScript. <code>Number(...)</code> במפורש.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E34">
+    <h3>P26-E34 · ‏SET מוחק את התוקף? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>SET</code> בלי <code>EX</code> כותב מפתח "חדש" — עם כל מה שהיה לו קודם?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>INCR</code> משנה את הערך, לא את המפתח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e34:" });
+await r.set("code", "4821", "EX", 300);
+console.log(await r.ttl("code"));
+await r.set("code", "9999");
+console.log(await r.ttl("code"));
+await r.set("hits", "0", "EX", 300);
+await r.incr("hits");
+console.log((await r.ttl("hits")) &gt; 0, await r.ttl("nothing"), await r.expire("nothing", 60));
+await r.del("code", "hits");
+await r.quit();</code></pre>
+<pre class="terminal">300
+-1
+true -2 0</pre>
+<p>‏<code>SET</code> מחליף את המפתח כולו — גם את התוקף. אחרי <code>SET code 9999</code> בלי <code>EX</code>, ה־TTL הוא −1: הקוד החדש חי לנצח. ‏<code>INCR</code> רק משנה את הערך, והתוקף נשאר. ‏<code>TTL</code> על מפתח שלא קיים — ‏−2, ו־<code>EXPIRE</code> עליו מחזיר 0 (לא נוצר כלום).</p>
+<p>ב־OTP: כל כתיבה של קוד חדש חייבת לכלול <code>EX</code> מחדש (<code>SET otp:&lt;user&gt; 9999 EX 300</code>). אחרת קוד אימות אחד נשאר תקף לתמיד — חור אבטחה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"ה־TTL שייך למפתח, אז הוא נשאר" — הוא נשאר רק בפקודות שמשנות ערך (<code>INCR</code>, <code>HSET</code>, <code>LPUSH</code>). ‏<code>SET</code> מחליף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E35">
+    <h3>P26-E35 · ‏MULTI עם פקודה שנכשלה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>INCR</code> על <code>"dana"</code> — מה Redis אומר כשהערך לא מספר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>exec()</code> לא זורק בגלל פקודה אחת שנכשלה — הוא מחזיר <code>[err, value]</code> לכל פקודה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+const r = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "e35:" });
+await r.del("count", "name");
+await r.set("name", "dana");
+const res = await r.multi().incr("count").incr("name").incr("count").exec();
+console.log(JSON.stringify(res!.map(([err, value]) =&gt; (err ? err.message : value))));
+console.log(await r.get("count"), await r.get("name"));
+await r.del("count", "name");
+await r.quit();</code></pre>
+<pre class="terminal">[1,"ERR value is not an integer or out of range",2]
+2 dana</pre>
+<ol><li>שתיים מתוך שלוש: הראשונה והשלישית. השנייה נכשלה בזמן הריצה, והשאר <em>בוצעו בכל זאת</em>.</li><li>ב־PostgreSQL השגיאה מבטלת את הטרנזקציה, ו־<code>COMMIT</code> הופך ל־<code>ROLLBACK</code>: אף שינוי לא נשמר (פרק 18).</li><li>לעבור על התוצאות ולבדוק את <code>err</code> של כל פקודה. ‏<code>MULTI</code> מבטיח רק שאף פקודה של לקוח אחר לא תיכנס באמצע — לא "הכול או כלום".</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא רק <code>res[0][1]</code> ולהניח שהכול עבר.</li><li>לחשוב ש־<code>exec()</code> יזרוק — הוא זורק רק כשה־MULTI כולו נדחה (למשל פקודה עם שם לא קיים, שנדחית עוד לפני הריצה).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E36">
+    <h3>P26-E36 · ‏KEYS, ‏keyPrefix ו־Redis ריק <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>Redis מריץ פקודה אחת בכל רגע.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"Redis לא מקור האמת" — מה מכל אלה אפשר לבנות מחדש?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>‏<code>KEYS</code> עובר על כל שני המיליון — שניות שלמות שבהן Redis לא עונה לאף אחד. כל בקשה בכל השרתים שמחכה ל־<code>GET</code> (cache, הגבלת קצב, sessions) נתקעת. במקום זה — לא לחפש מפתחות בכלל: גרסה לקבוצה (שיעור 2), ואם חייבים — <code>SCAN</code> בחלקים.</li><li>הן דורסות זו את זו: החנות כותבת hash, הדוחות כותבים JSON, ו־<code>HGETALL</code> נכשל עם <code>WRONGTYPE</code>. עם <code>keyPrefix: "shop:"</code> ו־<code>"reports:"</code> המפתחות בפועל שונים — והקוד של כל אחת לא משתנה.</li><li>קטלוג: הבקשות הראשונות איטיות יותר (MISS), ואז הכול חוזר — לא מורגש. הגבלת קצב: כולם מקבלים חלון חדש — בוט מקבל עוד כמה ניסיונות. sessions: כל המשתמשים מנותקים ונדרשים להתחבר שוב — מורגש, אבל אף נתון לא אבד. לכן sessions עם JWT או מקור אמת במסד הם החלטה ששוקלים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נשתמש ב־<code>FLUSHALL</code> לניקוי" — מוחק גם את הנתונים של האפליקציה השנייה, וגם את התור של BullMQ.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E06">
+    <h3>P26-E06 · מטמון JSON 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">redis.set(key, json, "EX", ttl)</code>. <code>redis.ttl</code> מחזיר −2 כשאין מפתח, −1 כשאין תוקף.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>0</code> ו־<code>false</code> הם ערכים — בדוק <code>raw === null</code>, לא <code>!raw</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E06
+import type { Redis } from "ioredis";
+
+// מטמון JSON פשוט מעל Redis: מחרוזות בלבד שם — לכן JSON.stringify / parse
+export function createJsonStore(redis: Redis) {
+  return {
+    async set(key: string, value: unknown, ttlSeconds?: number) {
+      if (value === undefined) throw new Error("אין ערך לשמור");
+      const json = JSON.stringify(value);
+      if (ttlSeconds) await redis.set(key, json, "EX", ttlSeconds);
+      else await redis.set(key, json);
+    },
+    async get&lt;T&gt;(key: string): Promise&lt;T | null&gt; {
+      const raw = await redis.get(key);
+      return raw === null ? null : (JSON.parse(raw) as T);
+    },
+    async del(key: string) {
+      return (await redis.del(key)) === 1;
+    },
+    // כמה שניות נשארו: null — אין מפתח; Infinity — בלי תוקף
+    async ttl(key: string) {
+      const t = await redis.ttl(key);
+      return t === -2 ? null : t === -1 ? Infinity : t;
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>redis.set(key, value)</code> עם אובייקט — ioredis שומר <code>"[object Object]"</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E08">
+    <h3>P26-E08 · מונים ודירוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>HINCRBY</code>, <code>ZINCRBY</code>, <code>EXPIRE</code> — ב־<code>redis.multi()…exec()</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>exec()</code> מחזיר מערך של <code>[error, result]</code> לכל פקודה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E08
+import type { Redis } from "ioredis";
+
+// צפיות במוצרים: מונה לכל יום (ומחיקה אוטומטית אחרי שבוע), ו־sorted set לדירוג
+export async function trackView(redis: Redis, productId: number, now: Date) {
+  const day = now.toISOString().slice(0, 10);
+  const views = `views:${day}`;
+  // MULTI: הכול יחד, בלי שבקשה אחרת תיכנס באמצע
+  const results = await redis
+    .multi()
+    .hincrby(views, String(productId), 1)
+    .expire(views, 7 * 86400)
+    .zincrby(`top:${day}`, 1, String(productId))
+    .expire(`top:${day}`, 7 * 86400)
+    .exec();
+  return Number(results![0][1]); // התוצאה של הפקודה הראשונה (HINCRBY)
+}
+
+export async function topProducts(redis: Redis, day: string, n: number): Promise&lt;{ productId: number; views: number }[]&gt; {
+  const flat = await redis.zrevrange(`top:${day}`, 0, n - 1, "WITHSCORES");
+  const out = [];
+  for (let i = 0; i &lt; flat.length; i += 2) out.push({ productId: Number(flat[i]), views: Number(flat[i + 1]) });
+  return out;
+}</code></pre>
+<p>הבודק שולח 50 צפיות במקביל ובודק שהמונה 50 — <code>HINCRBY</code> אטומי. "קרא, הוסף 1, כתוב" היה מאבד צפיות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מונה בלי תוקף — אחרי שנה יש 365 hashes שאף אחד לא קורא.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E10">
+    <h3>P26-E10 · טבלת מובילים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>ZINCRBY</code>, <code>ZREVRANGE … WITHSCORES</code>, <code>ZREVRANK</code> (מ־0).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>around</code>: <code class="mid">start = max(0, rank − radius)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E10
+import type { Redis } from "ioredis";
+
+// טבלת מובילים: sorted set — Redis שומר ממוין לפי score, וכל פעולה ב־O(log n)
+export function leaderboard(redis: Redis, name: string) {
+  const key = `lb:${name}`;
+  return {
+    add: (player: string, points: number) =&gt; redis.zincrby(key, points, player).then(Number),
+    async top(n: number) {
+      const flat = await redis.zrevrange(key, 0, n - 1, "WITHSCORES");
+      return Array.from({ length: flat.length / 2 }, (_, i) =&gt; ({ player: flat[2 * i], score: Number(flat[2 * i + 1]), rank: i + 1 }));
+    },
+    // מקום (מ־1), או null
+    async rank(player: string) {
+      const r = await redis.zrevrank(key, player);
+      return r === null ? null : r + 1;
+    },
+    async around(player: string, radius: number) {
+      const r = await redis.zrevrank(key, player);
+      if (r === null) return [];
+      const start = Math.max(0, r - radius);
+      const flat = await redis.zrevrange(key, start, r + radius, "WITHSCORES");
+      return Array.from({ length: flat.length / 2 }, (_, i) =&gt; ({ player: flat[2 * i], score: Number(flat[2 * i + 1]), rank: start + i + 1 }));
+    },
+  };
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>טבלת מובילים ב־SQL עם <code>ORDER BY</code> על כל צפייה — עובד ל־1,000 שחקנים, לא למיליון בזמן אמת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E11">
+    <h3>P26-E11 · צפית לאחרונה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>LREM key 0 value</code> — מוחק את כל המופעים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code>LTRIM key 0 max−1</code> — רשימה חסומה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E11
+import type { Redis } from "ioredis";
+
+// "צפית לאחרונה": רשימה לכל משתמש, הכי חדש ראשון, בלי כפילויות, עד max, ונמחקת אחרי 30 יום בלי פעילות
+export async function viewed(redis: Redis, userId: number, productId: number, max = 10) {
+  const key = `recent:${userId}`;
+  await redis
+    .multi()
+    .lrem(key, 0, String(productId)) // אם כבר שם — מוציאים, כדי שיעלה לראש
+    .lpush(key, String(productId))
+    .ltrim(key, 0, max - 1) // רשימה חסומה: לא גדלה לנצח
+    .expire(key, 30 * 86400)
+    .exec();
+}
+
+export async function recent(redis: Redis, userId: number): Promise&lt;number[]&gt; {
+  return (await redis.lrange(`recent:${userId}`, 0, -1)).map(Number);
+}</code></pre>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>בלי <code>LTRIM</code> — רשימה שגדלה לנצח.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E24">
+    <h3>P26-E24 · אתגר: חם עכשיו 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">ZUNIONSTORE tmp N key1 key2 …</code> — מחבר sorted sets (סכום scores). מפתח שלא קיים — כמו ריק.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>הכול ב־<code>multi()</code>: <code>zunionstore</code>, <code>zrevrange</code>, <code>del</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E24
+import type { Redis } from "ioredis";
+
+const minuteOf = (now: number) =&gt; Math.floor(now / 60_000);
+
+// "חם עכשיו": sorted set לכל דקה. צפייה ← ZINCRBY בדלי של הדקה הנוכחית (שמת לבד אחרי שעתיים)
+export async function recordView(redis: Redis, productId: number, now = Date.now()) {
+  const key = `trend:${minuteOf(now)}`;
+  await redis.multi().zincrby(key, 1, String(productId)).expire(key, 7200).exec();
+}
+
+// N הדקות האחרונות: ZUNIONSTORE מחבר את הדליים (סכום ה־scores) למפתח זמני, ומשם — ה־top
+export async function trending(redis: Redis, { windowMinutes, n, now = Date.now() }: { windowMinutes: number; n: number; now?: number }) {
+  const m = minuteOf(now);
+  const buckets = Array.from({ length: windowMinutes }, (_, i) =&gt; `trend:${m - i}`);
+  const tmp = `trend:tmp:${m}:${windowMinutes}:${Math.random().toString(36).slice(2)}`;
+  const results = await redis
+    .multi()
+    .zunionstore(tmp, buckets.length, ...buckets)
+    .zrevrange(tmp, 0, n - 1, "WITHSCORES")
+    .del(tmp)
+    .exec();
+  const flat = results![1][1] as string[];
+  return Array.from({ length: flat.length / 2 }, (_, i) =&gt; ({ productId: Number(flat[2 * i]), views: Number(flat[2 * i + 1]) }));
+}</code></pre>
+<p>זה דפוס כללי: "bucketing" — דלי לכל יחידת זמן, וחלון = איחוד של כמה דליים. אותו רעיון מאחורי מדדים ב־Prometheus ובכלי ניטור.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>מפתח זמני בשם קבוע (<code>trend:tmp</code>) — שתי בקשות במקביל דורסות זו את זו.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P26-E31">
+    <h3>P26-E31 · sessions ב־Redis 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="long">await redis.multi().hset(key, { ...data, userId: String(userId) }).expire(key, ttlSec).sadd(...).exec()</code>. ‏<code>HGETALL</code> על מפתח שלא קיים מחזיר <code>{}</code>, לא <code>null</code>. ‏<code class="mid">const { userId, ...data } = hash</code> מפריד את <code>userId</code> משאר השדות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>תוקף לרשימה: <code>EXPIRE key ttl NX</code> קובע תוקף רק אם אין לה עדיין, ו־<code>EXPIRE key ttl GT</code> רק מאריך. שניהם ברצף. ב־ioredis: <code class="mid">.expire(key, ttl, "NX").expire(key, ttl, "GT")</code>. ב־<code>destroyAllForUser</code>: ‏<code>SMEMBERS</code>, ואז <code>redis.del(...ids.map(k))</code>. ‏<code>DEL</code> מחזיר כמה מפתחות היו קיימים ונמחקו. זה בדיוק המספר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E31 — sessions ב־Redis
+import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
+
+export type Session = { userId: number; data: Record&lt;string, string&gt; };
+
+const sessionKey = (id: string) =&gt; `session:${id}`;
+const userKey = (userId: number) =&gt; `user:${userId}:sessions`;
+
+export async function createSession(redis: Redis, userId: number, data: Record&lt;string, string&gt; = {}, ttlSec = 1800): Promise&lt;string&gt; {
+  const id = randomUUID();
+  await redis
+    .multi()
+    .hset(sessionKey(id), { ...data, userId: String(userId) })
+    .expire(sessionKey(id), ttlSec)
+    .sadd(userKey(userId), id)
+    // הרשימה חיה כמו ה־session הארוך ביותר שבה: NX — אם אין לה עדיין תוקף, GT — רק להאריך
+    .expire(userKey(userId), ttlSec, "NX")
+    .expire(userKey(userId), ttlSec, "GT")
+    .exec();
+  return id;
+}
+
+export async function getSession(redis: Redis, id: string, ttlSec = 1800): Promise&lt;Session | null&gt; {
+  const hash = await redis.hgetall(sessionKey(id));
+  if (Object.keys(hash).length === 0) return null;
+  const { userId, ...data } = hash;
+  await redis.multi().expire(sessionKey(id), ttlSec).expire(userKey(Number(userId)), ttlSec, "GT").exec();
+  return { userId: Number(userId), data };
+}
+
+export async function destroySession(redis: Redis, id: string): Promise&lt;boolean&gt; {
+  const userId = await redis.hget(sessionKey(id), "userId");
+  if (userId === null) return false;
+  await redis.multi().del(sessionKey(id)).srem(userKey(Number(userId)), id).exec();
+  return true;
+}
+
+export async function destroyAllForUser(redis: Redis, userId: number): Promise&lt;number&gt; {
+  const ids = await redis.smembers(userKey(userId));
+  const deleted = ids.length &gt; 0 ? await redis.del(...ids.map(sessionKey)) : 0;
+  await redis.del(userKey(userId));
+  return deleted;
+}</code></pre>
+<p>ניסיון קצר, מקובץ נפרד (<code>demo.mts</code> ליד הפתרון, כדי שהבודק לא יריץ אותו כשהוא טוען את הקובץ שלך):</p>
+<pre><code class="lang-ts">import { Redis } from "ioredis";
+import { createSession, getSession, destroySession, destroyAllForUser } from "./P26-E31.ts";
+
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { keyPrefix: "demo-e31:" });
+const laptop = await createSession(redis, 7, { device: "laptop" });
+const phone = await createSession(redis, 7, { device: "phone" }, 60);
+console.log(await getSession(redis, laptop));
+console.log("ttl:", await redis.ttl(`session:${phone}`), await redis.ttl("user:7:sessions"));
+console.log("destroy phone:", await destroySession(redis, phone), await getSession(redis, phone));
+await createSession(redis, 7, { device: "tablet" });
+console.log("logout everywhere:", await destroyAllForUser(redis, 7));
+console.log(await redis.exists("user:7:sessions"));
+redis.disconnect();</code></pre>
+<pre class="terminal"><span class="prompt">% </span>node demo.mts
+{ userId: 7, data: { device: 'laptop' } }
+ttl: 60 1800
+destroy phone: true null
+logout everywhere: 2
+0</pre>
+<p>שורה 2: ה־session של הטלפון חי 60 שניות, והרשימה של המשתמש 1,800. בלי <code>NX</code>/‏<code>GT</code>, ה־session הקצר היה קובע לרשימה 60 שניות. אחרי דקה היא הייתה נמחקת, ו־"התנתק מכל המכשירים" לא היה מוצא את הלפטופ.</p>
+<p>למה הרשימה בכלל? בלעדיה, כדי למצוא את כל ה־sessions של משתמש צריך לסרוק את כל המפתחות (<code>SCAN session:*</code>) ולקרוא כל אחד. זה איטי, ובשרת גדול זה מיליוני מפתחות. האינדקס ההפוך (משתמש ← מזהים) הוא אותו רעיון כמו אינדקס במסד. המחיר: לשמור על שניהם מעודכנים, ולכן <code>MULTI</code>.</p>
+<p>הרשימה יכולה להכיל מזהים של sessions שכבר פגו. זה לא מזיק: ‏<code>DEL</code> עליהם לא עושה כלום, והרשימה עצמה פגה בסוף. בגלל זה <code>destroyAllForUser</code> סופרת לפי מה ש־<code>DEL</code> החזיר, ולא לפי אורך הרשימה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Math.random().toString(36)</code> כמזהה — אפשר לנחש. מזהה session הוא סיסמה זמנית.</li><li><code>HSET</code> ואז <code>EXPIRE</code> בלי <code>MULTI</code> — אם השרת נופל ביניהם, נשאר session בלי תוקף, לנצח.</li><li><code>if (!hash)</code> — ‏<code>{}</code> הוא truthy, ו־session שלא קיים חוזר כ־<code>{ userId: NaN }</code>.</li><li>לקבוע לרשימה <code>EXPIRE</code> רגיל בכל יצירה — session קצר מקצר את הרשימה של כולם.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E37">
+    <h3>P26-E37 · עגלת קניות ב־hash 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>HINCRBY</code> מחזיר את הערך החדש — לפיו מחליטים אם <code>HDEL</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>HGETALL</code> מחזיר מחרוזות. ממירים כל ערך למספר:</p>
+<pre><code class="lang-ts">Object.fromEntries(Object.entries(h).map(([k, v]) =&gt; [k, Number(v)]))</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E37: עגלת קניות ב־hash
+import type { Redis } from "ioredis";
+
+const WEEK = 7 * 86400;
+const key = (userId: number) =&gt; `cart:${userId}`;
+
+export async function addToCart(redis: Redis, userId: number, productId: number, qty: number) {
+  const [[, n]] = (await redis.multi().hincrby(key(userId), String(productId), qty).expire(key(userId), WEEK).exec()) as [Error | null, number][];
+  if (n &lt;= 0) {
+    await redis.hdel(key(userId), String(productId));
+    return 0;
+  }
+  return n;
+}
+
+export async function getCart(redis: Redis, userId: number) {
+  const h = await redis.hgetall(key(userId));
+  return Object.fromEntries(Object.entries(h).map(([k, v]) =&gt; [k, Number(v)]));
+}
+
+export async function clearCart(redis: Redis, userId: number) {
+  return (await redis.del(key(userId))) === 1;
+}</code></pre>
+<p>‏<code>HINCRBY</code> אטומי — שתי לשוניות שמוסיפות במקביל לא מאבדות אף יחידה. ההחלטה "0 ← למחוק" נעשית אחרי, בפקודה נפרדת; כאן זה בסדר, כי <code>HDEL</code> על שדה שכבר 0 לא מזיק.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>HGET</code>, חישוב ב־JS ו־<code>HSET</code> — אותו מרוץ של "קרא, שנה, כתוב" משיעור 3.</li><li>להשאיר שדה עם <code>0</code> או <code>-1</code> — הדף יראה "מוצר בכמות 0" בעגלה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E38">
+    <h3>P26-E38 · סקר: הצבעה אחת למשתמש 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>SADD</code> מחזיר 1 אם האיבר חדש, ו־0 אם כבר היה. זו פקודה אחת ואטומית — אין צורך ב־<code>SISMEMBER</code> לפני.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון לפי שני קריטריונים:</p>
+<pre><code class="lang-ts">(a, b) =&gt; b.votes - a.votes || a.option.localeCompare(b.option)</code></pre>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E38: סקר — הצבעה אחת למשתמש
+import type { Redis } from "ioredis";
+
+export async function vote(redis: Redis, pollId: string, userId: number, option: string) {
+  const added = await redis.sadd(`poll:${pollId}:voters`, String(userId));
+  if (added === 0) return false;
+  await redis.hincrby(`poll:${pollId}:results`, option, 1);
+  return true;
+}
+
+export async function results(redis: Redis, pollId: string) {
+  const h = await redis.hgetall(`poll:${pollId}:results`);
+  return Object.entries(h)
+    .map(([option, v]) =&gt; ({ option, votes: Number(v) }))
+    .sort((a, b) =&gt; b.votes - a.votes || a.option.localeCompare(b.option));
+}</code></pre>
+<p>‏<code>SADD</code> הוא "בדוק והוסף" בפקודה אחת. אם היינו כותבים <code>SISMEMBER</code> ואז <code>SADD</code>, שתי בקשות במקביל היו רואות "עוד לא הצביע", ושתיהן נספרות.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">if (await redis.sismember(...)) return false</code> ואז <code>sadd</code> — המרוץ שהבודק מנסה (20 במקביל).</li><li>למיין רק לפי קולות — סדר של שוויון משתנה בין הרצות.</li></ul>
+
+
+</div></details>
+  </div>
+  <h2>🔗 חלק 2</h2>
+<div class="ex" id="P26-E39">
+    <h3>P26-E39 · ‏Map בזיכרון מול Redis <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>כל עותק סופר לבד.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מה לא משנה אם כל שרת יודע משהו קצת אחר?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>עד 300: כל עותק סופר רק את מה שהגיע אליו, וה־load balancer מפזר.</li><li>הם נמחקים — כל deploy פותח לכולם חלון חדש. ב־Redis הם שורדים deploy של האפליקציה.</li><li>(א) cache של נתונים שכמעט לא משתנים (רשימת מדינות, הגדרות) — כל שרת מחזיק עותק, ולא אכפת אם אחד מתעדכן שנייה אחרי השני. (ב) single-flight (שיעור 2) — ‏Promise אי אפשר לשמור ב־Redis. וגם: מונים שנועדו למדדים של תהליך אחד (כמה בקשות טיפל <em>השרת הזה</em>).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"נעשה sticky sessions ונשאר עם Map" — עדיין נמחק ב־deploy, ולקוח שעובר שרת מתחיל מאפס.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E40">
+    <h3>P26-E40 · מה חוזר מ־JSON <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ל־JSON יש רק: מחרוזת, מספר, בוליאני, null, מערך, אובייקט.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>Date</code> הופך למחרוזת ISO (עם <code>toJSON</code>); ‏<code>Set</code> ו־<code>Map</code> — לאובייקט ריק.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">const order = { id: 7, at: new Date("2026-11-08T07:58:46Z"), tags: new Set(["gift"]), note: undefined, total: 59.8, items: new Map([["latte", 2]]) };
+const back = JSON.parse(JSON.stringify(order));
+console.log(back);
+console.log(typeof back.at, "note" in back, back.at.getFullYear?.());</code></pre>
+<pre class="terminal">{
+  id: 7,
+  at: '2026-11-08T07:58:46.000Z',
+  tags: {},
+  total: 59.8,
+  items: {}
+}
+string false undefined</pre>
+<p>‏<code>at</code> חזר כמחרוזת, ‏<code>tags</code> ו־<code>items</code> חזרו כ־<code>{}</code> (המידע אבד!), ו־<code>note</code> נעלם. הבאג הקלאסי: ב־MISS הפונקציה מחזירה את מה שהמסד נתן (<code>Date</code>), וב־HIT — את מה ש־<code>JSON.parse</code> נתן (מחרוזת). ‏<code>order.at.getTime()</code> עובד בפעם הראשונה ונופל בשנייה — באג שמופיע רק "לפעמים". הפתרון: לשמור רק טיפוסי JSON (להמיר לפני השמירה), או להחזיר בשני המקרים את אותו דבר (E58).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבדוק רק את ה־MISS בפיתוח — ה־cache ריק, והבאג מופיע רק בפרודקשן.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E41">
+    <h3>P26-E41 · הכי נמכרים: SQL או sorted set? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־ב׳ יש שני מקומות שצריכים להסכים.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אותה שאילתה מא׳ יכולה לבנות את ב׳.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<ol><li>בשתיהן — טבלת <code>order_items</code> ב־PostgreSQL. ב־ב׳ ה־sorted set הוא עותק מחושב.</li><li>א׳: כלום, השאילתה כבר לא סופרת אותה (אם מסננים לפי סטטוס). ב׳: ‏<code>ZINCRBY -qty</code> — ואם שכחת מקום אחד שמבטל, הדירוג סוטה לנצח.</li><li>מריצים את שאילתת א׳ פעם אחת וממלאים את ה־sorted set (‏<code>DEL</code> ו־<code>ZADD</code> — זה E42).</li><li>כשיש מעט הזמנות, או כשהשאילתה מהירה עם אינדקס. אפשר גם א׳ עם cache של 5 דקות — דירוג "הכי נמכרים" לא חייב להיות מדויק לשנייה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבחור ב׳ "כי Redis מהיר" בלי תוכנית לשחזור ולביטולים.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E42">
+    <h3>P26-E42 · לבנות דירוג מחדש משורות SQL 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">const m = redis.multi().del(key)</code>, ואז לכל שורה <code class="mid">m.zadd(key, Number(r.qty), String(r.product_id))</code>, ובסוף <code>expire</code> ו־<code>exec</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>EXPIRE</code> על מפתח שלא קיים לא יוצר אותו — אז גם בלי שורות אין צורך במקרה מיוחד.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E42: לבנות דירוג מחדש משורות SQL
+import type { Redis } from "ioredis";
+
+export async function rebuildBestsellers(redis: Redis, key: string, rows: { product_id: number; qty: string | number }[]) {
+  const m = redis.multi().del(key);
+  for (const r of rows) m.zadd(key, Number(r.qty), String(r.product_id));
+  await m.expire(key, 86400).exec();
+  return rows.length;
+}
+
+export async function topBestsellers(redis: Redis, key: string, n: number) {
+  const flat = await redis.zrevrange(key, 0, n - 1, "WITHSCORES");
+  const out: { productId: number; qty: number }[] = [];
+  for (let i = 0; i &lt; flat.length; i += 2) out.push({ productId: Number(flat[i]), qty: Number(flat[i + 1]) });
+  return out;
+}</code></pre>
+<p>‏<code>DEL</code> בתוך אותו <code>MULTI</code> חשוב: בלעדיו מוצר שהיה בדירוג הקודם ולא נמכר החודש נשאר. ובלי <code>MULTI</code>, קורא שמגיע בין ה־<code>DEL</code> ל־<code>ZADD</code> רואה דף בית בלי "הכי נמכרים".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>ZINCRBY</code> במקום <code>ZADD</code> — בנייה שנייה מכפילה את הכמויות.</li><li>להשאיר את <code>qty</code> כמחרוזת ב־<code>topBestsellers</code> — ‏<code>"12" &gt; "9"</code> הוא <code>false</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E43">
+    <h3>P26-E43 · ‏Express: מונה צפיות ודירוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">/^[1-9]\d*$/.test(req.params.id)</code>. ושים לב לסדר הנתיבים: <code>/products/top</code> הוא GET, ו־<code>/products/:id/view</code> הוא POST — אין התנגשות.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>exec()</code> ← ‏<code>[[null, 3], [null, "3"]]</code> — המונה הוא התוצאה הראשונה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E43: Express — מונה צפיות ודירוג
+import express from "express";
+import type { Redis } from "ioredis";
+
+export function viewsApp(redis: Redis) {
+  const app = express();
+  app.post("/products/:id/view", async (req, res) =&gt; {
+    if (!/^[1-9]\d*$/.test(req.params.id)) return res.status(400).json({ error: "id לא תקין" });
+    const id = req.params.id;
+    const r = await redis.multi().hincrby("views", id, 1).zincrby("top", 1, id).exec();
+    res.json({ productId: Number(id), views: Number(r![0][1]) });
+  });
+  app.get("/products/top", async (req, res) =&gt; {
+    const raw = req.query.n ?? "5";
+    const n = Number(raw);
+    if (typeof raw !== "string" || !Number.isInteger(n) || n &lt; 1 || n &gt; 50) return res.status(400).json({ error: "n בין 1 ל־50" });
+    const flat = await redis.zrevrange("top", 0, n - 1, "WITHSCORES");
+    const out = [];
+    for (let i = 0; i &lt; flat.length; i += 2) out.push({ productId: Number(flat[i]), views: Number(flat[i + 1]) });
+    res.json(out);
+  });
+  return app;
+}</code></pre>
+<p>Express 5 מעביר שגיאות של handler אסינכרוני ל־error handler לבד — אם Redis לא זמין, הלקוח מקבל 500 ולא בקשה תלויה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>Number("1.5")</code> או <code>Number("")</code> (‏0) כ־id — לכן regex.</li><li><code>?n=abc</code> ← ‏<code>NaN</code> ← ‏<code>zrevrange(top, 0, NaN)</code> — שגיאה מ־Redis במקום 400.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26-E44">
+    <h3>P26-E44 · פרופיל: Zod לפני HSET, וטיפוסים בחזרה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>HGETALL</code> על מפתח שלא קיים ← <code>{}</code>. בודקים <code class="mid">Object.keys(h).length === 0</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>Boolean("0")</code> הוא <code>true</code>! משווים: <code>h.newsletter === "1"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E44: פרופיל — Zod לפני HSET, וטיפוסים בחזרה
+import type { Redis } from "ioredis";
+import { z } from "zod";
+
+const schema = z.strictObject({
+  name: z.string().trim().min(1),
+  city: z.string().trim().min(1),
+  age: z.number().int().min(13).max(120),
+  newsletter: z.boolean().default(false),
+});
+type Profile = z.infer&lt;typeof schema&gt;;
+
+export async function saveProfile(redis: Redis, userId: number, input: unknown): Promise&lt;Profile&gt; {
+  const r = schema.safeParse(input);
+  if (!r.success) throw new Error("VALIDATION_ERROR");
+  const p = r.data;
+  await redis.hset(`profile:${userId}`, { name: p.name, city: p.city, age: String(p.age), newsletter: p.newsletter ? "1" : "0" });
+  return p;
+}
+
+export async function loadProfile(redis: Redis, userId: number): Promise&lt;Profile | null&gt; {
+  const h = await redis.hgetall(`profile:${userId}`);
+  if (Object.keys(h).length === 0) return null;
+  return { name: h.name, city: h.city, age: Number(h.age), newsletter: h.newsletter === "1" };
+}</code></pre>
+<p>הגבול בין "עולם עם טיפוסים" (הקוד) ל"עולם של מחרוזות" (Redis) עובר בשתי הפונקציות האלה בלבד. כל שאר הקוד מקבל <code>age: number</code> אמיתי.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>hset(key, p)</code> ישירות — ioredis ממיר <code>false</code> ל־<code>"false"</code>, ובחזרה <code>Boolean("false")</code> הוא <code>true</code>.</li><li>לשמור את <code>input</code> במקום <code>r.data</code> — בלי trim ובלי ברירת המחדל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="pager"><a href="practice-1.html"><small>חזרה</small>תרגול שיעור 1</a><a href="lesson-02-cache.html"><small>הבא</small>שיעור 2 — מטמון: cache-aside, ביטול ו־stampede</a></div>
+</main>
+</body>
+</html>
