@@ -16,6 +16,24 @@ const fills = new Map(); // קוד הדוגמה ← הפלט שהתקבל
 const only = args.filter((a) => !a.startsWith("--"));
 
 const problems = [];
+// אזהרות: כללי התרגול שעוד יש להם הפרות קיימות (לא מכשילות את הבנייה). רשימה מלאה עם --warnings
+const SHOW_WARNINGS = args.includes("--warnings");
+const warnings = [];
+// כללי תרגול ותצוגה שהם שגיאה — כל ההפרות הקיימות שלהם תוקנו. כלל עובר לכאן רק כשאין לו אף הפרה (HANDOFF 7.6)
+const STRICT = new Set([
+  "test-no-robot", // יש tests/<ID>.test.mjs ואין 🤖 בכותרת
+  "orphan-test", // בודק בלי תרגיל (חוץ מבודקי פרויקט PR*)
+  "checker-flag", // יש בודקים לתרגילים ואין checker: true
+  "understand-test", // שאלת הבנה עם בודק
+  "explicit-lesson", // "ידע נדרש" מזכיר פרק ואין @lesson מפורש
+  "link-line", // חלק 2 בלי שורת "🔗 איך זה מתחבר"
+  "part2-requires", // חלק 2, ו"ידע נדרש" הוא רק השיעור הנוכחי
+  "balance", // בכל שיעור: חלק 2 ≥ 5, שאלות הבנה בחלק 1 ≥ 4
+  "nested-code", // <code> בתוך <code> בדף בנוי
+  "table-wrap", // <table> בלי <div class="table-wrap">
+]);
+// אזהרה בלבד: robot-no-test, ‏missing-field, ‏understand-explained, ‏code-test, ‏level4
+const flag = (rule, msg) => (STRICT.has(rule) ? problems.push(`[${rule}] ${msg}`) : warnings.push({ rule, msg: `[${rule}] ${msg}` }));
 let runCount = 0;
 let currentOutDir = null;
 const lbl = (ch) => ch.label ?? `פרק ${ch.num}`;
@@ -185,8 +203,18 @@ function markLongCode(html) {
   });
 }
 
+// בדיקות תצוגה על הדף הבנוי (מחוץ ל־<pre>)
+function lintPage(title, body) {
+  const flat = body.replace(/<pre[\s\S]*?<\/pre>/g, "");
+  for (const m of flat.matchAll(/<code\b[^>]*>((?:(?!<\/code>)[\s\S])*?)<\/code>/g))
+    if (/<code\b/.test(m[1])) flag("nested-code", `${title}: <code> בתוך <code>: ${m[0].slice(0, 80)}`);
+  for (const m of flat.matchAll(/<table\b/g))
+    if (!/<div class="table-wrap">\s*$/.test(flat.slice(Math.max(0, m.index - 40), m.index))) flag("table-wrap", `${title}: <table> בלי <div class="table-wrap">: ${flat.slice(m.index, m.index + 80)}`);
+}
+
 function page({ title, depth, crumbs, body }) {
   const up = depth ? "../" : "";
+  lintPage(title, body);
   body = markLongCode(body);
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -376,6 +404,67 @@ ${pager({ href: "index.html", small: "חזרה", label: `פתיחת ${lbl(ch)}` 
   return { pages, idToPage };
 }
 
+// ---------- כללי התרגול (HANDOFF 7.6, אפיון סעיף 6). STRICT ← שגיאה, השאר ← אזהרה ----------
+const LINK_LINE = /🔗\s*<strong>איך זה מתחבר/;
+const PROJECT_TEST = /^PR\d/; // בודקי פרויקט בתיקיית tests של יחידה — מכוון, בלי תרגיל
+const numOf = (s) => String(s).replace(/^0+(?=\d)/, "");
+// האם "ידע נדרש" של שאלה בחלק 2 משלב משהו מעבר לשיעור שלה: פרק אחר, שיעור אחר, טווח שיעורים או "כל הפרק"
+function requiresIntegrates(e, ch) {
+  const mine = new Set([numOf(ch.code ?? ch.num), String(ch.num)]);
+  let scope = numOf(ch.code ?? ch.num);
+  for (const m of e.requires.matchAll(/(פרק|יחידה)\s+([\d.]+)|כל (?:הפרק|היחידה)|שיעור(?:ים)?\s+([\d\s,–\-ו־]+)/g)) {
+    if (m[1]) {
+      scope = numOf(m[2]);
+      if (!mine.has(scope)) return true;
+    } else if (!mine.has(scope)) continue;
+    else if (m[0].startsWith("כל")) return true;
+    else if (/–|-/.test(m[3]) || [...m[3].matchAll(/\d+/g)].some((x) => +x[0] !== e.lesson)) return true;
+  }
+  return false;
+}
+// פתרון של שאלת הבנה צריך משפט הסבר, לא רק קוד ופלט
+function hasExplanation(solution) {
+  const prose = solution
+    .replace(/^```[\s\S]*?^```[ \t]*$/gm, " ")
+    .replace(/<pre[\s\S]*?<\/pre>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
+  return (prose.match(/[֐-׿]{2,}/g) || []).length >= 4 || (prose.match(/\b[A-Za-z]{3,}\b/g) || []).length >= 12;
+}
+
+function lintPractice(ch, exs, lessons, rawExs) {
+  const dir = path.join(ch.dir, "tests");
+  const tests = new Set(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".test.mjs") && !f.startsWith("_")).map((f) => f.slice(0, -".test.mjs".length)) : []);
+  const ids = new Set(exs.map((e) => e.id));
+  for (const e of exs) {
+    const where = `${ch.slug}: ${e.id}`;
+    const test = tests.has(e.id);
+    const robot = /🤖/.test(e.title);
+    if (robot && !test) flag("robot-no-test", `${where}: 🤖 בכותרת ואין tests/${e.id}.test.mjs`);
+    if (test && !robot) flag("test-no-robot", `${where}: יש tests/${e.id}.test.mjs ואין 🤖 בכותרת`);
+    if (e.kind === "understand" && test) flag("understand-test", `${where}: שאלת הבנה עם בודק`);
+    if (e.kind === "code" && !test) flag("code-test", `${where}: שאלת קוד בלי בודק`);
+    for (const f of ["hint1", "hint2", "mistakes"]) if (!e[f].trim()) flag("missing-field", `${where}: חסר @${f}`);
+    if (!rawExs.get(e.id) && /פרק|יחידה/.test(e.requires) && !/כל (?:הפרק|היחידה)/.test(e.requires))
+      flag("explicit-lesson", `${where}: "ידע נדרש" ("${e.requires}") מזכיר פרק — חייב @lesson מפורש, אחרת מספר הפרק נספר כמספר שיעור`);
+    if (e.part === 2) {
+      if (!LINK_LINE.test(e.task)) flag("link-line", `${where}: חלק 2 בלי שורת "🔗 <strong>איך זה מתחבר:</strong>"`);
+      if (!requiresIntegrates(e, ch)) flag("part2-requires", `${where}: חלק 2, אבל "ידע נדרש" ("${e.requires}") הוא רק שיעור ${e.lesson} — הוסף את הפרק או השיעור הקודם`);
+    }
+    if (e.kind === "understand" && !hasExplanation(e.solution)) flag("understand-explained", `${where}: פתרון שאלת הבנה בלי משפט הסבר`);
+  }
+  for (const t of tests) if (!ids.has(t) && !PROJECT_TEST.test(t)) flag("orphan-test", `${ch.slug}: tests/${t}.test.mjs בלי תרגיל`);
+  if ([...ids].some((id) => tests.has(id)) && !ch.checker) flag("checker-flag", `${ch.slug}: יש בודקים לתרגילים ואין checker: true ב־chapter.mjs`);
+  for (let n = 1; n <= Math.max(lessons.length, 1); n++) {
+    const L = exs.filter((e) => e.lesson === n);
+    if (!L.length) continue;
+    const p2 = L.filter((e) => e.part === 2).length;
+    const p1u = L.filter((e) => e.part === 1 && e.kind === "understand").length;
+    if (p2 < 5 || p1u < 4) flag("balance", `${ch.slug}: שיעור ${n}: חלק 2 = ${p2} (מינימום 5), הבנה בחלק 1 = ${p1u} (מינימום 4)`);
+    if (!L.some((e) => e.level === 4)) flag("level4", `${ch.slug}: שיעור ${n}: אין תרגיל ברמה 4 (תיקון תקלות)`);
+  }
+}
+
 // ---------- פרק ----------
 async function loadChapters() {
   const dir = path.join(SRC, "chapters");
@@ -414,8 +503,10 @@ function buildChapter(ch, prevCh, nextCh) {
       if (!e.solution.trim()) problems.push(`${ch.slug}: אין פתרון ל־${e.id}`);
     });
     if (ch.expectedExercises && exs.length !== ch.expectedExercises) problems.push(`${ch.slug}: ${exs.length} תרגילים במקום ${ch.expectedExercises}`);
+    const explicitLesson = new Map(exs.map((e) => [e.id, e.lesson != null])); // לפני ש־placeExercise ממלא את lesson
     const r = exercisesPages(ch, exs, lessons);
     idToPage = r.idToPage;
+    lintPractice(ch, exs, lessons, explicitLesson);
     for (const [f, html] of Object.entries(r.pages)) fs.writeFileSync(path.join(outDir, f), html);
   }
 
@@ -638,6 +729,12 @@ if (FILL && fills.size) {
 }
 
 console.log(`נבנו ${chapters.length} פרקים/יחידות, ${exCount} תרגילים בפרקים שנבנו עכשיו.`);
+if (warnings.length) {
+  const byRule = {};
+  for (const w of warnings) byRule[w.rule] = (byRule[w.rule] ?? 0) + 1;
+  console.warn(`⚠ ${warnings.length} אזהרות תרגול (לא מכשילות): ${Object.entries(byRule).map(([r, n]) => `${r} ${n}`).join(", ")}${SHOW_WARNINGS ? "" : " — הרשימה המלאה עם --warnings"}`);
+  if (SHOW_WARNINGS) console.warn(warnings.map((w) => "  " + w.msg).join("\n"));
+}
 if (problems.length) {
   console.error(`\n✘ ${problems.length} בעיות:\n\n` + problems.join("\n\n"));
   process.exit(1);
