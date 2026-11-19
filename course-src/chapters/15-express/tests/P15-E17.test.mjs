@@ -17,9 +17,15 @@ test("עדכונים תקינים", async (t) => {
   res = await call("PATCH", "/tasks/2", { title: "  חדש ", priority: "low" });
   assert.deepEqual(res.body, { id: 2, title: "חדש", done: false, priority: "low" });
 });
+test("title באורך 100 בדיוק — מותר", async (t) => {
+  const call = await start(t, createApp());
+  const res = await call("PATCH", "/tasks/1", { title: "ב".repeat(100) });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.title.length, 100);
+});
 test("שגיאות", async (t) => {
   const call = await start(t, createApp());
-  for (const body of [{}, { id: 99 }, { owner: "x" }, { title: "" }, { done: "yes" }, { priority: "urgent" }, { done: true, titel: "x" }]) {
+  for (const body of [{}, { id: 99 }, { owner: "x" }, { title: "" }, { title: "   " }, { title: "א".repeat(101) }, { done: "yes" }, { priority: "urgent" }, { done: true, titel: "x" }]) {
     const res = await call("PATCH", "/tasks/1", body);
     assert.equal(res.status, 400, JSON.stringify(body));
     assert.equal(res.body.error.code, "VALIDATION_ERROR");

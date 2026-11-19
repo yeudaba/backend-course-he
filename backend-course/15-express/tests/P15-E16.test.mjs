@@ -30,6 +30,11 @@ test("routes", async (t) => {
   res = await call("POST", "/users", { name: "דן", email: "Dana@X.com" });
   assert.equal(res.status, 409);
   assert.deepEqual(res.body.error.code, "EMAIL_TAKEN");
+  res = await call("POST", "/users", { name: "א".repeat(50), email: "long@x.com" });
+  assert.equal(res.status, 201, "שם באורך 50 — מותר");
+  res = await call("POST", "/users", { name: "א".repeat(51), email: "longer@x.com" });
+  assert.equal(res.status, 400, "שם באורך 51 — מעבר ל־50");
+  assert.equal(res.body.error.code, "VALIDATION_ERROR");
   res = await call("POST", "/users", { name: "", email: "not-an-email" });
   assert.equal(res.status, 400);
   assert.equal(res.body.error.code, "VALIDATION_ERROR");

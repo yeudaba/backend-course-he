@@ -27,7 +27,8 @@ test("route", async (t) => {
   res = await call("GET", "/products?page=99");
   assert.equal(res.status, 200);
   assert.deepEqual(res.body.data, []);
-  for (const q of ["page=0", "limit=51", "page=abc"]) {
+  for (const q of ["limit=50", "limit=1", "page=1"]) assert.equal((await call("GET", "/products?" + q)).status, 200, `${q} — בתוך הטווח`);
+  for (const q of ["page=0", "limit=51", "page=abc", "limit=0", "page=1.5", "limit=2.5", "page=-1"]) {
     res = await call("GET", "/products?" + q);
     assert.equal(res.status, 400, q);
     assert.equal(res.body.error.code, "VALIDATION_ERROR");
