@@ -15,4 +15,8 @@ test("במקביל", async () => {
   await loadDashboard({ a: () => sleep(50), b: () => sleep(50), c: () => sleep(50) });
   assert.ok(Date.now() - t < 130);
 });
+test("שגיאה שהיא לא Error (throw של מחרוזת) — ההודעה היא המחרוזת עצמה", async () => {
+  const r = await loadDashboard({ a: async () => { throw "down"; }, b: async () => 1 });
+  assert.deepEqual(r, { data: { b: 1 }, errors: { a: "down" } }, "ל־reason שהוא מחרוזת אין .message — השתמש ב־String(reason)");
+});
 test("ריק", async () => assert.deepEqual(await loadDashboard({}), { data: {}, errors: {} }));

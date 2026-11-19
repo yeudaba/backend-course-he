@@ -13,8 +13,12 @@ test("תוצאות בסדר ובמגבלה", async () => {
   assert.equal(max, 2);
 });
 test("מנצל את המגבלה (לא במנות)", async () => {
-  const t = Date.now();
-  await mapLimit([60, 10, 10, 10, 10], 2, (ms) => sleep(ms));
-  assert.ok(Date.now() - t < 85, `לקח ${Date.now() - t}ms`);
+  // limit 2: פריט 0 לוקח 60ms ופריט 1 לוקח 10ms. ברגע שפריט 1 מסתיים, פריט 2 צריך להתחיל — בלי לחכות לפריט 0
+  const log = [];
+  await mapLimit([60, 10, 10, 10, 10], 2, async (ms, i) => { log.push(`start ${i}`); await sleep(ms); log.push(`end ${i}`); });
+  assert.ok(log.indexOf("start 2") < log.indexOf("end 0"), `פריט 2 התחיל רק אחרי שפריט 0 הסתיים — זו עבודה במנות ("${log.join(", ")}"). כל עובד צריך לקחת פריט חדש ברגע שהוא מתפנה`);
+});
+test("כישלון של fn — mapLimit נדחית עם השגיאה", async () => {
+  await assert.rejects(mapLimit([1, 2, 3], 2, async (x) => { await sleep(5); if (x === 2) throw new Error("boom"); return x; }), /boom/, "אל תבלע את השגיאה — המשימה: כישלון ← נזרק");
 });
 test("ריק ו־limit גדול", async () => { assert.deepEqual(await mapLimit([], 3, async (x) => x), []); assert.deepEqual(await mapLimit([1, 2], 10, async (x) => x * 2), [2, 4]); });
