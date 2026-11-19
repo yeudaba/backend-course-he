@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **197** | **3369** | **1870** | **1643** |
+| **42** | **197** | **3383** | **1877** | **1656** |
 
 ## מה שונה כאן
 
@@ -60,7 +60,7 @@
 | [פרק 5](backend-course/05-functions/index.html) | פונקציות <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
 | [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
 | [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 85 | 47 | ✔ |
-| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 5 | 86 | 48 | ✔ |
+| [פרק 8](backend-course/08-modules-errors/index.html) | ארגון קוד ואיתור תקלות | 5 | 100 | 55 | ✔ |
 | [פרויקט 1](backend-course/08p-project-expenses/index.html) | מנהל הוצאות בשורת הפקודה | 6 | — | 3 | ✔ |
 | [פרק 9](backend-course/09-git/index.html) | Git ו־GitHub | 4 | 80 | 27 | ✔ |
 | [פרק 10](backend-course/10-async/index.html) | אסינכרוניות | 4 | 82 | 46 | ✔ |
