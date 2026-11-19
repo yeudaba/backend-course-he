@@ -2233,9 +2233,9 @@ export async function* batches<T>(source: AsyncIterable<T> | Iterable<T>, size: 
 <p>בקובץ <code>28w-scale/starter/P28.5-E65.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
 ```ts
 export function csvLine(values: (string | number | boolean | null | undefined | Date)[]): string
-export function toCsv(header: string[], rows: Record<string, unknown>[]): Generator<string>
+export function toCsv(header: string[], rows: Record<string, unknown>[]): string[]
 ```
-<ul><li><code>csvLine</code> — ערכים מופרדים בפסיק, ונגמרת ב־<code>\r\n</code> (התקן, RFC 4180). ‏<code>null</code>/<code>undefined</code> ← ריק. ‏<code>Date</code> ← ‏<code>toISOString()</code>. כל השאר ← <code>String(v)</code>.</li><li>ערך שיש בו פסיק, מירכאה <code>"</code>, ‏<code>\n</code> או <code>\r</code> — עוטפים במירכאות, וכל מירכאה בפנים מוכפלת: <code>he said "hi"</code> ← <code>"he said ""hi"""</code>.</li><li><code>toCsv</code> — generator: קודם שורת הכותרת, ואז שורה לכל אובייקט, לפי סדר העמודות שב־<code>header</code>.</li></ul>
+<ul><li><code>csvLine</code> — ערכים מופרדים בפסיק, ונגמרת ב־<code>\r\n</code> (התקן, RFC 4180). ‏<code>null</code>/<code>undefined</code> ← ריק. ‏<code>Date</code> ← ‏<code>toISOString()</code>. כל השאר ← <code>String(v)</code>.</li><li>ערך שיש בו פסיק, מירכאה <code>"</code>, ‏<code>\n</code> או <code>\r</code> — עוטפים במירכאות, וכל מירכאה בפנים מוכפלת: <code>he said "hi"</code> ← <code>"he said ""hi"""</code>.</li><li><code>toCsv</code> — מערך של שורות: קודם שורת הכותרת, ואז שורה לכל אובייקט, לפי סדר העמודות שב־<code>header</code>. (את השורות אפשר לכתוב לזרם אחת אחת, כמו ב־E69.)</li></ul>
 ```term
 % npm run check P28.5-E65
 ```
@@ -2243,7 +2243,7 @@ export function toCsv(header: string[], rows: Record<string, unknown>[]): Genera
 <p>‏<code>/[",\r\n]/.test(s)</code> ← ‏<code>`"${s.replaceAll('"', '""')}"`</code>.</p>
 @hint2
 ```ts
-yield csvLine(header); for (const r of rows) yield csvLine(header.map((h) => r[h] as ...))
+return [csvLine(header), ...rows.map((r) => csvLine(header.map((h) => r[h] as ...)))];
 ```
 @solution
 ```ts save=solutions/P28.5-E65.ts
@@ -2260,9 +2260,8 @@ export function csvLine(values: Cell[]): string {
   return values.map(cell).join(",") + "\r\n";
 }
 
-export function* toCsv(header: string[], rows: Record<string, unknown>[]): Generator<string> {
-  yield csvLine(header);
-  for (const r of rows) yield csvLine(header.map((h) => r[h] as Cell));
+export function toCsv(header: string[], rows: Record<string, unknown>[]): string[] {
+  return [csvLine(header), ...rows.map((r) => csvLine(header.map((h) => r[h] as Cell)))];
 }
 ```
 <p>ל־Excel עם עברית כדאי להוסיף BOM (‏<code>"﻿"</code>) בתחילת הקובץ — אחרת הוא מנחש קידוד ומציג ג׳יבריש.</p>
@@ -2333,35 +2332,43 @@ docker logs --since 24h api 2>&1 | jq -c 'select(.level == "error")'
 ```ts
 export function exportApp(rows: () => AsyncIterable<object>): express.Express
 ```
-<ul><li><code>GET /export.ndjson</code> ← ‏200, ‏<code>Content-Type: application/x-ndjson</code>, וגוף: <code>JSON.stringify(row) + "\n"</code> לכל שורה, לפי הסדר.</li><li>עם backpressure ועצירה כשהלקוח מתנתק: ‏<code>pipeline</code> מ־<code>node:stream/promises</code> בין <code>Readable.from(...)</code> לבין <code>res</code>. כשהלקוח נסגר באמצע — המקור נסגר (ה־<code>finally</code> של ה־generator רץ), בלי לקרוא את כל השורות.</li><li>שגיאה במקור באמצע ← החיבור נסגר (אי אפשר כבר לשלוח 500 — הכותרות נשלחו), ולא קורס התהליך.</li></ul>
+<ul><li><code>GET /export.ndjson</code> ← ‏200, ‏<code>Content-Type: application/x-ndjson</code>, וגוף: <code>JSON.stringify(row) + "\n"</code> לכל שורה, לפי הסדר.</li><li>עם backpressure ועצירה כשהלקוח מתנתק: ‏<code>pipeline</code> מ־<code>node:stream/promises</code> בין <code>Readable.from(...)</code> לבין <code>res</code>. כשהלקוח נסגר באמצע — המקור נסגר, בלי לקרוא את כל השורות (הבודק מוודא שהמקור קיבל סימן לעצור).</li><li>את ההמרה משורה לטקסט עושים בשלב באמצע ה־<code>pipeline</code>: ‏<code>Transform</code> מ־<code>node:stream</code>, כמו <code>createGzip()</code> בשיעור — רק שאתה כותב את ההמרה בעצמך.</li><li>שגיאה במקור באמצע ← החיבור נסגר (אי אפשר כבר לשלוח 500 — הכותרות נשלחו), ולא קורס התהליך.</li></ul>
 <p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>res</code> של Express מפרק 15 — והשיעור: pipeline ו־backpressure; ‏E66 בקוד.</p>
 ```term
 % npm run check P28.5-E69
 ```
 @hint1
 ```ts
-async function* lines() { for await (const r of rows()) yield JSON.stringify(r) + "\n"; }
+const toLine = new Transform({
+  writableObjectMode: true, // נכנסים אובייקטים, יוצא טקסט
+  transform(row, _encoding, done) {
+    done(null, JSON.stringify(row) + "\n");
+  },
+});
 ```
 @hint2
 ```ts
-try { await pipeline(Readable.from(lines()), res); } catch { /* הלקוח התנתק או שגיאה במקור */ }
+try { await pipeline(Readable.from(rows()), toLine, res); } catch { /* הלקוח התנתק או שגיאה במקור */ }
 ```
 @solution
 ```ts save=solutions/P28.5-E69.ts
 // P28.5-E69: GET /export.ndjson בזרם
 import express from "express";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export function exportApp(rows: () => AsyncIterable<object>) {
   const app = express();
   app.get("/export.ndjson", async (req, res) => {
     res.status(200).type("application/x-ndjson");
-    async function* lines() {
-      for await (const row of rows()) yield JSON.stringify(row) + "\n";
-    }
+    const toLine = new Transform({
+      writableObjectMode: true,
+      transform(row: object, _encoding, done) {
+        done(null, JSON.stringify(row) + "\n");
+      },
+    });
     try {
-      await pipeline(Readable.from(lines()), res);
+      await pipeline(Readable.from(rows()), toLine, res);
     } catch {
       // הלקוח התנתק, או שגיאה במקור — pipeline כבר סגר את שני הצדדים
       res.destroy();
@@ -2370,6 +2377,7 @@ export function exportApp(rows: () => AsyncIterable<object>) {
   return app;
 }
 ```
+<p>שלושה שלבים בצינור אחד: <code>Readable.from(rows())</code> הופך את המקור לזרם של אובייקטים, <code>toLine</code> הופך כל אובייקט לשורת טקסט, ו־<code>res</code> שולח. <code>pipeline</code> מנהל את ה־backpressure בין כולם. וכשהלקוח מתנתק, הוא סוגר את כל השלבים, כולל המקור. לכן הייצוא נעצר ולא ממשיך לקרוא מהמסד.</p>
 @mistakes
 <ul><li>‏<code>res.json(await toArray(rows()))</code> — כל הייצוא בזיכרון, ושום דבר לא יוצא עד הסוף.</li><li>‏<code>for await</code> עם <code>res.write</code> בלי לבדוק את הערך המוחזר — לקוח איטי ממלא את הזיכרון.</li></ul>
 

@@ -11,7 +11,6 @@ export function csvLine(values: Cell[]): string {
   return values.map(cell).join(",") + "\r\n";
 }
 
-export function* toCsv(header: string[], rows: Record<string, unknown>[]): Generator<string> {
-  yield csvLine(header);
-  for (const r of rows) yield csvLine(header.map((h) => r[h] as Cell));
+export function toCsv(header: string[], rows: Record<string, unknown>[]): string[] {
+  return [csvLine(header), ...rows.map((r) => csvLine(header.map((h) => r[h] as Cell)))];
 }
