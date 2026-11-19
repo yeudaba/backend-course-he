@@ -180,11 +180,11 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 | 0 | `00-setup` | 5 שיעורים, נכתב ביד ישירות ב־backend-course (כולל דף הבית ומילון) | — |
 | 1–4 | `01-values-variables` … `04-loops` | ערכים, אופרטורים, תנאים, לולאות. ⚡ מבחני כניסה | בלי בודק |
 | 5–7 | `05-functions`, `06-arrays`, `07-objects` | ⚡ | הבודק מתחיל בפרק 5 |
-| 8 | `08-modules-errors` | modules, שגיאות, debugger, ESLint | ✔ |
+| 8 | `08-modules-errors` | modules, שגיאות, debugger, ESLint, **שיעור 5: regex** (נוסף 19.11.2026, ראה 7.7) | ✔ |
 | פרויקט 1 | `08p-project-expenses` | מנהל הוצאות CLI. שלבים 0–4 + reference. בדיקות PR1-LOGIC/STORAGE/CLI | ✔ |
 | 9 | `09-git` | Git ו־GitHub. `files/scenarios.mjs` יוצר מאגרי תרגול | בלי בודק |
 | 10 | `10-async` | | ✔ |
-| 11 | `11-typescript` | `.ts` עם בדיקות `typecheck` | ✔ |
+| 11 | `11-typescript` | `.ts` עם בדיקות `typecheck`. שיעור 3 כולל `keyof`/`T[K]` (7.7) | ✔ |
 | 12 | `12-design` | classes, repositories, DI | ✔ |
 | 13 | `13-node-npm` | `.mjs` | ✔ |
 | 14 | `14-http` | URL, methods, status, headers, curl, REST Client, `node:http`, fetch. `files/demo-server.mjs` (פורט 4000) | ✔ `.mjs` |
@@ -537,6 +537,14 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
   - **הכלל להוספת כללים:** כלל חדש נכנס ל־`STRICT` רק כשאין לו אף הפרה קיימת. עד אז הוא אזהרה. רשימת המשימות של exercise-coach (סעיפים `missing-field`, ‏`understand-explained`, ‏`level4`, כפילויות לא מכוונות ו־15.5) נמסרה בנפרד. כשכלל מגיע ל־0 הפרות, מעבירים אותו ל־`STRICT`.
 - **ידע מוקדם: עוד לא נאכף.** regex, ‏`new Date`, ‏`keyof` ו־generators משמשים בתרגילים לפני שנלמדו. בשבוע הקרוב יתווספו לשיעורים סעיפים על regex, ‏Date ו־keyof. אחרי זה אפשר להוסיף ל־build.mjs טבלת `TAUGHT_AT` (מונח ← היחידה והשיעור שבהם נלמד), כאזהרה `prior-knowledge` על `solution`, ‏`hint1` ו־`hint2`. עדיף טבלה מפורשת על grep, כי למשל `new Date` מופיע בשורת לוג ב־08-1, ונלמד רק ב־24-2.
 - **מחוץ לבנייה, בסקריפט ביקורת:** כפילויות חתימה וקוד inline ארוך מ־60 תווים. הבדיקות האלה רועשות מדי בשביל הבנייה.
+
+### 7.7 עדכון 19.11.2026 — ידע שהתרגול משתמש בו ולא נלמד
+- **הפער (ביקורת תרגול):** regex ב־239 תרגילים (הראשון P12-E19) ולא נלמד; `new Date` ב־52 תרגילים לפני פרק 24 (הראשון P07-E60); `keyof` ב־6 (הראשון P11-E25); generators ב־5. **ההחלטה (אפיון נספח ב׳ #10):** להוסיף לשיעורים, לא לשכתב פתרונות.
+- **Date** — פרק 7, שיעור 3, סעיף 6: רגע כמספר (`getTime`), ISO ו־`Z`, חישובי ימים, `getUTC...` וחודש מ־0, `Date.UTC` וגלישה (30.2 ← 2.3), תאריך ב־JSON, ‏Invalid Date (`RangeError: Invalid time value` רק ב־`toISOString`). איור ציר זמן. שאלות P07-E81–E85 (`expectedExercises: 85`); הבודק של E84 מחליף `process.env.TZ` בזמן ריצה (UTC, ירושלים, לוס אנג׳לס, קיריטימטי) — נבדק שפתרון עם `getDate/setDate` נכשל. פרק 24 שיעור 2 מפנה אחורה.
+- **regex** — פרק 8, **שיעור 5 חדש** (`lesson-05-regex.html`, בסוף הפרק כדי שמספרי השיעורים ודפי התרגול לא יזוזו): test, אבני בניין ועוגנים, match/groups/named groups/`(?:)`, ‏`g` ו־matchAll, replace (`$1`, פונקציה), split, ‏`new RegExp` + escaping, ‏`\p{L}` עם `u`, ‏`\b` לא עובד בעברית (גילוי 26), ‏`lastIndex` עם `g`, מתי לא. איור פירוק של `/^05\d-?\d{7}$/`. שאלות P08-E81–E86 (`expectedExercises: 86`). P08-E24/E25 ("כל הפרק") קיבלו `@lesson 4`/`@part 2` כדי לא לעבור לדף של שיעור 5. ההפניות בפרק 3 ("נלמד בפרק 13") תוקנו.
+- **keyof** — פרק 11, שיעור 3, סעיף 5: `keyof`, ‏`T[K]`, ‏`K extends keyof T`, ‏`keyof typeof`, הצצה ל־mapped types, ‏`Object.keys` ← `string[]` (TS7053). שאלות P11-E81–E85 (`expectedExercises: 85`).
+- **generators** — לא נלמדים. P28.5-E65 (‏`toCsv` מחזיר מערך) ו־E69 (‏`Transform` בתוך `pipeline`) נכתבו מחדש. **פתוח:** ב־P28.5-E51, ‏E64 ו־P29.5-E19 הבודק עצמו דורש iterator עצל (`next()`, `return()`), ואי אפשר בלי generator או iterator ידני — צריך החלטה (סעיף קצר על generators ביחידה 28.5, או לשנות משימות ובודקים).
+- **לקח:** הוספת שיעור בסוף פרק משנה את השיבוץ של תרגילים בלי `@lesson` ("כל הפרק", או מספר שיעור שעכשיו בטווח) — לבדוק לפני ואחרי ולנעוץ `@lesson`/`@part`.
 
 ---
 

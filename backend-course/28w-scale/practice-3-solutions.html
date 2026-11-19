@@ -466,7 +466,7 @@ export async function* batches&lt;T&gt;(source: AsyncIterable&lt;T&gt; | Iterabl
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<pre><code class="lang-ts">yield csvLine(header); for (const r of rows) yield csvLine(header.map((h) =&gt; r[h] as ...))</code></pre>
+<pre><code class="lang-ts">return [csvLine(header), ...rows.map((r) =&gt; csvLine(header.map((h) =&gt; r[h] as ...)))];</code></pre>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
@@ -483,9 +483,8 @@ export function csvLine(values: Cell[]): string {
   return values.map(cell).join(",") + "\r\n";
 }
 
-export function* toCsv(header: string[], rows: Record&lt;string, unknown&gt;[]): Generator&lt;string&gt; {
-  yield csvLine(header);
-  for (const r of rows) yield csvLine(header.map((h) =&gt; r[h] as Cell));
+export function toCsv(header: string[], rows: Record&lt;string, unknown&gt;[]): string[] {
+  return [csvLine(header), ...rows.map((r) =&gt; csvLine(header.map((h) =&gt; r[h] as Cell)))];
 }</code></pre>
 <p>ל־Excel עם עברית כדאי להוסיף BOM (‏<code>"﻿"</code>) בתחילת הקובץ — אחרת הוא מנחש קידוד ומציג ג׳יבריש.</p>
 
@@ -561,28 +560,36 @@ export function* toCsv(header: string[], rows: Record&lt;string, unknown&gt;[]):
 <div class="ex" id="P28.5-E69">
     <h3>P28.5-E69 · ‏GET /export.ndjson בזרם 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<pre><code class="lang-ts">async function* lines() { for await (const r of rows()) yield JSON.stringify(r) + "\n"; }</code></pre>
+<pre><code class="lang-ts">const toLine = new Transform({
+  writableObjectMode: true, // נכנסים אובייקטים, יוצא טקסט
+  transform(row, _encoding, done) {
+    done(null, JSON.stringify(row) + "\n");
+  },
+});</code></pre>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<pre><code class="lang-ts">try { await pipeline(Readable.from(lines()), res); } catch { /* הלקוח התנתק או שגיאה במקור */ }</code></pre>
+<pre><code class="lang-ts">try { await pipeline(Readable.from(rows()), toLine, res); } catch { /* הלקוח התנתק או שגיאה במקור */ }</code></pre>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
 <pre><code class="lang-ts">// P28.5-E69: GET /export.ndjson בזרם
 import express from "express";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export function exportApp(rows: () =&gt; AsyncIterable&lt;object&gt;) {
   const app = express();
   app.get("/export.ndjson", async (req, res) =&gt; {
     res.status(200).type("application/x-ndjson");
-    async function* lines() {
-      for await (const row of rows()) yield JSON.stringify(row) + "\n";
-    }
+    const toLine = new Transform({
+      writableObjectMode: true,
+      transform(row: object, _encoding, done) {
+        done(null, JSON.stringify(row) + "\n");
+      },
+    });
     try {
-      await pipeline(Readable.from(lines()), res);
+      await pipeline(Readable.from(rows()), toLine, res);
     } catch {
       // הלקוח התנתק, או שגיאה במקור — pipeline כבר סגר את שני הצדדים
       res.destroy();
@@ -590,6 +597,7 @@ export function exportApp(rows: () =&gt; AsyncIterable&lt;object&gt;) {
   });
   return app;
 }</code></pre>
+<p>שלושה שלבים בצינור אחד: <code>Readable.from(rows())</code> הופך את המקור לזרם של אובייקטים, <code>toLine</code> הופך כל אובייקט לשורת טקסט, ו־<code>res</code> שולח. <code>pipeline</code> מנהל את ה־backpressure בין כולם. וכשהלקוח מתנתק, הוא סוגר את כל השלבים, כולל המקור. לכן הייצוא נעצר ולא ממשיך לקרוא מהמסד.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>

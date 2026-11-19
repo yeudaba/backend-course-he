@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ביטויים רגולריים (regex): לבדוק ולפרק טקסט — פרק 8</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 8</a> ‹ שיעור 5</div>
+  <h1>שיעור 5 — ביטויים רגולריים (regex): לבדוק ולפרק טקסט</h1>
+  <p class="subtitle">⏱ ~45 דקות</p>
+  <div class="box goal">
+    <span class="box-title">🎯 בשיעור הזה</span>
+    <ul>
+      <li>מה זה ביטוי רגולרי (regex), ולמה הוא חוסך לולאות שלמות.</li>
+      <li>אבני הבניין: תווים, קבוצות תווים, כמויות, ו־<code>^</code>/<code>$</code>.</li>
+      <li><code>test</code> לבדיקה, <code>match</code> ו־groups לפירוק, <code>replace</code> ו־<code>split</code> לשינוי.</li>
+      <li>הדגלים <code>g</code>, <code>i</code>, <code>u</code>, ‏regex מתוך משתנה, ו"מתי לא להשתמש ב־regex".</li>
+    </ul>
+  </div>
+
+  <h2>1. למה צריך את זה</h2>
+  <p>ב־P03-E27 (פרק 3) בדקת שמספר טלפון "נראה תקין". בדקת אורך, ובדקת שהוא מתחיל ב־<code>05</code>. אבל "שכל התווים הם ספרות" נשאר בחוץ. עם מה שאתה יודע עכשיו, זו לולאה:</p>
+<pre><code class="lang-js">function allDigits(text) {
+  if (text.length === 0) {
+    return false;
+  }
+  for (const ch of text) {
+    if (ch &lt; "0" || ch &gt; "9") {
+      return false;
+    }
+  }
+  return true;
+}
+console.log(allDigits("0521234567"), allDigits("052-123"));
+
+console.log(/^\d+$/.test("0521234567"), /^\d+$/.test("052-123"));</code></pre>
+<pre class="terminal">true false
+true false</pre>
+  <p>השורה האחרונה עושה את אותה בדיקה. <code>/^\d+$/</code> הוא <strong>ביטוי רגולרי</strong> (regular expression, ובקיצור regex): תבנית שמתארת איך טקסט צריך להיראות. <code>test</code> שואל "האם הטקסט מתאים לתבנית?" ומחזיר <code>true</code> או <code>false</code>.</p>
+  <p>בשרת תפגוש regex כל הזמן: בדיקת קלט (טלפון, מיקוד, שם משתמש), פירוק שורות לוג, ניקוי טקסט, ובספריות כמו Zod (פרק 15), שבהן כותבים <code>.regex(/.../)</code>. הקורס משתמש בו מכאן והלאה, אז כדאי להכיר אותו טוב.</p>
+
+  <h2>2. אבני הבניין</h2>
+  <p>regex כותבים בין שני לוכסנים: <code>/.../</code>. אותיות וספרות רגילות מתאימות לעצמן. <code>/cat/</code> מחפש את הרצף "cat" <strong>בכל מקום</strong> בטקסט. התווים המיוחדים הם אלה:</p>
+  <div class="table-wrap"><table>
+    <tr><th>כתיב</th><th>מתאים ל־</th><th>דוגמה</th></tr>
+    <tr><td><code>\d</code></td><td>ספרה אחת (0–9)</td><td><code>/\d\d/</code> ← "07" ✔</td></tr>
+    <tr><td><code>\w</code></td><td>אות לטינית, ספרה או <code>_</code></td><td><code>/\w/</code> ← "a" ✔, "א" ✘</td></tr>
+    <tr><td><code>\s</code></td><td>רווח, טאב או ירידת שורה</td><td></td></tr>
+    <tr><td><code>.</code></td><td><strong>כל</strong> תו (חוץ מירידת שורה)</td><td><code>/1.5/</code> ← "1.5" ✔, אבל גם "105" ✔</td></tr>
+    <tr><td><code>[abc]</code></td><td>אחד מהתווים שבסוגריים</td><td><code>/[-.]/</code> ← מקף או נקודה</td></tr>
+    <tr><td><code>[a-z]</code>, <code>[0-9]</code></td><td>טווח</td><td><code>/[a-z0-9_]/</code></td></tr>
+    <tr><td><code>[^0-9]</code></td><td>כל תו <strong>חוץ</strong> מאלה</td><td></td></tr>
+    <tr><td><code>+</code> / <code>*</code> / <code>?</code></td><td>מה שלפני: פעם או יותר / אפס או יותר / אופציונלי</td><td><code>/\d+/</code>, <code>/-?/</code></td></tr>
+    <tr><td><code>{7}</code> / <code>{2,4}</code></td><td>בדיוק 7 פעמים / בין 2 ל־4</td><td><code>/\d{7}/</code></td></tr>
+    <tr><td><code>^</code> / <code>$</code></td><td>תחילת הטקסט / סוף הטקסט</td><td><code>/^\d+$/</code> ← רק ספרות, מההתחלה עד הסוף</td></tr>
+    <tr><td><code>a|b</code></td><td>או זה או זה</td><td><code>/^(GET|POST)$/</code></td></tr>
+    <tr><td><code>\.</code> <code>\(</code> <code>\$</code> ...</td><td>התו עצמו, בלי המשמעות המיוחדת</td><td><code>/\d+\.\d\d/</code> ← "12.50"</td></tr>
+  </table></div>
+  <p>הנה טלפון נייד ישראלי, עם או בלי מקף אחרי הקידומת:</p>
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="פירוק של הביטוי ^05\d-?\d{7}$ לחלקים">
+      <g style="stroke-width:2">
+        <rect x="40" y="40" width="70" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="120" y="40" width="90" height="50" rx="8" style="fill:var(--svg-fill);stroke:var(--svg-stroke)"/>
+        <rect x="220" y="40" width="90" height="50" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="320" y="40" width="90" height="50" rx="8" style="fill:var(--amber-soft);stroke:var(--amber)"/>
+        <rect x="420" y="40" width="170" height="50" rx="8" style="fill:var(--green-soft);stroke:var(--green)"/>
+        <rect x="600" y="40" width="70" height="50" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+      </g>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:22px">
+        <text x="75" y="73">^</text>
+        <text x="165" y="73">05</text>
+        <text x="265" y="73">\d</text>
+        <text x="365" y="73">-?</text>
+        <text x="505" y="73">\d{7}</text>
+        <text x="635" y="73">$</text>
+      </g>
+      <g text-anchor="middle" direction="rtl" style="font-size:13px">
+        <text x="75" y="115">התחלה</text>
+        <text x="165" y="115">בדיוק "05"</text>
+        <text x="265" y="115">ספרה אחת</text>
+        <text x="365" y="115">מקף, אולי</text>
+        <text x="505" y="115">בדיוק 7 ספרות</text>
+        <text x="635" y="115">סוף</text>
+      </g>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:15px">
+        <text x="200" y="165" style="fill:var(--green)">"052-1234567" ✔   "0521234567" ✔</text>
+        <text x="540" y="165" style="fill:var(--red)">"052-12345" ✘   "x0521234567" ✘</text>
+      </g>
+      <text x="360" y="198" text-anchor="middle" direction="rtl" style="font-size:13px;fill:var(--muted)">בלי ^ ו־$ — מספיק שהתבנית תופיע איפשהו באמצע הטקסט</text>
+    </svg>
+    <figcaption>איור 1: קוראים regex משמאל לימין, חלק אחרי חלק. כל חלק "אוכל" תווים מהטקסט לפי הסדר. אם חלק אחד לא מתאים, כל הבדיקה נכשלת.</figcaption>
+  </figure>
+<pre><code class="lang-js">const mobile = /^05\d-?\d{7}$/;
+for (const phone of ["052-1234567", "0521234567", "052-12345", "x0521234567", "052--1234567"]) {
+  console.log(phone, mobile.test(phone));
+}
+
+console.log(/\d{7}/.test("abc12345678xyz"));
+console.log(/^GET|POST$/.test("GETTER"), /^(GET|POST)$/.test("GETTER"));
+console.log(/hello/i.test("Hello World"));</code></pre>
+<pre class="terminal">052-1234567 true
+0521234567 true
+052-12345 false
+x0521234567 false
+052--1234567 false
+true
+true false
+true</pre>
+  <p>שלוש השורות האחרונות הן שלושה שיעורים:</p>
+  <ul>
+    <li>בלי <code>^</code> ו־<code>$</code>, <code>/\d{7}/</code> מסתפק ב־7 ספרות <strong>איפשהו</strong>, גם בתוך זבל. כשבודקים קלט, כמעט תמיד צריך את שניהם.</li>
+    <li><code>|</code> מחלק את <strong>כל</strong> הביטוי: <code>/^GET|POST$/</code> הוא "מתחיל ב־GET" או "נגמר ב־POST". סוגריים תוחמים אותו: <code>/^(GET|POST)$/</code>.</li>
+    <li><code>i</code> אחרי הלוכסן הסוגר הוא <strong>דגל</strong> (flag): בלי הבדל בין אותיות גדולות לקטנות. נכיר עוד שניים בהמשך.</li>
+  </ul>
+
+  <h2>3. <code>match</code> ו־groups: לפרק טקסט לחלקים</h2>
+  <p><code>test</code> עונה רק כן או לא. <code>match</code> מחזיר <strong>מה</strong> נמצא. סוגריים בתבנית יוצרים <strong>group</strong>, וכל group נכנס למקום משלו במערך:</p>
+<pre><code class="lang-js">const m = "2026-11-19".match(/^(\d{4})-(\d{2})-(\d{2})$/);
+console.log(m[0], m[1], m[2], m[3]);
+
+const [, year, month, day] = m;
+console.log(Number(day), Number(month), Number(year));
+
+console.log("19/11/2026".match(/^(\d{4})-(\d{2})-(\d{2})$/));
+
+const line = "GET /tasks/42 200";
+const named = line.match(/^(?&lt;method&gt;[A-Z]+) (?&lt;path&gt;\S+) (?&lt;status&gt;\d{3})$/);
+console.log(named.groups.method, named.groups.path, Number(named.groups.status));</code></pre>
+<pre class="terminal">2026-11-19 2026 11 19
+19 11 2026
+null
+GET /tasks/42 200</pre>
+  <ul>
+    <li><code>m[0]</code> הוא כל מה שהתאים. <code>m[1]</code>, <code>m[2]</code>... הם ה־groups, לפי סדר הסוגריים הפותחים. ה־destructuring משיעור 3 של פרק 7 מדלג על <code>m[0]</code> עם הפסיק הראשון.</li>
+    <li>כשאין התאמה, <code>match</code> מחזיר <strong><code>null</code></strong>, לא מערך ריק. תמיד בודקים לפני שניגשים ל־<code>m[1]</code>.</li>
+    <li><code>(?&lt;name&gt;...)</code> נותן ל־group שם, והוא מופיע ב־<code>m.groups.name</code>. עם יותר משלושה חלקים, שמות קריאים יותר ממספרים.</li>
+    <li>group תמיד מחזיר <strong>מחרוזת</strong>. מספר צריך להמיר עם <code>Number(...)</code>.</li>
+    <li>סוגריים רק כדי לקבץ, בלי לשמור (כמו ב־<code>(GET|POST)</code>), כותבים <code>(?:GET|POST)</code>. כך המספור של שאר ה־groups לא זז.</li>
+  </ul>
+  <p>וזה הדפוס שתכתוב הכי הרבה: פונקציה שמפרקת קלט, ו<strong>זורקת</strong> שגיאה ברורה אם הוא לא בפורמט (בדיוק כמו <code>parseQuantity</code> משיעור 2):</p>
+<pre><code class="lang-js">function parseDate(text) {
+  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m === null) {
+    throw new Error(`תאריך לא בפורמט YYYY-MM-DD: "${text}"`);
+  }
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+}
+
+for (const input of ["2026-11-19", "19/11/2026", "2026-1-5"]) {
+  try {
+    console.log(parseDate(input));
+  } catch (err) {
+    console.log(`✘ ${err.message}`);
+  }
+}</code></pre>
+<pre class="terminal">{ year: 2026, month: 11, day: 19 }
+✘ תאריך לא בפורמט YYYY-MM-DD: "19/11/2026"
+✘ תאריך לא בפורמט YYYY-MM-DD: "2026-1-5"</pre>
+
+  <h2>4. הדגל <code>g</code>: כל ההתאמות</h2>
+  <p>בלי דגל, <code>match</code> עוצר בהתאמה הראשונה. עם <code>g</code> (global) הוא מחזיר מערך של <strong>כל</strong> ההתאמות, אבל בלי ה־groups. כשצריך גם את כל ההתאמות וגם את ה־groups, משתמשים ב־<code>matchAll</code>:</p>
+<pre><code class="lang-js">const text = "קפה 12 ₪, עוגה 18 ₪, מים 6 ₪";
+console.log(text.match(/\d+/));
+console.log(text.match(/\d+/g));
+console.log("אין כאן מספרים".match(/\d+/g));
+
+const items = [...text.matchAll(/(\S+) (\d+) ₪/g)].map((m) =&gt; ({ name: m[1], price: Number(m[2]) }));
+console.log(items);</code></pre>
+<pre class="terminal">[
+  '12',
+  index: 4,
+  input: 'קפה 12 ₪, עוגה 18 ₪, מים 6 ₪',
+  groups: undefined
+]
+[ '12', '18', '6' ]
+null
+[
+  { name: 'קפה', price: 12 },
+  { name: 'עוגה', price: 18 },
+  { name: 'מים', price: 6 }
+]</pre>
+  <p><code>matchAll</code> מחזיר משהו שעוברים עליו (כמו <code>Map</code> או <code>Set</code>), ולכן מפזרים אותו למערך עם <code>[...]</code> ואז ממשיכים עם <code>map</code>. ושים לב: גם <code>match</code> עם <code>g</code> מחזיר <code>null</code> כשאין אף התאמה, לא <code>[]</code>.</p>
+
+  <h2>5. <code>replace</code> ו־<code>split</code>: לשנות ולחתוך</h2>
+<pre><code class="lang-js">console.log("052-123-4567".replace(/-/g, ""));
+console.log("052-123-4567".replace(/-/, ""));
+console.log("  כמה   רווחים   כפולים ".trim().replace(/\s+/g, " "));
+
+console.log("19/11/2026".replace(/^(\d{2})\/(\d{2})\/(\d{4})$/, "$3-$2-$1"));
+
+console.log("created_at_utc".replace(/_([a-z])/g, (all, letter) =&gt; letter.toUpperCase()));
+
+console.log("a, b,c ,  d".split(/\s*,\s*/));
+console.log("שורה 1\r\nשורה 2\nשורה 3".split(/\r?\n/));</code></pre>
+<pre class="terminal">0521234567
+052123-4567
+כמה רווחים כפולים
+2026-11-19
+createdAtUtc
+[ 'a', 'b', 'c', 'd' ]
+[ 'שורה 1', 'שורה 2', 'שורה 3' ]</pre>
+  <ul>
+    <li>בלי <code>g</code>, ‏<code>replace</code> מחליף רק את ההתאמה <strong>הראשונה</strong>. השורה השנייה בפלט מראה את זה.</li>
+    <li>בטקסט ההחלפה, <code>$1</code>, <code>$2</code>... הם ה־groups. כך הפכנו תאריך ישראלי לפורמט ISO בשורה אחת.</li>
+    <li>במקום טקסט אפשר לתת <strong>פונקציה</strong>. היא נקראת לכל התאמה, עם ההתאמה המלאה ואחריה ה־groups, ומה שהיא מחזירה נכנס במקום. כך <code>created_at_utc</code> הפך ל־<code>createdAtUtc</code>.</li>
+    <li><code>split</code> עם regex חותך לפי תבנית, ולא רק לפי תו קבוע. <code>/\r?\n/</code> מתאים לירידת שורה גם של Windows (<code>\r\n</code>) וגם של Mac ולינוקס (<code>\n</code>). תראה אותו בכל קוד שקורא קבצים.</li>
+  </ul>
+
+  <h2>6. regex מתוך משתנה, ועברית</h2>
+  <p>לפעמים התבנית לא ידועה מראש, למשל מילה שהמשתמש חיפש. <code>new RegExp(טקסט, דגלים)</code> בונה regex ממחרוזת:</p>
+<pre><code class="lang-js">const word = "קפה";
+const re = new RegExp(word, "g");
+console.log("קפה הפוך וקפה שחור".match(re).length);
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&amp;");
+}
+const search = "1.5";
+console.log(new RegExp(search).test("105"), new RegExp(escapeRegex(search)).test("105"));
+
+console.log("שלום, world 123".match(/\p{L}+/gu));
+console.log(/\bcat\b/.test("a cat here"), /\bשלום\b/u.test("אמר שלום לכולם"));</code></pre>
+<pre class="terminal">2
+true false
+[ 'שלום', 'world' ]
+true false</pre>
+  <ul>
+    <li>טקסט של משתמש הוא <strong>טקסט</strong>, לא תבנית. בלי escaping, הנקודה ב־<code>"1.5"</code> מתאימה לכל תו, ו־<code>"("</code> מפיל את התוכנית (בתיבה למטה). <code>escapeRegex</code> מוסיף <code>\</code> לפני כל תו מיוחד (<code>$&amp;</code> בטקסט ההחלפה = מה שהתאים).</li>
+    <li><code>\w</code> מכיר רק אותיות לטיניות. אותיות בכל שפה, כולל עברית: <code>\p{L}</code>. הוא עובד רק עם הדגל <code>u</code> (unicode).</li>
+    <li><code>\b</code> הוא "גבול מילה", והוא נשען על <code>\w</code>. לכן סביב מילה בעברית הוא לא עובד, גם עם <code>u</code>. בעברית כותבים את הגבול בעצמך, למשל <code>(^|[^\u0590-\u05FF])</code>.</li>
+  </ul>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ טעויות נפוצות</span>
+    <ul>
+      <li><strong>שכחת <code>^</code> ו־<code>$</code></strong> בבדיקת קלט: <code>/\d{7}/</code> מקבל גם <code>"abc12345678xyz"</code>.</li>
+      <li><strong><code>match</code> החזיר <code>null</code></strong> וניגשת ל־<code>m[1]</code>: <code class="mid">TypeError: Cannot read properties of null (reading '1')</code>. בודקים <code>m === null</code> קודם.</li>
+      <li><strong>נקודה בלי <code>\</code>:</strong> <code>/1.5/</code> מתאים גם ל־"105". נקודה אמיתית: <code>\.</code>.</li>
+      <li><strong>טקסט של משתמש ב־<code>new RegExp</code> בלי escaping:</strong> <code>new RegExp("(1")</code> זורק <code class="long">SyntaxError: Invalid regular expression: /(1/: Unterminated group</code>.</li>
+      <li><strong><code>g</code> עם <code>test</code>:</strong> regex עם <code>g</code> זוכר איפה עצר (בשדה <code>lastIndex</code>), ולכן אותה בדיקה מחזירה פעם <code>true</code> ופעם <code>false</code>. ל־<code>test</code> לא שמים <code>g</code>.</li>
+    </ul>
+  </div>
+<pre><code class="lang-js">const hasDigit = /\d/g;
+console.log(hasDigit.test("a1"), hasDigit.test("a1"), hasDigit.test("a1"));
+console.log(/\d/.test("a1"), /\d/.test("a1"), /\d/.test("a1"));</code></pre>
+<pre class="terminal">true false true
+true true true</pre>
+
+  <h2>7. מתי <strong>לא</strong> להשתמש ב־regex</h2>
+  <ul>
+    <li><strong>כשיש פונקציה פשוטה יותר:</strong> <code>startsWith</code>, <code>endsWith</code>, <code>includes</code> ו־<code>split(",")</code> קריאים יותר, ולא צריך regex בשבילם.</li>
+    <li><strong>לפורמטים מקוננים</strong> כמו JSON או HTML: <code>JSON.parse</code> ולא regex. regex לא יודע לספור סוגריים מקוננים.</li>
+    <li><strong>כשהתבנית נהיית ארוכה מדי לקריאה:</strong> מפרקים לכמה בדיקות קטנות עם הודעת שגיאה לכל אחת. "סיסמה חייבת ספרה" עדיף על "סיסמה לא תקינה".</li>
+    <li><strong>אימייל:</strong> regex פשוט כמו <code class="mid">/^[^\s@]+@[^\s@]+\.[^\s@]+$/</code> תופס טעויות הקלדה. הבדיקה האמיתית היא לשלוח מייל עם קישור.</li>
+  </ul>
+  <p>ועוד דבר לעתיד: regex מסוים על קלט ארוך של משתמש יכול לתקוע שרת שלם. זה נקרא ReDoS, ונגיע אליו ביחידה 28.5.</p>
+
+  <h2>סיכום</h2>
+  <div class="table-wrap"><table>
+    <tr><th>רוצים</th><th>כותבים</th><th>מחזיר</th></tr>
+    <tr><td>לבדוק שקלט בפורמט</td><td><code>/^...$/.test(text)</code></td><td><code>true</code> / <code>false</code></td></tr>
+    <tr><td>לפרק לחלקים</td><td><code class="mid">text.match(/^(...)-(...)$/)</code></td><td>מערך עם groups, או <code>null</code></td></tr>
+    <tr><td>כל ההתאמות</td><td><code>text.match(/.../g)</code> / <code>[...text.matchAll(/.../g)]</code></td><td>מערך / מערך של התאמות עם groups</td></tr>
+    <tr><td>להחליף</td><td><code class="mid">text.replace(/.../g, "..." או פונקציה)</code></td><td>מחרוזת חדשה</td></tr>
+    <tr><td>לחתוך</td><td><code>text.split(/\s*,\s*/)</code></td><td>מערך</td></tr>
+    <tr><td>תבנית ממשתנה</td><td><code class="mid">new RegExp(escapeRegex(word), "g")</code></td><td>regex</td></tr>
+  </table></div>
+
+  <div class="box job">
+    <span class="box-title">💼 בעולם העבודה</span>
+    <p>regex מופיע בכל בסיס קוד: בבדיקות קלט, בפירוק לוגים, ב־<code>.gitignore</code>, ב־routes של שרתים ובחיפוש ב־VS Code (הכפתור <code>.*</code> בחלון החיפוש). בראיונות שואלים לפעמים "כתוב regex לבדיקת X" או "מה הבעיה ב־regex הזה". הכי הרבה נקודות מקבלים על <code>^</code> ו־<code>$</code>, על escaping, ועל המשפט "כאן עדיף בלי regex".</p>
+  </div>
+
+  <div class="box practice">
+    <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
+    <p><strong>6 שאלות</strong>: חלק 1 — 5 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 1 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><a href="practice-5.html">← לתרגול של שיעור 5</a></p>
+  </div>
+
+<div class="pager"><a href="lesson-04-method.html"><small>הקודם</small>שיעור 4 — ESLint ושיטה לאיתור באגים</a><a href="practice-5.html"><small>הבא</small>✍️ תרגול שיעור 5</a></div>
+</main>
+</body>
+</html>

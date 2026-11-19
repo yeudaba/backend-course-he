@@ -5,6 +5,7 @@
       <li>העתקה רדודה ועמוקה; עדכון בלי לשנות את המקור.</li>
       <li>destructuring ו־shorthand.</li>
       <li>`Object.keys/values/entries` ו־JSON.</li>
+      <li>תאריכים: `Date` — רגע בזמן כמספר, `toISOString`, חישובים, ומה קורה לתאריך ב־JSON.</li>
     </ul>
   </div>
 
@@ -192,6 +193,131 @@ string
     <tr><td>`JSON.parse` על טקסט לא תקין קורס: `SyntaxError: Expected property name or '}' in JSON at position 1`</td></tr>
   </table></div>
   <p>טריק דיבוג: `JSON.stringify(obj, null, 2)` מדפיס אובייקט "יפה", עם הזחה.</p>
+
+  <h2>6. תאריכים: `Date`</h2>
+  <p>בטבלה למעלה כתוב "תאריכים הופכים למחרוזת". כדי להבין למה, צריך לראות מה זה תאריך ב־JavaScript. כמעט כל שרת עובד עם זמן: מתי נוצרה הזמנה, מתי פג תוקף של קוד, כמה ימים נשארו עד מועד היעד.</p>
+```js run
+const created = new Date("2026-11-19T08:30:00Z");
+console.log(created.toISOString());
+console.log(created.getTime());
+console.log(typeof created);
+```
+```out
+2026-11-19T08:30:00.000Z
+1795077000000
+object
+```
+  <p>שלוש שורות, שלושה דברים חשובים:</p>
+  <ul>
+    <li>`new Date("...")` יוצר תאריך מטקסט. הפורמט הוא ISO: שנה־חודש־יום, `T`, שעה, ובסוף `Z`. ה־`Z` אומר "השעה הזו ב־UTC", השעון העולמי שלא משתנה בקיץ ובחורף.</li>
+    <li>`getTime()` מחזיר את מה שבאמת שמור בתוך התאריך: <strong>מספר אחד</strong>. כמה אלפיות שנייה (milliseconds) עברו מ־1 בינואר 1970, חצות UTC.</li>
+    <li>`typeof` מחזיר `"object"`. תאריך הוא אובייקט, ולכן כל מה שלמדת בשיעור הזה על הפניות נכון גם לו.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 720 190" role="img" aria-label="ציר זמן: Date שומר מספר אלפיות שנייה מ־1970">
+      <defs><marker id="ar7d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--accent)"/></marker></defs>
+      <path d="M40 80 H 690" style="stroke:var(--svg-stroke);stroke-width:2" marker-end="url(#ar7d)"/>
+      <g style="stroke:var(--svg-stroke);stroke-width:2">
+        <path d="M60 70 V 90"/>
+        <path d="M560 70 V 90"/>
+      </g>
+      <path d="M60 110 H 556" style="stroke:var(--accent);stroke-width:2;fill:none" marker-end="url(#ar7d)"/>
+      <g class="mono" direction="ltr" text-anchor="middle" style="font-size:13px">
+        <text x="60" y="55">1970-01-01T00:00:00Z</text>
+        <text x="560" y="55">2026-11-19T08:30:00Z</text>
+        <text x="310" y="135">1795077000000 ms</text>
+      </g>
+      <text x="310" y="170" text-anchor="middle" direction="rtl" style="font-size:14px;fill:var(--muted)">זה כל מה ש־Date שומר: מספר אחד. toISOString רק "מציג" אותו כטקסט</text>
+    </svg>
+    <figcaption>איור 2: `Date` הוא נקודה על ציר הזמן. המספר זהה בכל מחשב בעולם. רק התצוגה ("איזו שעה זו אצלי?") תלויה במקום.</figcaption>
+  </figure>
+
+  <h3>חישובים: עובדים עם המספר</h3>
+```js run
+const DAY = 24 * 60 * 60 * 1000;
+const created = new Date("2026-11-01T10:00:00Z");
+const due = new Date("2026-11-19T10:00:00Z");
+
+const ms = due.getTime() - created.getTime();
+console.log(ms / DAY);
+
+const nextWeek = new Date(due.getTime() + 7 * DAY);
+console.log(nextWeek.toISOString());
+
+console.log(due > created);
+console.log(due === new Date("2026-11-19T10:00:00Z"));
+console.log(due.getTime() === new Date("2026-11-19T10:00:00Z").getTime());
+console.log(typeof Date.now());
+```
+```out
+18
+2026-11-26T10:00:00.000Z
+true
+false
+true
+number
+```
+  <p>מחסרים, מחברים ומשווים את <strong>המספרים</strong>. `new Date(מספר)` הופך מספר בחזרה לתאריך. `<` ו־`>` עובדים על תאריכים (JavaScript משווה את המספרים), אבל `===` משווה <strong>הפניות</strong>, בדיוק כמו `{ name: "x" } === { name: "x" }` בתחילת השיעור. לכן "האם זה אותו רגע?" בודקים עם `getTime()`. ו־`Date.now()` מחזיר את הרגע הנוכחי ישר כמספר, בלי ליצור אובייקט.</p>
+
+  <h3>חלקים של תאריך: UTC, וחודש שמתחיל מ־0</h3>
+```js run
+const d = new Date("2026-03-05T22:15:00Z");
+console.log(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours());
+console.log(d.getUTCMonth() + 1);
+console.log(d.toISOString().slice(0, 10));
+
+const newYear = new Date(Date.UTC(2026, 0, 1));
+console.log(newYear.toISOString());
+console.log(new Date(Date.UTC(2026, 1, 30)).toISOString());
+```
+```out
+2026 2 5 22
+3
+2026-03-05
+2026-01-01T00:00:00.000Z
+2026-03-02T00:00:00.000Z
+```
+  <ul>
+    <li>`getUTCMonth()` מחזיר <strong>2</strong> למרץ: החודשים נספרים מ־0 (ינואר = 0, דצמבר = 11). שאר החלקים נספרים רגיל. זו אחת הטעויות הנפוצות ביותר ב־JavaScript.</li>
+    <li>`Date.UTC(שנה, חודש, יום)` בונה רגע מחלקים (גם כאן חודש מ־0), ו־`new Date(...)` עוטף אותו.</li>
+    <li>30 בפברואר לא קיים, ו־JavaScript לא מתלונן: הוא "גולש" ל־2 במרץ. אם הקלט מגיע ממשתמש, בודקים אותו לפני כן.</li>
+    <li>`toISOString().slice(0, 10)` נותן את התאריך בלבד, `"2026-03-05"`. תראה את זה הרבה.</li>
+  </ul>
+  <p>ולמה דווקא `getUTC...`? יש גם `getDate()`, `getHours()` וכו׳ בלי UTC. הם מחזירים את החלקים <strong>לפי אזור הזמן של המחשב שמריץ את הקוד</strong>. אותו `d` במחשב בישראל: `getDate()` מחזיר 6, כי 22:15 ב־UTC זה כבר 00:15 בלילה של 6 במרץ בישראל. ב־`getUTCDate()` מתקבל 5 בכל מחשב. בשרת משתמשים בגרסאות ה־UTC, כדי שהתוצאה לא תשתנה לפי המקום שבו השרת רץ. את "איזו שעה זו אצל המשתמש" נלמד בפרק 24 (שיעור 2).</p>
+
+  <h3>תאריך ב־JSON: יוצא מחרוזת, נשאר מחרוזת</h3>
+```js run
+const order = { id: 7, createdAt: new Date("2026-11-19T08:30:00Z") };
+const text = JSON.stringify(order);
+console.log(text);
+
+const back = JSON.parse(text);
+console.log(typeof back.createdAt);
+const createdAt = new Date(back.createdAt);
+console.log(createdAt.getTime() === order.createdAt.getTime());
+```
+```out
+{"id":7,"createdAt":"2026-11-19T08:30:00.000Z"}
+string
+true
+```
+  <p>`JSON.stringify` כותב תאריך כמחרוזת ISO. `JSON.parse` לא יודע שזו הייתה פעם תאריך, ומחזיר מחרוזת. מי שמקבל את ה־JSON (שרת, דפדפן) ממיר בחזרה עם `new Date(...)`. זה המצב בכל API: תאריכים עוברים ברשת כמחרוזות ISO.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ טעויות נפוצות עם Date</span>
+    <ul>
+      <li><strong>תאריך לא תקין לא זורק שגיאה מיד.</strong> `new Date("31/12/2026")` מחזיר תאריך "שבור": `getTime()` מחזיר `NaN`, ו־`String(...)` מחזיר `"Invalid Date"`. השגיאה מגיעה רק אחר כך, כשקוראים ל־`toISOString()` (הדוגמה למטה). לכן קלט של תאריך בודקים עם `Number.isNaN(d.getTime())`.</li>
+      <li><strong>בלי `Z` בסוף.</strong> `new Date("2026-11-19T10:00:00")` (בלי `Z`) מתפרש לפי השעון של המחשב. בשרת ב־UTC יוצא 10:00 UTC, ובמק בישראל יוצא 08:00 UTC. אותו קוד, תוצאה שונה. כותבים `Z` תמיד.</li>
+      <li><strong>חודש מ־0:</strong> `Date.UTC(2026, 3, 1)` הוא 1 <strong>באפריל</strong>.</li>
+      <li><strong>`===` בין תאריכים</strong> כמעט תמיד `false`. משווים `getTime()`.</li>
+    </ul>
+  </div>
+```js run stderr fails
+const bad = new Date("31/12/2026");
+console.log(bad.getTime(), String(bad));
+console.log(bad.toISOString());
+```
+  <p>הפלט: `NaN Invalid Date`, ואז Node קורס עם `RangeError: Invalid time value`. השגיאה מצביעה על השורה של `toISOString`, לא על השורה שבה נוצר התאריך השבור. בגלל זה הבאג הזה קשה למצוא.</p>
 
   <div class="box practice">
     <span class="box-title">✍️ עכשיו בדף התרגילים</span>
