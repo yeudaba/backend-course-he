@@ -16,6 +16,16 @@ test("Dockerfile — מבנה", () => {
   const cmd = steps.filter((s) => s.cmd === "CMD").at(-1);
   assert.ok(cmd && cmd.args.startsWith("["), "CMD בצורת מערך (exec): [\"node\", \"server.mjs\"]");
 });
+test("רק הקבצים שצריך (לא COPY . . בלי .dockerignore)", () => {
+  const steps = parseDockerfile(readText(path.join(dir(), "Dockerfile")));
+  const copies = steps.filter((s) => s.cmd === "COPY" || s.cmd === "ADD");
+  assert.ok(copies.length, "חסר COPY של קובצי השרת");
+  const all = copies.flatMap((s) => s.args.replace(/^\[|\]$/g, "").split(/[\s,]+/).map((x) => x.replace(/^"|"$/g, "")).filter((x) => x && !x.startsWith("--")).slice(0, -1));
+  const everything = all.filter((src) => [".", "./", "*", "./*"].includes(src));
+  if (everything.length) {
+    assert.ok(fs.existsSync(path.join(dir(), ".dockerignore")), `COPY ${everything[0]} מעתיק את כל התיקייה (גם .env, ‏node_modules וקבצים שלא צריך). העתק רק את package.json ו־server.mjs — או הוסף .dockerignore`);
+  }
+});
 test("נבנה ורץ", { timeout: 300000 }, async (t) => {
   requireDocker();
   const { tag } = buildImage(t, dir());
