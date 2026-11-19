@@ -32,7 +32,10 @@ export async function sandbox(t, testUrl, seed) {
   const prismas = [];
   t.after(async () => {
     for (const p of prismas) await p.$disconnect();
-    for (const p of pools) await p.end(); // קודם החיבורים הנוספים — שלא יחזיקו נעילות על ה־schema
+    // קודם החיבורים הנוספים — שלא יחזיקו נעילות על ה־schema. חיבור שהקוד שלך לא שחרר (בלי release)
+    // היה משאיר את p.end() ואת הבדיקה תקועים — אז אחרי חצי שנייה מנתקים אותו בכוח
+    const ended = await Promise.race([Promise.all(pools.map((p) => p.end().catch(() => {}))).then(() => true), new Promise((r) => setTimeout(() => r(false), 500))]);
+    if (!ended) await client.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1", [schema]).catch(() => {});
     await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {});
     await client.end();
   });
@@ -43,7 +46,10 @@ export async function sandbox(t, testUrl, seed) {
     client,
     // Pool של חיבורים לאותו schema — לבדיקות של כמה חיבורים במקביל (פרק 18)
     pool(max = 10) {
-      const p = new pg.Pool({ connectionString: url, max, options: `-c search_path=${schema}` });
+      const p = new pg.Pool({ connectionString: url, max, options: `-c search_path=${schema}`, application_name: schema });
+      // חיבור שנותק (בסוף הבדיקה) לא מפיל את התהליך
+      p.on("error", () => {});
+      p.on("connect", (c) => c.on("error", () => {}));
       pools.push(p);
       return p;
     },

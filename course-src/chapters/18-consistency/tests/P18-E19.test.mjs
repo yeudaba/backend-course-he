@@ -29,6 +29,15 @@ test("שגיאה אחרת — מיד, בלי ניסיון חוזר", async (t) =
   await assert.rejects(withSerializableRetry(pool, async () => { calls++; throw new Error("boom"); }), { message: "boom" });
   assert.equal(calls, 1);
 });
+test("deadlock (40P01) — גם עליו מנסים שוב", async (t) => {
+  const db = await sandbox(t, import.meta.url);
+  const pool = db.pool(2);
+  let calls = 0;
+  const flaky = async () => { calls++; if (calls <= 2) throw Object.assign(new Error("deadlock detected"), { code: "40P01" }); return "ok"; };
+  assert.equal(await withSerializableRetry(pool, flaky, { retries: 5 }), "ok", "40P01 (deadlock) — ROLLBACK וניסיון חוזר, כמו 40001");
+  assert.equal(calls, 3);
+  assert.equal(pool.idleCount, pool.totalCount);
+});
 test("נגמרו הניסיונות", async (t) => {
   const db = await sandbox(t, import.meta.url);
   const pool = db.pool(2);
