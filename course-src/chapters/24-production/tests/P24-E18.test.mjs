@@ -38,6 +38,15 @@ test("מעל — 429 עם Retry-After בשניות", async (t) => {
   assert.equal(r.headers.get("retry-after"), "4", "הראשונה (לפני 6.5 שניות) יוצאת מהחלון בעוד 3.5 ← 4");
   assert.equal(r.headers.get("ratelimit-remaining"), "0");
 });
+test("Retry-After מעוגל למעלה גם כשנשארו 7.2 שניות", async (t) => {
+  const { get, clock } = await start(t, { limit: 1 });
+  await get();
+  clock.t += 2800;
+  const r = await get();
+  assert.equal(r.status, 429);
+  assert.equal(r.headers.get("retry-after"), "8", "נשארו 7.2 שניות ← 8 (Math.ceil; עיגול רגיל נותן 7 והלקוח יחזור מוקדם מדי)");
+  assert.equal(r.headers.get("ratelimit-reset"), "8");
+});
 test("חלון נע — ונדחות לא נספרות", async (t) => {
   const { get, clock } = await start(t);
   await get(); clock.t += 1000; await get(); clock.t += 1000; await get();
