@@ -30,11 +30,11 @@ test("מחכה: 503, חיבור שנופל, גרסה ישנה — ואז החד�
 });
 test("expectCommit מקוצר", async (t) => {
   const base = await server(t, { commits: [SHA] });
-  assert.equal((await smokeTest(base, { expectCommit: "2cb197c", intervalMs: 10 })).ok, true);
+  assert.equal((await smokeTest(base, { expectCommit: "2cb197c", intervalMs: 10, timeoutMs: 2000 })).ok, true);
 });
 test("בלי expectCommit — מספיק /version ו־/ready", async (t) => {
   const base = await server(t, { commits: ["whatever1"] });
-  assert.deepEqual(await smokeTest(base, { intervalMs: 10 }), { ok: true, attempts: 1, commit: "whatever1" });
+  assert.deepEqual(await smokeTest(base, { intervalMs: 10, timeoutMs: 2000 }), { ok: true, attempts: 1, commit: "whatever1" });
 });
 test("timeout — עם הגרסה האחרונה שנראתה", async (t) => {
   const base = await server(t, { commits: ["0ld0ld0"] });

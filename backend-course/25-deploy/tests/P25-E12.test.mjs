@@ -27,10 +27,18 @@ test("בדיקה שנכשלת או זורקת", async (t) => {
   assert.deepEqual(r.body, { status: "unavailable", checks: { db: "down", cache: "up", sync: "down" } });
 });
 test("timeout — ובמקביל", async (t) => {
-  const call = await start(t, { db: () => sleep(5000), a: () => sleep(150), b: () => sleep(150) }, { timeoutMs: 300 });
+  const call = await start(t, { db: () => new Promise(() => {}), a: () => sleep(150), b: () => sleep(150) }, { timeoutMs: 300 }); // db לא עונה אף פעם
   const started = Date.now();
   const r = await call("GET", "/ready");
   const took = Date.now() - started;
   assert.deepEqual(r.body.checks, { db: "timeout", a: "up", b: "up" });
-  assert.ok(took < 1000, `לא מחכה 5 שניות, ולא 150+150+… (${took}ms)`);
+  assert.ok(took < 1000, `לא מחכה 5 שניות (${took}ms)`);
+});
+test("כל הבדיקות מתחילות לפני שמחכים לאחת מהן (במקביל)", async (t) => {
+  const log = [];
+  const check = (name) => async () => { log.push(`start ${name}`); await sleep(30); log.push(`end ${name}`); };
+  const call = await start(t, { a: check("a"), b: check("b"), c: check("c") }, { timeoutMs: 1000 });
+  const r = await call("GET", "/ready");
+  assert.equal(r.status, 200);
+  assert.ok(log.indexOf("start c") < log.indexOf("end a"), `הבדיקות רצו אחת אחרי השנייה (${log.join(", ")}) — הפעל את כולן ואז Promise.all / allSettled`);
 });
