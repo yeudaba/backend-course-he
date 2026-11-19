@@ -7,4 +7,5 @@ const { toNumber } = await load(import.meta.url, "P11-E12.ts");
 test("עובר בדיקת טיפוסים (tsc --strict)", () => { const r = typecheck(import.meta.url, "P11-E12.ts"); assert.ok(r.ok, r.output); });
 test("מספרים", () => { assert.equal(toNumber(5), 5); assert.equal(toNumber(NaN), null); assert.equal(toNumber(Infinity), null); });
 test("מחרוזות", () => { assert.equal(toNumber(" 12.5 "), 12.5); assert.equal(toNumber(""), null); assert.equal(toNumber("  "), null); assert.equal(toNumber("abc"), null); });
+test("מחרוזת שרק מתחילה במספר — לא מספר", () => { assert.equal(toNumber("12abc"), null, "\"12abc\" לא מייצגת מספר (parseFloat מחזיר 12, ‏Number מחזיר NaN)"); assert.equal(toNumber("1e3"), 1000); });
 test("סוגים אחרים", () => { for (const v of [true, null, undefined, {}, [1]]) assert.equal(toNumber(v), null); });
