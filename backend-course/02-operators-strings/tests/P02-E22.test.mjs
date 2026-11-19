@@ -12,6 +12,10 @@ test("עובד גם עם מחיר אחר", () => {
   sameOutput(run(import.meta.url, FILE, { changes: [['"120"', '"80"', 'את המחיר "120"']] }), ["מחיר מקורי: 80.00", "הנחה (15%): 12.00", "אחרי הנחה: 68.00", "כולל משלוח: 88.00"]);
 });
 
+test("עובד גם עם אחוז הנחה ודמי משלוח אחרים", () => {
+  sameOutput(run(import.meta.url, FILE, { changes: [[/discountPercent\s*=\s*15\b/, "discountPercent = 10", "את אחוז ההנחה (discountPercent = 15)"], [/shipping\s*=\s*20\b/, "shipping = 30", "את דמי המשלוח (shipping = 20)"]] }), ["מחיר מקורי: 120.00", "הנחה (10%): 12.00", "אחרי הנחה: 108.00", "כולל משלוח: 138.00"]);
+});
+
 test("toFixed רק בהדפסה", () => {
   const bad = code(source(import.meta.url, FILE)).split("\n").filter((l) => l.includes("toFixed") && !l.includes("console.log"));
   assert.deepEqual(bad, [], "יש toFixed מחוץ ל־console.log — toFixed מחזיר טקסט, אז משתמשים בו רק כשמדפיסים");

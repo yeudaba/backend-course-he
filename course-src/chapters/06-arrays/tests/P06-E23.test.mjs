@@ -6,4 +6,5 @@ const { cartTotal, removeItem } = await load(import.meta.url, "P06-E23.js");
 
 test("cartTotal", () => { assert.equal(cartTotal([10, 20]), 30); assert.equal(cartTotal([]), 0); });
 test("removeItem מחזירה עגלה בלי הפריט", () => assert.deepEqual(removeItem(["עט", "מחברת", "תיק"], 1), ["עט", "תיק"]));
+test("removeItem מסירה לפי אינדקס — גם כשיש פריטים כפולים", () => assert.deepEqual(removeItem(["עט", "תיק", "עט", "עט"], 2), ["עט", "תיק", "עט"]));
 test("removeItem לא משנה את המקור", () => { const c = ["a", "b"]; removeItem(c, 0); assert.deepEqual(c, ["a", "b"]); });

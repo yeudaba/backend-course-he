@@ -1,0 +1,10 @@
+const shippingFee = 30;
+console.log("נוסף: מקלדת | פריטים: 1 | סכום: 250");
+console.log("נוסף: עכבר | פריטים: 2 | סכום: 340");
+console.log("נוסף: משטח לעכבר | פריטים: 3 | סכום: 375");
+console.log("נוסף: כבל USB | פריטים: 4 | סכום: 400");
+console.log("---");
+let cartTotal = 400;
+console.log("סכום העגלה:", cartTotal);
+console.log("דמי משלוח:", shippingFee);
+console.log("לתשלום:", cartTotal + shippingFee);

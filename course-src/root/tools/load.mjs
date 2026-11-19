@@ -79,3 +79,18 @@ export function api(base) {
     return { status: res.status, headers: res.headers, body: parsed };
   };
 }
+
+// מריץ ESLint (עם eslint.config.mjs של תיקיית הקורס) על הקובץ שלך, ומחזיר את ההודעות (פרק 8 והלאה)
+// [{ line, rule, message, severity: "error" | "warning" }] — מערך ריק = נקי
+export async function lint(testUrl, file) {
+  const root = path.resolve(path.dirname(fileURLToPath(testUrl)), "..", "..");
+  let ESLint;
+  try {
+    ({ ESLint } = await import("eslint"));
+  } catch {
+    throw new Error("ESLint לא מותקן. הרץ npm install בתיקיית הקורס (פרק 8, קופסת 🧰).");
+  }
+  const eslint = new ESLint({ cwd: root, overrideConfigFile: path.join(root, "eslint.config.mjs"), ignore: false });
+  const [result] = await eslint.lintFiles([target(testUrl, file)]);
+  return (result?.messages ?? []).map((m) => ({ line: m.line, rule: m.ruleId, message: m.message, severity: m.severity === 2 ? "error" : "warning" }));
+}

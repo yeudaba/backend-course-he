@@ -21,7 +21,13 @@ test("applyOrder — הכול או כלום", () => {
   assert.equal(r.error, "אין מספיק מלאי של B (נשארו 0)");
   assert.deepEqual(r.inventory, { A: 5, B: 0 });
 });
-test("applyOrder — אותו קוד פעמיים", () => assert.equal(applyOrder({ A: 3 }, { id: 1, items: [{ code: "A", qty: 2 }, { code: "A", qty: 2 }] }).ok, false));
+test("applyOrder — אותו קוד פעמיים", () => {
+  const inv = { A: 3 };
+  const r = applyOrder(inv, { id: 1, items: [{ code: "A", qty: 2 }, { code: "A", qty: 2 }] });
+  assert.equal(r.ok, false);
+  assert.equal(r.error, "אין מספיק מלאי של A (נשארו 1)", "אחרי הפריט הראשון נשארה יחידה אחת — ההודעה לפי המלאי המעודכן");
+  assert.deepEqual(r.inventory, { A: 3 });
+});
 test("processOrders", () => {
   const inv = { A: 5, B: 1 };
   const orders = [

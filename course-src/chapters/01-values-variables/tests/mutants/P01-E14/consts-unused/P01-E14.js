@@ -1,0 +1,11 @@
+let balance = 500;
+const firstDeposit = 200;
+const withdrawal = 350;
+const secondDeposit = 50;
+balance = balance + 200;
+console.log("הפקדה", 200, "| יתרה:", balance);
+balance = balance - 350;
+console.log("משיכה", 350, "| יתרה:", balance);
+balance = balance + 50;
+console.log("הפקדה", 50, "| יתרה:", balance);
+console.log("יתרה סופית:", balance);

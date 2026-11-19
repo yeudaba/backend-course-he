@@ -10,6 +10,7 @@ test("getPage", () => {
   assert.deepEqual(getPage(a, 1, 2), ["a", "b"]);
   assert.deepEqual(getPage(a, 3, 2), ["e"]);
   assert.deepEqual(getPage(a, 4, 2), []);
-  assert.deepEqual(getPage(a, 0, 2), []);
+  assert.deepEqual(getPage(a, 0, 2), [], "עמוד 0 — מחוץ לטווח");
+  assert.deepEqual(getPage(a, -1, 2), [], "עמוד שלילי — מחוץ לטווח (בדוק page < 1)");
 });
 test("totalPages", () => { assert.equal(totalPages(23, 10), 3); assert.equal(totalPages(20, 10), 2); assert.equal(totalPages(0, 10), 1); });
