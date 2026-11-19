@@ -15,4 +15,9 @@ test("כל הבעיות יחד", () => {
   assert.throws(() => loadConfig({ JWT_SECRET: "short" }), { message: "הגדרות לא תקינות: DATABASE_URL חסר; JWT_SECRET קצר מדי" });
   assert.throws(() => loadConfig({ PORT: "x", LOG_LEVEL: "loud" }), { message: "הגדרות לא תקינות: DATABASE_URL חסר; JWT_SECRET חסר; PORT לא תקין; LOG_LEVEL לא תקין" });
 });
+test("PORT — מספר שלם בטווח 1–65535", () => {
+  for (const PORT of ["0", "70000", "80.5", "-1"]) assert.throws(() => loadConfig({ ...good, PORT }), { message: "הגדרות לא תקינות: PORT לא תקין" }, `PORT=${PORT}`);
+  assert.equal(loadConfig({ ...good, PORT: "65535" }).port, 65535);
+  assert.equal(loadConfig({ ...good, PORT: "1" }).port, 1);
+});
 test("redact", () => assert.deepEqual(redact({ port: 1, databaseUrl: "x", jwtSecret: "y", adminPassword: "z", logLevel: "info" }), { port: 1, databaseUrl: "***", jwtSecret: "***", adminPassword: "***", logLevel: "info" }));
