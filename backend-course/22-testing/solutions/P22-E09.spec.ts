@@ -38,6 +38,14 @@ test("4xx — לא מנסים שוב", async () => {
   assert.equal(fn.mock.callCount(), 1);
 });
 
+test("500 בדיוק — כן מנסים שוב (רק מתחת ל־500 לא)", async () => {
+  const fn = mock.fn(async () => {
+    throw new HttpStatusError(500);
+  });
+  await assert.rejects(withRetry(fn, 1), HttpStatusError);
+  assert.equal(fn.mock.callCount(), 2);
+});
+
 test("retries=0 — ניסיון אחד", async () => {
   const fn = mock.fn(async () => {
     throw new HttpStatusError(500);
