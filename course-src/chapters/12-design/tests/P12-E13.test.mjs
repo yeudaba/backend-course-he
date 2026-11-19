@@ -9,3 +9,12 @@ test("זרימה מלאה", () => { const i = new Inventory(); i.addStock("A", 5
 test("שריון יותר מהזמין", () => { const i = new Inventory(); i.addStock("A", 2); i.reserve("A", 2); assert.throws(() => i.reserve("A", 1), { message: "אין מספיק מלאי של A" }); assert.throws(() => i.reserve("Z", 1)); });
 test("שחרור/מכירה מעבר לשריון", () => { const i = new Inventory(); i.addStock("A", 5); i.reserve("A", 1); assert.throws(() => i.release("A", 2), { message: "שחרור גדול מהשריון" }); assert.throws(() => i.commit("A", 2), { message: "שחרור גדול מהשריון" }); assert.equal(i.available("A"), 4); });
 test("כמויות לא חוקיות", () => { const i = new Inventory(); for (const q of [0, -1, 1.5]) assert.throws(() => i.addStock("A", q), { message: "כמות לא תקינה" }); });
+test("כמויות לא חוקיות — בכל המתודות (reserve, ‏release, ‏commit)", () => {
+  const i = new Inventory();
+  i.addStock("A", 5);
+  i.reserve("A", 2);
+  for (const q of [0, -1, 1.5]) {
+    for (const m of ["reserve", "release", "commit"]) assert.throws(() => i[m]("A", q), { message: "כמות לא תקינה" }, `${m}("A", ${q})`);
+  }
+  assert.equal(i.available("A"), 3, "שריון שלילי לא יכול להגדיל את הזמין");
+});

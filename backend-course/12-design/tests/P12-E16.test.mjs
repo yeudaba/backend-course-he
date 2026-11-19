@@ -28,6 +28,22 @@ test("שגיאות", async () => {
   await assert.rejects(svc.placeOrder(1, [{ productId: 9, qty: 1 }]), NotFoundError);
   await assert.rejects(svc.placeOrder(1, [{ productId: 2, qty: 2 }]), ConflictError);
 });
+test("אותו מוצר בשתי שורות — המלאי נבדק מול סכום הכמויות", async () => {
+  const { products, orders, svc } = await setup();
+  await assert.rejects(svc.placeOrder(1, [{ productId: 2, qty: 1 }, { productId: 2, qty: 1 }]), ConflictError, "במלאי תיק אחד, וההזמנה מבקשת שניים (בשתי שורות)");
+  assert.equal((await products.findById(2)).stock, 1, "המלאי לא השתנה");
+  assert.equal(await orders.count(), 0);
+  const o = await svc.placeOrder(1, [{ productId: 1, qty: 4 }, { productId: 1, qty: 6 }]);
+  assert.equal(o.total, 50);
+  assert.equal((await products.findById(1)).stock, 0, "10 עטים במלאי, נמכרו 4+6");
+});
+test("כמות לא תקינה ← ValidationError, והמלאי לא משתנה", async () => {
+  const { products, svc } = await setup();
+  for (const qty of [-5, 0, 1.5]) {
+    await assert.rejects(svc.placeOrder(1, [{ productId: 1, qty }]), ValidationError, `qty: ${qty}`);
+  }
+  assert.equal((await products.findById(1)).stock, 10, "כמות שלילית לא מגדילה את המלאי");
+});
 test("הכול או כלום", async () => {
   const { products, orders, svc } = await setup();
   await assert.rejects(svc.placeOrder(1, [{ productId: 1, qty: 2 }, { productId: 2, qty: 5 }]));

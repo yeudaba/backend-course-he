@@ -480,8 +480,16 @@ export class OrderService {
     if (items.length === 0) {
       throw new ValidationError("items", "הזמנה ריקה");
     }
-    const products: Product[] = [];
+    // שלב 1: בדיקות בלבד. כמות לכל מוצר — אותו מוצר בכמה שורות נספר פעם אחת, עם סכום הכמויות
+    const wanted = new Map&lt;number, number&gt;();
     for (const { productId, qty } of items) {
+      if (!Number.isInteger(qty) || qty &lt; 1) {
+        throw new ValidationError("qty", "כמות לא תקינה");
+      }
+      wanted.set(productId, (wanted.get(productId) ?? 0) + qty);
+    }
+    const products = new Map&lt;number, Product&gt;();
+    for (const [productId, qty] of wanted) {
       const product = await this.#products.findById(productId);
       if (!product) {
         throw new NotFoundError(`מוצר ${productId} לא נמצא`);
@@ -489,12 +497,14 @@ export class OrderService {
       if (product.stock &lt; qty) {
         throw new ConflictError(`אין מספיק מלאי למוצר ${productId}`);
       }
-      products.push(product);
+      products.set(productId, product);
     }
 
-    const lines: OrderLine[] = items.map((item, i) =&gt; ({ ...item, unitPrice: products[i].price }));
-    for (let i = 0; i &lt; items.length; i++) {
-      await this.#products.save({ ...products[i], stock: products[i].stock - items[i].qty });
+    // שלב 2: רק אחרי שהכול תקין — מורידים מלאי ושומרים
+    const lines: OrderLine[] = items.map((item) =&gt; ({ ...item, unitPrice: products.get(item.productId)!.price }));
+    for (const [productId, qty] of wanted) {
+      const product = products.get(productId)!;
+      await this.#products.save({ ...product, stock: product.stock - qty });
     }
     const total = Math.round(lines.reduce((s, l) =&gt; s + l.unitPrice * l.qty, 0) * 100) / 100;
     const order: Order = { id: (await this.#orders.count()) + 1, userId, createdAt: this.#now(), lines, total };
@@ -509,11 +519,11 @@ const service = new OrderService({ products, orders: new MemoryRepo&lt;Order&gt;
 const order = await service.placeOrder(7, [{ productId: 1, qty: 3 }]);
 console.log(order.total, order.lines[0].unitPrice, (await products.findById(1))?.stock);</code></pre>
 <pre class="terminal">15 5 7</pre>
-<p>שים לב לשתי הגבלות בפתרון: (1) אם אותו מוצר מופיע פעמיים בהזמנה — הבדיקה לא מצרפת כמויות (תרגיל להרחבה); (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
+<p>שים לב: (1) <code>wanted</code> מצרף כמויות לפי מוצר — בלי זה, שתי שורות של "תיק" כשיש במלאי תיק אחד היו עוברות את הבדיקה (כל שורה לבד "מספיקה") ומוכרות תיק שאין; ובלי בדיקת הכמות, <code>qty: -5</code> היה <strong>מגדיל</strong> את המלאי. (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li></ul>
+<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li><li>לבדוק כל שורה לחוד מול המלאי — אותו מוצר בשתי שורות נמכר פעמיים.</li></ul>
 
 
 </div></details>

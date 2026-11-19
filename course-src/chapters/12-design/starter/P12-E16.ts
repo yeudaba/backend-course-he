@@ -35,8 +35,9 @@ export class ValidationError extends Error {
 
 // constructor({ products, orders, now })
 // placeOrder(userId, items: { productId, qty }[]):
-//   ריק → ValidationError("items", "הזמנה ריקה")
+//   ריק → ValidationError("items", "הזמנה ריקה") | כמות שאינה שלם חיובי → ValidationError("qty", "כמות לא תקינה")
 //   מוצר לא קיים → NotFoundError(`מוצר ${id} לא נמצא`) | חסר מלאי → ConflictError(`אין מספיק מלאי למוצר ${id}`)
+//   אותו מוצר בכמה שורות — המלאי נבדק מול סכום הכמויות
 //   הכול או כלום; שומר { id: count+1, userId, createdAt: now(), lines (עם unitPrice ברגע ההזמנה), total }
 export class OrderService {
   // כתוב כאן
