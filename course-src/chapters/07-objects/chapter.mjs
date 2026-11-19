@@ -8,7 +8,7 @@ export default {
   fast: true,
   checker: true,
   time: "4 מפגשים (במסלול המהיר: 2)",
-  expectedExercises: 80,
+  expectedExercises: 85,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, והבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו:</strong> כלום.</p>
 ${copyStep("07-objects")}
@@ -43,6 +43,7 @@ ${verifyNode}`,
     "לעבוד עם מערך של אובייקטים: חיפוש, סינון, מיון לפי שדה, סכומים.",
     "להבין הפניות: מתי שני משתנים הם אותו אובייקט, ואיך מעתיקים נכון.",
     "להשתמש ב־destructuring, spread, `Object.entries` ו־JSON.",
+    "לעבוד עם תאריכים (`Date`): רגע כמספר, `toISOString`, חישובי ימים ב־UTC, ובדיקה של תאריך לא תקין.",
     "להשתמש ב־`Map` ו־`Set` כדי לחבר נתונים מקושרים במהירות.",
   ],
   intro: `<h2>🤔 למה צריך את זה?</h2>
@@ -50,7 +51,7 @@ ${verifyNode}`,
   lessons: [
     { file: "lesson-01-objects.html", title: "אובייקט: שדות, גישה ושינוי", minutes: 30 },
     { file: "lesson-02-arrays-of-objects.html", title: "מערך של אובייקטים", minutes: 35 },
-    { file: "lesson-03-references.html", title: "הפניות, העתקה, destructuring ו־JSON", minutes: 40 },
+    { file: "lesson-03-references.html", title: "הפניות, העתקה, destructuring, JSON ותאריכים", minutes: 55 },
     { file: "lesson-04-map-set.html", title: "Map, Set וגישור: נתונים מקושרים", minutes: 35, note: "כולל יחידת גישור" },
   ],
   glossary: [
@@ -65,6 +66,9 @@ ${verifyNode}`,
     ["Deep copy", "דִיפּ", "עותק עמוק — הכול, כולל אובייקטים פנימיים (`structuredClone`)"],
     ["Destructuring", "דִיסְטְרַקְצֶ'רִינְג", "פירוק: `const { name } = user;`"],
     ["JSON", "ג'ֵייסוֹן", "פורמט טקסט לאובייקטים — השפה שבה שרתים מדברים"],
+    ["Date", "דֵייט", "אובייקט של רגע בזמן. בפנים — מספר אלפיות השנייה מ־1.1.1970 UTC (`getTime()`)"],
+    ["ISO 8601", "אַיי־אוֹ־אֶס", "פורמט תאריך כטקסט: `2026-11-19T08:30:00.000Z`"],
+    ["UTC", "יוּ־טִי־סִי", "השעון העולמי, בלי שעון קיץ. ה־`Z` בסוף זמן ISO"],
     ["Map", "מֶאפּ", "מבנה של מפתח ← ערך, עם חיפוש מהיר"],
     ["Set", "סֶט", "אוסף ערכים ייחודיים (בלי כפילויות)"],
   ],
@@ -73,6 +77,7 @@ ${verifyNode}`,
 <li>לצייר "קופסאות והפניות" לקוד שבו שני משתנים מצביעים על אותו אובייקט, ולהסביר את הבאג.</li>
 <li>לעדכן שדה באובייקט <strong>בלי לשנות את המקור</strong> (spread).</li>
 <li>להמיר אובייקט ל־JSON ובחזרה, ולהסביר מה קורה לפונקציות ולתאריכים.</li>
+<li>לחשב כמה ימים עברו בין שני זמני ISO, ולהסביר למה <code>getUTCMonth()</code> מחזיר 2 למרץ ולמה כותבים <code>Z</code>.</li>
 <li>לחבר שני מערכים (הזמנות ולקוחות) לפי מזהה עם <code>Map</code>.</li>
 <li><code>npm run check P07</code>: 80% מ־E06–E19, ולפחות תרגיל תיקון אחד.</li>
 </ul>`,
