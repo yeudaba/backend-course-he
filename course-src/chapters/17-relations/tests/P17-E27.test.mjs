@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
+import { assertSameRows } from "../../tools/rows.mjs";
+import { isDeepStrictEqual } from "node:util";
 
 test("P17-E27: התוצאה (עמודות, שורות וסדר)", async (t) => {
   const db = await sandbox(t, import.meta.url, "store.sql");
@@ -8,9 +10,12 @@ test("P17-E27: התוצאה (עמודות, שורות וסדר)", async (t) => {
   const expected = await db.expectedRows("P17-E27.sql");
   assert.deepEqual(Object.keys(got?.[0] ?? {}), Object.keys(expected[0]), "שמות העמודות והסדר שלהן (full_name, order_id, order_no, total, running_total)");
   assert.equal(got.length, expected.length, "מספר ההזמנות (רק כאלה שלא בוטלו)");
-  assert.deepEqual(got.map((r) => r.order_no), expected.map((r) => r.order_no), "order_no — מתחיל מ־1 לכל לקוח (PARTITION BY)");
-  assert.deepEqual(got.map((r) => r.running_total), expected.map((r) => r.running_total), "running_total — סכום מצטבר לכל לקוח (SUM ... OVER (PARTITION BY ... ORDER BY ...))");
-  assert.deepEqual(got, expected);
+  assert.ok(isDeepStrictEqual(got.map((r) => r.order_no), expected.map((r) => r.order_no)), "order_no — מתחיל מ־1 לכל לקוח (PARTITION BY)");
+  assert.ok(isDeepStrictEqual(got.map((r) => r.running_total), expected.map((r) => r.running_total)), "running_total — סכום מצטבר לכל לקוח (SUM ... OVER (PARTITION BY ... ORDER BY ...))");
+  assertSameRows(got, expected);
+});
+test("P17-E27: נתונים נסתרים", async (t) => {
+  await sameAsSolution(t, import.meta.url, "P17-E27.sql", { seed: "store.sql" });
 });
 test("P17-E27: לקוח עם שתי הזמנות באותו שם", async (t) => {
   const db = await sandbox(t, import.meta.url, "store.sql");

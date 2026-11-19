@@ -543,7 +543,13 @@ ${pager(
   });
 
   // קבצים נלווים
-  for (const sub of ["starter", "solutions", "tests", "files"]) copyDir(path.join(ch.dir, sub), path.join(outDir, sub));
+  // tests/mutants/ (פתרונות שגויים לרגרסיה של הבודקים) נשאר ב־course-src ולא מגיע ללומד
+  const mutantsDir = path.join(ch.dir, "tests", "mutants");
+  const notMutants = (from) => from !== mutantsDir && !from.startsWith(mutantsDir + path.sep);
+  for (const sub of ["starter", "solutions", "tests", "files"]) {
+    const from = path.join(ch.dir, sub);
+    if (fs.existsSync(from)) fs.cpSync(from, path.join(outDir, sub), { recursive: true, filter: sub === "tests" ? notMutants : undefined });
+  }
 
   // דף פתיחה
   const lessonCards = lessons
@@ -624,8 +630,29 @@ function verifyTests(ch) {
       const st = run("starter");
       if (st.status === 0) problems.push(`${ch.slug}/${t}: עובר גם על קובץ ההתחלה`);
     }
+    // רגרסיה של הבודק (HANDOFF 7.8): כל מוטנט ב־tests/mutants/<ID>/<שם>/ הוא פתרון שגוי סביר — הקבצים בו
+    // מחליפים את קובצי solutions/ (קובץ _DELETE: רשימת קבצים למחיקה). הבודק חייב להיכשל על כל אחד מהם.
+    const id = t.replace(".test.mjs", "");
+    const mutDir = path.join(ch.dir, "tests", "mutants", id);
+    if (!fs.existsSync(mutDir)) continue;
+    for (const m of fs.readdirSync(mutDir).filter((d) => fs.statSync(path.join(mutDir, d)).isDirectory()).sort()) {
+      const rel = `.mut-${id}-${m}`;
+      const dir = path.join(OUT, ch.slug, rel);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.cpSync(path.join(OUT, ch.slug, "solutions"), dir, { recursive: true });
+      fs.cpSync(path.join(mutDir, m), dir, { recursive: true, filter: (f) => path.basename(f) !== "_DELETE" });
+      const del = path.join(mutDir, m, "_DELETE");
+      if (fs.existsSync(del)) for (const f of fs.readFileSync(del, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+      mutantDirs.push(dir);
+      const r = run(rel);
+      if (r.status === 0) problems.push(`${ch.slug}/${t}: עובר על המוטנט tests/mutants/${id}/${m} (הבודק אמור להיכשל עליו)`);
+      fs.rmSync(dir, { recursive: true, force: true });
+      mutantCount++;
+    }
   }
 }
+const mutantDirs = [];
+let mutantCount = 0;
 
 // ---------- דף הבית ומילון ----------
 function buildHome(chapters) {
@@ -694,6 +721,7 @@ process.on("exit", () => {
   for (const dir of generatedDirs) {
     for (const g of ["generated", "dist", path.join("src", "generated")]) fs.rmSync(path.join(dir, g), { recursive: true, force: true });
   }
+  for (const dir of mutantDirs) fs.rmSync(dir, { recursive: true, force: true });
   if (linkedModules) fs.unlinkSync(path.join(OUT, "node_modules"));
   fs.rmSync(path.join(SRC, ".run"), { recursive: true, force: true });
 });
@@ -738,4 +766,4 @@ if (warnings.length) {
 if (problems.length) {
   console.error(`\n✘ ${problems.length} בעיות:\n\n` + problems.join("\n\n"));
   process.exit(1);
-} else if (VERIFY) console.log(`✔ כל הדוגמאות והבדיקות אומתו (${runCount} דוגמאות קוד הורצו).`);
+} else if (VERIFY) console.log(`✔ כל הדוגמאות והבדיקות אומתו (${runCount} דוגמאות קוד הורצו, ${mutantCount} מוטנטים נכשלו כמו שצריך).`);

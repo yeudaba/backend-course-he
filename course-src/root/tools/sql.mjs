@@ -3,7 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
 import pg from "pg";
+import { assertSameRows, parseVariants, splitSql } from "./rows.mjs";
 
 // מספרים גדולים ו־numeric ← number; DATE ← מחרוזת "2026-11-01" (בלי הפתעות של אזור זמן)
 pg.types.setTypeParser(20, Number);
@@ -96,3 +98,74 @@ export async function sandbox(t, testUrl, seed) {
   };
   return db;
 }
+
+// מזיז חצי מהשורות של כל טבלה לסוף הקובץ הפיזי (UPDATE שלא משנה ערך) — כך שאילתה בלי ORDER BY
+// מחזירה סדר אחר מסדר ההכנסה. mode 0/1 — אילו שורות זזות (זוגיות/אי־זוגיות)
+async function shuffle(client, schema, mode = 0) {
+  const tables = (await client.query(
+    `SELECT c.table_name, MIN(c.column_name) FILTER (WHERE c.is_identity = 'NO' AND c.is_generated = 'NEVER') AS col
+     FROM information_schema.columns c JOIN information_schema.tables t USING (table_schema, table_name)
+     WHERE c.table_schema = $1 AND t.table_type = 'BASE TABLE' GROUP BY c.table_name`, [schema])).rows;
+  for (const { table_name: tb, col } of tables) {
+    if (!col) continue;
+    await client.query(`UPDATE "${tb}" SET "${col}" = "${col}" WHERE ctid IN (SELECT ctid FROM (SELECT ctid, row_number() OVER (ORDER BY ctid) AS rn FROM "${tb}") s WHERE rn % 2 = ${mode})`);
+  }
+}
+
+const resultOf = (res) => (Array.isArray(res) ? res.at(-1) : res);
+
+// הבודק הסטנדרטי לשאלות SQL: מריץ את הקובץ שלך ואת הפתרון לדוגמה, כל אחד ב־schema נקי, על כמה מערכי נתונים:
+//   1. קובץ הנתונים (seed) כמו שהוא;
+//   2. כל קטע ב־files/<seed>.variants.sql (נתונים נוספים ושינויים — כדי שתשובה "מועתקת" או WHERE id IN (...) לא יעברו),
+//      ואחרי כל קטע השורות מוזזות פיזית (כדי ש־ORDER BY חסר ייתפס);
+//   3. changes — שינויים ספציפיים לשאלה: [["תיאור", "SQL"], ...].
+// after: לקובץ שבונה טבלה בעצמו — SQL שרץ אחרי הקובץ שלך, ואז הפקודה האחרונה בקובץ רצה שוב.
+// אם יש הבדל — הודעה עם רמז (מה חסר / עודף / הסדר), בלי להציג את כל התשובה.
+export async function sameAsSolution(t, testUrl, file, { seed, changes = [], variants = true, after } = {}) {
+  const solutionText = fs.readFileSync(chapterPath(testUrl, "solutions", file), "utf8");
+  const sets = [{ label: seed ? `על הנתונים של ${seed}` : "", sql: "" }];
+  const vfile = seed && chapterPath(testUrl, "files", seed.replace(/\.sql$/, ".variants.sql"));
+  if (variants && vfile && fs.existsSync(vfile)) {
+    const vs = parseVariants(fs.readFileSync(vfile, "utf8"));
+    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql, shuffle: true }));
+  }
+  for (const [label, sql] of changes) sets.push({ label, sql, shuffle: true });
+
+  const run = async (text, set, mode) => {
+    const db = await sandbox(t, testUrl, seed);
+    if (set.sql) await db.query(set.sql);
+    if (mode !== undefined) await shuffle(db.client, db.schema, mode);
+    let res = resultOf(await db.client.query(text));
+    if (after) {
+      await db.query(after);
+      res = resultOf(await db.client.query(splitSql(text).at(-1)));
+    }
+    return { rows: res?.rows ?? [], columns: (res?.fields ?? []).map((f) => f.name) };
+  };
+  const mineText = () => {
+    const target = chapterPath(testUrl, process.env.CHECK_TARGET || "starter", file);
+    const text = fs.readFileSync(target, "utf8");
+    if (!text.replace(/--.*$/gm, "").trim()) throw new Error(`הקובץ ${file} ריק — כתוב בו את הפתרון שלך`);
+    return text;
+  };
+  const text = mineText();
+  for (const set of sets) {
+    const mode = set.shuffle ? 0 : undefined;
+    let got;
+    try {
+      got = await run(text, set, mode);
+    } catch (err) {
+      if (!set.sql) throw err;
+      assert.fail(`${set.label}: השאילתה שלך נכשלה — ${err.message}`);
+    }
+    const exp = await run(solutionText, set, mode);
+    // אם הפתרון עצמו מחזיר סדר אחר כשהשורות זזות — הסדר לא מוגדר בשאלה, ולא בודקים אותו
+    let ordered = true;
+    if (rowsKey(got.rows) !== rowsKey(exp.rows)) {
+      const exp2 = await run(solutionText, set, mode === 0 ? 1 : 0);
+      ordered = rowsKey(exp2.rows) === rowsKey(exp.rows);
+    }
+    assertSameRows(got.rows, exp.rows, set.label, { gotColumns: got.columns, expectedColumns: exp.columns, ordered });
+  }
+}
+const rowsKey = (rows) => JSON.stringify(rows);

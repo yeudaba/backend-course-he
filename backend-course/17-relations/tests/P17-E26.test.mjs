@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 
 const rejects = async (db, sql, msg) => assert.rejects(db.query(sql), undefined, `${msg} — המסד היה צריך לסרב`);
 const accepts = async (db, sql, msg) => {
@@ -13,11 +13,10 @@ const accepts = async (db, sql, msg) => {
 const count = async (db, table) => (await db.rows(`SELECT COUNT(*) AS n FROM ${table}`))[0].n;
 
 test("P17-E26: ההשאלות הפתוחות (עמודות, שורות וסדר)", async (t) => {
-  const db = await sandbox(t, import.meta.url);
-  const got = await db.fileRows("P17-E26.sql");
-  const expected = await db.expectedRows("P17-E26.sql");
-  assert.deepEqual(Object.keys(got?.[0] ?? {}), Object.keys(expected[0]), "שמות העמודות והסדר שלהן (title, member, loaned_on)");
-  assert.deepEqual(got, expected);
+  // אחרי הקובץ שלך הבודק מוסיף עוד השאלות ומריץ שוב את השאילתה האחרונה — כדי שתוצאה מועתקת לא תעבור
+  await sameAsSolution(t, import.meta.url, "P17-E26.sql", {
+    after: "INSERT INTO loans (book_id, member_id, loaned_on, returned_on) VALUES (1, 2, '2026-10-15', NULL), (3, 2, '2026-09-01', '2026-09-20'); UPDATE loans SET returned_on = '2026-11-05' WHERE book_id = 2 AND member_id = 2 AND loaned_on = '2026-10-20'",
+  });
 });
 test("P17-E26: הנתונים", async (t) => {
   const db = await sandbox(t, import.meta.url);
