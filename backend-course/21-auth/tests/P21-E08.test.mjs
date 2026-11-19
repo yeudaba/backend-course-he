@@ -28,4 +28,6 @@ test("כפילות ו־mass assignment", async (t) => {
   assert.ok(res.body.message.includes("property role should not exist"));
   assert.equal((await call("POST", "/auth/register", { email: "nope", password: "long-password-1" })).status, 400);
   assert.equal((await call("POST", "/auth/register", { email: "ok@example.com", password: "short" })).status, 400);
+  assert.equal((await call("POST", "/auth/register", { email: "ok@example.com", password: "1234567" })).status, 400, "סיסמה של 7 תווים — פחות מ־8");
+  assert.equal((await call("POST", "/auth/register", { email: "ok@example.com", password: "12345678" })).status, 201, "סיסמה של 8 תווים בדיוק — מותרת");
 });
