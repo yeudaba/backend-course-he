@@ -17,6 +17,14 @@ test("JSON תקין, גם כשאות נחתכת", async () => {
   assert.deepEqual(await readJsonBody(fakeReq(chunks, "application/json; charset=utf-8")), { name: "שלום עולם" });
 });
 test("415", () => assert.rejects(readJsonBody(fakeReq(["{}"], "text/plain")), { status: 415, message: "Content-Type חייב להיות application/json" }));
+test("415 נבדק לפני שקוראים את הגוף", async () => {
+  let produced = 0;
+  async function* endless() { while (true) { produced++; yield Buffer.alloc(100, 32); } }
+  const req = Readable.from(endless());
+  req.headers = { "content-type": "text/plain" };
+  await assert.rejects(readJsonBody(req), { status: 415 }, "גוף אינסופי עם text/plain — 415 מיד, בלי לקרוא");
+  assert.ok(produced <= 2, `נקראו ${produced} חתיכות לפני ה־415 — בדוק את Content-Type לפני הלולאה`);
+});
 test("415 בלי header", () => assert.rejects(readJsonBody(fakeReq(["{}"], null)), { status: 415 }));
 test("413 — עוצרים מוקדם", async () => {
   let produced = 0;

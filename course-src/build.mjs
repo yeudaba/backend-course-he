@@ -22,6 +22,7 @@ const warnings = [];
 // כללי תרגול ותצוגה שהם שגיאה — כל ההפרות הקיימות שלהם תוקנו. כלל עובר לכאן רק כשאין לו אף הפרה (HANDOFF 7.6)
 const STRICT = new Set([
   "test-no-robot", // יש tests/<ID>.test.mjs ואין 🤖 בכותרת
+  "robot-no-test", // 🤖 בכותרת ואין tests/<ID>.test.mjs (HANDOFF 7.8)
   "orphan-test", // בודק בלי תרגיל (חוץ מבודקי פרויקט PR*)
   "checker-flag", // יש בודקים לתרגילים ואין checker: true
   "understand-test", // שאלת הבנה עם בודק
@@ -32,7 +33,7 @@ const STRICT = new Set([
   "nested-code", // <code> בתוך <code> בדף בנוי
   "table-wrap", // <table> בלי <div class="table-wrap">
 ]);
-// אזהרה בלבד: robot-no-test, ‏missing-field, ‏understand-explained, ‏code-test, ‏level4
+// אזהרה בלבד: ‏missing-field, ‏understand-explained, ‏code-test, ‏level4
 const flag = (rule, msg) => (STRICT.has(rule) ? problems.push(`[${rule}] ${msg}`) : warnings.push({ rule, msg: `[${rule}] ${msg}` }));
 let runCount = 0;
 let currentOutDir = null;
