@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertSameRows } from "../../tools/rows.mjs";
 import fs from "node:fs";
 import { target } from "../../tools/load.mjs";
 import { sameAsSolution } from "./_sqlcheck.mjs";
 
 test("התוצאה", async (t) => {
   const { got, expected } = await sameAsSolution(t, import.meta.url, "P25.5-E36.sql", { seed: "basics.sql" });
-  assert.deepEqual(got, expected);
+  assertSameRows(got, expected);
 });
 test("באמת דרך time_zone של החיבור", async (t) => {
   const text = fs.readFileSync(target(import.meta.url, "P25.5-E36.sql"), "utf8").replace(/--.*$/gm, "");
