@@ -18,7 +18,8 @@ test("pagination", async (t) => {
 });
 test("query לא תקין ← 400", async (t) => {
   const { call } = await nestApp(t, ProductsModule, { validation: true });
-  for (const q of ["page=0", "limit=51", "page=abc", "limit=2.5"]) {
+  for (const q of ["limit=50", "limit=1"]) assert.equal((await call("GET", "/products?" + q)).status, 200, `${q} — בתוך הטווח`);
+  for (const q of ["page=0", "limit=51", "page=abc", "limit=2.5", "limit=0", "page=-1"]) {
     assert.equal((await call("GET", "/products?" + q)).status, 400, q);
   }
 });

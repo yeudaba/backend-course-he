@@ -1,8 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { loadNest, nestApp } from "../../tools/nest.mjs";
 
-const { PingModule, LOGGER } = loadNest(import.meta.url, "P20-E15.ts");
+const { PingModule, LOGGER, TimingInterceptor } = loadNest(import.meta.url, "P20-E15.ts");
+
+test("נרשם לכל האפליקציה: APP_INTERCEPTOR ב־providers של ה־module", () => {
+  const { APP_INTERCEPTOR } = createRequire(import.meta.url)("@nestjs/core");
+  const providers = Reflect.getMetadata("providers", PingModule) ?? [];
+  const global = providers.find((p) => p && typeof p === "object" && p.provide === APP_INTERCEPTOR);
+  assert.ok(global, "לא מצאנו { provide: APP_INTERCEPTOR, useClass: TimingInterceptor } ב־providers של PingModule — @UseInterceptors על controller חל רק עליו, לא על כל האפליקציה");
+  assert.equal(global.useClass, TimingInterceptor, "APP_INTERCEPTOR צריך להצביע על TimingInterceptor (useClass)");
+});
 
 test("X-Response-Time ושורת לוג", async (t) => {
   const lines = [];

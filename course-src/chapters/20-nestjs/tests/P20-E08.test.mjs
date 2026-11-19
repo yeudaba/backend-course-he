@@ -21,5 +21,8 @@ test("ולידציה ← 400 עם רשימת הודעות", async (t) => {
   }
   assert.equal((await call("POST", "/products", { name: "Mug", price: 1.234, stock: 1 })).status, 400, "יותר משתי ספרות אחרי הנקודה");
   assert.equal((await call("POST", "/products", { name: "Mug", price: 1, stock: 1, isActive: "yes" })).status, 400);
+  assert.equal((await call("POST", "/products", { name: "Mug", price: 100_000.01, stock: 1 })).status, 400, "price מעל 100,000");
+  assert.equal((await call("POST", "/products", { name: "M".repeat(81), price: 1, stock: 1 })).status, 400, "name באורך 81 — מעל 80");
   assert.equal((await call("GET", "/products")).body.length, 0, "שום מוצר לא נשמר");
+  assert.equal((await call("POST", "/products", { name: "M".repeat(80), price: 100_000, stock: 0 })).status, 201, "name באורך 80 ו־price של 100,000 — מותרים (הגבולות עצמם)");
 });
