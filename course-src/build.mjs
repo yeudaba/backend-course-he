@@ -103,8 +103,9 @@ function renderFences(src, ctx) {
 }
 
 function inline(text) {
-  // `קוד` → <code>, מחוץ לתגיות svg/pre שנכתבו ידנית
-  return text.replace(/(<svg[\s\S]*?<\/svg>|<pre[\s\S]*?<\/pre>)|`([^`\n]+)`/g, (all, keep, code) =>
+  // `קוד` → <code>, מחוץ לתגיות svg/pre/code שנכתבו ידנית
+  // (backtick בתוך <code>…</code> ידני — למשל template literal — נשאר כמו שהוא, בלי <code> מקונן)
+  return text.replace(/(<svg[\s\S]*?<\/svg>|<pre[\s\S]*?<\/pre>|<code\b[^>]*>[\s\S]*?<\/code>)|`([^`\n]+)`/g, (all, keep, code) =>
     keep ? keep : `<code>${esc(code)}</code>`
   );
 }
