@@ -433,6 +433,43 @@ export async function handleJob(job: { name: string; data: { orderId: number } }
 
 </div></details>
   </div>
+<div class="ex" id="P26-E122">
+    <h3>P26-E122 · cache שמפיל את החנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code>redis-cli TTL product:1</code> אחרי ה־MISS הראשון: מה התוצאה? ומה נשמר כשה־<code>load</code> מחזיר <code>null</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>SET key value</code> בלי <code>EX</code> שומר לתמיד. ‏<code>JSON.stringify(null)</code> הוא <code>"null"</code>, וזה ערך שנמצא ב־GET. וקריאה ל־Redis שזורקת — מי תופס אותה?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E122: cache-aside לדף מוצר — מתוקן
+import type { Redis } from "ioredis";
+
+export async function cachedProduct&lt;P&gt;(redis: Redis | null, id: number, load: (id: number) =&gt; Promise&lt;P | null&gt;, ttlSec = 60) {
+  const key = `product:${id}`;
+  if (!redis) return { product: await load(id), cache: "OFF" as const };
+  let cached: string | null;
+  try {
+    cached = await redis.get(key);
+  } catch {
+    return { product: await load(id), cache: "OFF" as const };
+  }
+  if (cached !== null) return { product: JSON.parse(cached) as P, cache: "HIT" as const };
+  const product = await load(id);
+  if (product !== null) await redis.set(key, JSON.stringify(product), "EX", ttlSec).catch(() =&gt; {});
+  return { product, cache: "MISS" as const };
+}</code></pre>
+<ol><li><strong>‏<code>redis.get</code> בלי try/catch.</strong> כש־Redis לא זמין, החריגה עלתה עד ה־route, ונהיה 500. cache הוא שיפור ביצועים: כשהוא נופל, חוזרים למסד. גם <code>set</code> שנכשל לא מפיל.</li><li><strong>‏<code>SET</code> בלי <code>EX</code>.</strong> המוצר נשמר לתמיד, ולכן שינוי מחיר במסד לא הגיע לאתר. ‏TTL הוא הגבול העליון לנתון ישן.</li><li><strong>‏<code>null</code> נשמר כ־<code>"null"</code>.</strong> ‏<code>GET</code> מחזיר את המחרוזת <code>"null"</code>, שאינה <code>null</code>, ולכן זה נחשב HIT עם מוצר <code>null</code>, לתמיד. לא שומרים "לא נמצא" (או שומרים לזמן קצר מאוד, בכוונה).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>if (cached)</code> במקום <code>cached !== null</code>. כאן זה עובד, כי JSON של מוצר לא ריק; אבל בערכים כמו <code>"0"</code> או <code>""</code> זה מפספס HIT.</li><li>לתפוס את השגיאה ולהחזיר <code>{ product: null }</code>. Redis נפל, והלקוח רואה "המוצר לא נמצא".</li><li>‏<code>redis.expire</code> בפקודה נפרדת אחרי <code>set</code>. אם התהליך נופל ביניהן, המפתח נשאר בלי TTL.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P26-E100">
     <h3>P26-E100 · ‏depends_on עם healthcheck <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
