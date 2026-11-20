@@ -48,7 +48,7 @@ test("שגיאות לא מקריסות", () => {
   assert.equal(exec("add", "2026-02-01"), 1);
   assert.equal(fs.existsSync(filePath), false, "לא נשמר קובץ אחרי שגיאה");
   assert.equal(exec("oops"), 1);
-  assert.ok(out.at(-1).startsWith("פקודה לא מוכרת: oops"));
+  assert.ok(out.at(-1).startsWith("פקודה לא מוכרת: oops"), `על פקודה לא מוכרת ציפינו להודעה שמתחילה ב־"פקודה לא מוכרת: oops", וקיבלנו: ${JSON.stringify(out.at(-1))}`);
   assert.equal(exec("help"), 0);
-  assert.ok(out.at(-1).startsWith("שימוש:"));
+  assert.ok(out.at(-1).startsWith("שימוש:"), `על help ציפינו ל־HELP (מתחיל ב־"שימוש:"), וקיבלנו: ${JSON.stringify(out.at(-1))}`);
 });

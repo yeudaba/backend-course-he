@@ -9,7 +9,7 @@ const base = () => [
   { id: 5, date: "2026-11-02", category: "food", amount: 31.2, note: "" },
 ];
 
-test("expenseError", () => { const e = m.expenseError("X", "msg"); assert.ok(e instanceof Error); assert.equal(e.code, "X"); assert.equal(e.message, "msg"); });
+test("expenseError", () => { const e = m.expenseError("X", "msg"); assert.ok(e instanceof Error, "expenseError צריכה להחזיר new Error(message) עם שדה code — וקיבלנו משהו שאינו Error"); assert.equal(e.code, "X"); assert.equal(e.message, "msg"); });
 test("isValidDate", () => {
   for (const d of ["2026-10-01", "2024-02-29", "2026-12-31"]) assert.equal(m.isValidDate(d), true, d);
   for (const d of ["2026-02-30", "2026-13-01", "2026-1-5", "abc", "2026-10-00", ""]) assert.equal(m.isValidDate(d), false, d);
