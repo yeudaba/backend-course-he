@@ -18,6 +18,8 @@ test("parseMemory ← בתים: Mi (בינארי) מול M (עשרוני)", () =
   assert.equal(parseMemory("1Gi"), 2 ** 30);
   assert.equal(parseMemory("1.5Gi"), 1.5 * 2 ** 30);
   assert.equal(parseMemory("64Ki"), 65536);
+  assert.equal(parseMemory("64k"), 64_000, "k (קטנה) — עשרוני: 1000");
+  assert.equal(parseMemory("2G"), 2_000_000_000);
   assert.equal(parseMemory("1000"), 1000);
   for (const bad of ["", "512mb", "1GB", "Mi"]) assert.throws(() => parseMemory(bad), undefined, `"${bad}"`);
 });
