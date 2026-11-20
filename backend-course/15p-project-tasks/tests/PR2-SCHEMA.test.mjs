@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../../tools/load.mjs";
 
-const { createTaskSchema, updateTaskSchema, listQuerySchema, idParamsSchema } = await load(import.meta.url, "tasks-api/src/tasks/tasks.schema.ts");
+const { createTaskSchema, updateTaskSchema, listQuerySchema, idParamsSchema } = await load(import.meta.url, "tasks-api/src/tasks/tasks.schema.ts", { step: "שלב 1", exports: "createTaskSchema, updateTaskSchema, listQuerySchema ו־idParamsSchema" });
 const fails = (schema, input) => assert.equal(schema.safeParse(input).success, false, `היה צריך להיכשל: ${JSON.stringify(input)}`);
 
 test("createTaskSchema — ברירות מחדל וניקוי", () => {

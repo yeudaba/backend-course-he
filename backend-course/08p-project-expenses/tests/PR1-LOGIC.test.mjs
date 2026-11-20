@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../../tools/load.mjs";
 
-const m = await load(import.meta.url, "expenses-cli/src/expenses.js");
+const m = await load(import.meta.url, "expenses-cli/src/expenses.js", { step: "שלב 1", exports: "את פונקציות הלוגיקה (isValidDate, addExpense, monthlySummary ועוד)" });
 const base = () => [
   { id: 1, date: "2026-10-01", category: "food", amount: 54.5, note: "lunch" },
   { id: 2, date: "2026-10-03", category: "transport", amount: 12, note: "" },

@@ -583,6 +583,10 @@ node course-src/build.mjs --fill 18            # כמו --verify, אבל ממל�
 
 **מה נשאר פתוח:** מוטנטים שלא נבדקים בלי בדיקה שבירה — השוואת זמנים ב־login (dummy hash, PR3-AUTH), החזר כספי בביטול (PR3-PAY; אין דרך לראות מבחוץ), עדכון מנהל קיים בעלייה חוזרת (PR3-AUTH), תשלום כפול במקביל עם מפתחות שונים (PR3-PAY — הבדיקה נוספה, אבל המרוץ לא משתחזר), ו־טרנזקציה ב־contract של P25-E67. הבודקים של פרויקט 3 לוקחים 10–20 שניות כל אחד (עליית Nest + bcrypt) — מעל הכלל של 10 שניות.
 
+**חריג מאושר:** בודקי פרויקט 3 (‏`25p`, ‏PR3-*) רשאים לרוץ 10–20 שניות כל אחד — המשתמש אישר; אין לקצר אותם על חשבון הכיסוי. **PR2-TESTS נשאר בלי מוטנט — בהחלטה** (פרויקט Jest כבד, נבדק ידנית); לא לסמן אותו כחוסר.
+
+**קובץ חסר בפרויקט (‏08p, ‏15p, ‏25p, ‏29x):** ‏`load(testUrl, file, { step, exports })` ב־`tools/load.mjs` לא זורק `ERR_MODULE_NOT_FOUND` גולמי: "לא נמצא src/ingest.ts — צור אותו לפי הדרישות בשלב 1 ויצא ממנו createIngestServer(…)", "src/x.ts מייבא את src/y.ts, שלא נמצא", ו"החבילה express לא מותקנת — הרץ npm install". ב־29x הרמזים בטבלה `HINTS` ב־`tests/_events.mjs`; ב־`startApp` (‏`tools/app.mjs`) — ‏prisma חסר ← "הרץ npm install", ו־`dist/main.js` חסר ← "npm run build". בודק פרויקט חדש — להעביר `{ step, exports }`.
+
 ### 7.9 עדכון 20.11.2026 — השלמת מערך התרגול (סוכן `exercise-coach`, ענף `claude/practice-quality`)
 - **אזהרות לפני ← אחרי:** ‏`missing-field` ‏88 ← 0, ‏`understand-explained` ‏25 ← 0, ‏`level4` ‏51 ← 0, ‏`code-test` ‏20 ← 17 (רק תרגילי ה־Terminal של פרק 9, חריג מכוון).
 - **עברו ל־`STRICT`:** ‏`missing-field`, ‏`understand-explained`, ‏`level4`. מעכשיו: כל תרגיל חייב `@hint1`, ‏`@hint2` ו־`@mistakes`; פתרון של שאלת הבנה חייב משפט "למה" (‏`hasExplanation`); ובכל שיעור חייב להיות תרגיל ברמה 4.
