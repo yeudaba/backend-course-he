@@ -28,3 +28,10 @@ test("טווח ריק", async (t) => {
   const { db } = await mongoSandbox(t, import.meta.url);
   assert.deepEqual(await dashboard(db, new Date("2020-01-01"), new Date("2020-02-01")), { byDay: [], byStatus: {}, topProducts: [] });
 });
+test("הזמנה בדיוק ב־from — בפנים (טווח חצי־פתוח [from, to))", async (t) => {
+  const { db } = await mongoSandbox(t, import.meta.url);
+  const from = new Date("2026-12-01T00:00:00Z");
+  await db.collection("orders").insertOne({ _id: "edge", customerId: "c1", status: "pending", createdAt: from, items: [{ productId: "p1", price: 10, qty: 1 }], total: 10 });
+  const r = await dashboard(db, from, new Date("2026-12-02T00:00:00Z"));
+  assert.deepEqual(r.byStatus, { pending: 1 });
+});
