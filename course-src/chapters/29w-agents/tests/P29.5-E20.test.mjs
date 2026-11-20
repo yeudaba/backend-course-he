@@ -33,3 +33,8 @@ test("באג 3: ה־assistant חוזר עם כל הבלוקים — tool_use ו�
   assert.ok(Array.isArray(asst.content), "content כמערך בלוקים, לא מחרוזת");
   assert.deepEqual(asst.content.map((b) => b.type), ["thinking", "text", "tool_use"]);
 });
+test("סוכן שלא מסיים — עוצר אחרי 10 צעדים בדיוק, עם שגיאה", async () => {
+  const { client, bodies } = fakeClaude(() => message([toolUse("a", {})], { stop_reason: "tool_use" }));
+  await assert.rejects(runSimpleAgent(client, { system: "s", tools, prompt: "go" }));
+  assert.equal(bodies().length, 10, "10 קריאות למודל, לא יותר");
+});

@@ -33,6 +33,7 @@ test("כל סוגי הבעיות, בסדר הקבוע", () => {
 test("גבולות", () => {
   assert.deepEqual(auditMcpTools([tool("x", "   exactly twenty ch   ".trim().padEnd(20, "."))]), [], "20 תווים — בסדר");
   assert.deepEqual(auditMcpTools([tool("x", "a".repeat(19))]), [{ tool: "x", problems: ["short_description"] }]);
+  assert.deepEqual(auditMcpTools([tool("x", "   short desc        ")]), [{ tool: "x", problems: ["short_description"] }], "רווחים בקצוות לא נספרים (trim)");
   assert.deepEqual(auditMcpTools([tool("x", "Returns the environment name (prod or dev).")]), [], "‏environment אינו .env");
   assert.deepEqual(auditMcpTools([{ name: "y", description: "Search orders, returns matching rows.", inputSchema: {} }]), [], "בלי properties");
 });

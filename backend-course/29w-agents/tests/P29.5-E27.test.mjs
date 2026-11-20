@@ -27,6 +27,7 @@ test("קלט תקין ← []", async () => {
   const validate = await get();
   assert.deepEqual(validate(ORDER, { customerEmail: "d@x.com", items: [{ productId: 3, qty: 2 }] }), []);
   assert.deepEqual(validate(ORDER, { customerEmail: "d@x.com", items: [], shipping: "express", gift: false, price: 0.5 }), []);
+  assert.deepEqual(validate(ORDER, { customerEmail: "d@x.com", items: [{ productId: 3, qty: 1 }], price: 0 }), [], "minimum — הגבול עצמו מותר (qty 1, ‏price 0)");
 });
 test("כל השגיאות, עם נתיב מלא", async () => {
   const validate = await get();

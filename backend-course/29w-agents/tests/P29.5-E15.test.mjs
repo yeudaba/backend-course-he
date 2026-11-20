@@ -60,3 +60,8 @@ test("עובד שלא קיים ← is_error; דוח ארוך מקוצר", async 
   assert.equal(results[0].is_error, true);
   assert.ok(results[1].content.length <= 2100, `הדוח ${results[1].content.length} תווים — מציף את ההקשר של המוביל`);
 });
+test("המוביל לא מסיים — עוצר אחרי maxSteps, עם שגיאה", async () => {
+  const { client, bodies } = fakeClaude(() => message([toolUse("delegate", { worker: "nobody", instructions: "x" })], { stop_reason: "tool_use" }));
+  await assert.rejects(runLead(client, { system: "s", task: "t", workers, maxSteps: 3 }));
+  assert.equal(bodies().length, 3, "3 קריאות למודל (maxSteps), לא יותר");
+});
