@@ -22,7 +22,7 @@ test("במקביל — אף צפייה לא הולכת לאיבוד", async (t) 
   assert.equal(await redis.hget("views:2026-11-08", "3"), "50", "HINCRBY אטומי — לא GET ואז SET");
 });
 test("topProducts", async (t) => {
-  const { redis } = await redisSandbox(t);
+  const { redis, raw, prefix } = await redisSandbox(t);
   for (const [id, n] of [[1, 3], [2, 5], [3, 1], [4, 5]]) for (let i = 0; i < n; i++) await trackView(redis, id, d1);
   await trackView(redis, 9, d2);
   const top = await topProducts(redis, "2026-11-08", 3);
@@ -30,4 +30,8 @@ test("topProducts", async (t) => {
   assert.deepEqual(top.slice(0, 2).map((x) => x.productId).sort(), [2, 4]);
   assert.equal(top[2].productId, 1);
   assert.deepEqual(await topProducts(redis, "2026-11-10", 3), []);
+  for (const key of await raw.keys(`${prefix}*2026-11-08*`)) {
+    const ttl = await raw.ttl(key);
+    assert.ok(ttl > 0 && ttl <= 7 * 86400, `למפתח ${key} אין TTL (${ttl}) — כל מפתח יומי (גם של הדירוג) צריך EXPIRE, אחרת הוא נשאר לנצח`);
+  }
 });
