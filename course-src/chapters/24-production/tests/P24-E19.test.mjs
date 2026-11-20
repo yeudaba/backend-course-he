@@ -15,6 +15,7 @@ async function start(t, opts) {
   app.get("/slow", (req, res) => setTimeout(() => { events.push("slow done"); res.json({ ok: true }); }, 300));
   app.get("/hang", () => {});
   const server = http.createServer(app);
+  server.keepAliveTimeout = 1000; // חיבור keep-alive שהתפנה אחרי התשובה נסגר אחרי שנייה (ברירת המחדל: 5) — שהבדיקה לא תחכה
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   t.after(() => server.closeAllConnections());
   g = gracefulShutdown(server, { onClose: async () => { events.push("onClose"); }, ...opts });
@@ -50,12 +51,17 @@ test("חיבורים חדשים — נדחים", async (t) => {
   await g.shutdown();
   await assert.rejects(fetch(base + "/fast"), "השרת לא מקבל חיבורים");
 });
-test("timeout ← סגירה בכוח", async (t) => {
+test("timeout ← סגירה בכוח", { timeout: 10_000 }, async (t) => {
   const { g, get, events } = await start(t, { timeoutMs: 150 });
   const hang = get("/hang").catch((e) => e.code);
   await new Promise((r) => setTimeout(r, 30));
   const started = Date.now();
-  assert.deepEqual(await g.shutdown(), { forced: true });
+  let timer;
+  const stuck = new Promise((resolve) => { timer = setTimeout(() => resolve("stuck"), 3000); });
+  const result = await Promise.race([g.shutdown(), stuck]);
+  clearTimeout(timer);
+  assert.notEqual(result, "stuck", "shutdown לא הסתיים אחרי 3 שניות, למרות timeoutMs: 150 — בקשה תקועה צריכה להיסגר בכוח אחרי timeoutMs");
+  assert.deepEqual(result, { forced: true });
   const waited = Date.now() - started;
   assert.ok(waited >= 140 && waited < 1000, `חיכה ~150ms (${waited})`);
   assert.equal(await hang, "ECONNRESET", "הבקשה התקועה נותקה");

@@ -28,6 +28,7 @@ test("HttpException — status, code ו־requestId", async () => {
   const svc = await run(new HttpException("maintenance", 503));
   assert.equal(svc.status, 503);
   assert.deepEqual(svc.logs, [], "5xx מ־HttpException — לא warn");
+  assert.deepEqual((await run(new HttpException("x", 500))).logs, [], "500 בדיוק — גם לא warn");
 });
 test("שגיאה לא צפויה ← 500 בלי לחשוף", async () => {
   const r = await run(new Error('relation "tasks" does not exist'));

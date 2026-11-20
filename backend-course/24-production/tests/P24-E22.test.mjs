@@ -11,7 +11,7 @@ async function start(t) {
   let n = 0;
   let failNext = 0;
   app.post("/orders", (req, res) => {
-    if (failNext > 0) { failNext--; return res.status(503).json({ error: "db down" }); }
+    if (failNext > 0) { failNext--; return res.status(500).json({ error: "db down" }); }
     res.status(201).json({ id: ++n, owner: req.get("x-user-id"), item: req.body.item });
   });
   const { base, close } = await listen(app);
@@ -45,7 +45,7 @@ test("גוף אחר ← 422", async (t) => {
 test("5xx לא נשמר", async (t) => {
   const { post, fail } = await start(t);
   fail(1);
-  assert.equal((await post({ item: "ספר" }, "key-0001", "dana")).status, 503);
+  assert.equal((await post({ item: "ספר" }, "key-0001", "dana")).status, 500, "500 בדיוק — 5xx, לא נשמר");
   const retry = await post({ item: "ספר" }, "key-0001", "dana");
   assert.equal(retry.status, 201, "הניסיון החוזר באמת ניסה שוב");
 });

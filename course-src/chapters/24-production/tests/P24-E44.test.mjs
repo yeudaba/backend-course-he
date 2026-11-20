@@ -14,6 +14,7 @@ async function start(t, { withId = true } = {}) {
   app.get("/boom", () => { throw new Error("password authentication failed for user \"admin\""); });
   app.get("/teapot", () => { throw Object.assign(new Error("short and stout"), { status: 418 }); });
   app.get("/weird", () => { throw Object.assign(new Error("bad gateway"), { status: 502 }); });
+  app.get("/five", () => { throw Object.assign(new Error("db"), { status: 500 }); });
   app.get("/partial", (req, res, next) => { res.writeHead(200, { "content-type": "text/plain" }); res.write("part"); next(new Error("late")); });
   app.use(errorHandler((level, msg, fields) => logs.push({ level, msg, fields })));
   const { base, close } = await listen(app);
@@ -56,6 +57,8 @@ test("status אחר בטווח 4xx נשמר; 5xx מהשגיאה ← 500", async 
   assert.equal(b.status, 500, "status 502 על השגיאה הוא לא 'אשמת הלקוח'");
   assert.equal(b.body.error.code, "INTERNAL");
   assert.deepEqual(logs.map((l) => l.level), ["warn", "error"]);
+  const c = await call("GET", "/five");
+  assert.deepEqual([c.status, c.body.error.code], [500, "INTERNAL"], "status 500 על השגיאה — לא בטווח 4xx");
 });
 test("בלי requestId ← null", async (t) => {
   const { call } = await start(t, { withId: false });

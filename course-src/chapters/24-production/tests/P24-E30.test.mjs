@@ -17,3 +17,7 @@ test("escaping של ערכים", () => {
   const lines = renderHistogram({ name: "d", labels: { q: 'say "hi"\\' }, buckets: [1], values: [] });
   assert.equal(lines[0], 'd_bucket{q="say \\"hi\\"\\\\",le="1"} 0');
 });
+test("ערך ששווה בדיוק לגבול נספר בדלי (le = קטן או שווה)", () => {
+  const lines = renderHistogram({ name: "d", labels: { route: "/a" }, buckets: [0.1], values: [0.1] });
+  assert.equal(lines[0], 'd_bucket{route="/a",le="0.1"} 1');
+});
