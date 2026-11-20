@@ -17,6 +17,7 @@ test("הרשמה רגילה", async () => {
   await assert.rejects(r.register("dana@example.com ", "other-pass"), { message: "EMAIL_TAKEN" });
   assert.equal(r.size, 2);
   assert.equal(r.findByEmail("nobody@example.com"), undefined);
+  assert.equal(r.findByEmail("  dana@example.com ")?.id, 1, "findByEmail מנרמל גם רווחים");
 });
 test("5 הרשמות באותו רגע — בדיוק אחת מצליחה", async () => {
   const UsersRegistry = await get();
