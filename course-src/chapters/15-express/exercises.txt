@@ -5066,3 +5066,59 @@ x050-1234567y    true false
 <p>בלי עוגנים, כל מחרוזת שמכילה טלפון עוברת — כולל ספרה עודפת בסוף או זבל מסביב. עם <code>^...$</code> — רק טלפון בדיוק. ‏<code>+972-50-...</code> נכשל בשתיהן: אם רוצים לתמוך בו, מוסיפים אפשרות, או מנרמלים (<code>transform</code>) לפני הבדיקה.</p>
 @mistakes
 <ul><li>לבדוק את ה־regex רק עם דוגמאות טובות — "עובד". תמיד גם עם דוגמה שיש בה תוספת לפני ואחרי.</li></ul>
+
+@@ P15-E81 | 4 | המוצר שאף פעם לא נמצא 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>ב־<code>15-express/starter/P15-E81.ts</code>, ‏<code>createApp()</code> עם שלושה מוצרים בזיכרון:</p>
+<ul><li><code>GET /products/cheap</code> ← המוצרים שמחירם מתחת ל־10.</li><li><code>GET /products/:id</code> ← המוצר, או 404 <code>{ "error": "המוצר לא נמצא" }</code>.</li><li><code>POST /products</code> <code>{ name, price }</code> ← 201 והמוצר החדש, עם id הבא.</li></ul>
+<p>התלונות: כל <code>GET /products/1</code> מחזיר 404; ‏<code>/products/cheap</code> מחזיר "המוצר לא נמצא"; ו־POST מחזיר 500. מצא ותקן שלוש תקלות.</p>
+```term
+% npm run check P15-E81
+```
+@hint1
+<p>VS Code כבר מסמן אחת השורות באדום. קרא את ההודעה. ואחר כך הוסף <code>console.log(req.params, req.body)</code> בתחילת כל handler ושלח בקשות: מה הסוג של <code>req.params.id</code>, ומה <code>req.body</code>?</p>
+@hint2
+<p>Express בודק את ה־routes לפי הסדר שבו נרשמו, והראשון שמתאים עונה. איזה route מתאים גם ל־<code>/products/cheap</code>?</p>
+@solution
+```ts save=solutions/P15-E81.ts
+// P15-E81: מוצרים — מתוקן
+import express from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const products = [
+    { id: 1, name: "אספרסו", price: 9 },
+    { id: 2, name: "קפוצ׳ינו", price: 14 },
+    { id: 3, name: "עוגייה", price: 6 },
+  ];
+  let nextId = 4;
+
+  app.get("/products/cheap", (req, res) => {
+    res.json(products.filter((p) => p.price < 10));
+  });
+
+  app.get("/products/:id", (req, res) => {
+    const product = products.find((p) => p.id === Number(req.params.id));
+    if (!product) {
+      res.status(404).json({ error: "המוצר לא נמצא" });
+      return;
+    }
+    res.json(product);
+  });
+
+  app.post("/products", (req, res) => {
+    const { name, price } = req.body;
+    const product = { id: nextId++, name, price };
+    products.push(product);
+    res.status(201).json(product);
+  });
+
+  return app;
+}
+```
+<ol><li><strong><code>express.json()</code> חסר.</strong> בלי ה־middleware הזה הגוף לא נקרא, ו־<code>req.body</code> הוא <code>undefined</code>. ‏destructuring מתוך <code>undefined</code> זורק <code>TypeError</code>, ו־Express מחזיר 500.</li><li><strong>id כמחרוזת.</strong> כל מה שמגיע מהכתובת הוא מחרוזת: <code>req.params.id</code> הוא <code>"1"</code>, ו־<code>1 === "1"</code> הוא <code>false</code>. ממירים עם <code>Number</code>.</li><li><strong>סדר ה־routes.</strong> <code>/products/:id</code> נרשם קודם, והוא מתאים גם ל־<code>/products/cheap</code>, עם <code>id = "cheap"</code>. route קבוע נרשם לפני route עם פרמטר.</li></ol>
+@mistakes
+<ul><li>להשוות עם <code>==</code> במקום להמיר. זה עובד כאן, אבל מסתיר את ההבדל בין הסוגים, ונשבר במקומות אחרים (למשל <code>includes</code>).</li><li>לתקן את cheap עם <code>if (req.params.id === "cheap")</code> בתוך ה־route של id. הסדר הנכון פשוט יותר, ולא מערבב שני endpoints.</li><li>להחזיר 200 ב־POST. יצירה מוצלחת היא 201.</li></ul>
