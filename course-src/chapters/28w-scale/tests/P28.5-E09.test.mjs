@@ -18,4 +18,6 @@ test("כמה instances", () => {
 test("חיבורים למסד: 9 instances × pool של 20 מול max_connections 100", () => {
   assert.deepEqual(checkDbConnections({ instances: 9, poolPerInstance: 20, maxConnections: 100 }), { needed: 180, available: 90, ok: false, maxPoolPerInstance: 10 });
   assert.equal(checkDbConnections({ instances: 3, poolPerInstance: 20, maxConnections: 100 }).ok, true);
+  const exact = checkDbConnections({ instances: 3, poolPerInstance: 30, maxConnections: 100 });
+  assert.equal(exact.ok, exact.needed <= exact.available, "בדיוק כמו שיש — מספיק (<=)");
 });

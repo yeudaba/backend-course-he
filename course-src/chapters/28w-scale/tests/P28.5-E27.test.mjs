@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 
 const FILE = "P28.5-E27.sql";
 const norm = (rows) => rows.map((r) => [String(r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day).slice(0, 10), Number(r.views), Number(r.users), r.top_path, Number(r.top_path_views)]);
@@ -21,4 +21,7 @@ test("P28.5-E27: יום עם צפייה אחת, ונתיב שמוביל ביום
   const rows = norm(await db.fileRows(FILE));
   assert.deepEqual(rows[1], ["2026-11-02", 6, 3, "/checkout", 3], "צפייה נוספת ב־/checkout — עכשיו הוא מוביל");
   assert.deepEqual(rows[3], ["2026-11-04", 1, 1, "/zzz", 1]);
+});
+test("P28.5-E27: נתונים נסתרים (והשורות בסדר פיזי אחר)", async (t) => {
+  await sameAsSolution(t, import.meta.url, FILE, { seed: "views-days.sql", base: false });
 });

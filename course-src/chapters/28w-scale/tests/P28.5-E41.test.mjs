@@ -33,3 +33,10 @@ test("טיימרים נפרדים", () => {
   a.timed("x", async () => 1);
   assert.deepEqual(b.summary(), {});
 });
+test("percentile אחרי מיון — גם כשהזמנים לא מגיעים לפי הסדר", async () => {
+  let clock = 0;
+  const { timed, summary } = createTimer(() => clock);
+  const work = timed("x", async (ms) => { clock += ms; });
+  for (const ms of [10, 90, 70, 30, 50]) await work(ms);
+  assert.equal(summary().x.p50, 50);
+});
