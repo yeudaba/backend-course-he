@@ -4047,3 +4047,136 @@ export class HealthModule {}
 <p>בלי timeout, מסד "תקוע" מחזיק את <code>/health</code> עד ש־Docker מוותר (שניות ארוכות), ובינתיים כל בדיקה חדשה תופסת עוד חיבור. ‏503 (ולא 500) אומר למאזן העומסים "אל תשלח לי תנועה עכשיו" — וזה מה שהוא בודק.</p>
 @mistakes
 <ul><li>להחזיר 200 עם <code>{ db: "down" }</code> — רוב הכלים מסתכלים רק על ה־status, והשרת "בריא" בעיניהם.</li></ul>
+
+@@ P20-E84 | 4 | module שלא מחובר 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>ב־<code>20-nestjs/starter/P20-E84.ts</code> אפליקציה עם שני modules:</p>
+<ul><li><code>GreetingsModule</code>: ‏<code>GET /greetings/:lang</code> ← <code>{ text }</code> מ־<code>GreetingsService</code> (<code>he</code> ← "שלום", ‏<code>en</code> ← "Hello", כל השאר ← "Hello").</li><li><code>StatusModule</code>: ‏<code>GET /status</code> ← <code>{ status: "ok" }</code>.</li><li><code>AppModule</code> מחבר את שניהם.</li></ul>
+<p>האפליקציה לא עולה בכלל. אחרי שמתקנים את זה, <code>/status</code> מחזיר 404, וגם <code>/greetings/he</code>. מצא ותקן שלוש תקלות.</p>
+```term
+% npm run check P20-E84
+```
+@hint1
+<p>קרא את השגיאה כשהאפליקציה עולה: "Nest can't resolve dependencies of …". על איזו מחלקה היא מדברת, ומה חסר לה?</p>
+@hint2
+<p>מחלקה שמוזרקת צריכה להופיע ב־<code>providers</code> של ה־module. ‏module שלא נמצא ב־<code>imports</code> של AppModule לא קיים בשביל Nest. ובדוק את הנתיב ב־<code>@Controller</code>.</p>
+@solution
+```ts save=solutions/P20-E84.ts
+// P20-E84: שני modules — מתוקן
+import { Controller, Get, Injectable, Module, Param } from "@nestjs/common";
+
+@Injectable()
+export class GreetingsService {
+  greet(lang: string) {
+    return lang === "he" ? "שלום" : "Hello";
+  }
+}
+
+@Controller("greetings")
+export class GreetingsController {
+  constructor(private readonly greetings: GreetingsService) {}
+
+  @Get(":lang")
+  get(@Param("lang") lang: string) {
+    return { text: this.greetings.greet(lang) };
+  }
+}
+
+@Module({ controllers: [GreetingsController], providers: [GreetingsService] })
+export class GreetingsModule {}
+
+@Controller("status")
+export class StatusController {
+  @Get()
+  get() {
+    return { status: "ok" };
+  }
+}
+
+@Module({ controllers: [StatusController] })
+export class StatusModule {}
+
+@Module({ imports: [GreetingsModule, StatusModule] })
+export class AppModule {}
+```
+<ol><li><strong>‏<code>GreetingsService</code> לא ב־<code>providers</code>.</strong> ה־controller מבקש אותו ב־constructor, ו־Nest לא יודע מאיפה להביא אותו, ולכן האפליקציה לא עולה: <code>Nest can't resolve dependencies of the GreetingsController (?)</code>.</li><li><strong>‏<code>StatusModule</code> לא ב־<code>imports</code> של AppModule.</strong> ‏Nest בונה רק את מה שמחובר לעץ שמתחיל ב־AppModule. module שלא יובא — ה־routes שלו לא קיימים.</li><li><strong>‏<code>@Controller("greeting")</code></strong> ביחיד, והדרישה היא <code>/greetings</code>. הנתיב של ה־controller הוא הקידומת של כל ה־routes שלו.</li></ol>
+@mistakes
+<ul><li>לפתור את 1 עם <code>new GreetingsService()</code> בתוך ה־controller. זה עוקף את ה־DI, ובבדיקות אי אפשר להחליף את ה־service.</li><li>להוסיף את <code>StatusController</code> ל־<code>controllers</code> של AppModule. זה עובד, אבל עוקף את ה־module, וכל provider שלו יחסר.</li><li>לשים את <code>GreetingsService</code> ב־<code>providers</code> של AppModule. ‏providers לא עוברים בין modules בלי <code>exports</code>, ולכן ה־GreetingsModule עדיין לא מוצא אותו.</li></ul>
+
+@@ P20-E85 | 4 | configureApp שלא תופס כלום 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>ב־<code>20-nestjs/starter/P20-E85.ts</code> ה־<code>NotesModule</code> מ־P20-E72 (הוא תקין), ‏<code>ApiErrorFilter</code> ו־<code>configureApp(app)</code>. הדרישות מ־E72 לא השתנו: prefix ‏<code>api</code>; ולידציה שדוחה שדות שלא ב־DTO; וכל שגיאת HTTP חוזרת עם ה־status המקורי ובצורה <code>{ error: { code, message, details? } }</code>.</p>
+<p>הבדיקות של ה־frontend מראות:</p>
+<ul><li><code>POST /api/notes</code> עם שדה מיותר — 201, והשדה פשוט נבלע.</li><li>‏<code>POST /api/notes</code> עם <code>text: ""</code> — 400, אבל בצורה של Nest (<code>{ statusCode, message, error }</code>), לא בצורה שלנו.</li><li>‏<code>GET /api/notes/9</code> — הגוף בצורה שלנו, אבל ה־status הוא <strong>200</strong>.</li></ul>
+<p>מצא ותקן שלוש תקלות.</p>
+```term
+% npm run check P20-E85
+```
+@hint1
+<p>לכל תלונה: מי אחראי עליה? שדה מיותר — ה־pipe. צורת התשובה — ה־filter. ה־status — השורה שכותבת את התשובה.</p>
+@hint2
+<p>‏<code>ValidationPipe</code> בלי אפשרויות לא דוחה שדות מיותרים. ‏<code>@Catch(X)</code> תופס רק X וסוגים שיורשים ממנו. ו־<code>res.json(...)</code> לבד שולח 200.</p>
+@solution
+```ts save=solutions/P20-E85.ts
+// P20-E85: configureApp — מתוקן
+import { ArgumentsHost, Body, Catch, Controller, ExceptionFilter, Get, HttpException, INestApplication, Module, NotFoundException, Param, ParseIntPipe, Post, ValidationPipe } from "@nestjs/common";
+import { IsString, Length } from "class-validator";
+import type { Response } from "express";
+
+export class CreateNoteDto {
+  @IsString()
+  @Length(1, 200)
+  text: string;
+}
+
+@Controller("notes")
+export class NotesController {
+  private notes: { id: number; text: string }[] = [];
+
+  @Post()
+  create(@Body() dto: CreateNoteDto) {
+    const note = { id: this.notes.length + 1, text: dto.text };
+    this.notes.push(note);
+    return note;
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    const note = this.notes.find((n) => n.id === id);
+    if (!note) throw new NotFoundException(`פתק ${id} לא נמצא`);
+    return note;
+  }
+}
+
+@Module({ controllers: [NotesController] })
+export class NotesModule {}
+
+const CODES: Record<number, string> = { 400: "BAD_REQUEST", 404: "NOT_FOUND" };
+
+@Catch(HttpException)
+export class ApiErrorFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse<Response>();
+    const status = exception.getStatus();
+    const body = exception.getResponse();
+    const msg = typeof body === "object" && body !== null ? (body as { message?: unknown }).message : body;
+    const error = Array.isArray(msg)
+      ? { code: CODES[status] ?? "ERROR", message: "Validation failed", details: msg }
+      : { code: CODES[status] ?? "ERROR", message: exception.message };
+    res.status(status).json({ error });
+  }
+}
+
+export function configureApp(app: INestApplication) {
+  app.setGlobalPrefix("api");
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.useGlobalFilters(new ApiErrorFilter());
+}
+```
+<ol><li><strong>‏<code>new ValidationPipe()</code> בלי אפשרויות</strong> בודק רק את השדות שיש עליהם decorators, ומשאיר את כל השאר. ‏<code>whitelist</code> מוריד שדות מיותרים, ו־<code>forbidNonWhitelisted</code> הופך אותם לשגיאה 400.</li><li><strong>‏<code>@Catch(NotFoundException)</code></strong> תופס רק 404. שגיאת הוולידציה היא <code>BadRequestException</code>, ולכן היא עברה ל־filter של Nest. ‏<code>@Catch(HttpException)</code> תופס את כל שגיאות ה־HTTP.</li><li><strong>‏<code>res.json(...)</code> בלי <code>res.status(status)</code></strong> שולח 200. ה־filter אחראי גם על הגוף וגם על ה־status.</li></ol>
+@mistakes
+<ul><li>‏<code>@Catch()</code> בלי פרמטר. זה תופס גם שגיאות שאינן HTTP (באג בקוד), ו־<code>getStatus</code> לא קיים עליהן, וה־filter עצמו קורס.</li><li>להוסיף רק <code>whitelist: true</code>. השדה המיותר נמחק בשקט, וה־frontend לא יודע ששלח משהו שגוי.</li><li>לתקן את ה־status עם <code>res.status(400)</code> קבוע. אז גם 404 חוזר כ־400.</li></ul>

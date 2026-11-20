@@ -654,6 +654,80 @@ export async function createTestApp({ now, tasks }: { now: Date; tasks: Task[] }
 
 </div></details>
   </div>
+<div class="ex" id="P20-E85">
+    <h3>P20-E85 · configureApp שלא תופס כלום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>לכל תלונה: מי אחראי עליה? שדה מיותר — ה־pipe. צורת התשובה — ה־filter. ה־status — השורה שכותבת את התשובה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>ValidationPipe</code> בלי אפשרויות לא דוחה שדות מיותרים. ‏<code>@Catch(X)</code> תופס רק X וסוגים שיורשים ממנו. ו־<code>res.json(...)</code> לבד שולח 200.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P20-E85: configureApp — מתוקן
+import { ArgumentsHost, Body, Catch, Controller, ExceptionFilter, Get, HttpException, INestApplication, Module, NotFoundException, Param, ParseIntPipe, Post, ValidationPipe } from "@nestjs/common";
+import { IsString, Length } from "class-validator";
+import type { Response } from "express";
+
+export class CreateNoteDto {
+  @IsString()
+  @Length(1, 200)
+  text: string;
+}
+
+@Controller("notes")
+export class NotesController {
+  private notes: { id: number; text: string }[] = [];
+
+  @Post()
+  create(@Body() dto: CreateNoteDto) {
+    const note = { id: this.notes.length + 1, text: dto.text };
+    this.notes.push(note);
+    return note;
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    const note = this.notes.find((n) =&gt; n.id === id);
+    if (!note) throw new NotFoundException(`פתק ${id} לא נמצא`);
+    return note;
+  }
+}
+
+@Module({ controllers: [NotesController] })
+export class NotesModule {}
+
+const CODES: Record&lt;number, string&gt; = { 400: "BAD_REQUEST", 404: "NOT_FOUND" };
+
+@Catch(HttpException)
+export class ApiErrorFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const status = exception.getStatus();
+    const body = exception.getResponse();
+    const msg = typeof body === "object" &amp;&amp; body !== null ? (body as { message?: unknown }).message : body;
+    const error = Array.isArray(msg)
+      ? { code: CODES[status] ?? "ERROR", message: "Validation failed", details: msg }
+      : { code: CODES[status] ?? "ERROR", message: exception.message };
+    res.status(status).json({ error });
+  }
+}
+
+export function configureApp(app: INestApplication) {
+  app.setGlobalPrefix("api");
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  app.useGlobalFilters(new ApiErrorFilter());
+}</code></pre>
+<ol><li><strong>‏<code>new ValidationPipe()</code> בלי אפשרויות</strong> בודק רק את השדות שיש עליהם decorators, ומשאיר את כל השאר. ‏<code>whitelist</code> מוריד שדות מיותרים, ו־<code>forbidNonWhitelisted</code> הופך אותם לשגיאה 400.</li><li><strong>‏<code>@Catch(NotFoundException)</code></strong> תופס רק 404. שגיאת הוולידציה היא <code>BadRequestException</code>, ולכן היא עברה ל־filter של Nest. ‏<code>@Catch(HttpException)</code> תופס את כל שגיאות ה־HTTP.</li><li><strong>‏<code>res.json(...)</code> בלי <code>res.status(status)</code></strong> שולח 200. ה־filter אחראי גם על הגוף וגם על ה־status.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>@Catch()</code> בלי פרמטר. זה תופס גם שגיאות שאינן HTTP (באג בקוד), ו־<code>getStatus</code> לא קיים עליהן, וה־filter עצמו קורס.</li><li>להוסיף רק <code>whitelist: true</code>. השדה המיותר נמחק בשקט, וה־frontend לא יודע ששלח משהו שגוי.</li><li>לתקן את ה־status עם <code>res.status(400)</code> קבוע. אז גם 404 חוזר כ־400.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P20-E79">
     <h3>P20-E79 · מה עבר מ־Express ל־Nest, ומה לא נגעו בו <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
