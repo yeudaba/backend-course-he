@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { load } from "../../tools/load.mjs";
 
-const s = await load(import.meta.url, "expenses-cli/src/storage.js");
+const s = await load(import.meta.url, "expenses-cli/src/storage.js", { step: "שלב 2", exports: "loadExpenses ו־saveExpenses" });
 const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pr1-")), "expenses.json");
 
 test("קובץ לא קיים → מערך ריק", () => assert.deepEqual(s.loadExpenses(tmp()), []));

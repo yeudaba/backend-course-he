@@ -14,7 +14,8 @@ test("מתקן רק את מה שזז", async (t) => {
   await products.updateOne({ _id: "p1" }, { $push: { reviews: { by: "c4", rating: 1 } } });
   await products.updateOne({ _id: "p6" }, { $unset: { reviews: "" } });
   await products.insertOne({ _id: "p9", name: "New" });
-  assert.deepEqual(await f(db), ["p1", "p3", "p6", "p9"]);
+  await products.insertOne({ _id: "p0", name: "Zero" });
+  assert.deepEqual(await f(db), ["p0", "p1", "p3", "p6", "p9"], "ממוין לפי id");
   const byId = Object.fromEntries((await products.find().toArray()).map((p) => [p._id, [p.ratingCount, p.ratingSum]]));
   assert.deepEqual(byId.p1, [3, 10]);
   assert.deepEqual(byId.p3, [3, 14]);

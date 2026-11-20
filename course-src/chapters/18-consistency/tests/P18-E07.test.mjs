@@ -23,6 +23,13 @@ test("העברה שנכשלת לא משנה כלום", async (t) => {
   assert.deepEqual(await balances(db), before, "שום יתרה לא השתנתה (גם לא של Noa)");
   assert.equal((await db.rows("SELECT COUNT(*) AS n FROM transfers"))[0].n, transfersBefore);
 });
+test("כישלון בפקודה השנייה — גם הראשונה מתבטלת (transaction)", async (t) => {
+  const db = await sandbox(t, import.meta.url, "bank.sql");
+  const pool = db.pool(3);
+  const before = await balances(db);
+  await assert.rejects(transfer(pool, 1, 99, 100), undefined, "חשבון 99 לא קיים — ה־INSERT ל־transfers נכשל (FK)");
+  assert.deepEqual(await balances(db), before, "הכסף ירד מחשבון 1 ולא הגיע לשום מקום — חסרים BEGIN/COMMIT סביב כל הפעולות");
+});
 test("חיבורים לא דולפים", async (t) => {
   const db = await sandbox(t, import.meta.url, "bank.sql");
   const pool = db.pool(3);

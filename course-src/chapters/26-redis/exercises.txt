@@ -1109,7 +1109,7 @@ logout everywhere: 2
 @mistakes
 <ul><li><code>Math.random().toString(36)</code> כמזהה — אפשר לנחש. מזהה session הוא סיסמה זמנית.</li><li><code>HSET</code> ואז <code>EXPIRE</code> בלי <code>MULTI</code> — אם השרת נופל ביניהם, נשאר session בלי תוקף, לנצח.</li><li><code>if (!hash)</code> — ‏<code>{}</code> הוא truthy, ו־session שלא קיים חוזר כ־<code>{ userId: NaN }</code>.</li><li>לקבוע לרשימה <code>EXPIRE</code> רגיל בכל יצירה — session קצר מקצר את הרשימה של כולם.</li></ul>
 
-@@ P26-E32 | 2 | לקרוא את INFO של Redis 🤖 | 20 | שיעור 2
+@@ P26-E32 | 2 | לקרוא את INFO של Redis 🤖 | 20 | פרק 2, פרק 7, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -1206,7 +1206,7 @@ console.log(hitRatio(info), hitRatio(parseInfo("# Stats\r\nkeyspace_hits:0\r\nke
 @mistakes
 <ul><li><code>split("\n")</code> — ‏<code>\r</code> נשאר בסוף כל ערך.</li><li><code>line.split(":")</code> — ערך עם נקודתיים נחתך.</li><li>חלוקה באפס — שרת שעלה עכשיו מחזיר <code>NaN</code>, וגרף שמצייר <code>NaN</code> נשבר.</li><li>להשאיר את המספרים כמחרוזות ב־<code>parseKeyspace</code> — ‏<code>"1204" &gt; "980"</code> הוא <code>false</code>.</li></ul>
 
-@@ P26-E33 | 3 | TypedEmitter: אירועים עם טיפוסים 🤖 | 25 | שיעור 3
+@@ P26-E33 | 3 | TypedEmitter: אירועים עם טיפוסים 🤖 | 25 | פרק 11, פרק 12, שיעור 3
 @lesson 3
 @part 2
 @type review
@@ -1523,6 +1523,7 @@ console.log(back);
 console.log(typeof back.at, "note" in back, back.at.getFullYear?.());
 ```
 <p>אילו מהשדות "נשברו" בדרך ל־cache וחזרה? ומה יקרה לקוד שעושה <code>order.at.getTime()</code> על תוצאה שהגיעה מ־HIT, כשב־MISS זה עבד?</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> <code>JSON.stringify</code> ו־<code>JSON.parse</code> מפרק 7, ו־<code>Date</code>, ‏<code>Set</code> ו־<code>Map</code>, פוגשים את Redis מהשיעור: כל ערך ב־Redis הוא מחרוזת, ולכן cache שומר את האובייקט אחרי מעבר דרך JSON — ומה שלא שורד את המעבר הזה חוזר אחרת.</p>
 @hint1
 <p>ל־JSON יש רק: מחרוזת, מספר, בוליאני, null, מערך, אובייקט.</p>
 @hint2
@@ -4121,3 +4122,110 @@ export async function eventsAfter(redis: Redis, stream: string, lastId: number) 
 <p>id מ־<code>INCR</code> ולא מונה בזיכרון — כך <code>Last-Event-ID: 42</code> אומר אותו דבר בכל שרת. (ל־Redis יש גם מבנה שנבנה בדיוק לזה — Streams, ‏<code>XADD</code>/<code>XRANGE</code> — עם ids עולים וחיתוך מובנים. כאן בנינו אותו משני הכלים שכבר מכירים.)</p>
 @mistakes
 <ul><li><code>LTRIM key 0 max-1</code> — משאיר את הראשונים (הישנים), ומוחק כל אירוע חדש.</li><li>לסמוך על הסדר ב־list בלי מיון — במקביל, ה־id וסדר ה־RPUSH לא תמיד אותו דבר.</li></ul>
+
+@@ P26-E121 | 4 | דירוג שמתאפס בכל משחק 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>ב־<code>26-redis/starter/P26-E121.ts</code> לוח דירוג על sorted set בשם <code>board:&lt;name&gt;</code>:</p>
+<ul><li><code>addPoints(redis, board, user, points)</code> — <strong>מוסיפה</strong> נקודות למשתמש, ומחזירה את הניקוד החדש (מספר).</li><li><code>top(redis, board, n)</code> — ‏<code>n</code> המשתמשים עם הכי הרבה נקודות: <code>[{ user, score }]</code>, מהגבוה לנמוך.</li><li><code>rankOf(redis, board, user)</code> — המקום של המשתמש, מ־1 (הראשון = 1), או <code>null</code> אם הוא לא בלוח.</li></ul>
+<p>התלונות: כל משחק "מאפס" את הניקוד הקודם; ‏<code>top(3)</code> מחזיר ארבעה, ודווקא את החלשים; והמנצח מקבל "מקום 0" במקום 1. מצא ותקן.</p>
+```term
+% npm run check P26-E121
+```
+@hint1
+<p>ב־<code>redis-cli</code>: ‏<code>ZADD b 10 dana</code> ואז <code>ZADD b 5 dana</code>. מה הניקוד של dana? ומה <code>ZRANGE b 0 3</code> מחזיר: כמה איברים, ובאיזה סדר?</p>
+@hint2
+<p>‏<code>ZINCRBY</code> מוסיף. ‏<code>ZRANGE … REV</code> (או <code>ZREVRANGE</code>) מהגבוה, והאינדקס האחרון <strong>כלול</strong>. ‏<code>ZREVRANK</code> מתחיל מ־0.</p>
+@solution
+```ts save=solutions/P26-E121.ts
+// P26-E121: לוח דירוג — מתוקן
+import type { Redis } from "ioredis";
+
+export async function addPoints(redis: Redis, board: string, user: string, points: number): Promise<number> {
+  return Number(await redis.zincrby(`board:${board}`, points, user));
+}
+
+export async function top(redis: Redis, board: string, n: number) {
+  const flat = await redis.zrange(`board:${board}`, 0, n - 1, "REV", "WITHSCORES");
+  const out: { user: string; score: number }[] = [];
+  for (let i = 0; i < flat.length; i += 2) out.push({ user: flat[i], score: Number(flat[i + 1]) });
+  return out;
+}
+
+export async function rankOf(redis: Redis, board: string, user: string): Promise<number | null> {
+  const r = await redis.zrevrank(`board:${board}`, user);
+  return r === null ? null : r + 1;
+}
+```
+<ol><li><strong>‏<code>ZADD</code></strong> קובע ניקוד, ולכן כל משחק דרס את הקודם. ‏<code>ZINCRBY</code> מוסיף לניקוד הקיים (ויוצר את המשתמש אם אין), בפקודה אטומית אחת.</li><li><strong>‏<code>ZRANGE key 0 n</code></strong> מחזיר <code>n + 1</code> איברים, כי שני הקצוות כלולים. והסדר הוא מהנמוך לגבוה. ‏<code>0, n - 1</code> עם <code>REV</code>.</li><li><strong>‏<code>ZRANK</code></strong> סופר מהנמוך ומתחיל מ־0. ‏<code>ZREVRANK</code> סופר מהגבוה, ומוסיפים 1 כדי שהראשון יהיה 1.</li></ol>
+@mistakes
+<ul><li>‏<code>ZSCORE</code> ואז <code>ZADD</code> עם הסכום. שני שרתים שמוסיפים יחד דורסים זה את זה. ‏<code>ZINCRBY</code> אטומי.</li><li>להפוך את המערך בקוד אחרי <code>ZRANGE</code> רגיל. כך מקבלים את <code>n</code> החלשים בסדר הפוך, לא את <code>n</code> החזקים.</li><li>‏<code>return r + 1</code> בלי לבדוק <code>null</code>. ‏<code>null + 1</code> הוא 1, ומשתמש שלא קיים מקבל מקום ראשון.</li></ul>
+
+@@ P26-E122 | 4 | cache שמפיל את החנות 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>‏<code>cachedProduct(redis, id, load, ttlSec = 60)</code> ב־<code>26-redis/starter/P26-E122.ts</code> היא ה־cache-aside של דף המוצר בחנות (פרויקט 3). מחזירה <code>{ product, cache }</code>:</p>
+<ul><li>‏<code>redis</code> הוא <code>null</code> (Redis כבוי בהגדרות), או ש־Redis זורק שגיאה ← טוענים מהמסד, ו־<code>cache: "OFF"</code>. תקלה ב־cache לעולם לא מפילה בקשה.</li><li>יש ערך ב־<code>product:&lt;id&gt;</code> ← <code>"HIT"</code>.</li><li>אין ← <code>load(id)</code>, ואם נמצא מוצר — שומרים אותו ל־<code>ttlSec</code> שניות; ‏<code>"MISS"</code>. מוצר שלא נמצא (<code>null</code>) <strong>לא</strong> נשמר.</li></ul>
+<p>התלונות: כש־Redis נפל, כל דף מוצר החזיר 500; מחיר שעודכן במסד לא התעדכן באתר אף פעם; ומוצר חדש שנוסף אחרי שמישהו חיפש אותו נשאר "לא נמצא". מצא ותקן.</p>
+```term
+% npm run check P26-E122
+```
+@hint1
+<p>‏<code>redis-cli TTL product:1</code> אחרי ה־MISS הראשון: מה התוצאה? ומה נשמר כשה־<code>load</code> מחזיר <code>null</code>?</p>
+@hint2
+<p>‏<code>SET key value</code> בלי <code>EX</code> שומר לתמיד. ‏<code>JSON.stringify(null)</code> הוא <code>"null"</code>, וזה ערך שנמצא ב־GET. וקריאה ל־Redis שזורקת — מי תופס אותה?</p>
+@solution
+```ts save=solutions/P26-E122.ts
+// P26-E122: cache-aside לדף מוצר — מתוקן
+import type { Redis } from "ioredis";
+
+export async function cachedProduct<P>(redis: Redis | null, id: number, load: (id: number) => Promise<P | null>, ttlSec = 60) {
+  const key = `product:${id}`;
+  if (!redis) return { product: await load(id), cache: "OFF" as const };
+  let cached: string | null;
+  try {
+    cached = await redis.get(key);
+  } catch {
+    return { product: await load(id), cache: "OFF" as const };
+  }
+  if (cached !== null) return { product: JSON.parse(cached) as P, cache: "HIT" as const };
+  const product = await load(id);
+  if (product !== null) await redis.set(key, JSON.stringify(product), "EX", ttlSec).catch(() => {});
+  return { product, cache: "MISS" as const };
+}
+```
+<ol><li><strong>‏<code>redis.get</code> בלי try/catch.</strong> כש־Redis לא זמין, החריגה עלתה עד ה־route, ונהיה 500. cache הוא שיפור ביצועים: כשהוא נופל, חוזרים למסד. גם <code>set</code> שנכשל לא מפיל.</li><li><strong>‏<code>SET</code> בלי <code>EX</code>.</strong> המוצר נשמר לתמיד, ולכן שינוי מחיר במסד לא הגיע לאתר. ‏TTL הוא הגבול העליון לנתון ישן.</li><li><strong>‏<code>null</code> נשמר כ־<code>"null"</code>.</strong> ‏<code>GET</code> מחזיר את המחרוזת <code>"null"</code>, שאינה <code>null</code>, ולכן זה נחשב HIT עם מוצר <code>null</code>, לתמיד. לא שומרים "לא נמצא" (או שומרים לזמן קצר מאוד, בכוונה).</li></ol>
+@mistakes
+<ul><li>‏<code>if (cached)</code> במקום <code>cached !== null</code>. כאן זה עובד, כי JSON של מוצר לא ריק; אבל בערכים כמו <code>"0"</code> או <code>""</code> זה מפספס HIT.</li><li>לתפוס את השגיאה ולהחזיר <code>{ product: null }</code>. Redis נפל, והלקוח רואה "המוצר לא נמצא".</li><li>‏<code>redis.expire</code> בפקודה נפרדת אחרי <code>set</code>. אם התהליך נופל ביניהן, המפתח נשאר בלי TTL.</li></ul>
+
+@@ P26-E123 | 4 | אירועי SSE שהדפדפן לא רואה 🤖 | 15 | שיעור 6
+@lesson 6
+@part 1
+@task
+<p>‏<code>sseMessage({ id, event, data })</code> ב־<code>26-redis/starter/P26-E123.ts</code> בונה הודעה אחת של Server-Sent Events:</p>
+<ul><li>שורת <code>id: …</code> אם <code>id</code> הועבר (גם <code>0</code>), ושורת <code>event: …</code> אם <code>event</code> הועבר.</li><li><code>data</code>: מחרוזת כמו שהיא, וכל ערך אחר כ־JSON. כל שורה בטקסט — שורת <code>data: …</code> משלה.</li><li>ההודעה מסתיימת בשורה ריקה.</li></ul>
+<p>התלונות: ‏<code>EventSource</code> בדפדפן לא מקבל אף הודעה (ב־Network רואים שהן מגיעות); הודעה עם טקסט של כמה שורות מגיעה חתוכה; ו־<code>lastEventId</code> לא מתעדכן באירוע הראשון. מצא ותקן.</p>
+```term
+% npm run check P26-E123
+```
+@hint1
+<p>הדפדפן מחבר את השורות של הודעה ומפעיל <code>onmessage</code> רק כשהוא פוגש... מה? ובאיזה id מתחיל המונה של האירועים?</p>
+@hint2
+<p>הודעה מסתיימת ב־<code>\n\n</code>. ‏<code>if (id)</code> לא מתקיים ל־0. ושורה חדשה בתוך <code>data</code> מסיימת את השדה: כל שורה צריכה <code>data: </code> משלה.</p>
+@solution
+```ts save=solutions/P26-E123.ts
+// P26-E123: הודעת SSE — מתוקן
+export function sseMessage({ id, event, data }: { id?: string | number; event?: string; data: unknown }): string {
+  let out = "";
+  if (id !== undefined) out += `id: ${id}\n`;
+  if (event !== undefined) out += `event: ${event}\n`;
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  for (const line of text.split("\n")) out += `data: ${line}\n`;
+  return out + "\n";
+}
+```
+<ol><li><strong>בלי שורה ריקה בסוף</strong> הדפדפן ממשיך לחכות לשאר ההודעה, ולא מפעיל אף <code>onmessage</code>. כל הודעה מסתיימת ב־<code>\n\n</code>.</li><li><strong>טקסט עם <code>\n</code></strong> בשורת <code>data:</code> אחת: השורה השנייה כבר לא מתחילה ב־<code>data:</code>, והדפדפן מתעלם ממנה. מפצלים לשורות, וכל אחת עם <code>data: </code>; הדפדפן מחבר אותן חזרה עם <code>\n</code>.</li><li><strong>‏<code>if (id)</code></strong> דילג על <code>id: 0</code>, האירוע הראשון. ‏<code>!== undefined</code>.</li></ol>
+@mistakes
+<ul><li>להחליף את <code>\n</code> ברווח בתוך ה־data. ההודעה מגיעה, אבל לא כמו שנשלחה.</li><li>‏<code>JSON.stringify</code> גם למחרוזת. אז הלקוח מקבל <code>"שלום"</code> עם מירכאות, ונדרש <code>JSON.parse</code> בצד השני.</li><li>לשכוח את הרווח אחרי <code>data:</code>. הדפדפן מוריד רווח אחד בלבד, ולכן זה עובד גם בלעדיו; אבל אם יש שניים, אחד נשאר בטקסט.</li></ul>

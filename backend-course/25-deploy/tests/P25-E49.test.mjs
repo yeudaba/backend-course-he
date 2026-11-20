@@ -23,3 +23,7 @@ test("ריק, ושמות לא רלוונטיים", async () => {
   assert.deepEqual(f("A=1", "process.env.toString(); process.env.A"), { missing: [], unused: [] }, "toString — לא משתנה");
   assert.deepEqual(f("lower=1\nB=2", "process.env.B"), { missing: [], unused: [] }, "רק שמות באותיות גדולות");
 });
+test("רשימות ממוינות", async () => {
+  const f = await get();
+  assert.deepEqual(f("ZED=1\nALPHA=1\nMID=1", "process.env.YY; process.env.BB"), { missing: ["BB", "YY"], unused: ["ALPHA", "MID", "ZED"] });
+});

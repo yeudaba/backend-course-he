@@ -17,3 +17,11 @@ test("חיפוש", async (t) => {
   assert.equal(r.data.length, 10);
   assert.deepEqual((await searchProducts(prisma, { page: 2 })).data.map((p) => p.id), [5]);
 });
+
+test("תיקו במחיר — לפי id", async (t) => {
+  const { prisma } = await shop(t, import.meta.url);
+  await prisma.$executeRawUnsafe("UPDATE products SET price = 50 WHERE id IN (1, 2, 3)");
+  await prisma.$executeRawUnsafe("UPDATE products SET stock = stock WHERE id IN (2, 1)"); // סדר פיזי אחר
+  const r = await searchProducts(prisma, { q: "beans" });
+  assert.deepEqual(r.data.map((p) => p.id), [1, 2, 3], "באותו מחיר — לפי id (orderBy משני)");
+});

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../../tools/load.mjs";
 
-const m = await load(import.meta.url, "expenses-cli/src/expenses.js");
+const m = await load(import.meta.url, "expenses-cli/src/expenses.js", { step: "שלב 1", exports: "את פונקציות הלוגיקה (isValidDate, addExpense, monthlySummary ועוד)" });
 const base = () => [
   { id: 1, date: "2026-10-01", category: "food", amount: 54.5, note: "lunch" },
   { id: 2, date: "2026-10-03", category: "transport", amount: 12, note: "" },
@@ -13,11 +13,13 @@ test("expenseError", () => { const e = m.expenseError("X", "msg"); assert.ok(e i
 test("isValidDate", () => {
   for (const d of ["2026-10-01", "2024-02-29", "2026-12-31"]) assert.equal(m.isValidDate(d), true, d);
   for (const d of ["2026-02-30", "2026-13-01", "2026-1-5", "abc", "2026-10-00", ""]) assert.equal(m.isValidDate(d), false, d);
+  assert.equal(m.isValidDate("2000-02-29"), true, "2000 — שנה מעוברת (מתחלקת ב־400)");
+  assert.equal(m.isValidDate("2100-02-29"), false, "2100 — לא מעוברת (מתחלקת ב־100 ולא ב־400)");
 });
 test("parseAmount", () => {
   assert.equal(m.parseAmount("54.5"), 54.5);
   assert.equal(m.parseAmount(" 12.345 "), 12.35);
-  for (const bad of ["", "abc", "0", "-3"]) assert.throws(() => m.parseAmount(bad), { code: "INVALID_AMOUNT" });
+  for (const bad of ["", "abc", "0", "-3", "12abc"]) assert.throws(() => m.parseAmount(bad), { code: "INVALID_AMOUNT" }, JSON.stringify(bad));
 });
 test("nextId", () => { assert.equal(m.nextId([]), 1); assert.equal(m.nextId(base()), 6); });
 test("addExpense מוסיף בלי לשנות את המקור", () => {
@@ -46,6 +48,8 @@ test("filterExpenses", () => {
 });
 test("monthlySummary", () => {
   assert.deepEqual(m.monthlySummary(base(), "2026-10"), { month: "2026-10", count: 2, total: 66.5, byCategory: { food: 54.5, transport: 12 }, topCategory: "food" });
+  const many = [{ id: 1, date: "2026-10-01", category: "food", amount: 10, note: "" }, { id: 2, date: "2026-10-02", category: "rent", amount: 900, note: "" }];
+  assert.equal(m.monthlySummary(many, "2026-10").topCategory, "rent", "topCategory — הקטגוריה עם הסכום הגבוה, לא הראשונה");
   assert.deepEqual(m.monthlySummary(base(), "2025-01"), { month: "2025-01", count: 0, total: 0, byCategory: {}, topCategory: null });
 });
 test("formatExpenses", () => {

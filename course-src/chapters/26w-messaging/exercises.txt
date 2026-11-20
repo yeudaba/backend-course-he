@@ -23,6 +23,8 @@
 @solution
 <ol><li>ההודעה אושרה ונמחקה, החיוב לא קרה ← <strong>הלקוח לא חויב, לתמיד</strong>. זה at-most-once: כל הודעה מטופלת לכל היותר פעם אחת — לפעמים אפס.</li><li>החיוב קרה, ה־ack לא ← ההודעה חוזרת ← <strong>חיוב כפול</strong>. זה at-least-once: לפחות פעם אחת — לפעמים יותר.</li><li>הכול בסדר.</li></ol>
 <p>at-least-once הוא ברירת המחדל הנכונה כמעט תמיד (עדיף כפול מחסר), <strong>בתנאי שה־consumer אידמפוטנטי</strong>: אותה הודעה פעמיים ← אותה תוצאה כמו פעם אחת. איך: מזהה ייחודי לכל אירוע, ו"כבר טיפלתי ב־X" שנשמר <em>באותה טרנזקציה</em> עם הפעולה (E15) — ולספק התשלומים שולחים idempotency key (פרק 21). "exactly-once" של Kafka חל רק בתוך Kafka (קריאה ← כתיבה ל־topic אחר); ברגע שיש צד שלישי — מסד, API, מייל — חוזרים לאידמפוטנטיות.</p>
+@mistakes
+<ul><li>לחשוב ש־ack לפני הטיפול "בטוח יותר". זה at-most-once: נפילה באמצע מאבדת את החיוב לגמרי.</li><li>לחשוב שאפשר להבטיח exactly-once עם broker בלבד. ה־broker לא יודע אם ספק התשלומים חייב. ההגנה היא consumer אידמפוטנטי עם מזהה אירוע.</li><li>לסמן "טופל" בטבלה אחרת, מחוץ לטרנזקציה של הפעולה. נפילה בין השניים מחזירה את הבעיה.</li></ul>
 
 @@ P26.5-E03 | 1 | לאן הולכת כל הודעה? | 15 | שיעור 2
 @task
@@ -64,6 +66,8 @@ cancel order.cancelled.us, order.cancelled.il
 all    order.created.il, order.cancelled.us, order.cancelled.il, order.created, order.paid.il.vip
 ```
 <p><code>order.created</code> — שתי מילים: לא תואם <code>order.*.il</code> (צריך שלוש), אבל כן <code>order.#</code>. <code>order.paid.il.vip</code> — ארבע מילים: רק <code>#</code> תופס. <code>payment.failed.il</code> — אף אחד, ונזרקה. ו־<code>order.cancelled.il</code> הגיעה לשלושה תורים — עותק לכל אחד.</p>
+@mistakes
+<ul><li>לחשוב ש־<code>*</code> תופס כמה מילים. <code>order.*.il</code> לא תופס את <code>order.paid.il.vip</code>, כי יש שם ארבע מילים.</li><li>לחשוב ש־<code>order.#</code> לא תופס את <code>order.created</code>. <code>#</code> יכול להיות גם אפס מילים.</li><li>לחשוב שהודעה כמו <code>payment.failed.il</code> "מחכה" עד שיהיה תור מתאים. אם אף binding לא תופס אותה, היא נזרקת.</li></ul>
 
 @@ P26.5-E04 | 1 | key, partition וסדר | 15 | שיעור 4
 @task
@@ -102,6 +106,8 @@ order-2 paid     → partition 2, offset 2
 order-1 shipped  → partition 1, offset 2
 ```
 <ol><li><strong>כן.</strong> אותו key ← אותו partition, וה־offsets שלו עולים לפי סדר השליחה. consumer קורא partition לפי הסדר.</li><li><strong>לא מובטח.</strong> אם הם ב־partitions שונים — כל partition נקרא בקצב משלו, אולי ע״י consumers שונים. וזה בסדר: אין קשר סיבתי בין הזמנות שונות. אם יש — צריך key משותף.</li><li><strong>3.</strong> כל partition ל־consumer אחד; שניים נשארים בלי עבודה (standby למקרה שאחד נופל). מספר ה־partitions הוא תקרת המקביליות של group — לכן בוחרים אותו מראש עם מרווח.</li></ol>
+@mistakes
+<ul><li>לחשוב שהסדר נשמר בין הזמנות שונות. הסדר מובטח רק בתוך partition, והזמנות עם key שונה יכולות להגיע לפי סדר אחר.</li><li>לחשוב ש־5 consumers מחלקים ביניהם 3 partitions "בחצאים". כל partition שייך ל־consumer אחד, ולכן שניים יישבו בטלים.</li><li>לצפות ש־<code>order-1</code> ו־<code>order-2</code> יגיעו בהכרח ל־partitions שונים. ה־hash יכול לשים שני keys באותו partition.</li></ul>
 
 @@ P26.5-E05 | 1 | visibility timeout | 15 | שיעור 3
 @task
@@ -139,6 +145,8 @@ await sqs.send(new DeleteQueueCommand({ QueueUrl }));
 3. "resize image 42" (receive #2)
 ```
 <p>(<code>WaitTimeSeconds: 1</code> — long polling קצר. בלי זה, receive "סוקר" רק חלק מהשרתים של SQS, ויכול לחזור ריק גם כשיש הודעה — שיעור 3.) בזמן ה־visibility timeout ההודעה "בטיפול" — consumers אחרים לא רואים אותה. לא נמחקה עד הסוף ← חוזרת, והמונה עולה. כלל: ה־timeout ארוך מהזמן שלוקח לטפל (אחרת ההודעה חוזרת בזמן שעוד מטפלים בה, ומטופלת פעמיים); ועבודה ארוכה מאריכה אותו תוך כדי (<code>ChangeMessageVisibility</code>). ואחרי <code>maxReceiveCount</code> קבלות — ל־DLQ (E11).</p>
+@mistakes
+<ul><li>לחשוב ש־receive מוחק את ההודעה. היא רק מוסתרת ל־VisibilityTimeout, וחוזרת אם לא קראו ל־DeleteMessage.</li><li>לצפות שה־receive השני יחזיר את אותה הודעה מיד. היא עדיין מוסתרת, ולכן חוזר "כלום".</li><li>לחשוב ש־<code>ApproximateReceiveCount</code> נשאר 1. הוא עולה בכל קבלה, ולכן בפעם השלישית הוא 2. לפי המונה הזה עובד ה־DLQ.</li></ul>
 
 @@ P26.5-E06 | 2 | topic exchange 🤖 | 20 | שיעור 2
 @task
@@ -303,6 +311,8 @@ export function parseOrderPlaced(raw: string): EventEnvelope<OrderPlaced> {
 }
 ```
 <p>למה שתי גרסאות? כי אי אפשר לעדכן את כל ה־producers וה־consumers באותה שנייה. הכלל: <strong>consumer מתעדכן קודם</strong> (מקבל גם v1 וגם v2), ורק אחר כך ה־producer מתחיל לשלוח v2. ובחברות עם הרבה צוותים — Schema Registry שאוכף את זה.</p>
+@mistakes
+<ul><li>לאמת את ה־data לפני שבודקים את <code>version</code>. סכמה של v2 תדחה אירוע v1 תקין.</li><li><code>.strict()</code> על הסכמה. שירות ששולח שדה חדש ישבור את הצרכנים, והתרגיל מבקש לאפשר שדות נוספים.</li><li>להחזיר v1 כמו שהוא (<code>totalCents</code>) במקום להמיר לצורה של v2. הקוד שאחרי הפרסור יצטרך לטפל בשתי צורות.</li></ul>
 
 @@ P26.5-E09 | 2 | SQS FIFO 🤖 | 20 | שיעור 3
 @task
@@ -349,6 +359,8 @@ export async function sendOrderEvents(sqs: SQSClient, queueUrl: string, events: 
 }
 ```
 <p>FIFO מול Standard: Standard — כמעט בלי הגבלת קצב, אבל סדר "בערך" ולפעמים כפילויות; FIFO — סדר מדויק בתוך group ו־dedup של 5 דקות, עם תקרת קצב. ושימו לב: סדר בתוך group אומר שהודעה תקועה בהזמנה 7 עוצרת רק את הזמנה 7 — לא את כל התור.</p>
+@mistakes
+<ul><li>לשלוח את כל האירועים ב־batch אחד. SQS מקבל עד 10 הודעות ב־batch, ויזרוק על יותר.</li><li><code>MessageGroupId</code> קבוע (למשל <code>"orders"</code>). זה עובד, אבל כל ההזמנות מחכות זו לזו בתור אחד, במקום סדר לכל הזמנה בנפרד.</li><li>לסמוך על כך ש־batch שלא זרק הצליח כולו. כשחלק מההודעות נכשלות, הן חוזרות ב־<code>Failed</code>, וצריך לבדוק את זה.</li></ul>
 
 @@ P26.5-E10 | 2 | consumer של SQS 🤖 | 20 | שיעור 3
 @task
@@ -393,6 +405,8 @@ export async function pollOnce(
 }
 ```
 <p>ובפועל — לולאה: <code>while (!stopping) await pollOnce(…)</code>, ו־SIGTERM (פרק 24) מסמן stopping, כך שהקבלה הנוכחית מסתיימת לפני היציאה.</p>
+@mistakes
+<ul><li>למחוק עם <code>MessageId</code>. למחיקה צריך את ה־<code>ReceiptHandle</code> של הקבלה הזו.</li><li>למחוק את כל ההודעות, גם את אלה שנכשלו. הודעה שנכשלה צריכה לחזור לתור, ולכן לא מוחקים אותה.</li><li>לקרוא ל־DeleteMessageBatch עם רשימה ריקה. SQS זורק על batch ריק, ולכן בודקים קודם שיש מה למחוק.</li></ul>
 
 @@ P26.5-E11 | 2 | dead-letter queue ב־SQS 🤖 | 15 | שיעור 3
 @task
@@ -428,6 +442,8 @@ export async function createQueueWithDlq(
 }
 ```
 <p>ה־DLQ שומר 14 יום כי מישהו צריך להסתכל: alarm על "יש הודעות ב־DLQ", בדיקה, תיקון — ואז redrive חזרה לתור הראשי (יש לזה כפתור בקונסולה ו־API).</p>
+@mistakes
+<ul><li>לשים ב־<code>deadLetterTargetArn</code> את ה־URL של ה־DLQ. צריך ARN, ומקבלים אותו מ־<code>GetQueueAttributes</code>.</li><li><code>RedrivePolicy</code> כאובייקט ולא כמחרוזת. כל ה־Attributes של SQS הם מחרוזות, ולכן צריך <code>JSON.stringify</code>.</li><li>ליצור את התור הראשי לפני ה־DLQ. אז עוד אין ARN להפנות אליו.</li></ul>
 
 @@ P26.5-E12 | 2 | producer של Kafka 🤖 | 15 | שיעור 4
 @task
@@ -463,6 +479,8 @@ export async function publishOrderEvents(producer: Producer<string, string, stri
 }
 ```
 <p>ובקוד קיים תפגוש את <strong>KafkaJS</strong> — הספרייה הנפוצה ביותר ל־Node.js במשך שנים (<code>producer.send({ topic, messages })</code>, <code>consumer.run({ eachMessage })</code>), שלא קיבלה עדכון מאז 2023. הרעיונות זהים; ה־API שונה מעט.</p>
+@mistakes
+<ul><li>לקרוא ל־<code>send</code> בלולאה, פעם לכל אירוע. זה עובד, אבל כל קריאה היא סבב רשת. התרגיל מבקש קריאה אחת.</li><li><code>key: e.orderId</code> כמספר. ה־serializer הוא של מחרוזות, ולכן <code>String(e.orderId)</code>.</li><li>לשכוח את ה־key לגמרי. אז האירועים של אותה הזמנה מתפזרים בין partitions, והסדר ביניהם אובד.</li></ul>
 
 @@ P26.5-E13 | 3 | projection מזרם לא מסודר 🤖 | 20 | שיעור 5
 @task
@@ -504,6 +522,8 @@ export function project(events: OrderEvent[]) {
 }
 ```
 <p>ה־<code>seq</code> מגיע מה־producer — מהמסד שלו (מספר גרסה בשורת ההזמנה, שעולה בכל עדכון). בלעדיו, consumer לא יכול לדעת ש־"paid" שהגיע עכשיו ישן מ־"shipped" שכבר ראה.</p>
+@mistakes
+<ul><li>להשוות לסדר ההגעה במקום ל־<code>seq</code> השמור. אירוע ישן שמגיע מאוחר ידרוס מצב חדש יותר.</li><li>להשוות עם <code>&gt;=</code> במקום <code>&gt;</code>. אז כפילות של אותו אירוע תיספר כ"הוחל".</li><li>לא לבדוק <code>cancelled</code>. אירוע <code>paid</code> שמגיע אחרי ביטול "מחיה" הזמנה מבוטלת.</li></ul>
 
 @@ P26.5-E14 | 3 | commit אחרי טיפול 🤖 | 25 | שיעור 4
 @task
@@ -550,6 +570,8 @@ export async function consumeAndCommit(
 }
 ```
 <p>commit אחרי כל הודעה הוא הכי בטוח, ולא הכי מהיר: בנפח גבוה עושים commit כל N הודעות או כל שנייה (autocommit עם מרווח) — ומקבלים שאחרי קריסה כמה הודעות יטופלו שוב. שוב: consumer אידמפוטנטי.</p>
+@mistakes
+<ul><li><code>autocommit: true</code>. ה־offset נשמר גם כשה־handler זורק, וההודעה אובדת.</li><li>commit לפני ה־handler. זה at-most-once: נפילה באמצע הטיפול מדלגת על ההודעה.</li><li>לסגור את ה־consumer רק במסלול ההצלחה. בלי <code>finally</code>, שגיאה משאירה חיבור פתוח, והבדיקה (והתהליך) נתקעים.</li></ul>
 
 @@ P26.5-E15 | 3 | consumer אידמפוטנטי 🤖 | 25 | שיעור 5
 @task
@@ -635,6 +657,8 @@ export function nextRetry(attempt: number, err: unknown, { baseMs = 500, maxMs =
 }
 ```
 <p>למה jitter? שירות התשלומים נפל לדקה, ואלף consumers נכשלו יחד. בלי jitter — כולם חוזרים יחד אחרי 500ms, ושוב אחרי 1000ms: גלים שמפילים את השירות בדיוק כשהוא מנסה לקום ("thundering herd"). עם jitter — הניסיונות מתפזרים.</p>
+@mistakes
+<ul><li>לנסות שוב גם על 400 או 404. שגיאה קבועה לא תשתנה בניסיון נוסף, ולכן היא הולכת ישר ל־dead letter. 408 ו־429 הם החריגים.</li><li><code>2^attempt</code> במקום <code>2^(attempt−1)</code>. אז הניסיון הראשון כבר מחכה פי 2.</li><li>jitter של "תקרה ± 10%". כל ה־workers עדיין מנסים שוב כמעט באותו רגע. full jitter בוחר מכל הטווח, מ־0 עד התקרה.</li></ul>
 
 @@ P26.5-E17 | 3 | transactional outbox 🤖 | 30 | שיעור 5
 @task
@@ -708,6 +732,8 @@ export async function relayOutbox(pool: Pool, publish: (row: OutboxRow) => Promi
 }
 ```
 <p>outbox נותן at-least-once: אם ה־relay שלח ונפל לפני ה־COMMIT — השורה תישלח שוב. לכן ה־consumer אידמפוטנטי (E15) — שני הדפוסים באים יחד. ובקנה מידה גדול, במקום relay שסורק — CDC (Debezium) שקורא את ה־WAL של PostgreSQL ושולח ל־Kafka.</p>
+@mistakes
+<ul><li><code>pool.query</code> לשורת ה־outbox במקום <code>client.query</code>. היא רצה על חיבור אחר, מחוץ לטרנזקציה, ונשמרת גם כשההזמנה נכשלת.</li><li><code>FOR UPDATE</code> בלי <code>SKIP LOCKED</code>. relay שני מחכה לראשון במקום לקחת שורות אחרות, או ששניהם שולחים את אותן שורות.</li><li>לסמן <code>published_at</code> לכל ה־batch מראש. אם publish נכשל באמצע, שורות שלא נשלחו מסומנות כנשלחו ונעלמות.</li></ul>
 
 @@ P26.5-E18 | 3 | retry עם השהיה ב־RabbitMQ 🤖 | 30 | שיעור 2
 @task
@@ -772,6 +798,8 @@ export async function startRetryingWorker(
 }
 ```
 <p>(ל־RabbitMQ יש גם plugin של delayed messages, ו־quorum queues סופרות ניסיונות בעצמן — <code>x-delivery-limit</code>. הטריק עם TTL עובד בכל התקנה.)</p>
+@mistakes
+<ul><li><code>messageTtl</code> על תור העבודה ולא על תור ההמתנה. אז הודעות נזרקות מהתור הראשי לפני שמישהו טיפל בהן.</li><li>לספור ניסיונות בזיכרון של ה־worker. אחרי restart המונה מתאפס. את המספר קוראים מ־<code>x-death</code> שבהודעה.</li><li>לשלוח את ההודעה ל־<code>deadQueue</code> בלי ack למקור. אז היא גם ב־dead letter וגם חוזרת לתור.</li></ul>
 
 @@ P26.5-E19 | 3 | consumer lag 🤖 | 15 | שיעור 4
 @task
@@ -815,6 +843,8 @@ export function isFallingBehind(samples: number[], { window = 3 } = {}): boolean
 }
 ```
 <p>lag גבוה אחרי deploy זה טבעי (consumer עלה ומדביק פער). lag ש<em>עולה</em> כל הזמן — הצרכנים איטיים מהקצב: מוסיפים consumers (עד מספר ה־partitions), או מגלים שה־handler איטי (שאילתה בלי אינדקס, קריאת API בכל הודעה).</p>
+@mistakes
+<ul><li>להתייחס ל־<code>-1</code> (אין commit) כמספר. <code>end − (−1)</code> נותן lag גדול באחד מהאמת. בלי commit מחשבים מ־<code>earliest</code>.</li><li><code>isFallingBehind</code> שבודק רק את הדגימה הראשונה מול האחרונה. lag שעלה וירד באמצע ייחשב בטעות כעלייה.</li><li>להשתמש במפתחות של <code>Object.entries</code> כמספרים בלי <code>Number(p)</code>. הם מחרוזות.</li></ul>
 
 @@ P26.5-E20 | 4 | worker של מיילים — שלוש תקלות 🤖 | 20 | שיעור 2
 @task
@@ -842,6 +872,8 @@ export async function startEmailWorker(ch: Channel, queue: string, sendEmail: (t
   });
 }
 ```
+@mistakes
+<ul><li>להעביר את ה־ack לסוף, אבל גם ב־catch לקרוא ל־<code>ch.nack(msg)</code> בלי פרמטרים. ברירת המחדל היא requeue, וההודעה הפגומה חוזרת בלולאה.</li><li><code>prefetch(1)</code> "ליתר ביטחון". זה בטוח לזיכרון, אבל איטי מאוד: ה־worker מחכה לסבב רשת על כל מייל.</li><li>לבלוע את השגיאה ב־catch עם ack. המייל לא נשלח, וגם לא נשאר עקבות ב־dead letter.</li></ul>
 
 @@ P26.5-E21 | 4 | חשבוניות מ־SQS — שלוש תקלות 🤖 | 20 | שיעור 3
 @task
@@ -873,6 +905,8 @@ export async function processInvoices(sqs: SQSClient, queueUrl: string, issue: (
 }
 ```
 <p>הכפילויות היו מתקלה 2: כל ההודעות "נמחקו" עם ה־ReceiptHandle של הראשונה — כלומר רק היא נמחקה (כמה פעמים), והשאר חזרו אחרי ה־visibility timeout ועובדו שוב.</p>
+@mistakes
+<ul><li>למחוק בתוך <code>finally</code>. ההודעה נמחקת גם כשהפקת החשבונית נכשלה.</li><li><code>WaitTimeSeconds: 0</code> או בלי השדה. ReceiveMessage חוזר מיד, ומשלמים על מיליוני קריאות ריקות.</li><li>לשמור את ה־ReceiptHandle מחוץ ללולאה (של ההודעה הראשונה). רק היא נמחקת, והשאר חוזרות ומופקות שוב.</li></ul>
 
 @@ P26.5-E22 | 4 | סטטוסים ב־Kafka — שלוש תקלות 🤖 | 20 | שיעור 4
 @task
@@ -919,6 +953,8 @@ export async function syncStatuses(
   return n;
 }
 ```
+@mistakes
+<ul><li>לשלוח בלי key, או עם key קבוע לכל ההודעות. בלי key אין סדר בין עדכונים של אותה הזמנה. key קבוע שם את כל התנועה ב־partition אחד.</li><li>commit לפני <code>save</code>. כשהמסד נופל, ה־offset כבר התקדם, והעדכון אבד.</li><li><code>fallbackMode: LATEST</code>. group חדש רואה רק הודעות שנשלחו אחרי שעלה, ולא את ההיסטוריה.</li></ul>
 
 @@ P26.5-E23 | 4 | outbox — שלוש תקלות 🤖 | 20 | שיעור 5
 @task
@@ -976,6 +1012,8 @@ export async function relayOutbox(pool: Pool, publish: (row: any) => Promise<voi
 }
 ```
 <p>בתיקון הזה, publish שנכשל באמצע מבטל (ROLLBACK) גם את הסימון של מה שכבר נשלח באותה ריצה — אז אלה יישלחו שוב. זה at-least-once, ובסדר — ה־consumers אידמפוטנטיים. E17 מראה גרסה שמסמנת את מה שהצליח.</p>
+@mistakes
+<ul><li>לתקן את ה־INSERT ל־<code>client.query</code> רק בשורה אחת. כל שאילתה בתוך הטרנזקציה חייבת לרוץ על אותו <code>client</code>.</li><li>לסמן <code>published_at</code> לפני ה־publish. אם ה־broker נופל, האירוע מסומן כנשלח ואובד.</li><li><code>SELECT … FOR UPDATE</code> מחוץ ל־BEGIN. הנעילה משתחררת מיד, וה־relay השני לוקח את אותן שורות.</li></ul>
 
 @@ P26.5-E24 | 5 | אתגר: צינור ההזמנות ב־RabbitMQ 🤖 | 60 | שיעור 5
 @task
@@ -1085,6 +1123,8 @@ export async function startConsumer(
 }
 ```
 <p>בלי confirms, <code>publish</code> חוזר כשההודעה נכנסה ל־buffer של הספרייה — לא כשהגיעה ל־broker. נפילה של הרשת באותו רגע ← ההזמנה נשמרה, האירוע לא. עם confirms — יודעים, ואפשר לנסות שוב (או: outbox, E17).</p>
+@mistakes
+<ul><li>לסמן <code>markIfNew</code> עם <code>eventId</code> בלבד. אז רק השירות הראשון מטפל באירוע, והשני רואה "כבר טופל".</li><li>לא לקרוא ל־<code>unmark</code> כש־handle נכשל. אז ניסיון חוזר של אותו אירוע ידלג עליו, והאירוע לא יטופל לעולם.</li><li>לחזור מ־<code>publishOrderPlaced</code> בלי <code>waitForConfirms</code>. אם ה־broker נופל רגע אחרי השליחה, ההזמנה אבדה ואף אחד לא יודע.</li></ul>
 
 @@ P26.5-E25 | 5 | אתגר: אנליטיקה מ־Kafka, בדיוק פעם אחת 🤖 | 60 | שיעור 5
 @task
@@ -1160,6 +1200,8 @@ export async function runRevenueAggregator({ brokers, topic, pool, max }: Aggreg
 }
 ```
 <p>זה הדפוס שמאחורי "exactly-once" אמיתי מול מסד: התוצאה וה"איפה עצרתי" נכתבים אטומית, אז אין מצב ביניים. הבודק מפיל את התהליך בשני מקומות שונים — ומימוש עם שתי טרנזקציות (קודם התוצאה, אחר כך ה־offset) נכשל באחד מהם: אירוע נספר פעמיים.</p>
+@mistakes
+<ul><li>לעשות commit ל־offset גם ב־Kafka, או לסמוך על autocommit. מה שקובע הוא רק ה־offset שבמסד, באותה טרנזקציה עם הסכום.</li><li>לשמור <code>m.offset</code> במקום <code>m.offset + 1n</code>. בעלייה, האירוע האחרון ייספר פעמיים.</li><li>לערבב <code>bigint</code> ו־<code>number</code> (<code>m.offset + 1</code>). זה זורק <code>TypeError</code>.</li></ul>
 
 @@ P26.5-E26 | 3 | להחזיר סדר להודעות 🤖 | 25 | שיעור 4
 @type scratch
@@ -1250,7 +1292,7 @@ next: 4 pending: 1
 @mistakes
 <ul><li>למסור רק את <code>seq</code> ולא לבדוק מי מחכה אחריו — 3 נשארת ב־Map לנצח.</li><li>לבדוק כפילות רק מול <code>#next</code> — הודעה שמחכה ומגיעה שוב דורסת את הראשונה.</li><li>לשמור את כל ההודעות במערך ולמיין בכל <code>push</code> — עובד, אבל O(n log n) לכל הודעה, ואין דרך פשוטה לזהות כפילות.</li><li><code>Math.max(...[])</code> כשאין ממתינות — ‏<code>-Infinity</code>. בדוק קודם שה־Map לא ריק.</li></ul>
 
-@@ P26.5-E27 | 3 | בדיקות ל־decide: לנסות שוב או dead letter? 🤖 | 25 | שיעור 5
+@@ P26.5-E27 | 3 | בדיקות ל־decide: לנסות שוב או dead letter? 🤖 | 25 | פרק 22, שיעור 5
 @lesson 5
 @part 2
 @type review
@@ -1312,7 +1354,7 @@ test("attempt לא תקין ← RangeError", () => {
 @mistakes
 <ul><li>לבדוק רק את 1, 2, 3 — שלושה מוטנטים (בלי תקרה, תקרה של 30 שניות, ו־<code>&gt;</code>) עוברים.</li><li><code>assert.equal(d.reason, "נכשל 5 פעמים: connection reset")</code> — עובד על הקוד הזה, אבל קושר את הבדיקה לניסוח.</li><li>לבדוק <code>RangeError</code> רק על 0 — שבר (<code>1.5</code>) עובר במימוש שבודק רק <code>attempt &lt; 1</code>.</li></ul>
 
-@@ P26.5-E28 | 2 | האירוע הבא לכל מפתח ב־outbox 🤖 | 20 | שיעור 5
+@@ P26.5-E28 | 2 | האירוע הבא לכל מפתח ב־outbox 🤖 | 20 | פרק 17, פרק 18, שיעור 5
 @lesson 5
 @part 2
 @type review
@@ -3464,3 +3506,37 @@ export function upcast(e: { type: string; version: number; data: unknown }): V2 
 <p>כשתגיע v3, מוסיפים <code>case 2</code> שמעלה ל־3, ו־v1 עובר דרך שניהם — כל שלב קטן ונבדק לבד. הלוגיקה העסקית מכירה רק את הגרסה האחרונה, וזה מה שמחזיק את הקוד פשוט שנים.</p>
 @mistakes
 <ul><li><code>Math.floor(total * 100)</code> — ‏<code>0.29 * 100</code> הוא <code>28.999999999999996</code>, ויוצא 28.</li><li>להעלות גרסה "לא מוכרת" כאילו היא האחרונה — v3 מהעתיד נקרא לא נכון בשקט.</li></ul>
+
+@@ P26.5-E101 | 4 | consumer שמאבד הזמנות 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>processDelivery(seen, msg, handle)</code> ב־<code>26w-messaging/starter/P26.5-E101.ts</code> מטפלת בהודעה אחת מתור עם at-least-once. ‏<code>seen</code> הוא <code>Set</code> של מזהי הודעות שכבר טופלו (בפרודקשן — טבלה). ‏<code>msg</code>: ‏<code>{ id, body }</code>. מחזירה מה לעשות עם ההודעה:</p>
+<ul><li><code>"duplicate"</code> — ה־id כבר טופל: לא קוראים ל־<code>handle</code> (ו־ack).</li><li><code>"ack"</code> — ‏<code>await handle(body)</code> הצליח; רק אז מסמנים את ה־id כמטופל.</li><li><code>"retry"</code> — ‏<code>handle</code> זרק: לא מסמנים, וההודעה תחזור.</li></ul>
+<p>התלונות: הזמנה שנכשלה פעם אחת (ספק התשלומים לא ענה) לא טופלה לעולם; שתי הזמנות שונות עם אותו תוכן (אותו לקוח, אותו מוצר) — השנייה נזרקה; ובלוג רואים "ack" על הזמנות שנכשלו. מצא ותקן.</p>
+```term
+% npm run check P26.5-E101
+```
+@hint1
+<p>עקוב אחרי הזמנה שנכשלת בפעם הראשונה ומצליחה בשנייה: מה יש ב־<code>seen</code> אחרי הניסיון הראשון?</p>
+@hint2
+<p>מזהה כפילות הוא ה־id של ההודעה, לא התוכן שלה. וסימון "טופל" — רק אחרי שהטיפול הצליח.</p>
+@solution
+```ts save=solutions/P26.5-E101.ts
+// P26.5-E101: הודעה אחת, at-least-once — מתוקן
+export type Decision = "ack" | "retry" | "duplicate";
+
+export async function processDelivery(seen: Set<string>, msg: { id: string; body: unknown }, handle: (body: unknown) => Promise<void>): Promise<Decision> {
+  if (seen.has(msg.id)) return "duplicate";
+  try {
+    await handle(msg.body);
+  } catch {
+    return "retry";
+  }
+  seen.add(msg.id);
+  return "ack";
+}
+```
+<ol><li><strong>‏<code>seen.add</code> לפני <code>handle</code>.</strong> ההודעה סומנה כמטופלת עוד לפני הטיפול. כשהטיפול נכשל והיא חזרה, היא זוהתה כ"כפילות" ונזרקה. זו התנהגות at-most-once. מסמנים אחרי הצלחה.</li><li><strong>זיהוי לפי <code>JSON.stringify(body)</code>.</strong> שתי הזמנות אמיתיות יכולות להיראות זהות. כפילות היא אותה <em>הודעה</em> שנמסרה שוב, ולכן לפי ה־id שלה.</li><li><strong>‏<code>catch</code> החזיר <code>"ack"</code>.</strong> ‏ack אומר ל־broker למחוק את ההודעה. על כישלון — retry (ואחרי מספר ניסיונות, dead letter).</li></ol>
+@mistakes
+<ul><li>להעביר את <code>seen.add</code> לתוך <code>finally</code>. זה מסמן גם כשנכשל, אותו באג.</li><li>לבדוק כפילות לפי <code>body.orderId</code>. זה עובד להזמנות, אבל לא לסוגי אירועים אחרים (עדכון סטטוס של אותה הזמנה הוא אירוע חדש עם אותו orderId).</li><li>‏<code>handle(body)</code> בלי <code>await</code>. השגיאה לא נתפסת ב־try, וכל הודעה מקבלת ack.</li></ul>

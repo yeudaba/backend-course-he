@@ -41,6 +41,8 @@ test("פגום ← שגיאה", () => {
     JSON.stringify({ ...ok, data: { ...ok.data, email: "not-an-email" } }),
     JSON.stringify({ ...ok, data: { ...ok.data, total: { amountCents: -1, currency: "ILS" } } }),
     JSON.stringify(makeEvent("order.placed", 1, { orderId: 5, email: "d@example.com" }, { now })),
+    JSON.stringify(makeEvent("order.placed", 1, { orderId: 5, email: "not-an-email", totalCents: 100 }, { now })),
+    JSON.stringify(makeEvent("order.placed", 1, { orderId: 5, email: "d@example.com", totalCents: 1.5 }, { now })),
   ];
   for (const raw of bad) assert.throws(() => parseOrderPlaced(raw), undefined, raw.slice(0, 80));
 });

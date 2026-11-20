@@ -28,5 +28,6 @@ test("רק name ו־price (ו־_id)", async (t) => {
 });
 test("ערכים לא תקינים ← RangeError", async (t) => {
   const { db } = await mongoSandbox(t, import.meta.url);
-  for (const o of [{ page: 0 }, { pageSize: 0 }, { pageSize: 51 }, { page: 1.5 }]) await assert.rejects(productsPage(db, o), RangeError);
+  for (const o of [{ page: 0 }, { pageSize: 0 }, { pageSize: 51 }, { page: 1.5 }, { pageSize: 2.5 }]) await assert.rejects(productsPage(db, o), RangeError, JSON.stringify(o));
+  assert.equal((await productsPage(db, { pageSize: 50 })).items.length, 8, "pageSize 50 — מותר");
 });

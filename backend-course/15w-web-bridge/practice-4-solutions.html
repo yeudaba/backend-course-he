@@ -215,7 +215,7 @@ console.log("הסינון שנבחר: done · מה שעל המסך:", shown);</c
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p><code><code class="mid">/tasks${params.size ? "?" + params : ""}</code></code></p>
+<p><code class="mid">`/tasks${params.size ? "?" + params : ""}`</code></p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
@@ -240,7 +240,7 @@ console.log(tasksPath());</code></pre>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>לבנות במחרוזת: <code><code class="mid">/tasks?status=${status}&amp;amp;q=${q}</code></code> — <code>q</code> לא מקודד, וערכים ריקים נשלחים.</li></ul>
+<ul><li>לבנות במחרוזת: <code class="mid">`/tasks?status=${status}&amp;q=${q}`</code> — <code>q</code> לא מקודד, וערכים ריקים נשלחים.</li></ul>
 
 
 </div></details>
@@ -252,7 +252,7 @@ console.log(tasksPath());</code></pre>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>תאריך: <code>const [y, m, d] = task.dueDate.split("-"); <code>${d}.${m}.${y}</code></code>.</p>
+<p>תאריך: <code class="mid">const [y, m, d] = task.dueDate.split("-"); `${d}.${m}.${y}`</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
@@ -289,7 +289,7 @@ export function renderTask(doc, task, { onToggle, onDelete }) {
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>li.innerHTML = <code class="long">&amp;lt;input type="checkbox"&amp;gt;&amp;lt;span&amp;gt;${task.title}&amp;lt;/span&amp;gt;...</code></code> — XSS (P15.5-E52), וגם צריך אחר כך לחפש את האלמנטים כדי לחבר אירועים.</li><li>לקרוא <code>onToggle(task.id, !done)</code> — אם המשתמש לחץ פעמיים, הערך השני שגוי. קוראים את <code>box.checked</code> ברגע האירוע.</li></ul>
+<ul><li><code class="long">li.innerHTML = `&lt;input type="checkbox"&gt;&lt;span&gt;${task.title}&lt;/span&gt;...`</code> — XSS (P15.5-E52), וגם צריך אחר כך לחפש את האלמנטים כדי לחבר אירועים.</li><li>לקרוא <code>onToggle(task.id, !done)</code> — אם המשתמש לחץ פעמיים, הערך השני שגוי. קוראים את <code>box.checked</code> ברגע האירוע.</li></ul>
 
 
 </div></details>
@@ -601,6 +601,54 @@ for (const u of ["/", "/app.JS?v=3", "/docs/", "/%2E%2E%2F.env", "/../web-backup
 
 </div></details>
   </div>
+<div class="ex" id="P15.5-E83">
+    <h3>P15.5-E83 · רשימת משימות שמריצה קוד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה <code>innerHTML +=</code> עושה עם הטקסט שהמשתמש כתב? ומה הוא עושה עם מה שכבר היה ברשימה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שרת שמשתמש ב־<code>express.json()</code> קורא גוף רק עם header מסוים. ו־<code>fetch</code> לא זורק על 400: מי בודק את <code>res.ok</code>?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P15.5-E83: רשימת משימות — מתוקן
+export function renderList(doc, ul, tasks) {
+  if (tasks.length === 0) {
+    const li = doc.createElement("li");
+    li.className = "empty";
+    li.textContent = "אין משימות";
+    ul.replaceChildren(li);
+    return;
+  }
+  ul.replaceChildren(
+    ...tasks.map((t) =&gt; {
+      const li = doc.createElement("li");
+      li.textContent = t.title;
+      return li;
+    })
+  );
+}
+
+export async function createTask(apiBase, title, fetchFn = fetch) {
+  const res = await fetchFn(`${apiBase}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+  return body;
+}</code></pre>
+<ol><li><strong><code>innerHTML</code> עם קלט של משתמש</strong> הופך את הכותרת ל־HTML, ו־<code>onerror</code> רץ. ‏<code>textContent</code> מציג אותה כטקסט, תמיד.</li><li><strong><code>+=</code> בלי ניקוי</strong> מוסיף לרשימה הקיימת. ‏<code>replaceChildren</code> מחליף את כל התוכן בבת אחת.</li><li><strong>חסר <code>Content-Type</code>.</strong> בלי ה־header השרת לא מפרש את הגוף כ־JSON, ‏<code>req.body</code> ריק, ומגיע 400.</li><li><strong>לא בודקים <code>res.ok</code>.</strong> ‏<code>fetch</code> זורק רק כשאין תשובה בכלל. על 400 הוא מחזיר תשובה רגילה, והגוף של השגיאה חזר כאילו הוא משימה.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"לנקות" את הכותרת עם <code>replace(/&lt;/g, "")</code> ולהשאיר innerHTML. תמיד יש עוד דרך לעקוף ניקוי ידני; <code>textContent</code> לא צריך ניקוי.</li><li>לבדוק <code>res.status === 400</code> בלבד. גם 401, ‏409 ו־500 הן שגיאות; <code>res.ok</code> מכסה את כולן.</li><li>לקרוא <code>res.json()</code> פעמיים (פעם לבדיקה ופעם להחזרה). את הגוף אפשר לקרוא רק פעם אחת.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P15.5-E76">
     <h3>P15.5-E76 · Vary: Origin <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
@@ -746,7 +794,7 @@ export function createCors({ allow, credentials = false, maxAge = 600 }: { allow
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p><code>const parts = [first]; if (s.done) parts.push(<code>${s.done} בוצעו</code>); ... return parts.join(" · ");</code></p>
+<p><code class="long">const parts = [first]; if (s.done) parts.push(`${s.done} בוצעו`); ... return parts.join(" · ");</code></p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>

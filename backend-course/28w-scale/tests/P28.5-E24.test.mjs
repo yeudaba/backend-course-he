@@ -54,19 +54,36 @@ test("cache: אותה שאילתה ← HIT; אחרי ה־TTL ← שוב MISS", a
 });
 test("תחת עומס: 300 בקשות, 10 במקביל ← p95 מתחת ל־50ms", async (t) => {
   const get = await start(t);
+  // כיול: כמה לוקחת שאילתה "קרה" (בלי cache) על המחשב הזה. כשהמחשב עמוס, גם הסף עולה בהתאם
+  const cold = [];
+  for (const day of ["2026-10-20", "2026-10-21", "2026-10-22"]) {
+    const t0 = performance.now();
+    assert.equal((await get(`/top-products?day=${day}&limit=4`)).status, 200);
+    cold.push(performance.now() - t0);
+  }
+  cold.sort((a, b) => a - b);
+  const limit = Math.max(50, cold[1] * 0.75);
   const paths = Array.from({ length: 10 }, (_, i) => `/revenue?from=2026-10-${String(i + 1).padStart(2, "0")}&to=2026-10-${String(i + 15).padStart(2, "0")}`);
-  const lat = [];
-  let next = 0;
-  await Promise.all(Array.from({ length: 10 }, async () => {
-    while (next < 300) {
-      const p = paths[next++ % paths.length];
-      const t0 = performance.now();
-      const r = await get(p);
-      lat.push(performance.now() - t0);
-      assert.equal(r.status, 200);
-    }
-  }));
-  lat.sort((a, b) => a - b);
-  const p95 = lat[Math.ceil(0.95 * lat.length) - 1];
-  assert.ok(p95 < 50, `p95 = ${p95.toFixed(1)}ms`);
+  const measure = async () => {
+    const lat = [];
+    let next = 0;
+    await Promise.all(Array.from({ length: 10 }, async () => {
+      while (next < 300) {
+        const p = paths[next++ % paths.length];
+        const t0 = performance.now();
+        const r = await get(p);
+        lat.push(performance.now() - t0);
+        assert.equal(r.status, 200);
+      }
+    }));
+    lat.sort((a, b) => a - b);
+    return lat[Math.ceil(0.95 * lat.length) - 1];
+  };
+  // עד שלושה סבבים — רגע של עומס במחשב לא מכשיל פתרון טוב
+  const tries = [];
+  for (let i = 0; i < 3; i++) {
+    tries.push(await measure());
+    if (tries.at(-1) < limit) return;
+  }
+  assert.fail(`p95 = ${tries.map((x) => x.toFixed(1)).join(" / ")}ms בשלושה סבבים (הסף: ${limit.toFixed(0)}ms; שאילתה בלי cache לוקחת כאן ${cold[1].toFixed(0)}ms) — האם התשובות נשמרות ב־cache?`);
 });

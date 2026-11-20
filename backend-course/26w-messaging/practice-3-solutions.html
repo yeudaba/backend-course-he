@@ -50,9 +50,12 @@ await sqs.send(new DeleteQueueCommand({ QueueUrl }));</code></pre>
 3. "resize image 42" (receive #2)</pre>
 <p>(<code>WaitTimeSeconds: 1</code> — long polling קצר. בלי זה, receive "סוקר" רק חלק מהשרתים של SQS, ויכול לחזור ריק גם כשיש הודעה — שיעור 3.) בזמן ה־visibility timeout ההודעה "בטיפול" — consumers אחרים לא רואים אותה. לא נמחקה עד הסוף ← חוזרת, והמונה עולה. כלל: ה־timeout ארוך מהזמן שלוקח לטפל (אחרת ההודעה חוזרת בזמן שעוד מטפלים בה, ומטופלת פעמיים); ועבודה ארוכה מאריכה אותו תוך כדי (<code>ChangeMessageVisibility</code>). ואחרי <code>maxReceiveCount</code> קבלות — ל־DLQ (E11).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־receive מוחק את ההודעה. היא רק מוסתרת ל־VisibilityTimeout, וחוזרת אם לא קראו ל־DeleteMessage.</li><li>לצפות שה־receive השני יחזיר את אותה הודעה מיד. היא עדיין מוסתרת, ולכן חוזר "כלום".</li><li>לחשוב ש־<code>ApproximateReceiveCount</code> נשאר 1. הוא עולה בכל קבלה, ולכן בפעם השלישית הוא 2. לפי המונה הזה עובד ה־DLQ.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E62">
     <h3>P26.5-E62 · ‏visibility timeout קצר מדי <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
@@ -201,9 +204,12 @@ export async function sendOrderEvents(sqs: SQSClient, queueUrl: string, events: 
 }</code></pre>
 <p>FIFO מול Standard: Standard — כמעט בלי הגבלת קצב, אבל סדר "בערך" ולפעמים כפילויות; FIFO — סדר מדויק בתוך group ו־dedup של 5 דקות, עם תקרת קצב. ושימו לב: סדר בתוך group אומר שהודעה תקועה בהזמנה 7 עוצרת רק את הזמנה 7 — לא את כל התור.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח את כל האירועים ב־batch אחד. SQS מקבל עד 10 הודעות ב־batch, ויזרוק על יותר.</li><li><code>MessageGroupId</code> קבוע (למשל <code>"orders"</code>). זה עובד, אבל כל ההזמנות מחכות זו לזו בתור אחד, במקום סדר לכל הזמנה בנפרד.</li><li>לסמוך על כך ש־batch שלא זרק הצליח כולו. כשחלק מההודעות נכשלות, הן חוזרות ב־<code>Failed</code>, וצריך לבדוק את זה.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E10">
     <h3>P26.5-E10 · consumer של SQS 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
@@ -250,9 +256,12 @@ export async function pollOnce(
 }</code></pre>
 <p>ובפועל — לולאה: <code class="mid">while (!stopping) await pollOnce(…)</code>, ו־SIGTERM (פרק 24) מסמן stopping, כך שהקבלה הנוכחית מסתיימת לפני היציאה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק עם <code>MessageId</code>. למחיקה צריך את ה־<code>ReceiptHandle</code> של הקבלה הזו.</li><li>למחוק את כל ההודעות, גם את אלה שנכשלו. הודעה שנכשלה צריכה לחזור לתור, ולכן לא מוחקים אותה.</li><li>לקרוא ל־DeleteMessageBatch עם רשימה ריקה. SQS זורק על batch ריק, ולכן בודקים קודם שיש מה למחוק.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E11">
     <h3>P26.5-E11 · dead-letter queue ב־SQS 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
@@ -290,9 +299,12 @@ export async function createQueueWithDlq(
 }</code></pre>
 <p>ה־DLQ שומר 14 יום כי מישהו צריך להסתכל: alarm על "יש הודעות ב־DLQ", בדיקה, תיקון — ואז redrive חזרה לתור הראשי (יש לזה כפתור בקונסולה ו־API).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים ב־<code>deadLetterTargetArn</code> את ה־URL של ה־DLQ. צריך ARN, ומקבלים אותו מ־<code>GetQueueAttributes</code>.</li><li><code>RedrivePolicy</code> כאובייקט ולא כמחרוזת. כל ה־Attributes של SQS הם מחרוזות, ולכן צריך <code>JSON.stringify</code>.</li><li>ליצור את התור הראשי לפני ה־DLQ. אז עוד אין ARN להפנות אליו.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E21">
     <h3>P26.5-E21 · חשבוניות מ־SQS — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
@@ -326,9 +338,12 @@ export async function processInvoices(sqs: SQSClient, queueUrl: string, issue: (
 }</code></pre>
 <p>הכפילויות היו מתקלה 2: כל ההודעות "נמחקו" עם ה־ReceiptHandle של הראשונה — כלומר רק היא נמחקה (כמה פעמים), והשאר חזרו אחרי ה־visibility timeout ועובדו שוב.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>למחוק בתוך <code>finally</code>. ההודעה נמחקת גם כשהפקת החשבונית נכשלה.</li><li><code>WaitTimeSeconds: 0</code> או בלי השדה. ReceiveMessage חוזר מיד, ומשלמים על מיליוני קריאות ריקות.</li><li>לשמור את ה־ReceiptHandle מחוץ ללולאה (של ההודעה הראשונה). רק היא נמחקת, והשאר חוזרות ומופקות שוב.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E67">
     <h3>P26.5-E67 · ‏heartbeat ל־visibility בזמן עבודה ארוכה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>

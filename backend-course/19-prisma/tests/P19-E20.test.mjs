@@ -7,6 +7,7 @@ const { ordersWithCustomers } = await load(import.meta.url, "P19-E20.ts");
 
 test("בלי N+1", async (t) => {
   const { prisma, queries } = await shop(t, import.meta.url, { log: true });
+  await prisma.$executeRawUnsafe("UPDATE orders SET status = status WHERE id IN (1, 2)"); // משנה את הסדר הפיזי בטבלה
   const before = queries.length;
   const r = await ordersWithCustomers(prisma);
   assert.ok(queries.length - before <= 2, `${queries.length - before} שאילתות — מותר עד 2`);

@@ -240,9 +240,14 @@ test("הגבולות עצמם תקינים", () => {
 });
 
 test("ערכים לא תקינים ← RangeError", () => {
-  for (const query of [{ page: "0" }, { page: "-1" }, { page: "abc" }, { page: "" }, { limit: "51" }, { limit: "0" }, { limit: "2.5" }]) {
+  for (const query of [{ page: "0" }, { page: "-1" }, { page: "abc" }, { page: "" }, { page: "1.5" }, { limit: "51" }, { limit: "0" }, { limit: "2.5" }]) {
     assert.throws(() => parsePagination(query), RangeError, JSON.stringify(query));
   }
+});
+
+test("maxLimit מהאופציות", () => {
+  assert.equal(parsePagination({ limit: "100" }, { maxLimit: 100 }).limit, 100);
+  assert.throws(() => parsePagination({ limit: "11" }, { maxLimit: 10 }), RangeError);
 });
 
 test("ההודעה מציינת את הערך", () => {
@@ -300,6 +305,14 @@ test("4xx — לא מנסים שוב", async () => {
   });
   await assert.rejects(withRetry(fn), HttpStatusError);
   assert.equal(fn.mock.callCount(), 1);
+});
+
+test("500 בדיוק — כן מנסים שוב (רק מתחת ל־500 לא)", async () => {
+  const fn = mock.fn(async () => {
+    throw new HttpStatusError(500);
+  });
+  await assert.rejects(withRetry(fn, 1), HttpStatusError);
+  assert.equal(fn.mock.callCount(), 2);
 });
 
 test("retries=0 — ניסיון אחד", async () => {
@@ -862,7 +875,7 @@ test("lowBalance — בדיוק החשבונות שמתחת לסף", () => {
 
 @@ P22-E21 | 4 | בדיקות חלשות מדי 🤖 | 20 | שיעור 1
 @task
-<p>ב־<code>P22-E21.spec.ts</code> הבדיקות ל־<code>parseConfig(env)</code> עוברות, אבל "שבע מתוך שבע" באגים עוברים דרכן: port כמחרוזת, ברירת מחדל שגויה, <code>DEBUG="false"</code> שהופך ל־<code>true</code>, רווחים שלא נוקו, ועוד. חזק אותן. (התנהגות: <code>APP_NAME</code> חובה, trim; PORT 1–65535, ברירת מחדל 3000; DEBUG רק <code>"true"</code>/<code>"false"</code>; <code>CORS_ORIGINS</code> מופרד בפסיקים, מנוקה מרווחים וריקים; כל שגיאה — <code>ConfigError</code>.)</p>
+<p>ב־<code>P22-E21.spec.ts</code> הבדיקות ל־<code>parseConfig(env)</code> עוברות, אבל "עשרה מתוך עשרה" באגים עוברים דרכן: port כמחרוזת, ברירת מחדל שגויה, <code>DEBUG="false"</code> שהופך ל־<code>true</code>, רווחים שלא נוקו, ועוד. חזק אותן. (התנהגות: <code>APP_NAME</code> חובה, trim; PORT 1–65535, ברירת מחדל 3000; DEBUG רק <code>"true"</code>/<code>"false"</code>; <code>CORS_ORIGINS</code> מופרד בפסיקים, מנוקה מרווחים וריקים; כל שגיאה — <code>ConfigError</code>.)</p>
 @hint1
 <p><code>assert.ok(x)</code> עובר על כל ערך "אמיתי" — <code>"8080"</code>, <code>8081</code>, <code>[" "]</code>. השווה ל<em>ערך המדויק</em>.</p>
 @hint2
@@ -978,6 +991,7 @@ test("חודש בלי מכירות", async () => {
 <p><code>InventoryService(clock, notifier, lowStockThreshold = 3)</code> ב־<code>P22-E24.ts</code>:</p>
 <ul><li><code>restock(sku, qty)</code> — מוסיף למלאי. <code>available(sku)</code> — מלאי פחות שמירות פעילות.</li><li><code>reserve(sku, qty)</code> — שומר ל־15 דקות, מחזיר id. יותר מהפנוי ← <code>OutOfStockError</code>. אם אחרי השמירה נשארו <strong>עד</strong> הסף — <code>notifier.lowStock(sku, left)</code>.</li><li><code>release(id)</code> — משחרר. <code>commit(id)</code> — מוריד מהמלאי באמת; שמירה שפגה או לא קיימת ← שגיאה.</li><li>כמות שאינה שלם חיובי ← <code>RangeError</code> (ב־restock וב־reserve).</li></ul>
 <p>כתוב בדיקות שיתפסו את כל עשרת הבאגים שהבודק מכין.</p><p class="muted">איך עובד הבודק בתרגיל הזה: הוא מריץ את <strong>הבדיקות שלך</strong> על הקוד התקין (חייבות לעבור), ואז על כמה גרסאות שלו עם באג אחד (חייבות להיכשל). הוא מראה אילו באגים "שרדו". את <code>P22-E24.ts</code> עצמו לא משנים. הרצה ידנית: <code>node --test 22-testing/starter/P22-E24.spec.ts</code>.</p>
+<p>🔗 <strong>איך זה מתחבר:</strong> כל הפרק בתרגיל אחד: <code>node:test</code> (שיעור 1), כפילים ושעון מזויף (שיעור 2) ו־mutation testing (שיעור 4). הבאגים שהבודק מכין הם בדיוק המוטציות שהבדיקות שלך צריכות לתפוס.</p>
 @hint1
 <p>setup אחד: שעון שאפשר לקדם בדקות, notifier עם <code>mock.fn</code>, ו־inventory חדש לכל בדיקה.</p>
 @hint2
@@ -1195,7 +1209,7 @@ test("קלט לא תקין ← RangeError", () => {
 @mistakes
 <ul><li>לבדוק רק "עמוד 1 של 100 שורות" — ‏<code>floor</code> ו־<code>ceil</code> נותנים 10 בשניהם, ו־<code>hasNext</code> בעמוד האחרון לא נבדק.</li><li>לבדוק <code>pageSize</code> של 1000 במקום 101 — לא תופס <code>&gt; 101</code>. הגבול הוא 100, ולכן בודקים 100 (עובר) ו־101 (נכשל).</li><li>לבדוק את המימוש (למשל שהקוד קורא ל־<code>Math.ceil</code>) — שני המימושים התקינים האחרים נכשלים, והבודק מתלונן ש"הבדיקות בודקות איך ולא מה".</li></ul>
 
-@@ P22-E27 | 3 | מטמון LRU עם Map 🤖 | 25 | שיעור 2
+@@ P22-E27 | 3 | מטמון LRU עם Map 🤖 | 25 | פרק 7, פרק 11, פרק 12, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -1268,7 +1282,7 @@ console.log(cache.keys(), cache.get("b"), cache.size);
 @mistakes
 <ul><li><code>set</code> למפתח קיים בלי <code>delete</code> קודם — ‏<code>Map.set</code> משאיר אותו במקום הישן, והוא ייצא ראשון למרות שעדכנו אותו.</li><li><code>if (!value) return undefined</code> — ‏<code>0</code> ו־<code>""</code> "לא נמצאים", ולא עוברים לסוף.</li><li>להוציא את הישן <em>לפני</em> ה־<code>set</code> גם כשהמפתח כבר קיים — מוציאים פריט בלי סיבה.</li></ul>
 
-@@ P22-E28 | 3 | memoizeAsync עם שעון מוזרק 🤖 | 25 | שיעור 2
+@@ P22-E28 | 3 | memoizeAsync עם שעון מוזרק 🤖 | 25 | פרק 5, פרק 7, פרק 10, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -1554,7 +1568,7 @@ assert.equal(cartTotal([{ price: 0.1, qty: 1 }, { price: 0.2, qty: 1 }]), 0.3);
 @hint2
 <p>ומה עם המערך המקורי — מותר לו להשתנות?</p>
 @solution
-<table><tr><th>קלט</th><th>ציפייה</th><th>תופס</th></tr><tr><td><code>[], 3</code></td><td><code>[]</code></td><td>מחזיר <code>[[]]</code></td></tr><tr><td><code>[1], 3</code></td><td><code>[[1]]</code></td><td>size גדול מהמערך</td></tr><tr><td><code>[1,2,3,4], 2</code></td><td><code>[[1,2],[3,4]]</code></td><td>חתיכה ריקה מיותרת בסוף</td></tr><tr><td><code>[1,2,3,4,5], 2</code></td><td><code>[[1,2],[3,4],[5]]</code></td><td>החתיכה האחרונה נחתכת או נעלמת</td></tr><tr><td><code>[1,2,3], 1</code></td><td><code>[[1],[2],[3]]</code></td><td>off-by-one בגבול התחתון</td></tr><tr><td><code>0</code> / <code>-1</code> / <code>1.5</code> כ־size</td><td><code>RangeError</code></td><td>לולאה אינסופית (size 0!) או חתיכות שבורות</td></tr><tr><td>אחרי הקריאה — המערך המקורי</td><td>לא השתנה</td><td>שימוש ב־<code>splice</code></td></tr></table>
+<div class="table-wrap"><table><tr><th>קלט</th><th>ציפייה</th><th>תופס</th></tr><tr><td><code>[], 3</code></td><td><code>[]</code></td><td>מחזיר <code>[[]]</code></td></tr><tr><td><code>[1], 3</code></td><td><code>[[1]]</code></td><td>size גדול מהמערך</td></tr><tr><td><code>[1,2,3,4], 2</code></td><td><code>[[1,2],[3,4]]</code></td><td>חתיכה ריקה מיותרת בסוף</td></tr><tr><td><code>[1,2,3,4,5], 2</code></td><td><code>[[1,2],[3,4],[5]]</code></td><td>החתיכה האחרונה נחתכת או נעלמת</td></tr><tr><td><code>[1,2,3], 1</code></td><td><code>[[1],[2],[3]]</code></td><td>off-by-one בגבול התחתון</td></tr><tr><td><code>0</code> / <code>-1</code> / <code>1.5</code> כ־size</td><td><code>RangeError</code></td><td>לולאה אינסופית (size 0!) או חתיכות שבורות</td></tr><tr><td>אחרי הקריאה — המערך המקורי</td><td>לא השתנה</td><td>שימוש ב־<code>splice</code></td></tr></table></div>
 <p>שים לב ל־<code>size = 0</code>: בלי בדיקה, <code>for (let i = 0; i &lt; a.length; i += 0)</code> לא נגמר, והבדיקה "נתקעת" במקום להיכשל. זה בדיוק המקרה שחייב בדיקה.</p>
 @mistakes
 <ul><li>לבדוק רק את הדוגמה מהתיאור. היא תמיד עוברת — מי שכתב את הקוד בדק אותה.</li></ul>
@@ -1642,7 +1656,7 @@ test("ערכים לא תקינים ← RangeError", () => {
 @task
 <p>ב־<code>22-testing/starter/P22-E37.ts</code> יש <code>class Cart</code> (עם <code>Map</code> פרטי):</p>
 <ul><li><code>add(sku, priceAgorot, qty = 1)</code> — אותו sku מצטבר (והמחיר מתעדכן לאחרון). עד 10 יחידות מכל sku. ‏qty שלם חיובי, מחיר שלם 0 ומעלה (0 = מתנה). אחרת ← <code>RangeError</code>.</li><li><code>remove(sku)</code> ← <code>true</code> אם היה, אחרת <code>false</code>.</li><li><code>count</code> — סך <strong>היחידות</strong>. ‏<code>totalAgorot()</code> — מחיר × כמות, לכל sku.</li></ul>
-<p>כתוב בדיקות ב־<code>P22-E37.spec.ts</code> (ריק). כל בדיקה עם עגלה חדשה. הבודק מריץ 8 באגים.</p>
+<p>כתוב בדיקות ב־<code>P22-E37.spec.ts</code> (ריק). כל בדיקה עם עגלה חדשה. הבודק מריץ 10 באגים.</p>
 ```term
 % npm run check P22-E37
 ```
@@ -1679,6 +1693,13 @@ test("אותו sku מצטבר, עד 10", () => {
   assert.equal(cart.count, 10);
   assert.throws(() => cart.add("mug", 4990, 1), RangeError);
   assert.equal(cart.count, 10);
+});
+
+test("הוספה חוזרת — המחיר מתעדכן לאחרון", () => {
+  const cart = new Cart();
+  cart.add("mug", 4990, 1);
+  cart.add("mug", 3990, 1);
+  assert.equal(cart.totalAgorot(), 2 * 3990);
 });
 
 test("מתנה במחיר 0", () => {
@@ -2333,66 +2354,45 @@ export async function start(t: { after(fn: () => void | Promise<void>): void }, 
 @mistakes
 <ul><li><code>await res.json()</code> על כל תשובה — 204 ותשובות טקסט זורקות.</li><li><code>t.after(() =&gt; server.close())</code> בלי לחכות — בדרך כלל עובד, אבל חיבורי keep-alive של <code>fetch</code> יכולים להשאיר את התהליך פתוח עוד כמה שניות.</li></ul>
 
-@@ P22-E55 | 2 | ‏aUser ו־aTask 🤖 | 15 | שיעור 3
+@@ P22-E55 | 2 | ‏invalidCases — כל הגופים הלא תקינים 🤖 | 15 | שיעור 3
 @lesson 3
 @part 1
 @task
-<p>בקובץ <code>22-testing/starter/P22-E55.ts</code> כתוב וייצא builders לנתוני בדיקה:</p>
+<p>בבדיקות HTTP של POST כותבים הרבה פעמים את אותה בדיקה: גוף תקין, ובו שדה אחד שגוי ← 400. במקום להעתיק אותה, מייצרים את המקרים מטבלה. (את ה־builders ל־User ול־Task כתבת כבר ב־P22-E16.) בקובץ <code>22-testing/starter/P22-E55.ts</code> כתוב וייצא:</p>
 ```ts
-export type User = { id: number; email: string; role: "user" | "admin"; createdAt: string };
-export type Task = { id: number; ownerId: number; title: string; status: "todo" | "in_progress" | "done"; dueDate: string | null; createdAt: string };
-export function aUser(overrides?: Partial<User>): User
-export function aTask(overrides?: Partial<Task>): Task
-export function resetBuilders(): void
+export function invalidCases(valid: Record<string, unknown>, bad: Record<string, unknown[]>): { name: string; body: Record<string, unknown> }[]
 ```
-<ul><li>לכל סוג מונה משלו, מ־1. כל קריאה מקדמת אותו, גם אם ב־overrides יש <code>id</code> (ואז ה־id מה־overrides).</li><li>ברירות מחדל ל־User: ‏<code>email: `user${id}@example.com`</code> (לפי ה־id <strong>הסופי</strong>), ‏<code>role: "user"</code>, ‏<code>createdAt: "2026-11-04T10:00:00.000Z"</code>.</li><li>ל־Task: ‏<code>ownerId: 1</code>, ‏<code>title: `משימה ${id}`</code>, ‏<code>status: "todo"</code>, ‏<code>dueDate: null</code>, ואותו <code>createdAt</code>.</li><li><code>resetBuilders()</code> — שני המונים חוזרים ל־1. כל קריאה מחזירה אובייקט חדש.</li></ul>
+<ul><li>לכל שדה ב־<code>bad</code>, לפי הסדר: קודם מקרה בלי השדה (<code>name: "בלי title"</code>), ואחריו מקרה לכל ערך שגוי (<code>name: `title = ${JSON.stringify(v)}`</code>), עם הגוף התקין ובו רק השדה הזה מוחלף.</li><li>את <code>valid</code> לא משנים, וכל מקרה מקבל אובייקט חדש.</li><li>שדה ב־<code>bad</code> שאין ב־<code>valid</code> ← <code>Error(`אין שדה ${field} בגוף התקין`)</code>.</li></ul>
+<p>כך משתמשים בזה:</p>
+```ts
+for (const c of invalidCases({ title: "חלב", priority: "high" }, { title: ["", "   ", 5], priority: ["urgent"] })) {
+  test(c.name, async (t) => assert.equal((await (await start(t))("POST", "/tasks", c.body)).status, 400));
+}
+```
 ```term
 % npm run check P22-E55
 ```
 @hint1
-<p><code>let userSeq = 0;</code> ואז <code>const id = overrides.id ?? ++userSeq;</code> — רגע: המונה צריך להתקדם <em>תמיד</em>. ‏<code>const seq = ++userSeq; const id = overrides.id ?? seq;</code></p>
+<p>‏<code>Object.entries(bad)</code> שומר על הסדר. ובלי השדה: <code>const { [field]: _, ...rest } = valid;</code></p>
 @hint2
-```ts
-return { id, email: `user${id}@example.com`, role: "user", createdAt: ..., ...overrides };
-```
-<p>— ה־overrides אחרונים, אז הם גוברים.</p>
+<p>‏<code>JSON.stringify("")</code> הוא <code>""</code> עם המירכאות, ו־<code>JSON.stringify(5)</code> הוא <code>5</code>. כך שם הבדיקה מראה בדיוק מה נשלח.</p>
 @solution
 ```ts save=solutions/P22-E55.ts
-// P22-E55: builders לנתוני בדיקה
-export type User = { id: number; email: string; role: "user" | "admin"; createdAt: string };
-export type Task = {
-  id: number;
-  ownerId: number;
-  title: string;
-  status: "todo" | "in_progress" | "done";
-  dueDate: string | null;
-  createdAt: string;
-};
-
-const CREATED = "2026-11-04T10:00:00.000Z";
-let userSeq = 0;
-let taskSeq = 0;
-
-export function aUser(overrides: Partial<User> = {}): User {
-  const seq = ++userSeq;
-  const id = overrides.id ?? seq;
-  return { id, email: `user${id}@example.com`, role: "user", createdAt: CREATED, ...overrides };
-}
-
-export function aTask(overrides: Partial<Task> = {}): Task {
-  const seq = ++taskSeq;
-  const id = overrides.id ?? seq;
-  return { id, ownerId: 1, title: `משימה ${id}`, status: "todo", dueDate: null, createdAt: CREATED, ...overrides };
-}
-
-export function resetBuilders(): void {
-  userSeq = 0;
-  taskSeq = 0;
+// P22-E55: invalidCases — גוף תקין עם שדה אחד שגוי בכל פעם
+export function invalidCases(valid: Record<string, unknown>, bad: Record<string, unknown[]>) {
+  const cases: { name: string; body: Record<string, unknown> }[] = [];
+  for (const [field, values] of Object.entries(bad)) {
+    if (!(field in valid)) throw new Error(`אין שדה ${field} בגוף התקין`);
+    const { [field]: _, ...rest } = valid;
+    cases.push({ name: `בלי ${field}`, body: rest });
+    for (const v of values) cases.push({ name: `${field} = ${JSON.stringify(v)}`, body: { ...valid, [field]: v } });
+  }
+  return cases;
 }
 ```
-<p>כאן מונה ברמת הקובץ הוא בכוונה (שונה מ־E43): <code>resetBuilders()</code> נקרא ב־<code>beforeEach</code>, וכך כל בדיקה מתחילה מ־1. כשמחר מוסיפים שדה חובה ל־Task, משנים שורה אחת כאן.</p>
+<p>שדה אחד שגוי בכל פעם, כל השאר תקינים. כך כשבדיקה נכשלת, ברור איזה שדה לא נבדק בשרת. ושם הבדיקה (<code>title = "   "</code>) מופיע בפלט של <code>node --test</code>, בלי לפתוח את הקוד.</p>
 @mistakes
-<ul><li><code>overrides.id ?? ++taskSeq</code> — כשיש id ב־overrides המונה לא מתקדם, והקריאה הבאה עלולה לקבל אותו id.</li><li>email לפי המונה ולא לפי ה־id הסופי — <code>aUser({ id: 7 })</code> מקבל <code>user1@...</code>.</li></ul>
+<ul><li>לשנות את <code>valid</code> (<code>valid[field] = v</code>) ולהחזיר אותו. כל המקרים מצביעים על אותו אובייקט, ובסוף כולם עם הערך האחרון.</li><li>להחליף כמה שדות באותו מקרה. אם השרת בודק רק אחד מהם, הבדיקה עדיין מקבלת 400, והבאג בשדה השני לא נתפס.</li><li>‏<code>delete body[field]</code> על <code>{ ...valid }</code>. זה עובד, אבל קל לשכוח את העותק ולמחוק מ־<code>valid</code> עצמו.</li></ul>
 
 @@ P22-E56 | 3 | מסד בדיקות: schema זמני 🤖 | 25 | פרק 16, שיעור 3
 @lesson 3
@@ -2589,7 +2589,7 @@ await client.query(`CREATE TABLE tasks (id serial PRIMARY KEY, owner_id int, tit
 @task
 <p>ב־<code>22-testing/starter/P22-E61.ts</code> יש <code>TasksRepository(pool)</code> מול PostgreSQL:</p>
 <ul><li><code>insert(ownerId, { title, status?, dueDate? })</code> ← המשימה (<code>status</code> ברירת מחדל <code>todo</code>, ‏<code>dueDate</code> מחרוזת <code>YYYY-MM-DD</code> או <code>null</code>).</li><li><code>list(ownerId, status?)</code> ← רק של הבעלים; מיון לפי <code>dueDate</code> (בלי תאריך — בסוף), ואז <code>id</code>.</li><li><code>countOverdue(ownerId, today)</code> ← כמה משימות עם <code>dueDate</code> <strong>לפני</strong> <code>today</code> שאינן <code>done</code>.</li></ul>
-<p>ו־<code>P22-E61-db.ts</code> (לא משנים) — ‏<code>createTestSchema()</code> שמחזיר <code>{ pool, reset, close }</code> עם הטבלה <code>tasks</code>. כתוב בדיקות ב־<code>P22-E61.spec.ts</code> (ריק). הבודק מריץ 7 באגים, מול המסד שלך.</p>
+<p>ו־<code>P22-E61-db.ts</code> (לא משנים) — ‏<code>createTestSchema()</code> שמחזיר <code>{ pool, reset, close }</code> עם הטבלה <code>tasks</code>. כתוב בדיקות ב־<code>P22-E61.spec.ts</code> (ריק). הבודק מריץ 8 באגים, מול המסד שלך.</p>
 ```term
 % npm run check P22-E61
 ```
@@ -3975,7 +3975,7 @@ test("refresh token — 7 ימים", async () => {
 @task
 <p>ב־<code>22-testing/starter/P22-E92.ts</code> יש <code>parseRegister(body)</code> עם Zod (כמו <code>auth.schema.ts</code> של שלב ד׳):</p>
 <ul><li><code>z.strictObject</code>: שדה לא מוכר ← שגיאה.</li><li><code>email</code>: ‏<code>trim</code>, אותיות קטנות, אימייל תקין.</li><li><code>password</code>: לפחות 8 תווים, לכל היותר 72 <strong>בתים</strong> ב־UTF-8, בלי <code>trim</code>.</li><li>מחזיר <code>{ ok: true, data }</code> או <code>{ ok: false, errors: string[] }</code>.</li></ul>
-<p>כתוב בדיקות ב־<code>P22-E92.spec.ts</code> (ריק), עם טבלת מקרים. הבודק מריץ 7 באגים.</p>
+<p>כתוב בדיקות ב־<code>P22-E92.spec.ts</code> (ריק), עם טבלת מקרים. הבודק מריץ 8 באגים.</p>
 ```term
 % npm run check P22-E92
 ```
@@ -4415,3 +4415,115 @@ test("שגיאה לא צפויה ← 500 כללי, בלי פרטים", async (t)
 <p>ה־500 נבדק עם <code>deepEqual</code> על כל הגוף: אם מישהו מוסיף "רק לדיבאג" שדה <code>stack</code>, הבדיקה נכשלת. זו בדיוק בדיקת האבטחה של API8.</p>
 @mistakes
 <ul><li>לבדוק רק <code>status</code> ב־500 — מוטנט שמחזיר את ה־stack עובר.</li></ul>
+
+@@ P22-E102 | 4 | בדיקות HTTP ירוקות שלא תופסות כלום 🤖 | 25 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>ב־<code>22-testing/starter/P22-E102.spec.ts</code> ארבע בדיקות HTTP לאפליקציה של P22-E57 (היא ב־<code>starter/P22-E102.ts</code>, ולא משנים אותה). כל הבדיקות ירוקות. אבל כשהבודק מכניס לאפליקציה באג אחד בכל פעם, הבדיקות נשארות ירוקות כמעט על כולם.</p>
+<p>יש בקובץ ארבע חולשות: שרת אחד לכל הבדיקות, בדיקה שתלויה בבדיקה שלפניה, ‏<code>assert.ok(res.ok)</code> במקום status מדויק, ובדיקות שלא בודקות גבולות ומקרים שליליים. תקן וחזק אותן, עד שהבודק לא ימצא באג ששורד.</p>
+```term
+% node --test 22-testing/starter/P22-E102.spec.ts
+% npm run check P22-E102
+```
+@hint1
+<p>הרץ את <code>npm run check</code>: ההודעה מונה את הבאגים ששרדו. לכל אחד שאל: איזו בדיקה הייתה אמורה להיכשל עליו, ולמה היא לא נכשלה?</p>
+@hint2
+<p>"‏ids משותפים" שורד כי יש שרת אחד; כשלכל בדיקה יש <code>createApp()</code> משלה, בדיקה שמצפה ל־id ‏1 תופסת אותו. ‏<code>res.ok</code> נכון גם ל־200 וגם ל־201. ובגבולות: 50 תווים מותר, 51 לא.</p>
+@solution
+```ts save=solutions/P22-E102.spec.ts
+// P22-E102 — בדיקות HTTP, מתוקנות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { createApp } from "./P22-E102.ts";
+
+async function start(t: { after(fn: () => void): void }) {
+  const server = await new Promise<Server>((resolve) => {
+    const s = createApp().listen(0, () => resolve(s));
+  });
+  t.after(() => server.close());
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  return (method: string, path: string, body?: unknown) =>
+    fetch(base + path, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+test("POST ← 201, Location, ו־name אחרי trim", async (t) => {
+  const call = await start(t);
+  const res = await call("POST", "/items", { name: "  Mug " });
+  assert.equal(res.status, 201);
+  assert.equal(res.headers.get("location"), "/items/1");
+  assert.deepEqual(await res.json(), { id: 1, name: "Mug" });
+});
+
+test("ids מתחילים מ־1 בכל אפליקציה", async (t) => {
+  const call = await start(t);
+  assert.deepEqual(await (await call("POST", "/items", { name: "A" })).json(), { id: 1, name: "A" });
+});
+
+test("name לא תקין ← 400, ו־50 תווים מותר", async (t) => {
+  const call = await start(t);
+  for (const body of [{}, { name: "" }, { name: "   " }, { name: 5 }, { name: "x".repeat(51) }]) {
+    assert.equal((await call("POST", "/items", body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call("POST", "/items", { name: "x".repeat(50) })).status, 201);
+});
+
+test("GET ← הפריט, ו־404 על id שלא קיים", async (t) => {
+  const call = await start(t);
+  await call("POST", "/items", { name: "Mug" });
+  const res = await call("GET", "/items/1");
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { id: 1, name: "Mug" });
+  assert.equal((await call("GET", "/items/2")).status, 404);
+});
+
+test("DELETE ← 204, והפריט באמת נמחק", async (t) => {
+  const call = await start(t);
+  await call("POST", "/items", { name: "Mug" });
+  assert.equal((await call("DELETE", "/items/1")).status, 204);
+  assert.equal((await call("GET", "/items/1")).status, 404);
+  assert.equal((await call("DELETE", "/items/1")).status, 404);
+});
+```
+<ol><li><strong>שרת אחד לכל הקובץ.</strong> הבדיקות חלקו מצב: ה־id של בדיקה תלוי בכמה פריטים נוצרו לפניה, ובאג של "מונה משותף לכל האפליקציות" לא נראה. שרת חדש לכל בדיקה (<code>start(t)</code>, עם <code>t.after</code> שסוגר).</li><li><strong>"GET מחזיר את הפריט" לא יצר פריט.</strong> היא עבדה רק כי בדיקת ה־POST רצה לפניה. בדיקה שרצה לבד חייבת להכין את מה שהיא צריכה.</li><li><strong>‏<code>assert.ok(res.ok)</code></strong> נכון לכל 2xx, ולכן 200 במקום 201 עבר. ‏status מדויק, וגם <code>Location</code>.</li><li><strong>חסרו גבולות ומקרים שליליים:</strong> ‏<code>"  Mug "</code> בודק trim; ‏51 ו־50 תווים בודקים את הגבול; ‏404 על id שלא קיים; ו־GET אחרי DELETE בודק שהמחיקה קרתה באמת.</li></ol>
+@mistakes
+<ul><li>להוסיף בדיקות בלי לפרק את השרת המשותף. הבאג של המונה המשותף ממשיך לשרוד, כי כל הבדיקות רואות אותו מונה.</li><li>‏<code>assert.notEqual(res.status, 500)</code>. זה עובר כמעט על כל באג.</li><li>לשכוח <code>t.after(() =&gt; server.close())</code>. השרתים נשארים פתוחים, והבדיקות לא מסתיימות.</li></ul>
+
+@@ P22-E103 | 4 | בדיקות Jest שנכשלות על קוד תקין 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>ב־<code>22-testing/starter/P22-E103.spec.ts</code> בדיקות Jest ל־<code>formatDuration</code> של P22-E74 (הקוד ב־<code>starter/P22-E103.ts</code>, והוא <strong>תקין</strong>). הבדיקות נכשלות. יש בהן שלוש טעויות, ואחרי שמתקנים אותן, באג אחד מתוך שבעה עדיין שורד.</p>
+<p>תקן את שלוש הטעויות, והוסף את מה שחסר כדי שהבדיקות יתפסו את כל הבאגים.</p>
+```term
+% npm run check P22-E103
+```
+@hint1
+<p>קרא את ההודעה של Jest על כל בדיקה שנכשלה: מה הוא ציפה, ומה קיבל? כשהקוד תקין, ההודעה מצביעה על הבדיקה.</p>
+@hint2
+<p>בדוק את סדר הפרמטרים של ה־callback מול סדר העמודות בטבלה. ‏<code>toThrow</code> מקבל פונקציה. ושאל: איזה סוג קלט לא תקין לא נבדק בכלל?</p>
+@solution
+```ts save=solutions/P22-E103.spec.ts
+// P22-E103 — בדיקות ב־Jest, מתוקנות
+import { formatDuration } from "./P22-E103";
+
+describe("formatDuration", () => {
+  it.each([
+    [0, "0:00"],
+    [65, "1:05"],
+    [3600, "1:00:00"],
+    [3725, "1:02:05"],
+  ])("%d שניות ← %s", (seconds, expected) => {
+    expect(formatDuration(seconds)).toBe(expected);
+  });
+
+  it.each([-1, 1.5])("%p ← RangeError", (bad) => {
+    expect(() => formatDuration(bad)).toThrow(RangeError);
+  });
+});
+```
+<ol><li><strong>‏<code>(expected, seconds)</code></strong> — ‏<code>it.each</code> מעביר את העמודות לפי הסדר שלהן בשורה. הטבלה היא <code>[seconds, expected]</code>, אז הפונקציה קיבלה מחרוזת כשניות, ו־<code>formatDuration("0:00")</code> זרק.</li><li><strong>‏<code>[3600, "60:00"]</code></strong> היא ציפייה שגויה: לפי ההגדרה, שעה ומעלה היא <code>h:mm:ss</code>, כלומר <code>"1:00:00"</code>. כשבדיקה נכשלת על קוד תקין, בודקים קודם את הבדיקה.</li><li><strong>‏<code>expect(formatDuration(-1)).toThrow()</code></strong> קורא לפונקציה <strong>לפני</strong> ש־<code>expect</code> מקבל משהו, והחריגה מפילה את הבדיקה. ‏<code>toThrow</code> צריך פונקציה: <code>() =&gt; formatDuration(-1)</code>.</li><li><strong>הבאג ששרד: "שבר מתקבל".</strong> אף בדיקה לא העבירה מספר לא שלם. ‏<code>1.5</code> נוסף לטבלת השגיאות.</li></ol>
+@mistakes
+<ul><li>"לתקן" את הציפייה ל־<code>"60:00"</code> על ידי שינוי הקוד. הקוד תקין; הבדיקה היא שטעתה.</li><li>להחליף את <code>toThrow(RangeError)</code> ב־<code>toThrow()</code>. אז הבאג "Error במקום RangeError" שורד.</li><li>לייבא <code>"./P22-E103.ts"</code> עם הסיומת. ב־ts-jest מייבאים בלי <code>.ts</code>.</li></ul>

@@ -1,7 +1,6 @@
-// P22-E55: aUser, aTask, resetBuilders
-// כתוב וייצא type User, type Task, aUser(overrides?), aTask(overrides?), resetBuilders()
-//   מונה לכל סוג מ־1 (מתקדם תמיד) | User: email user<id>@example.com, role user, createdAt 2026-11-04T10:00:00.000Z
-//   Task: ownerId 1, title "משימה <id>", status todo, dueDate null, אותו createdAt | overrides גוברים
+// P22-E55: invalidCases(valid, bad) — גוף תקין עם שדה אחד שגוי בכל פעם
+// כתוב וייצא: invalidCases(valid, bad) ← [{ name, body }]
+//   לכל שדה ב־bad: "בלי <field>", ואז "<field> = <JSON של הערך>" לכל ערך שגוי
+//   valid לא משתנה · שדה שאין ב־valid ← Error("אין שדה <field> בגוף התקין")
 //
-// הרצה:   node 22-testing/starter/P22-E55.ts
 // בדיקה:  npm run check P22-E55

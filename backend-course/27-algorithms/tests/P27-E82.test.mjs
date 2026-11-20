@@ -24,6 +24,7 @@ test("עותק לכל פונקציה, ו־seed קבוע", () => {
   findCounterexample((a) => (inputs1.push(a), 0), () => 0, gen, 20, 42);
   findCounterexample((a) => (inputs2.push(a), 0), () => 0, gen, 20, 42);
   assert.deepEqual(inputs1, inputs2, "אותו seed ← אותם קלטים");
+  assert.equal(inputs1.length, 20, "runs = 20 ← בדיוק 20 קלטים");
   const inputs3 = [];
   findCounterexample((a) => (inputs3.push(a), 0), () => 0, gen, 20, 7);
   assert.notDeepEqual(inputs1, inputs3);

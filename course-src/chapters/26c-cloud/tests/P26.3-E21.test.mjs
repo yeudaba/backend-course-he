@@ -15,6 +15,7 @@ test("ולא יותר", () => {
   assert.equal(decide(p, "s3:DeleteObject", `${B}/uploads/42/a.png`), "implicit-deny", "worker פרוץ לא מוחק קבצים של לקוחות");
   assert.equal(decide(p, "s3:PutObject", `${B}/uploads/42/a.png`), "implicit-deny", "לא דורס מקורות");
   assert.equal(decide(p, "s3:GetObject", "arn:aws:s3:::coffee-backups/db.sql"), "implicit-deny");
+  assert.equal(decide(p, "s3:GetObject", `${B}/invoices/2026/7.pdf`), "implicit-deny", "קריאה רק מ־uploads/ — לא מכל ה־bucket");
   assert.equal(decide(p, "sqs:SendMessage", Q), "implicit-deny");
   assert.equal(decide(p, "sqs:DeleteQueue", Q), "implicit-deny");
   assert.equal(decide(p, "sqs:ReceiveMessage", Q.replace("image-jobs", "payments")), "implicit-deny");

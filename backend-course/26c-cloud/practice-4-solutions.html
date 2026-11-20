@@ -175,9 +175,12 @@ spec:
       - CreateNamespace=true</code></pre>
 <p><strong>selfHeal</strong>: מישהו הריץ <code>kubectl scale --replicas=1</code> בלילה — Argo CD מחזיר ל־3 תוך דקות. מה שב־Git הוא האמת. ושינוי אמיתי? pull request ל־repo התצורה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשים את ה־Application ב־namespace <code>coffee</code>. ה־Application עצמו יושב ב־<code>argocd</code>; <code>coffee</code> הוא היעד (<code>destination.namespace</code>).</li><li><code>valueFiles</code> עם נתיב מלא (<code class="mid">charts/coffee-api/values-prod.yaml</code>). הנתיב יחסי ל־<code>path</code> של ה־chart.</li><li>לכתוב <code>automated: {}</code> ולחשוב שזה כולל מחיקה ותיקון. בלי <code>prune: true</code> ו־<code>selfHeal: true</code>, Argo CD לא מוחק ולא מחזיר שינויים ידניים.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.3-E25">
     <h3>P26.3-E25 · אתגר: עדכון tag ב־repo התצורה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
@@ -242,9 +245,12 @@ export function bumpImageTag(text: string, repository: string, tag: string): { t
 }</code></pre>
 <p>בפועל יש לזה כלים מוכנים — <code>kustomize edit set image</code>, <code>yq</code>, או Argo CD Image Updater — אבל כולם עושים בדיוק את זה. וה־commit עצמו (ב־Jenkins): <code class="mid">git commit -am "coffee-api 1.5.0" &amp;&amp; git push</code> ל־repo התצורה, עם token שיש לו הרשאה רק ל־repo הזה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">text.replace(repository + ":", …)</code>: מחליף גם repository ארוך יותר שמתחיל באותו שם, וגם שורה בתוך ConfigMap.</li><li><code>YAML.parse</code> ואז <code>YAML.stringify</code>: ההערות והמרכאות נעלמות, וה־diff ב־repo התצורה הופך לקובץ שלם.</li><li>לחתוך את ה־tag ב־<code>:</code> הראשון. ב־<code>localhost:5000/app:1.2</code> זה ה־port של ה־registry, ולכן חותכים רק ב־<code>:</code> שאחרי ה־<code>/</code> האחרון.</li><li>לשכוח <code>initContainers</code> ו־CronJob, שבו ה־pod spec נמצא עמוק יותר (<code class="mid">jobTemplate.spec.template.spec</code>).</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.3-E73">
     <h3>P26.3-E73 · ‏mergeValues כמו של Helm 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -507,6 +513,40 @@ export function syncWaves(objs: Obj[]): string[][] {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>מיון מפתחות ה־Map בלי פונקציית השוואה — ‏<code>[-1, 10, 2]</code> ממוינים כמחרוזות.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E103">
+    <h3>P26.3-E103 · מיזוג values שמשנה את ברירות המחדל 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>קרא ל־<code>mergeValues(base, prod)</code> ואז הדפס את <code>base</code>. מה השתנה בו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>typeof []</code> הוא <code>"object"</code>, ולכן <code>Array.isArray</code> נבדק לפני "אובייקט רגיל". ותוצאה חדשה מתחילה מעותק, לא מ־<code>base</code> עצמו.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E103: מיזוג values כמו Helm — מתוקן
+type Values = Record&lt;string, unknown&gt;;
+const isPlain = (x: unknown): x is Values =&gt; typeof x === "object" &amp;&amp; x !== null &amp;&amp; !Array.isArray(x);
+const clone = (x: unknown): unknown =&gt; (Array.isArray(x) ? x.map(clone) : isPlain(x) ? Object.fromEntries(Object.entries(x).map(([k, v]) =&gt; [k, clone(v)])) : x);
+
+export function mergeValues(base: Values, override: Values): Values {
+  const out = clone(base) as Values;
+  for (const [key, value] of Object.entries(override)) {
+    if (value === null) delete out[key];
+    else if (isPlain(value) &amp;&amp; isPlain(out[key])) out[key] = mergeValues(out[key] as Values, value);
+    else out[key] = clone(value);
+  }
+  return out;
+}</code></pre>
+<ol><li><strong>‏<code>const out = base</code></strong> הוא אותו אובייקט. המיזוג כתב לתוך ה־base, ולכן המיזוג הבא (staging) התחיל מ־values של prod. מתחילים מעותק עמוק, ומעתיקים גם ערכים מה־override.</li><li><strong>מערך טופל כמו אובייקט.</strong> ‏<code>typeof []</code> הוא <code>"object"</code>, ולכן המערכים מוזגו לפי אינדקס. ב־Helm מערך מחליף לגמרי: <code>Array.isArray</code> לפני הבדיקה של אובייקט.</li><li><strong>‏<code>null</code> הוצב כערך.</strong> ב־Helm ‏<code>null</code> מוחק את המפתח מה־defaults. ‏<code>delete out[key]</code>.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>{ ...base, ...override }</code>. זה מיזוג שטחי: ‏<code>image: { tag }</code> ב־prod מוחק את <code>image.repository</code> מה־base.</li><li>‏<code>structuredClone(base)</code> ואז מיזוג שמציב ערכים מה־override כמו שהם. התוצאה עדיין חולקת מערכים ואובייקטים עם ה־override.</li><li>להחליף את <code>null</code> ב־<code>undefined</code>. המפתח עדיין קיים, ו־<code>{{ if .Values.resources }}</code> ב־template מתנהג אחרת מבלי מפתח.</li></ul>
 
 
 </div></details>

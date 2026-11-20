@@ -172,7 +172,7 @@ export function survivesAzLoss(spread: Record&lt;string, number&gt;, minHealthy:
 </div></details>
   </div>
 <div class="ex" id="P26.3-E35">
-    <h3>P26.3-E35 · כמה תשיעיות? <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <h3>P26.3-E35 · כמה תשיעיות? 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
 <p>‏<code>-Math.log10(1 - a)</code> — ‏0.999 ← 3.</p>
 
@@ -328,7 +328,7 @@ export function budgetAlerts(dailyCosts: number[], budget: number, thresholds = 
 <div class="ex" id="P26.3-E39">
     <h3>P26.3-E39 · ‏terraform plan קטן 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>‏<code>new Map(actual.map((r) =&gt; [<code>${r.type}.${r.name}</code>, r]))</code>.</p>
+<p>‏<code class="mid">new Map(actual.map((r) =&gt; [`${r.type}.${r.name}`, r]))</code>.</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
@@ -456,6 +456,53 @@ export function findSecrets(text: string) {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להדפיס את השורה כולה "כדי שיהיה קל למצוא" — הסוד עכשיו גם בלוג.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P26.3-E102">
+    <h3>P26.3-E102 · Lambda שעונה 502 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>502 מ־API Gateway אומר שה־Lambda זרקה, או החזירה משהו בצורה לא נכונה. מה <code class="mid">event.queryStringParameters</code> כשאין query?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>body</code> חייב להיות מחרוזת. ובגוף ב־base64: ‏<code class="mid">Buffer.from(body, "base64").toString("utf8")</code> לפני <code>JSON.parse</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.3-E102: Lambda של מוצרים — מתוקן
+type Event = { httpMethod: string; path: string; queryStringParameters: Record&lt;string, string&gt; | null; body: string | null; isBase64Encoded?: boolean };
+const products = [
+  { id: 1, name: "Ethiopia", category: "beans", price: 62 },
+  { id: 2, name: "V60", category: "gear", price: 89 },
+  { id: 3, name: "Espresso Blend", category: "beans", price: 48 },
+];
+const json = (statusCode: number, data: unknown) =&gt; ({ statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+
+export async function handler(event: Event) {
+  if (event.httpMethod === "GET" &amp;&amp; event.path === "/products") {
+    const category = event.queryStringParameters?.category;
+    return json(200, category ? products.filter((p) =&gt; p.category === category) : products);
+  }
+  if (event.httpMethod === "POST" &amp;&amp; event.path === "/products") {
+    const raw = event.isBase64Encoded &amp;&amp; event.body ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+    let data: { name?: unknown; price?: unknown };
+    try {
+      data = JSON.parse(raw ?? "");
+    } catch {
+      return json(400, { error: "JSON לא תקין" });
+    }
+    if (typeof data.name !== "string" || typeof data.price !== "number" || !(data.price &gt; 0)) return json(400, { error: "name ו־price חיובי" });
+    return json(201, { id: products.length + 1, name: data.name, price: data.price });
+  }
+  return json(404, { error: "not found" });
+}</code></pre>
+<ol><li><strong>‏<code class="mid">event.queryStringParameters.category</code></strong> זרק <code>TypeError</code> כש־<code>queryStringParameters</code> הוא <code>null</code>. Lambda שזורקת ← API Gateway מחזיר 502. ‏<code>?.</code>.</li><li><strong>‏<code>body: products</code></strong> הוא מערך, לא מחרוזת. ה־proxy של API Gateway מצפה למחרוזת; JSON.stringify.</li><li><strong>base64 לא פוענח.</strong> כשהלקוח שולח גוף בינארי או עם קידוד מסוים, API Gateway מעביר אותו ב־base64 ומסמן <code>isBase64Encoded</code>. ‏<code>JSON.parse</code> על base64 נכשל, ולכן 400.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף את כל ה־handler ב־try/catch שמחזיר 500. ה־502 נעלם, אבל הבאג (<code>null</code>) נשאר, ועכשיו כל GET בלי query מחזיר 500.</li><li>לפענח base64 תמיד. גוף רגיל (<code>isBase64Encoded: false</code>) נשבר.</li><li>לשכוח את ה־<code>Content-Type</code> בתשובות של שגיאה. הלקוח מקבל טקסט, ו־<code>res.json()</code> בצד שלו נכשל.</li></ul>
 
 
 </div></details>

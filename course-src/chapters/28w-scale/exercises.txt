@@ -8,6 +8,8 @@
 <p>הסיכוי שכל 30 מהירות: 0.98^30.</p>
 @solution
 <ol><li>ממוצע: (980×40 + 20×3000) / 1000 = <strong>99.2ms</strong>. p50: <strong>40ms</strong>. p99: הבקשה ה־990 — <strong>3000ms</strong> (980 הראשונות מהירות).</li><li><strong>לא.</strong> 2% מהבקשות מעל 500ms — p99 הוא 3 שניות. והממוצע (99ms) נראה מצוין.</li><li>1 − 0.98^30 ≈ <strong>45%</strong>. כמעט חצי מהצפיות בדף איטיות, למרות ש"רק 2%" מהבקשות איטיות. זו הסיבה שאתרים גדולים מודדים p99 ו־p99.9 — המשתמש פוגש את הזנב הרבה יותר ממה שנדמה.</li><li>ממוצע מערבב שתי אוכלוסיות ומסתיר את שתיהן: הוא גבוה מדי למקרה הרגיל ונמוך מדי לזנב. percentiles (p50 — החוויה הרגילה, p95/p99 — הזנב) מספרים את הסיפור; ו־max — את המקרה הגרוע (לפעמים GC או cold start).</li></ol>
+@mistakes
+<ul><li>לחשב p99 כ"ממוצע של האיטיות", או כממוצע של 1% העליונים. p99 הוא ערך אחד מהרשימה הממוינת: הבקשה ה־990.</li><li>לחשוב שעומדים ב־SLO כי הממוצע (99ms) רחוק מ־500ms. ה־SLO מדבר על 99% מהבקשות, ו־2% מעל הסף זה כבר כישלון.</li><li>לחשב "2% × 30 = 60%" לשאלת הדף. ההסתברויות לא מתחברות; מחשבים את הסיכוי שכולן מהירות (0.98^30), ומחסרים מ־1.</li></ul>
 
 @@ P28.5-E02 | 1 | OLTP או OLAP? | 15 | שיעור 4
 @task
@@ -20,6 +22,8 @@
 @solution
 <ol><li><strong>OLTP.</strong> שורה אחת לפי מפתח, ב־1ms, והנתון חייב להיות עדכני.</li><li><strong>OLAP.</strong> סורק את כל ההזמנות אבל רק 3–4 עמודות. ב־PostgreSQL של האפליקציה זה גם איטי וגם מאט את הלקוחות שקונים באותו רגע.</li><li><strong>OLTP.</strong> כתיבה קטנה עם טרנזקציה — מחסני נתונים לא בנויים לזה (ומשלמים בהם לפי סריקה, לא לפי כתיבה).</li><li><strong>OLAP</strong>, ועם <code>APPROX_COUNT_DISTINCT</code> (HyperLogLog, E18) — ספירה מדויקת של ייחודיים על 2 מיליארד שורות יקרה מאוד, והערכה של כמה אחוזים מספיקה לדוח (שיעור 4 מראה כמה היא סוטה בפועל).</li><li><strong>OLTP</strong> — ובתוך הטרנזקציה של ה־checkout (פרק 18). מחסן נתונים מתעדכן בדרך כלל באיחור של דקות־שעות (ETL).</li></ol>
 <p>הדפוס הנפוץ: האפליקציה כותבת ל־OLTP; תהליך (ETL/CDC) מעתיק למחסן; דוחות ואנליטיקה רצים שם. E25 בונה גרסה קטנה של זה.</p>
+@mistakes
+<ul><li>"מחסן נתונים מהיר יותר, אז הכול לשם". שאילתה על שורה אחת, או כתיבה קטנה עם טרנזקציה, מהירות יותר ב־PostgreSQL. מחסן מתאים לסריקות גדולות.</li><li>לבדוק מלאי ב־checkout מול המחסן. הנתונים שם מתעדכנים באיחור, וההחלטה חייבת להתבסס על הנתון העדכני ביותר.</li><li>להריץ את הדוח של שלוש שנים על המסד של האפליקציה, "רק פעם בשבוע". הסריקה מאטה את הלקוחות שקונים באותו רגע.</li></ul>
 
 @@ P28.5-E03 | 1 | מי חוסם את ה־event loop? | 15 | שיעור 2
 @task
@@ -64,6 +68,8 @@ pbkdf2 (async)   timer fired while the work was running
 busy loop        timer waited until the work finished
 ```
 <p><code>pbkdf2Sync</code> ולולאת החישוב תופסים את ה־thread היחיד של JavaScript — שום timer, שום בקשת HTTP ושום health check לא ייענו עד שיסתיימו. ב־API עם 100 משתמשים, התחברות אחת "מקפיאה" את כולם. <code>pbkdf2</code> האסינכרוני עושה בדיוק את אותה עבודה — ב־thread אחר. עבודת CPU של JavaScript עצמו (הלולאה) — מעבירים ל־worker thread (E13).</p>
+@mistakes
+<ul><li>לחשוב ש־<code>async</code> בפונקציה מספיק כדי שלולאת חישוב לא תחסום. הקוד בתוכה עדיין רץ על ה־thread היחיד.</li><li>לחשוב ש־pbkdf2 עם callback חוסם כמו <code>pbkdf2Sync</code>. הוא רץ ב־thread pool של libuv, וה־timer רץ בינתיים.</li><li>לצפות שה־timer ירוץ בדיוק אחרי 10ms גם בזמן לולאה חוסמת. 10ms הוא מינימום, לא הבטחה.</li></ul>
 
 @@ P28.5-E04 | 1 | שורות מול עמודות | 15 | שיעור 4
 @task
@@ -107,6 +113,8 @@ parquet: 14.6 MB
 add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000
 ```
 <p>הקובץ קטן פי כמה, ועוד יותר חשוב — מה נקרא: לשאילתה על <code>type</code>, DuckDB קורא מה־Parquet <strong>רק את העמודה type</strong> (ועמודה עם 5 ערכים שונים נדחסת כמעט לאפס — dictionary encoding). מה־CSV הוא חייב לקרוא ולפרש את כל הקובץ, כל העמודות, כטקסט. כך בדיוק עובדים BigQuery, Snowflake ו־Databricks — ולכן שם משלמים לפי <em>עמודות שנסרקו</em> (E05, E17).</p>
+@mistakes
+<ul><li>לחשוב ש־DuckDB קורא את כל ה־Parquet כדי לספור לפי סוג. הוא קורא רק את העמודה <code>type</code>.</li><li>לחשוב ש־Parquet קטן רק בגלל דחיסה כללית (כמו zip). הרווח הגדול בא מאחסון לפי עמודות: ערכים דומים יושבים יחד ונדחסים טוב.</li><li>לצפות שב־CSV אפשר לקרוא "רק עמודה אחת". שורות הטקסט עוברות סריקה מלאה כדי למצוא את הפסיקים.</li></ul>
 
 @@ P28.5-E05 | 1 | כמה עולה שאילתה? | 15 | שיעור 4
 @task
@@ -119,6 +127,8 @@ add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000
 @solution
 <ol><li><strong>2TB.</strong> כל העמודות, כל השורות — ה־LIMIT מופעל אחרי הסריקה. (בקונסולה של BigQuery יש "preview" חינמי בדיוק בשביל זה.)</li><li><strong>~100GB</strong> — עמודה אחת, כל השנה.</li><li><strong>~270MB</strong> — עמודה אחת, יום אחד (100GB / 365).</li><li><strong>~100GB</strong> — המנוע לא יודע שיום ב־<code>ts</code> שווה ל־<code>day</code>, אז אין pruning. אותה תוצאה, פי 365 בעלות.</li></ol>
 <p>כללי אצבע: לא <code>SELECT *</code>; תמיד WHERE על עמודת ה־partition; ו־clustering (מיון לפי עמודה שמסננים עליה הרבה, כמו <code>customer_id</code>) מקטין עוד. E17 מחשב את זה בקוד.</p>
+@mistakes
+<ul><li>לחשוב ש־<code>LIMIT 10</code> מוזיל את השאילתה. הוא מקטין רק את התשובה; הסריקה כבר קרתה, ומשלמים עליה.</li><li>לחשוב ש־<code>DATE(ts) = …</code> שקול ל־<code>day = …</code>. המנוע לא יודע שהם קשורים, ולכן אין partition pruning.</li><li>לחשב לפי מספר השורות שמוחזרות, ולא לפי הבתים שנסרקים. במחסן on-demand משלמים לפי בתים.</li></ul>
 
 @@ P28.5-E06 | 2 | percentiles 🤖 | 15 | שיעור 1
 @task
@@ -219,6 +229,8 @@ export function histPercentile(h: Histogram, p: number): number {
 }
 ```
 <p>למה זה חשוב: <strong>אי אפשר לחשב ממוצע של p99</strong>. שרת אחד מהיר (p99 = 20ms) ושרת אחד עמוס (p99 = 1000ms) — הממוצע 510ms לא מתאר אף אחד, וגם לא את p99 של המערכת. histograms מתאחדים בחיבור פשוט, ומהאיחוד מחשבים percentile אמיתי. (E21 — הבאג הזה בפועל.)</p>
+@mistakes
+<ul><li><code>Math.ceil(Math.log(ms) / Math.log(1.1))</code> בלי epsilon. ערך שנמצא בדיוק על גבול נופל לדלי הבא.</li><li><code>merge</code> שמוסיף לתוך ה־histogram הראשון. התרגיל מבקש histogram חדש, בלי לשנות את הקלט.</li><li>להשתמש ב־<code>p/100 × total</code> בלי <code>ceil</code>. עם 10 ערכים, p50 יחפש "5" ויכול להחזיר דלי אחד מוקדם מדי, או מאוחר מדי.</li></ul>
 
 @@ P28.5-E08 | 2 | מחולל עומס 🤖 | 25 | שיעור 1
 @task
@@ -277,6 +289,8 @@ export async function runLoad(request: () => Promise<unknown>, { concurrency, to
 ```bash
 npx autocannon -c 50 -d 20 http://localhost:3000/products   # 50 חיבורים, 20 שניות
 ```
+@mistakes
+<ul><li>לשלוח batches של <code>concurrency</code> עם <code>Promise.all</code>, ולחכות לכל batch. אז בקשה איטית אחת מעכבת את כל ה־batch, וה־concurrency לא קבוע.</li><li><code>Promise.all</code> על כל ה־total בבת אחת. אין שום הגבלה, ו־10,000 בקשות יוצאות יחד.</li><li>לתת לשגיאה לעצור הכול. התרגיל מבקש לספור שגיאות ולהמשיך.</li></ul>
 
 @@ P28.5-E09 | 2 | חוק Little ותכנון קיבולת 🤖 | 15 | שיעור 1
 @task
@@ -306,6 +320,8 @@ export function checkDbConnections({ instances, poolPerInstance, maxConnections,
 }
 ```
 <p>השורה האחרונה היא תקלה אמיתית ונפוצה: autoscaling מוסיף instances ← כל אחד פותח pool של 20 ← PostgreSQL מגיע ל־<code>max_connections</code> ← <code>too many clients</code>, דווקא בשיא. הפתרונות: pool קטן לכל instance, ו־connection pooler (PgBouncer, RDS Proxy) באמצע.</p>
+@mistakes
+<ul><li>לשכוח להמיר מילישניות לשניות: <code>2000 × 150</code> במקום <code>2000 × 0.15</code>.</li><li><code>Math.round</code> במקום <code>Math.ceil</code>. 4.2 instances הם 5, לא 4.</li><li>לחלק ב־<code>perInstance × headroom</code> במקום ב־<code>perInstance × (1 − headroom)</code>.</li></ul>
 
 @@ P28.5-E10 | 2 | פירוק NDJSON בזרם 🤖 | 25 | שיעור 3
 @task
@@ -393,6 +409,8 @@ export async function dailyRevenue(input: Readable): Promise<Record<string, DayT
 }
 ```
 <p>הזיכרון כאן קבוע: שורה אחת בכל רגע, ומפה של ~30 ימים. אותו קוד יעבוד על 300 אלף שורות ועל 300 מיליון. ההפך — <code>(await fs.readFile(f, "utf8")).split("\n")</code> — טוען את כל הקובץ לזיכרון (ומחרוזת ב־V8 מוגבלת בכל מקרה לכחצי מיליארד תווים).</p>
+@mistakes
+<ul><li><code>fs.readFileSync</code> ו־<code>split("\n")</code>. על קובץ גדול כל הקובץ נכנס לזיכרון.</li><li>יום לפי <code>createdAt.slice(0, 10)</code>. זה היום ב־UTC; הזמנה ב־01:00 בישראל נספרת ביום הקודם.</li><li>לשכוח לדלג על שורות ריקות, או לספור גם הזמנות מבוטלות.</li></ul>
 
 @@ P28.5-E12 | 2 | הכנסה מרוכזת 🤖 | 20 | שיעור 3
 @task
@@ -430,6 +448,8 @@ export async function bulkInsertViews(pool: Pool, rows: PageView[], { batchSize 
 }
 ```
 <p>למה לא <code>VALUES ($1,$2,$3,$4), ($5,…)</code>? אפשר — אבל 5,000 שורות × 4 = 20,000 פרמטרים, ו־PostgreSQL מגביל ל־65,535 בשאילתה. עם unnest — תמיד 4. ולמיליוני שורות: <code>COPY … FROM STDIN</code> (החבילה <code>pg-copy-streams</code>), המהיר מכולם.</p>
+@mistakes
+<ul><li>INSERT לכל שורה בלולאה. 50,000 שורות הן 50,000 סבבים למסד.</li><li>לבנות SQL עם <code>VALUES ($1,$2,$3,$4), ($5,…)</code> לכל ה־batch. PostgreSQL מגביל ל־65,535 פרמטרים בשאילתה, ו־<code>unnest</code> צריך רק ארבעה.</li><li>להחזיר <code>rows.length</code> במקום לסכום <code>rowCount</code>. שורות שדולגו ב־<code>ON CONFLICT</code> ייספרו בטעות.</li></ul>
 
 @@ P28.5-E13 | 3 | worker threads 🤖 | 25 | שיעור 2
 @task
@@ -488,6 +508,8 @@ export async function countPrimesParallel(limit: number, { threads = 4, chunks =
 }
 ```
 <p>worker threads הם לא "async": כל worker הוא thread נוסף עם V8 משלו (כ־10MB זיכרון, ועשרות ms לעלות). לכן — pool קבוע, לא worker לכל בקשה (בפרודקשן: <code>piscina</code>). ולעבודה ש־Node כבר מריץ ב־thread pool (crypto, zlib, fs) — מספיקה הגרסה האסינכרונית (E03, E23).</p>
+@mistakes
+<ul><li>worker חדש לכל chunk. יצירת worker יקרה, והתרגיל מבקש <code>threads</code> workers שלוקחים מתור משותף.</li><li>לחלק את הטווחים בלי לכסות את הקצוות (למשל <code>to</code> לא כולל, ו־<code>from</code> של הבא מתחיל +1). מספרים בגבול נספרים פעמיים או לא בכלל.</li><li>לשכוח <code>worker.terminate()</code> בסוף. התהליך לא נסגר, והבדיקה נתקעת.</li></ul>
 
 @@ P28.5-E14 | 3 | מוניטור ל־event loop 🤖 | 20 | שיעור 2
 @task
@@ -522,6 +544,8 @@ export function startLagMonitor({ thresholdMs, intervalMs = 1000, onLag }: { thr
 }
 ```
 <p>בפרודקשן מייצאים את זה כמדד (<code>nodejs_eventloop_lag_seconds</code> ב־prom-client) ומתריעים עליו: p99 lag של 200ms אומר שכל בקשה בשרת הזה מחכה עד 200ms — לפני שהקוד שלה בכלל התחיל.</p>
+@mistakes
+<ul><li>להשוות את <code>h.max</code> ל־threshold במילישניות. הערכים בננו־שניות, ולכן מחלקים ב־1e6.</li><li>לשכוח <code>h.reset()</code> אחרי דיווח. אז ה־max הישן מדווח שוב ושוב, בכל חלון.</li><li>בלי <code>unref()</code>. ה־interval משאיר את התהליך חי גם כשאין שום עבודה אחרת.</li></ul>
 
 @@ P28.5-E15 | 3 | SQL אנליטי ב־DuckDB 🤖 | 20 | שיעור 4
 @task
@@ -544,6 +568,8 @@ FROM orders
 GROUP BY category
 ORDER BY revenue DESC;
 ```
+@mistakes
+<ul><li><code>sum(price_cents)</code> בלי הכפלה בכמות. ההכנסה יוצאת נמוכה מדי.</li><li>לחלק ב־100 (שלם) ולא ב־100.0. מקבלים עיגול לשלם ומאבדים את האגורות.</li><li><code>share_pct</code> עם תת־שאילתה נפרדת על כל הטבלה, או מחושב לפני ה־GROUP BY. <code>sum(sum(x)) OVER ()</code> מחשב את הסך הכולל על התוצאה המקובצת.</li></ul>
 
 @@ P28.5-E16 | 3 | Parquet מחולק לפי יום 🤖 | 20 | שיעור 4
 @task
@@ -577,6 +603,8 @@ export async function ordersPerDay(conn: DuckDBConnection, outDir: string): Prom
 }
 ```
 <p>זו בדיוק הצורה של data lake על S3 (יחידה 26.3): <code>s3://lake/orders/day=2026-10-01/part-0.parquet</code>. שאילתה עם <code>WHERE day = '2026-10-15'</code> קוראת תיקייה אחת מתוך 32 — partition pruning, כמו ב־BigQuery (E05).</p>
+@mistakes
+<ul><li>יום לפי <code>created_at::DATE</code>, כלומר UTC. הזמנות של אחרי חצות בישראל נכנסות לתיקייה של היום הקודם.</li><li>לקרוא את החלקים בלי <code>hive_partitioning = true</code>. עמודת <code>day</code> לא חוזרת מתוך שמות התיקיות.</li><li>לבנות נתיב עם גרש בתוכו בלי escape. מחרוזת SQL נשברת.</li></ul>
 
 @@ P28.5-E17 | 3 | הערכת עלות סריקה 🤖 | 20 | שיעור 4
 @task
@@ -613,6 +641,8 @@ export function estimateScan(t: TableStats, q: QueryShape, { pricePerTiB = 6.25 
 }
 ```
 <p>(המחיר כאן — פרמטר. מחירים של שירותי ענן משתנים; בעבודה — מהדף הרשמי, ובדרך כלל דרך "dry run" שמחזיר את מספר הבתים לפני שמריצים.)</p>
+@mistakes
+<ul><li>להקטין את הסריקה לפי <code>LIMIT</code>. במחסן עמודתי LIMIT לא משנה את מה שנסרק.</li><li>pruning לפי <code>days</code> גם כשהטבלה לא מחולקת. בלי <code>partitionedBy</code> נסרקת כל הטבלה.</li><li>1TiB כ־10<sup>12</sup> בתים. כאן TiB הוא 2<sup>40</sup>, והעלות יוצאת שונה בכ־10%.</li></ul>
 
 @@ P28.5-E18 | 3 | HyperLogLog 🤖 | 30 | שיעור 4
 @task
@@ -666,6 +696,8 @@ export function mergeHLL(a: HLL, b: HLL): HLL {
 }
 ```
 <p>זה מה שמאחורי <code>PFADD</code>/<code>PFCOUNT</code> ב־Redis, <code>APPROX_COUNT_DISTINCT</code> ב־BigQuery ו־<code>approx_count_distinct</code> ב־DuckDB ו־Spark. ו־merge הוא הקסם: HLL לכל יום ← איחוד ← ייחודיים לחודש, בלי לספור מחדש.</p>
+@mistakes
+<ul><li><code>x &gt;&gt; (32 − p)</code> במקום <code>&gt;&gt;&gt;</code>. עם ביט עליון 1 מקבלים אינדקס שלילי.</li><li>לשכוח את המקרה "כולם אפס" ב־ρ. <code>Math.clz32(0)</code> הוא 32, אבל המקסימום הנכון הוא <code>32 − p + 1</code>.</li><li><code>mergeHLL</code> שמחבר רגיסטרים. איחוד הוא מקסימום לכל רגיסטר, אחרת ההערכה מתנפחת.</li></ul>
 
 @@ P28.5-E19 | 3 | reservoir sampling 🤖 | 15 | שיעור 3
 @task
@@ -692,6 +724,8 @@ export async function reservoirSample<T>(items: Iterable<T> | AsyncIterable<T>, 
   return sample;
 }
 ```
+@mistakes
+<ul><li>להגריל <code>j</code> בין 0 ל־<code>k</code> במקום בין 0 ל־<code>n−1</code>. הפריטים המאוחרים מקבלים סיכוי גדול מדי.</li><li>לאסוף את כל הזרם למערך ואז לבחור k. זה הורס את כל העניין: מיליוני שורות בזיכרון.</li><li><code>for (const x of items)</code>. זה לא עובד על async iterable, ולכן <code>for await</code>.</li></ul>
 
 @@ P28.5-E20 | 4 | ייבוא שעובד רק בבדיקות — שלוש תקלות 🤖 | 20 | שיעור 3
 @task
@@ -717,6 +751,8 @@ export async function importEvents(input: Readable, onEvent: (e: any) => Promise
   return count;
 }
 ```
+@mistakes
+<ul><li>לפצל כל chunk ב־<code>split("\n")</code>. שורה שנחתכה בין שני chunks נשברת, וגם תו עברי שנחתך באמצע הופך ל־<code>�</code>.</li><li>לתקן רק את <code>JSON.parse</code> עם try/catch שמדלג. השורות השבורות פשוט נעלמות בשקט.</li><li><code>onEvent(e)</code> בלי <code>await</code>. אלפי INSERT יוצאים במקביל, ושגיאה לא מגיעה ל־caller.</li></ul>
 
 @@ P28.5-E21 | 4 | דשבורד latency — שלוש תקלות 🤖 | 15 | שיעור 1
 @task
@@ -737,6 +773,8 @@ export function latencyReport(perInstance: number[][]): { count: number; p50: nu
   return { count: all.length, p50: at(50), p99: at(99) };
 }
 ```
+@mistakes
+<ul><li>לתקן רק את ה־<code>sort()</code>. ממוצע של p99 מכל שרת עדיין לא p99 של כל הבקשות.</li><li>אינדקס <code>Math.floor(p × n)</code>. עם 100 ערכים, p99 נותן את הערך ה־100 (האחרון), כלומר max, ולא את ה־99.</li><li><code>all.sort()</code> על המערך המקורי של שרת, בלי <code>flat</code>. זה משנה את הקלט של ה־caller.</li></ul>
 
 @@ P28.5-E22 | 4 | דוח יומי — שלוש תקלות 🤖 | 15 | שיעור 4
 @task
@@ -758,6 +796,8 @@ GROUP BY day
 ORDER BY day
 LIMIT 10;
 ```
+@mistakes
+<ul><li><code>count(customer_id)</code> במקום <code>count(DISTINCT customer_id)</code>. לקוח עם שלוש הזמנות נספר שלוש פעמים.</li><li>להמיר לשעון ישראל ב־SELECT, אבל לקבץ לפי <code>created_at::DATE</code>. ה־GROUP BY חייב להשתמש באותו ביטוי של היום בישראל (כאן — לפי הכינוי <code>day</code>).</li><li><code>sum(price_cents)</code>. המחיר הוא ליחידה, ולכן צריך <code>quantity * price_cents</code>.</li></ul>
 
 @@ P28.5-E23 | 4 | שרת שנתקע — שלוש תקלות 🤖 | 20 | שיעור 2
 @task
@@ -808,6 +848,8 @@ export function createServer(): http.Server {
 }
 ```
 <p>איך מוצאים את זה בפרודקשן: מוניטור lag (E14) מראה שה־event loop נחסם; ואז <code>node --cpu-prof</code> (או <code>clinic flame</code>) — פרופיל שמראה באיזו פונקציה ה־CPU בילה. <code>pbkdf2Sync</code> בראש ה־flame graph — וזהו.</p>
+@mistakes
+<ul><li>לעטוף את <code>pbkdf2Sync</code> ב־<code>async</code> או ב־Promise. הפונקציה עדיין רצה על ה־event loop וחוסמת.</li><li>ב־<code>/slow</code>: לולאת <code>while (Date.now() &lt; end)</code> במקום <code>await sleep</code>. זו המתנה שחוסמת הכול.</li><li>לשכוח את <code>gzipSync</code> של הייצוא. גם דחיסה של קובץ גדול חוסמת לכמה מאות מילישניות.</li></ul>
 
 @@ P28.5-E24 | 5 | אתגר: API אנליטיקה תחת עומס 🤖 | 60 | שיעור 5
 @task
@@ -931,6 +973,8 @@ export async function createAnalyticsServer({ parquetPath, cacheTtlMs = 60_000, 
 }
 ```
 <p>הארכיטקטורה הזו — Parquet (על S3) + DuckDB בתוך שירות — נפוצה יותר ויותר לדשבורדים פנימיים: בלי cluster של מחסן נתונים, ושאילתות של מילי־שניות על מיליוני שורות. כשהנתונים גדלים לטרה־בייטים — אותן שאילתות עוברות ל־BigQuery/Snowflake כמעט בלי שינוי.</p>
+@mistakes
+<ul><li>לשרשר את <code>from</code> ו־<code>to</code> לתוך ה־SQL. זה SQL injection; משתמשים בפרמטרים.</li><li>לחשב את היום בישראל בכל שאילתה. זה מאט מאוד; מחשבים אותו פעם אחת בעלייה, בטבלה.</li><li>cache לפי <code>req.url</code> כמו שהוא. <code>?to=…&amp;from=…</code> ו־<code>?from=…&amp;to=…</code> הם אותה בקשה, ולכן המפתח בנוי מהפרמטרים אחרי אימות.</li><li>TTL לפי <code>Date.now()</code> במקום ה־<code>now</code> המוזרק. הבודק מזיז את השעון, וה־cache לא פג.</li></ul>
 
 @@ P28.5-E25 | 5 | אתגר: data lake מצטבר 🤖 | 60 | שיעור 5
 @task
@@ -1023,6 +1067,8 @@ export async function lakeReport(conn: DuckDBConnection, lakeDir: string) {
 }
 ```
 <p>זה ETL מצטבר "אמיתי" בקטן: Fivetran, Airbyte ו־Debezium עושים את אותו דבר (Debezium — מה־WAL, בלי לשאול את הטבלה). ו־"append-only + גרסה אחרונה בקריאה" הוא הבסיס של פורמטים כמו Delta Lake (Databricks) ו־Apache Iceberg — שמוסיפים מעל Parquet טרנזקציות ו־time travel.</p>
+@mistakes
+<ul><li>watermark לפי <code>updated_at</code> בלבד, עם <code>&gt;</code>. שורות עם אותו זמן שנפלו בין שני עמודים לא ייקראו לעולם.</li><li>לכתוב את <code>_state.json</code> לפני שהקובץ נשמר. נפילה באמצע מדלגת על השינויים לתמיד.</li><li>דוח שסופר את כל הגרסאות של הזמנה. הזמנה שעודכנה שלוש פעמים נספרת שלוש פעמים, או שהזמנה שבוטלה בגרסה האחרונה עדיין נספרת.</li></ul>
 
 @@ P28.5-E26 | 3 | הנפוצים ביותר בזרם, בזיכרון קבוע 🤖 | 30 | שיעור 3
 @type scratch
@@ -1118,7 +1164,7 @@ seen: 100000 · מונים בזיכרון: 20 במקום 2931
 @mistakes
 <ul><li>החדש מקבל <code>count: 1</code> במקום <code>min + 1</code> — הוא יימחק מיד בפעם הבאה, ופריט חם שנכנס מאוחר לא "יטפס" לעולם.</li><li>לשכוח את <code>error</code> — אי אפשר להבדיל בין 3,759 אמיתיים ל־3,759 שעברו בירושה.</li><li>לשמור <code>Map</code> של הכול "רק לבדיקה" — זה בדיוק מה שהאלגוריתם חוסך.</li><li><code>top()</code> שממיין את ה־Map עצמו — ‏<code>Map</code> לא ממוין; יוצרים מערך חדש.</li></ul>
 
-@@ P28.5-E27 | 2 | סיכום יומי של צפיות 🤖 | 20 | שיעור 4
+@@ P28.5-E27 | 2 | סיכום יומי של צפיות 🤖 | 20 | פרק 16, פרק 17, שיעור 4
 @lesson 4
 @part 2
 @type review
@@ -1169,7 +1215,7 @@ ORDER BY d.day;
 @mistakes
 <ul><li><code>COUNT(user_id)</code> — סופר צפיות, לא משתמשים.</li><li>לשים <code>COUNT(DISTINCT user_id)</code> ב־CTE של הנתיבים ולצרף — מקבלים משתמשים לנתיב, לא ליום.</li><li><code>MAX(COUNT(*))</code> — אי אפשר לקנן פונקציות צבירה. ובכל מקרה זה נותן את המספר, לא את הנתיב.</li><li><code>date_trunc('day', viewed_at)</code> — עובד, אבל מחזיר <code>timestamptz</code> (חצות), לא תאריך.</li></ul>
 
-@@ P28.5-E28 | 2 | דוח של בדיקת עומס 🤖 | 20 | שיעור 1
+@@ P28.5-E28 | 2 | דוח של בדיקת עומס 🤖 | 20 | פרק 2, פרק 6, שיעור 1
 @lesson 1
 @part 2
 @type review
@@ -2233,9 +2279,9 @@ export async function* batches<T>(source: AsyncIterable<T> | Iterable<T>, size: 
 <p>בקובץ <code>28w-scale/starter/P28.5-E65.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
 ```ts
 export function csvLine(values: (string | number | boolean | null | undefined | Date)[]): string
-export function toCsv(header: string[], rows: Record<string, unknown>[]): Generator<string>
+export function toCsv(header: string[], rows: Record<string, unknown>[]): string[]
 ```
-<ul><li><code>csvLine</code> — ערכים מופרדים בפסיק, ונגמרת ב־<code>\r\n</code> (התקן, RFC 4180). ‏<code>null</code>/<code>undefined</code> ← ריק. ‏<code>Date</code> ← ‏<code>toISOString()</code>. כל השאר ← <code>String(v)</code>.</li><li>ערך שיש בו פסיק, מירכאה <code>"</code>, ‏<code>\n</code> או <code>\r</code> — עוטפים במירכאות, וכל מירכאה בפנים מוכפלת: <code>he said "hi"</code> ← <code>"he said ""hi"""</code>.</li><li><code>toCsv</code> — generator: קודם שורת הכותרת, ואז שורה לכל אובייקט, לפי סדר העמודות שב־<code>header</code>.</li></ul>
+<ul><li><code>csvLine</code> — ערכים מופרדים בפסיק, ונגמרת ב־<code>\r\n</code> (התקן, RFC 4180). ‏<code>null</code>/<code>undefined</code> ← ריק. ‏<code>Date</code> ← ‏<code>toISOString()</code>. כל השאר ← <code>String(v)</code>.</li><li>ערך שיש בו פסיק, מירכאה <code>"</code>, ‏<code>\n</code> או <code>\r</code> — עוטפים במירכאות, וכל מירכאה בפנים מוכפלת: <code>he said "hi"</code> ← <code>"he said ""hi"""</code>.</li><li><code>toCsv</code> — מערך של שורות: קודם שורת הכותרת, ואז שורה לכל אובייקט, לפי סדר העמודות שב־<code>header</code>. (את השורות אפשר לכתוב לזרם אחת אחת, כמו ב־E69.)</li></ul>
 ```term
 % npm run check P28.5-E65
 ```
@@ -2243,7 +2289,7 @@ export function toCsv(header: string[], rows: Record<string, unknown>[]): Genera
 <p>‏<code>/[",\r\n]/.test(s)</code> ← ‏<code>`"${s.replaceAll('"', '""')}"`</code>.</p>
 @hint2
 ```ts
-yield csvLine(header); for (const r of rows) yield csvLine(header.map((h) => r[h] as ...))
+return [csvLine(header), ...rows.map((r) => csvLine(header.map((h) => r[h] as ...)))];
 ```
 @solution
 ```ts save=solutions/P28.5-E65.ts
@@ -2260,9 +2306,8 @@ export function csvLine(values: Cell[]): string {
   return values.map(cell).join(",") + "\r\n";
 }
 
-export function* toCsv(header: string[], rows: Record<string, unknown>[]): Generator<string> {
-  yield csvLine(header);
-  for (const r of rows) yield csvLine(header.map((h) => r[h] as Cell));
+export function toCsv(header: string[], rows: Record<string, unknown>[]): string[] {
+  return [csvLine(header), ...rows.map((r) => csvLine(header.map((h) => r[h] as Cell)))];
 }
 ```
 <p>ל־Excel עם עברית כדאי להוסיף BOM (‏<code>"﻿"</code>) בתחילת הקובץ — אחרת הוא מנחש קידוד ומציג ג׳יבריש.</p>
@@ -2333,35 +2378,43 @@ docker logs --since 24h api 2>&1 | jq -c 'select(.level == "error")'
 ```ts
 export function exportApp(rows: () => AsyncIterable<object>): express.Express
 ```
-<ul><li><code>GET /export.ndjson</code> ← ‏200, ‏<code>Content-Type: application/x-ndjson</code>, וגוף: <code>JSON.stringify(row) + "\n"</code> לכל שורה, לפי הסדר.</li><li>עם backpressure ועצירה כשהלקוח מתנתק: ‏<code>pipeline</code> מ־<code>node:stream/promises</code> בין <code>Readable.from(...)</code> לבין <code>res</code>. כשהלקוח נסגר באמצע — המקור נסגר (ה־<code>finally</code> של ה־generator רץ), בלי לקרוא את כל השורות.</li><li>שגיאה במקור באמצע ← החיבור נסגר (אי אפשר כבר לשלוח 500 — הכותרות נשלחו), ולא קורס התהליך.</li></ul>
+<ul><li><code>GET /export.ndjson</code> ← ‏200, ‏<code>Content-Type: application/x-ndjson</code>, וגוף: <code>JSON.stringify(row) + "\n"</code> לכל שורה, לפי הסדר.</li><li>עם backpressure ועצירה כשהלקוח מתנתק: ‏<code>pipeline</code> מ־<code>node:stream/promises</code> בין <code>Readable.from(...)</code> לבין <code>res</code>. כשהלקוח נסגר באמצע — המקור נסגר, בלי לקרוא את כל השורות (הבודק מוודא שהמקור קיבל סימן לעצור).</li><li>את ההמרה משורה לטקסט עושים בשלב באמצע ה־<code>pipeline</code>: ‏<code>Transform</code> מ־<code>node:stream</code>, כמו <code>createGzip()</code> בשיעור — רק שאתה כותב את ההמרה בעצמך.</li><li>שגיאה במקור באמצע ← החיבור נסגר (אי אפשר כבר לשלוח 500 — הכותרות נשלחו), ולא קורס התהליך.</li></ul>
 <p>🔗 <strong>איך זה מתחבר:</strong> ‏<code>res</code> של Express מפרק 15 — והשיעור: pipeline ו־backpressure; ‏E66 בקוד.</p>
 ```term
 % npm run check P28.5-E69
 ```
 @hint1
 ```ts
-async function* lines() { for await (const r of rows()) yield JSON.stringify(r) + "\n"; }
+const toLine = new Transform({
+  writableObjectMode: true, // נכנסים אובייקטים, יוצא טקסט
+  transform(row, _encoding, done) {
+    done(null, JSON.stringify(row) + "\n");
+  },
+});
 ```
 @hint2
 ```ts
-try { await pipeline(Readable.from(lines()), res); } catch { /* הלקוח התנתק או שגיאה במקור */ }
+try { await pipeline(Readable.from(rows()), toLine, res); } catch { /* הלקוח התנתק או שגיאה במקור */ }
 ```
 @solution
 ```ts save=solutions/P28.5-E69.ts
 // P28.5-E69: GET /export.ndjson בזרם
 import express from "express";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export function exportApp(rows: () => AsyncIterable<object>) {
   const app = express();
   app.get("/export.ndjson", async (req, res) => {
     res.status(200).type("application/x-ndjson");
-    async function* lines() {
-      for await (const row of rows()) yield JSON.stringify(row) + "\n";
-    }
+    const toLine = new Transform({
+      writableObjectMode: true,
+      transform(row: object, _encoding, done) {
+        done(null, JSON.stringify(row) + "\n");
+      },
+    });
     try {
-      await pipeline(Readable.from(lines()), res);
+      await pipeline(Readable.from(rows()), toLine, res);
     } catch {
       // הלקוח התנתק, או שגיאה במקור — pipeline כבר סגר את שני הצדדים
       res.destroy();
@@ -2370,6 +2423,7 @@ export function exportApp(rows: () => AsyncIterable<object>) {
   return app;
 }
 ```
+<p>שלושה שלבים בצינור אחד: <code>Readable.from(rows())</code> הופך את המקור לזרם של אובייקטים, <code>toLine</code> הופך כל אובייקט לשורת טקסט, ו־<code>res</code> שולח. <code>pipeline</code> מנהל את ה־backpressure בין כולם. וכשהלקוח מתנתק, הוא סוגר את כל השלבים, כולל המקור. לכן הייצוא נעצר ולא ממשיך לקרוא מהמסד.</p>
 @mistakes
 <ul><li>‏<code>res.json(await toArray(rows()))</code> — כל הייצוא בזיכרון, ושום דבר לא יוצא עד הסוף.</li><li>‏<code>for await</code> עם <code>res.write</code> בלי לבדוק את הערך המוחזר — לקוח איטי ממלא את הזיכרון.</li></ul>
 
@@ -3370,3 +3424,321 @@ export function checkBatch(rows: Record<string, unknown>[], rules: Rule[]) {
 ```
 @mistakes
 <ul><li>ב־<code>unique</code> לספור את <em>כל</em> ההופעות של ערך כפול — שתי שורות עם אותו id הן הפרה אחת, לא שתיים.</li></ul>
+
+@@ P28.5-E101 | 4 | סנכרון שמדלג על שורות 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>הלב של הסנכרון המצטבר מ־PostgreSQL ל־data lake (כמו ב־P28.5-E25), בלי מסד. ‏<code>nextBatch(rows, watermark, size)</code> ב־<code>28w-scale/starter/P28.5-E101.ts</code>:</p>
+<ul><li><code>rows</code> — שורות <code>{ id, updatedAt }</code>, בכל סדר (‏<code>updatedAt</code> מחרוזת ISO).</li><li><code>watermark</code> — ‏<code>{ updatedAt, id }</code> של השורה האחרונה שכבר יוצאה, או <code>null</code> בפעם הראשונה.</li><li>מחזירה <code>{ batch, watermark }</code>: עד <code>size</code> שורות שבאות <strong>אחרי</strong> ה־watermark, בסדר <code>(updatedAt, id)</code> עולה; ו־watermark חדש — של השורה האחרונה ב־batch (או הישן, אם ה־batch ריק).</li></ul>
+<p>אחרי חודש, ב־data lake חסרות מאות שורות: כאלה שעודכנו באותה מיקרו־שנייה כמו שורה אחרת, וכאלה שנפלו מעבר ל־size. מצא ותקן.</p>
+```term
+% npm run check P28.5-E101
+```
+@hint1
+<p>הרץ את הלולאה ביד: שלוש שורות עם אותו <code>updatedAt</code>, ‏<code>size</code> 2. אילו שורות נכנסות בסבב הראשון, מה ה־watermark אחריו, ומה נכנס בסבב השני?</p>
+@hint2
+<p>"אחרי" ו"מיון" — על הזוג <code>(updatedAt, id)</code>. וה־watermark החדש הוא של השורה האחרונה <em>שיוצאה</em>, לא של האחרונה שקיימת.</p>
+@solution
+```ts save=solutions/P28.5-E101.ts
+// P28.5-E101: batch הבא בסנכרון מצטבר — מתוקן
+export type Mark = { updatedAt: string; id: number };
+
+const cmp = (a: Mark, b: Mark) => a.updatedAt.localeCompare(b.updatedAt) || a.id - b.id;
+
+export function nextBatch<R extends Mark>(rows: R[], watermark: Mark | null, size: number) {
+  const after = rows.filter((r) => !watermark || cmp(r, watermark) > 0).sort(cmp);
+  const batch = after.slice(0, size);
+  const last = batch.at(-1);
+  return { batch, watermark: last ? { updatedAt: last.updatedAt, id: last.id } : watermark };
+}
+```
+<ol><li><strong>‏<code>r.updatedAt &gt; watermark.updatedAt</code> בלבד.</strong> שורה עם אותו <code>updatedAt</code> ו־id גבוה יותר, שלא נכנסה לסבב הקודם, נשארה "מאחורי" ה־watermark לתמיד. משווים את הזוג.</li><li><strong>מיון לפי <code>updatedAt</code> בלבד.</strong> בתיקו, הסדר תלוי בסדר הקלט, ואז ה־watermark (שורה אחרונה) לא באמת הגבול של מה שיוצא.</li><li><strong>ה־watermark החדש היה המקסימום של כל השורות</strong>, גם של אלה שלא נכנסו ל־batch. מה שנשאר מעבר ל־size דולג. ה־watermark הוא של מה שיוצא בפועל.</li></ol>
+@mistakes
+<ul><li>‏<code>&gt;=</code> על <code>updatedAt</code>. אין דילוג, אבל השורה האחרונה של כל סבב יוצאת שוב, והדוח סופר אותה פעמיים.</li><li>להמיר את <code>updatedAt</code> ל־<code>Date</code> לפני ההשוואה. ‏Date מאבד את המיקרו־שניות של PostgreSQL, ושתי שורות שונות נראות באותו זמן.</li><li>לשמור את ה־watermark לפני שהקובץ נכתב. נפילה באמצע מדלגת על ה־batch.</li></ul>
+
+@@ P28.5-E102 | 1 | מתי הגוף של generator רץ? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בלי להריץ: מה ידפיס הקוד הזה, שורה אחרי שורה?</p>
+```ts
+function* steps(): Generator<number> {
+  console.log("A");
+  yield 1;
+  console.log("B");
+  yield 2;
+  console.log("C");
+}
+const g = steps();
+console.log("start");
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+```
+<p>ואחר כך: (1) למה <code>start</code> מודפס לפני <code>A</code>? (2) מתי בדיוק מודפס <code>C</code>, ולמה לא אחרי ה־<code>next()</code> השני? (3) מה ה־<code>value</code> בקריאה השלישית, ולמה אין שם <code>3</code> או <code>"C"</code>?</p>
+@hint1
+<p>‏<code>steps()</code> רק יוצר את ה־generator. כל <code>next()</code> מריץ את הגוף מהמקום שבו הוא עצר <strong>עד ה־<code>yield</code> הבא</strong>, או עד הסוף.</p>
+@hint2
+<p>אין בפונקציה <code>return</code> עם ערך. מה פונקציה רגילה מחזירה כשהיא מגיעה לסוף בלי <code>return</code>?</p>
+@solution
+```ts run
+function* steps(): Generator<number> {
+  console.log("A");
+  yield 1;
+  console.log("B");
+  yield 2;
+  console.log("C");
+}
+const g = steps();
+console.log("start");
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+```
+```out
+start
+A
+{ value: 1, done: false }
+B
+{ value: 2, done: false }
+C
+{ value: undefined, done: true }
+{ value: undefined, done: true }
+```
+<ol><li><strong>‏<code>start</code> לפני <code>A</code></strong>, כי <code>steps()</code> לא מריץ אף שורה מהגוף. הוא רק מחזיר אובייקט generator שמחכה. השורה הראשונה של הגוף רצה רק ב־<code>next()</code> הראשון.</li><li><strong>‏<code>C</code> מודפס רק ב־<code>next()</code> השלישי.</strong> ה־<code>next()</code> השני ממשיך מאחרי <code>yield 1</code>, מדפיס <code>B</code>, ונעצר ב־<code>yield 2</code>. הקוד שאחרי <code>yield 2</code> מחכה לבקשה הבאה. generator עושה בדיוק את העבודה שביקשו ממנו, ולא שורה אחת יותר.</li><li><strong>‏<code>value: undefined</code>, ‏<code>done: true</code></strong>, כי הגוף הגיע לסוף בלי <code>yield</code> נוסף ובלי <code>return</code>, ולכן הערך הוא <code>undefined</code>, כמו בפונקציה רגילה. <code>"C"</code> רק הודפס, הוא לא הוחזר. מכאן והלאה כל <code>next()</code> מחזיר אותו דבר, כי ה־generator כבר גמר.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>steps()</code> מריץ את הגוף עד ה־<code>yield</code> הראשון. לא: עד <code>next()</code> הראשון לא רצה אף שורה.</li><li>לצפות לשגיאה ב־<code>next()</code> הרביעי. generator שגמר פשוט מחזיר <code>done: true</code> שוב ושוב.</li></ul>
+
+@@ P28.5-E103 | 1 | ‏break, ‏finally ו־generator שנגמר | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בלי להריץ: מה ידפיס הקוד?</p>
+```ts
+function* rows(): Generator<string> {
+  try {
+    yield "r1";
+    yield "r2";
+    yield "r3";
+  } finally {
+    console.log("closed");
+  }
+}
+const g = rows();
+for (const r of g) {
+  console.log(r);
+  if (r === "r1") break;
+}
+for (const r of g) console.log("again", r);
+console.log([...rows()].length);
+```
+<p>(1) למה <code>closed</code> מודפס מיד אחרי <code>r1</code>, ולא בסוף? (2) מישהו ציפה שהלולאה השנייה תמשיך מ־<code>r2</code>. למה היא לא מדפיסה כלום, ולמה אין שגיאה? (3) למה <code>closed</code> מודפס פעם שנייה, ואיפה? (4) בקוד אמיתי, מה היית שם ב־<code>finally</code> של generator שקורא שורות ממסד?</p>
+@hint1
+<p>‏<code>break</code> בתוך <code>for...of</code> קורא ל־<code>g.return()</code>. מה קורה ל־generator ש־<code>return()</code> נקרא עליו?</p>
+@hint2
+<p>‏<code>[...rows()]</code> יוצר generator <strong>חדש</strong> ועובר עליו עד הסוף.</p>
+@solution
+```ts run
+function* rows(): Generator<string> {
+  try {
+    yield "r1";
+    yield "r2";
+    yield "r3";
+  } finally {
+    console.log("closed");
+  }
+}
+const g = rows();
+for (const r of g) {
+  console.log(r);
+  if (r === "r1") break;
+}
+for (const r of g) console.log("again", r);
+console.log([...rows()].length);
+```
+```out
+r1
+closed
+closed
+3
+```
+<ol><li><strong>‏<code>break</code> סוגר את ה־generator.</strong> ‏<code>for...of</code> קורא בשבילך ל־<code>g.return()</code>, והגוף מסתיים במקום שבו עצר (ב־<code>yield "r1"</code>). ‏<code>finally</code> רץ תמיד כשהגוף מסתיים, ולכן <code>closed</code> מודפס עוד לפני הלולאה השנייה.</li><li><strong>אחרי <code>return()</code> ה־generator גמר</strong>, ו־<code>next()</code> מחזיר <code>done: true</code> מיד. הלולאה השנייה מקבלת <code>done: true</code> כבר בסיבוב הראשון, ולכן לא מדפיסה כלום. גם אין שגיאה, כי מבחינת JavaScript זה רצף ריק ותקין. זה הבאג השקט של "עוברים פעמיים על אותו generator": אותו דבר קורה גם בלי <code>break</code>, אחרי שהלולאה הראשונה הגיעה לסוף.</li><li><strong>‏<code>rows()</code> בשורה האחרונה הוא generator חדש</strong>, עם גוף משלו ו־<code>finally</code> משלו. ה־spread עובר עליו עד הסוף, ובסוף הגוף רץ ה־<code>finally</code>. לכן <code>closed</code> מודפס לפני <code>3</code>: ‏<code>console.log</code> רץ רק אחרי שה־spread גמר.</li><li>שחרור משאבים: <code>client.release()</code> לחיבור מה־pool, או סגירת cursor או קובץ. כך גם מי שעוצר באמצע (‏<code>break</code>, ‏<code>return</code>, חריגה בלולאה) לא משאיר חיבור תפוס.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>break</code> רק "משהה" את ה־generator, ושאפשר להמשיך ממנו אחר כך. ‏<code>break</code> סוגר אותו. כדי להמשיך באמצע, קוראים ל־<code>next()</code> ביד.</li><li>לשים את השחרור אחרי הלולאה בתוך הגוף, ולא ב־<code>finally</code>. אחרי <code>break</code> השורה הזו לא רצה אף פעם.</li></ul>
+
+@@ P28.5-E104 | 2 | חתיכות מכל iterable 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>‏<code>inChunks</code> מהשיעור עובד רק על מערך, כי הוא משתמש ב־<code>slice</code>. בקובץ <code>28w-scale/starter/P28.5-E104.ts</code> (יש בו רק הערה) כתוב וייצא גרסה שעובדת על <strong>כל</strong> iterable: מערך, ‏<code>Set</code>, מחרוזת, או generator אחר.</p>
+```ts
+export function chunk<T>(source: Iterable<T>, size: number): Generator<T[]>
+```
+<ul><li>מחזיר מערכים של <code>size</code> איברים לפי הסדר. החתיכה האחרונה יכולה להיות קצרה יותר. מקור ריק ← אף חתיכה.</li><li><strong>עצל:</strong> כדי להחזיר את החתיכה הראשונה, לוקחים מהמקור בדיוק <code>size</code> איברים, לא יותר. הבודק נותן מקור של מיליון איברים וסופר כמה נלקחו.</li><li><code>size</code> קטן מ־1, או לא מספר שלם ← <code>RangeError</code> (מספיק שייזרק ב־<code>next()</code> הראשון).</li></ul>
+```ts
+[...chunk(new Set([1, 2, 3, 4, 5]), 2)]; // [[1, 2], [3, 4], [5]]
+[...chunk("abcd", 3)];                   // [["a", "b", "c"], ["d"]]
+```
+```term
+% npm run check P28.5-E104
+```
+@hint1
+<p>בלי <code>slice</code> ובלי <code>[...source]</code>: לולאת <code>for (const x of source)</code> שאוספת לתוך מערך <code>buf</code>. כש־<code>buf.length === size</code>, עושים <code>yield buf</code> ומתחילים <code>buf</code> חדש.</p>
+@hint2
+<p>אחרי הלולאה: אם נשאר משהו ב־<code>buf</code>, זו החתיכה האחרונה. ואת ה־<code>RangeError</code> בודקים בשורה הראשונה של הגוף, עם <code>Number.isInteger(size)</code>.</p>
+@solution
+```ts save=solutions/P28.5-E104.ts
+// P28.5-E104: חתיכות מכל iterable
+export function* chunk<T>(source: Iterable<T>, size: number): Generator<T[]> {
+  if (!Number.isInteger(size) || size < 1) throw new RangeError(`size חייב להיות מספר שלם חיובי, קיבלתי ${size}`);
+  let buf: T[] = [];
+  for (const x of source) {
+    buf.push(x);
+    if (buf.length === size) {
+      yield buf;
+      buf = [];
+    }
+  }
+  if (buf.length > 0) yield buf;
+}
+```
+<ul><li><strong>‏<code>yield</code> בתוך <code>for...of</code></strong> עוצר את הלולאה באמצע. המקור לא מתבקש לאיבר הבא עד שמישהו יבקש את החתיכה הבאה. לכן החתיכה הראשונה לוקחת בדיוק <code>size</code> איברים, גם ממקור אינסופי.</li><li><strong>‏<code>buf = []</code> ולא <code>buf.length = 0</code>.</strong> המערך שהוחזר שייך עכשיו למי שקיבל אותו. אם מרוקנים אותו במקום, החתיכה שהוא כבר מחזיק מתרוקנת גם אצלו.</li><li>ה־<code>throw</code> נמצא בגוף, ולכן הוא קורה ב־<code>next()</code> הראשון ולא ב־<code>chunk(...)</code> עצמו. זה בסדר: הגוף לא רץ עד שמבקשים ממנו.</li></ul>
+@mistakes
+<ul><li>‏<code>const all = [...source]</code> בהתחלה ואז <code>slice</code>. התוצאה נכונה, אבל זה טוען את כל המקור לזיכרון, ועל מקור אינסופי זה לא נגמר.</li><li>לשכוח את החתיכה האחרונה, הקצרה. 5 איברים בחתיכות של 2 נותנים <code>[[1,2],[3,4]]</code>, וה־<code>5</code> הולך לאיבוד.</li><li>‏<code>buf.length = 0</code> במקום <code>buf = []</code>. כל החתיכות שהוחזרו הופכות לאותו מערך ריק.</li></ul>
+
+@@ P28.5-E105 | 2 | מזהים אינסופיים ו־take 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>28w-scale/starter/P28.5-E105.ts</code> (יש בו רק הערה) כתוב וייצא שתי פונקציות:</p>
+```ts
+export function ids(prefix: string, start?: number): Generator<string>
+export function take<T>(source: Iterable<T>, n: number): T[]
+```
+<ul><li><code>ids</code> — generator אינסופי: <code>"ORD-1"</code>, ‏<code>"ORD-2"</code>, … ‏(<code>start</code> ברירת מחדל 1). ‏<code>ids("INV", 100)</code> ← ‏<code>"INV-100"</code>, ‏<code>"INV-101"</code>, …</li><li><code>take</code> — מערך של <code>n</code> האיברים הראשונים (או פחות, אם המקור קצר יותר).</li><li><code>take</code> לוקח מהמקור <strong>בדיוק</strong> עד <code>n</code> איברים, לא איבר נוסף "כדי לבדוק". ‏<code>n</code> שהוא 0 ← ‏<code>[]</code>, בלי לגעת במקור.</li><li>כשהוא עוצר באמצע, <code>take</code> <strong>סוגר</strong> את המקור, כך שה־<code>finally</code> שלו רץ. הבודק בודק את זה עם generator שיש לו <code>finally</code>.</li></ul>
+```ts
+take(ids("ORD"), 3); // ["ORD-1", "ORD-2", "ORD-3"]
+```
+```term
+% npm run check P28.5-E105
+```
+@hint1
+<p><code>ids</code>: ‏<code>let n = start;</code> ואז לולאת <code>while (true)</code> עם <code>yield</code> של המזהה ו־<code>n++</code>. זה לא נתקע, כי כל <code>yield</code> עוצר.</p>
+@hint2
+<p><code>take</code>: ‏<code>if (n &lt;= 0) return [];</code> ואז <code>for...of</code>: ‏<code>push</code>, ו<strong>אחרי</strong> ה־<code>push</code> בודקים אם הגענו ל־<code>n</code> ועושים <code>break</code>. ‏<code>break</code> סוגר את המקור בשבילך.</p>
+@solution
+```ts save=solutions/P28.5-E105.ts
+// P28.5-E105: מזהים אינסופיים ו־take
+export function* ids(prefix: string, start = 1): Generator<string> {
+  let n = start;
+  while (true) {
+    yield `${prefix}-${n}`;
+    n++;
+  }
+}
+
+export function take<T>(source: Iterable<T>, n: number): T[] {
+  const out: T[] = [];
+  if (n <= 0) return out;
+  for (const x of source) {
+    out.push(x);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+```
+<ul><li><strong>הבדיקה אחרי ה־<code>push</code></strong>: אם בודקים לפני, הלולאה מבקשת איבר נוסף רק כדי לגלות שהיא לא צריכה אותו. ב־<code>ids</code> זה רק חישוב מיותר, אבל במקור שקורא מה־API או מהמסד זו קריאה מיותרת.</li><li><strong>‏<code>break</code> ולא <code>next()</code> ביד</strong>: ‏<code>for...of</code> קורא ל־<code>return()</code> של המקור כשיוצאים באמצע, וה־<code>finally</code> שלו רץ. מי שכותב לולאת <code>next()</code> ביד צריך לזכור לקרוא ל־<code>return()</code> בעצמו.</li><li><code>take</code> הוא פונקציה רגילה ולא generator: הוא מחזיר מערך מוכן. זו הנקודה שבה העצלות נגמרת, ומקבלים ערכים אמיתיים.</li></ul>
+@mistakes
+<ul><li>‏<code>[...ids("ORD")].slice(0, 3)</code>. ה־spread מנסה לאסוף רצף אינסופי, והתהליך נתקע עד שנגמר הזיכרון.</li><li>לבדוק <code>if (out.length &gt;= n) break</code> בתחילת הלולאה. התוצאה נכונה, אבל נלקח איבר אחד יותר מדי, וב־<code>n = 0</code> המקור נפתח בכלל.</li><li>לולאת <code>while</code> עם <code>it.next()</code> בלי <code>it.return()</code> בסוף. ה־<code>finally</code> של המקור לא רץ, וחיבור נשאר פתוח.</li></ul>
+
+@@ P28.5-E106 | 3 | עמודים מה־API, ועצירה מוקדמת 🤖 | 20 | פרק 18, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>API של הזמנות מחזיר עמודים: <code>{ items, next }</code>, כאשר <code>next</code> הוא מספר העמוד הבא, או <code>null</code> בעמוד האחרון. בקובץ <code>28w-scale/starter/P28.5-E106.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Page<T> = { items: T[]; next: number | null };
+export type FetchPage<T> = (page: number) => Promise<Page<T>>;
+export function paginate<T>(fetchPage: FetchPage<T>): AsyncGenerator<T>
+export function findFirst<T>(fetchPage: FetchPage<T>, pred: (item: T) => boolean): Promise<T | undefined>
+```
+<ul><li><code>paginate</code> — ‏<code>async function*</code> שמתחיל מעמוד 1, מחזיר את הפריטים אחד אחד, וממשיך לפי <code>next</code>. מספרי העמודים לא חייבים להיות רצופים (‏<code>next: 7</code> אחרי עמוד 1). עמוד עם <code>items: []</code> הוא לא סוף: הסוף הוא רק <code>next: null</code>.</li><li>עמוד נטען רק כשצריך את הפריט הראשון שלו.</li><li><code>findFirst</code> — עובר על <code>paginate</code> עם <code>for await</code>, ומחזיר את הפריט הראשון שעונה על <code>pred</code> (או <code>undefined</code>). <strong>אחרי שנמצא, לא נטען אף עמוד נוסף.</strong> הבודק סופר את הקריאות ל־<code>fetchPage</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏pagination מפרק 18 (שיעור 4), כאן מהצד של מי שצורך אותה, ו־<code>for await</code> מפרק 13. והשיעור: ‏<code>async function*</code> מחביא את העמודים, והצרכן קובע את הקצב.</p>
+```term
+% npm run check P28.5-E106
+```
+@hint1
+<p>כמו <code>allOrders</code> בשיעור: ‏<code>let page: number | null = 1;</code> ואז <code>while (page !== null)</code>: ‏<code>await fetchPage(page)</code>, ‏<code>for (const item of res.items) yield item;</code>, ‏<code>page = res.next</code>.</p>
+@hint2
+<p><code>findFirst</code>: לולאת <code>for await</code> על <code>paginate(fetchPage)</code>, ו־<code>return item</code> כש־<code>pred(item)</code>. ‏<code>return</code> מתוך <code>for await</code> סוגר את ה־generator, והוא לא מגיע ל־<code>fetchPage</code> הבא.</p>
+@solution
+```ts save=solutions/P28.5-E106.ts
+// P28.5-E106: עמודים מה־API, ועצירה מוקדמת
+export type Page<T> = { items: T[]; next: number | null };
+export type FetchPage<T> = (page: number) => Promise<Page<T>>;
+
+export async function* paginate<T>(fetchPage: FetchPage<T>): AsyncGenerator<T> {
+  let page: number | null = 1;
+  while (page !== null) {
+    const res: Page<T> = await fetchPage(page);
+    for (const item of res.items) yield item;
+    page = res.next;
+  }
+}
+
+export async function findFirst<T>(fetchPage: FetchPage<T>, pred: (item: T) => boolean): Promise<T | undefined> {
+  for await (const item of paginate(fetchPage)) {
+    if (pred(item)) return item;
+  }
+  return undefined;
+}
+```
+<ul><li><strong>למה זה עוצר בזמן:</strong> ‏<code>paginate</code> נעצר ב־<code>yield item</code>, ולא מגיע ל־<code>fetchPage</code> הבא עד שהלולאה מבקשת עוד פריט. ‏<code>return</code> ב־<code>findFirst</code> סוגר את ה־generator, ולכן הבקשה הזו לא מגיעה אף פעם.</li><li><strong>‏<code>while (page !== null)</code></strong> ולא "עד שמגיע עמוד ריק". API עם סינון בצד השרת מחזיר לפעמים עמוד ריק באמצע.</li><li><strong>‏<code>const res: Page&lt;T&gt;</code></strong>: בלי הטיפוס, TypeScript לא מצליח להסיק את <code>page</code> שמשתנה בתוך הלולאה, ומתלונן על <code>any</code> מרומז.</li></ul>
+@mistakes
+<ul><li>לאסוף את כל העמודים למערך, ורק אחר כך לחפש. זה עובד, אבל כל העמודים נטענים גם כשהפריט נמצא בעמוד הראשון.</li><li>לעצור כש־<code>items.length === 0</code>. ההזמנות שאחרי עמוד ריק באמצע לא מגיעות.</li><li>‏<code>page++</code> במקום <code>page = res.next</code>. זה עובד רק כשהעמודים רצופים, ועם cursor מפרק 18 זה לא עובד בכלל.</li></ul>
+
+@@ P28.5-E107 | 4 | דוח הזמנות ששולמו 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>28w-scale/starter/P28.5-E107.ts</code> יש שתי פונקציות. ‏<code>paidOrders(fetchPage)</code> אמור לעבור על כל העמודים (כמו <code>allOrders</code> בשיעור) ולהחזיר רק הזמנות עם <code>paid: true</code>. ‏<code>paidReport(fetchPage)</code> אמור להחזיר <code>{ count, ids }</code> של ההזמנות האלה, וכל עמוד נטען <strong>פעם אחת</strong>.</p>
+<p>הקוד לא עובר קומפילציה. אחרי שתתקן את זה הוא ייכשל בזמן ריצה, ואחרי שתתקן גם את זה הוא יחזיר <code>ids</code> ריק, בלי שום שגיאה. מצא ותקן את שלוש התקלות.</p>
+```term
+% npm run check P28.5-E107
+```
+@hint1
+<p>הבודק מריץ קודם את TypeScript על הקובץ. קרא את השגיאות: שתיים מהן מופיעות בסעיף "טעויות נפוצות" בשיעור.</p>
+@hint2
+<p>התקלה השלישית: כמה פעמים אפשר לעבור על אותו generator? ואם יוצרים generator שני, כמה פעמים נטען כל עמוד?</p>
+@solution
+```ts save=solutions/P28.5-E107.ts
+// P28.5-E107: דוח הזמנות ששולמו — מתוקן
+export type Order = { id: string; paid: boolean };
+export type Page = { items: Order[]; next: number | null };
+type FetchPage = (page: number) => Promise<Page>;
+
+export async function* paidOrders(fetchPage: FetchPage): AsyncGenerator<Order> {
+  let page: number | null = 1;
+  while (page !== null) {
+    const res: Page = await fetchPage(page);
+    for (const o of res.items) {
+      if (o.paid) yield o;
+    }
+    page = res.next;
+  }
+}
+
+export async function paidReport(fetchPage: FetchPage): Promise<{ count: number; ids: string[] }> {
+  const ids: string[] = [];
+  for await (const o of paidOrders(fetchPage)) ids.push(o.id);
+  return { count: ids.length, ids };
+}
+```
+<ol><li><strong>‏<code>yield</code> בתוך החץ של <code>forEach</code></strong> (‏<code>TS1163</code>; ‏Node נכשל כבר בטעינת הקובץ). ‏<code>yield</code> שייך לפונקציה שהוא כתוב בה ישירות, והחץ הוא פונקציה רגילה. החץ לא יכול לעצור את ה־generator שמסביבו. התיקון: ‏<code>for...of</code> רגיל על <code>res.items</code>.</li><li><strong>‏<code>for...of</code> על async generator</strong> (‏<code>TS2488</code>, וב־Node: ‏<code>TypeError: orders is not iterable</code>). async generator מחזיר Promise מכל <code>next()</code>, ולכן רק <code>for await</code> יודע לחכות לו.</li><li><strong>שתי לולאות על אותו generator.</strong> הראשונה מיצתה אותו, והשנייה קיבלה רצף ריק בלי שגיאה. ליצור generator שני (‏<code>paidOrders(fetchPage)</code> פעמיים) מחזיר תוצאה נכונה, אבל טוען כל עמוד פעמיים. התיקון: מעבר אחד שאוסף את <code>ids</code>, ו־<code>count</code> הוא האורך שלו.</li></ol>
+@mistakes
+<ul><li>להחליף את <code>forEach</code> ב־<code>map</code> או ב־<code>filter</code>. גם אלה מקבלים callback, אז <code>yield</code> בתוכם שגוי באותה מידה.</li><li>לתקן את שתי השגיאות הראשונות ולעצור, כי "זה עובר קומפילציה". התקלה השלישית לא זורקת שגיאה, היא רק מחזירה מספרים לא נכונים.</li></ul>

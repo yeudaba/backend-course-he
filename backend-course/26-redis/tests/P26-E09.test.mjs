@@ -33,3 +33,8 @@ test("שני שרתים, 20 בקשות במקביל — בדיוק limit עוב�
   const results = await Promise.all(Array.from({ length: 20 }, (_, i) => hit(i % 2 ? sb.redis : other, "ip-1", { limit: 5, windowSeconds: 60, now: T0 })));
   assert.equal(results.filter((r) => r.allowed).length, 5, "INCR אטומי ומשותף — לא GET ואז SET, ולא Map בזיכרון");
 });
+test("resetSeconds — שניות שלמות שנשארו, בלי עיגול למעלה של השעון", async (t) => {
+  const { redis } = await redisSandbox(t);
+  const r = await hit(redis, "ip-9", { limit: 3, windowSeconds: 60, now: T0 + 700 });
+  assert.equal(r.resetSeconds, 55, "בשנייה 5.7 של החלון — עדיין 55 (Math.floor של השעון)");
+});

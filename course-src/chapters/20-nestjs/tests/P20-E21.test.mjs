@@ -28,3 +28,10 @@ test("דוח שלא קיים ← 404", async (t) => {
   assert.equal(res.status, 404);
   assert.equal(res.body.message, "דוח 7 לא נמצא");
 });
+test("GET /reports/:id — הדוח הנכון", async (t) => {
+  const { call } = await nestApp(t, ReportsModule, { validation: true });
+  await call("POST", "/reports", { title: "א" });
+  await call("POST", "/reports", { title: "ב" });
+  assert.equal((await call("GET", "/reports/2")).body.title, "ב");
+  assert.equal((await call("GET", "/reports/1")).body.title, "א");
+});

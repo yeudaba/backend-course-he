@@ -37,6 +37,7 @@ test("קלט לא תקין ← 400, ושום דבר לא נכתב", async (t) =>
     assert.equal(r.status, 400, `id=${id}`);
     assert.ok((await r.json()).error, "גוף { error }");
   }
+  assert.equal((await fetch(base + "/products/top?n=50")).status, 200, "n=50 — הגבול מותר");
   for (const n of ["0", "51", "abc", "2.5"]) assert.equal((await fetch(base + `/products/top?n=${n}`)).status, 400, `n=${n}`);
   assert.equal(await raw.exists(`${prefix}views`, `${prefix}top`), 0);
 });

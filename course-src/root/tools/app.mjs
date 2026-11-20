@@ -60,7 +60,12 @@ export async function startApp(t, testUrl, { env = {}, name = "coffee-shop" } = 
   });
 
   const req = createRequire(path.join(dir, "package.json"));
-  const prismaCli = req.resolve("prisma/build/index.js");
+  let prismaCli;
+  try {
+    prismaCli = req.resolve("prisma/build/index.js");
+  } catch {
+    throw new Error(`prisma לא מותקן בפרויקט (${dir}) — הרץ npm install בתיקיית הפרויקט (prisma ב־devDependencies), ואז npx prisma generate ו־npm run build`);
+  }
   const migrate = spawnSync(process.execPath, [prismaCli, "migrate", "deploy"], { cwd: dir, encoding: "utf8", env: { ...process.env, DATABASE_URL: databaseUrl }, timeout: 120000 });
   if (migrate.status !== 0) throw new Error(`prisma migrate deploy נכשל:\n${(migrate.stdout + migrate.stderr).slice(-1500)}`);
 

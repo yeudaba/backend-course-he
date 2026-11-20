@@ -20,6 +20,7 @@ test("רמות", async () => {
   assert.equal(lvl(201), "info");
   assert.equal(lvl(304), "info");
   assert.equal(lvl(404), "warn");
+  assert.equal(lvl(400), "warn", "400 — warn (400 ומעלה)");
   assert.equal(lvl(429), "warn");
   assert.equal(lvl(500), "error");
   assert.equal(lvl(503), "error");

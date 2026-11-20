@@ -28,3 +28,6 @@ test("20,000 רשומות בשרשרת אחת — מהר", () => {
   assert.equal(g.length, 1);
   assert.equal(g[0].length, 20_000);
 });
+test("טלפון של 9 ספרות — מספיק לזיהוי", () => {
+  assert.deepEqual(mergeCustomers([{ id: 1, phone: "03-1234567" }, { id: 2, phone: "031234567" }]), [[1, 2]]);
+});

@@ -15,3 +15,10 @@ test("הכנסות לפי קטגוריה", async (t) => {
   assert.equal(april.find((r) => r.category === "beans").revenue, 359.6);
   assert.deepEqual(await revenueByCategory(prisma, { since: new Date("2030-01-01") }), []);
 });
+test("since כולל את הרגע עצמו", async (t) => {
+  const { prisma } = await shop(t, import.meta.url);
+  const [{ created_at }] = await prisma.$queryRawUnsafe("SELECT created_at FROM orders WHERE id = 9");
+  const at = await revenueByCategory(prisma, { since: created_at });
+  const after = await revenueByCategory(prisma, { since: new Date(created_at.getTime() + 1000) });
+  assert.ok(at.reduce((s, r) => s + r.revenue, 0) > after.reduce((s, r) => s + r.revenue, 0), "הזמנה שנוצרה בדיוק ב־since — נכללת (>=)");
+});

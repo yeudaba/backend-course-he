@@ -11,6 +11,11 @@ test("סכום לכל לקוח, מהגדול לקטן", () => {
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.lines, ["rona 300.00", "dana 200.00", "yossi 55.25", "avi 0.00"]);
 });
+test("תיקו בסכום ← לפי שם (א״ב)", (t) => {
+  const dir = tempDir(t);
+  fs.writeFileSync(path.join(dir, "o.csv"), "id,customer,amount\n1,zoe,10\n2,bob,7\n3,amy,10\n4,bob,3\n5,kim,2.5\n");
+  assert.deepEqual(runScript(import.meta.url, "P23-E08.sh", [path.join(dir, "o.csv")]).lines, ["amy 10.00", "bob 10.00", "zoe 10.00", "kim 2.50"]);
+});
 test("רק שורת כותרת ← כלום", () => {
   const r = runScript(import.meta.url, "P23-E08.sh", [path.join(logs, "empty.csv")]);
   assert.equal(r.status, 0);

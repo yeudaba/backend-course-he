@@ -1,19 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { exportsOf, code } from "./_src.mjs";
+import { exportsOf } from "./_src.mjs";
 
-const FILE = "P05-E33.js";
-const get = () => exportsOf(import.meta.url, FILE, ["square"]);
-// הקוד שלך בלי הערות
-const src = () => code(import.meta.url, FILE);
+const get = () => exportsOf(import.meta.url, "P05-E33.js", ["rectangleArea"]);
 
-test("7 בריבוע", async () => {
-  const { square } = await get();
-  assert.equal(square(7), 49);
+test("4 על 2.5", async () => {
+  const { rectangleArea } = await get();
+  assert.equal(rectangleArea(4, 2.5), 10);
 });
-test("שלילי, אפס ושבר", async () => {
-  const { square } = await get();
-  assert.equal(square(-4), 16, "square(-4)");
-  assert.equal(square(0), 0, "square(0)");
-  assert.equal(square(1.5), 2.25, "square(1.5)");
+test("ערכים אחרים — הפונקציה מחשבת מהפרמטרים", async () => {
+  const { rectangleArea } = await get();
+  assert.equal(rectangleArea(3, 7), 21, "rectangleArea(3, 7)");
+  assert.equal(rectangleArea(0, 5), 0, "rectangleArea(0, 5)");
+  assert.equal(rectangleArea(1.5, 1.5), 2.25, "rectangleArea(1.5, 1.5)");
+  assert.equal(rectangleArea(2, 3), 6, "רוחב כפול גובה — לא חיבור");
 });

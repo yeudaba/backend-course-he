@@ -13,6 +13,7 @@ async function start(t, opts = {}) {
   app.get("/health", (req, res) => res.json({ ok: true }));
   app.get("/tasks", (req, res) => res.json([]));
   app.post("/tasks", (req, res) => res.status(422).json({ error: "x" }));
+  app.get("/bad", (req, res) => res.status(400).json({ error: "x" }));
   app.get("/boom", () => { throw new Error("x"); });
   const { base, close } = await listen(app);
   t.after(close);
@@ -32,8 +33,9 @@ test("רמה לפי status", async (t) => {
   await call("POST", "/tasks", {});
   await call("GET", "/boom");
   await call("GET", "/nope");
+  await call("GET", "/bad");
   await settle();
-  assert.deepEqual(entries.map((e) => [e.status, e.level]), [[422, "warn"], [500, "error"], [404, "warn"]]);
+  assert.deepEqual(entries.map((e) => [e.status, e.level]), [[422, "warn"], [500, "error"], [404, "warn"], [400, "warn"]]);
   assert.ok(!("requestId" in entries[0]), "בלי res.locals.requestId — בלי השדה");
 });
 test("שעון: now() בתחילה ובסוף", async (t) => {

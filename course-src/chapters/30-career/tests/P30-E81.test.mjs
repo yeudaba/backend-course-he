@@ -36,3 +36,11 @@ test("סדר מעורבב, בלי deploy, בלי שגיאות", () => {
   assert.deepEqual(incidentNumbers([L(0, { level: 30, msg: "deploy", version: "1" })]), { errors: 0, firstErrorAt: null, lastErrorAt: null, minutes: 0, peakPerMinute: 0, fixedBy: null });
   assert.equal(incidentNumbers([L(0, { level: 50 })]).minutes, 0);
 });
+test("deploy בדיוק ברגע של השגיאה הראשונה — נחשב תיקון", () => {
+  const r = incidentNumbers([L(0, { level: 50, msg: "x" }), L(0, { level: 30, msg: "deploy", version: "2.0.0" }), L(120, { level: 50, msg: "x" })]);
+  assert.notEqual(r.fixedBy, null);
+});
+test("deploy בדיוק ברגע של השגיאה האחרונה — נחשב", () => {
+  const r = incidentNumbers([L(0, { level: 50, msg: "x" }), L(120, { level: 50, msg: "x" }), L(120, { level: 30, msg: "deploy", version: "2.0.1" })]);
+  assert.equal(r.fixedBy, "2.0.1");
+});

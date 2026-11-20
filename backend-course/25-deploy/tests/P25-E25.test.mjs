@@ -6,11 +6,13 @@ const { BlueGreen } = await load(import.meta.url, "P25-E25.ts");
 function platform({ broken = [] } = {}) {
   const running = {};
   const log = [];
+  const checks = { n: 0 };
   return {
     log,
+    checks,
     running,
     start: async (c, v) => { log.push(`start ${c} ${v}`); running[c] = v; },
-    healthy: async (c) => running[c] !== undefined && !broken.includes(running[c]),
+    healthy: async (c) => ++checks.n && running[c] !== undefined && !broken.includes(running[c]),
     stop: async (c) => { log.push(`stop ${c}`); delete running[c]; },
   };
 }
@@ -30,7 +32,9 @@ test("גרסה לא תקינה — התנועה לא זזה", async () => {
   const p = platform({ broken: ["v2"] });
   const bg = new BlueGreen(p);
   await bg.deploy("v1");
+  const before = p.checks.n;
   assert.equal(await bg.deploy("v2", { attempts: 3 }), false);
+  assert.equal(p.checks.n - before, 3, "attempts: 3 — שלוש בדיקות health, לא יותר");
   assert.deepEqual(bg.live, { color: "blue", version: "v1" });
   assert.deepEqual(p.log, ["start blue v1", "start green v2", "stop green"]);
   assert.deepEqual(bg.history, ["v1"]);

@@ -18,9 +18,14 @@ test("הגבולות עצמם תקינים", () => {
 });
 
 test("ערכים לא תקינים ← RangeError", () => {
-  for (const query of [{ page: "0" }, { page: "-1" }, { page: "abc" }, { page: "" }, { limit: "51" }, { limit: "0" }, { limit: "2.5" }]) {
+  for (const query of [{ page: "0" }, { page: "-1" }, { page: "abc" }, { page: "" }, { page: "1.5" }, { limit: "51" }, { limit: "0" }, { limit: "2.5" }]) {
     assert.throws(() => parsePagination(query), RangeError, JSON.stringify(query));
   }
+});
+
+test("maxLimit מהאופציות", () => {
+  assert.equal(parsePagination({ limit: "100" }, { maxLimit: 100 }).limit, 100);
+  assert.throws(() => parsePagination({ limit: "11" }, { maxLimit: 10 }), RangeError);
 });
 
 test("ההודעה מציינת את הערך", () => {

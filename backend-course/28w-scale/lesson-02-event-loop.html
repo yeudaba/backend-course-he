@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">יחידה 28.5</a> ‹ שיעור 2</div>
   <h1>שיעור 2 — Node.js תחת עומס: event loop, thread pool ו־workers</h1>
-  <p class="subtitle">⏱ ~45 דקות</p>
+  <p class="subtitle">⏱ ~65 דקות</p>
   <div class="box goal">
     <span class="box-title">🎯 בשיעור הזה</span>
     <ul>
@@ -18,6 +18,7 @@
       <li>מה חוסם: פונקציות <code>Sync</code>, לולאות חישוב, JSON ענק, regex גרוע.</li>
       <li>thread pool של libuv מול worker threads — מתי כל אחד.</li>
       <li>למצוא את החוסם: lag monitor ו־CPU profile.</li>
+      <li>generators: לייצר ערכים לפי בקשה, בחתיכות — ו־<code>async function*</code> לעמודים ולזרמים.</li>
     </ul>
   </div>
 
@@ -74,9 +75,213 @@ npx clinic flame -- node dist/main.js   # או: clinic בונה flame graph או
     <p>הגרסה האסינכרונית משחררת את ה־event loop, אבל ה־thread pool קטן: 100 התחברויות במקביל עם <code>pbkdf2</code> ← 4 רצות, 96 בתור. ה־API נשאר זמין (health עונה), אבל התחברות לוקחת שניות. מגבילים concurrency (rate limit על login — פרק 24), ובודקים בבדיקת עומס.</p>
   </div>
 
+  <h2 id="generators">4. generators: ערכים לפי בקשה</h2>
+  <p>בסעיף 1 ראית ש־<code>JSON.stringify</code> של מערך ענק חוסם את השרת. פתרון אחד: לחלק את העבודה לחתיכות, ובין חתיכה לחתיכה לתת ל־event loop לנשום. בשביל זה צריך פונקציה שיודעת <strong>לעצור באמצע</strong>: להחזיר חתיכה אחת, לחכות, ולהמשיך בדיוק מאותו מקום. פונקציה רגילה לא יודעת לעשות את זה. <code>return</code> מסיים אותה, וכל המשתנים המקומיים נעלמים. לזה יש ב־JavaScript סוג מיוחד של פונקציה: <strong>generator</strong>.</p>
+
+  <h3>‏<code>function*</code>, ‏<code>yield</code> ו־<code>next()</code></h3>
+<pre><code class="lang-ts">function* countdown(): Generator&lt;number, string&gt; {
+  console.log("  [התחלתי]");
+  yield 3;
+  console.log("  [ממשיך אחרי 3]");
+  yield 2;
+  yield 1;
+  return "שיגור";
+}
+
+const g = countdown();
+console.log("נוצר generator");
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());</code></pre>
+<pre class="terminal">נוצר generator
+  [התחלתי]
+{ value: 3, done: false }
+  [ממשיך אחרי 3]
+{ value: 2, done: false }
+{ value: 1, done: false }
+{ value: 'שיגור', done: true }
+{ value: undefined, done: true }</pre>
+  <p>מה קרה כאן, שורה אחרי שורה:</p>
+  <ul>
+    <li>הכוכבית ב־<code>function*</code> הופכת את הפונקציה ל־generator. ההבדל הראשון: הקריאה <code>countdown()</code> <strong>לא מריצה אף שורה</strong> מהגוף. "נוצר generator" מודפס לפני "[התחלתי]". הקריאה רק מחזירה אובייקט, ה־<strong>generator</strong>, שמחכה.</li>
+    <li>כל <code>g.next()</code> מריץ את הגוף עד ה־<code>yield</code> הבא, ושם הפונקציה <strong>נעצרת</strong>. <code>next()</code> מחזיר אובייקט עם שני שדות: <code>value</code> (מה שבא אחרי <code>yield</code>) ו־<code>done: false</code>.</li>
+    <li>ה־<code>next()</code> הבא ממשיך מהשורה שאחרי ה־<code>yield</code>, עם כל המשתנים המקומיים כמו שהיו.</li>
+    <li>כשהגוף מגיע ל־<code>return</code> (או לסוף), מתקבל <code>done: true</code>. ומשם כל <code>next()</code> מחזיר <code class="mid">{ value: undefined, done: true }</code>.</li>
+    <li>הטיפוס ב־TypeScript: <code>Generator&lt;number, string&gt;</code> — מה ש־<code>yield</code> מחזיר, ומה ש־<code>return</code> מחזיר. בדרך כלל כותבים רק את הראשון: <code>Generator&lt;string&gt;</code>.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="שני מסלולים: הקוד שקורא ל־next והגוף של ה־generator. כל next מעביר שליטה לגוף עד yield, וה־yield מחזיר ערך ושליטה בחזרה">
+      <defs><marker id="gn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--svg-stroke)"/></marker></defs>
+      <g style="stroke-width:2">
+        <rect x="560" y="20" width="140" height="190" rx="8" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+        <rect x="20" y="20" width="200" height="190" rx="8" style="fill:var(--purple-soft);stroke:var(--purple)"/>
+      </g>
+      <g text-anchor="middle" style="font-size:13px" direction="rtl">
+        <text x="630" y="42">הקוד שלך</text>
+        <text x="120" y="42">גוף ה־generator</text>
+      </g>
+      <g class="mono" text-anchor="middle" style="font-size:12px" direction="ltr">
+        <text x="630" y="78">g.next()</text>
+        <text x="630" y="138">g.next()</text>
+        <text x="630" y="192">g.next()</text>
+        <text x="120" y="78">… yield 3</text>
+        <text x="120" y="138">… yield 2</text>
+        <text x="120" y="192">yield 1</text>
+      </g>
+      <g style="stroke:var(--svg-stroke);stroke-width:2;fill:none">
+        <path d="M555 70 H 228" marker-end="url(#gn)"/>
+        <path d="M228 92 H 555" marker-end="url(#gn)" style="stroke-dasharray:5 4"/>
+        <path d="M555 130 H 228" marker-end="url(#gn)"/>
+        <path d="M228 152 H 555" marker-end="url(#gn)" style="stroke-dasharray:5 4"/>
+      </g>
+      <g text-anchor="middle" style="font-size:11px" direction="rtl">
+        <text x="390" y="64">"תמשיך"</text>
+        <text x="390" y="108">‏{ value: 3, done: false } — והגוף נעצר</text>
+        <text x="390" y="124">"תמשיך" — מהשורה שאחרי yield 3</text>
+        <text x="390" y="168">‏{ value: 2, done: false }</text>
+      </g>
+    </svg>
+    <figcaption>איור 2: generator הוא פונקציה שעובדת בתורות. הקוד שלך מחליט מתי לבקש את הערך הבא, וה־generator מחשב רק אותו. בין הבקשות הוא לא רץ בכלל, ולא תופס את ה־event loop.</figcaption>
+  </figure>
+
+  <h3>‏<code>for...of</code> על generator</h3>
+  <p>לקרוא ל־<code>next()</code> ביד זה מסורבל. generator הוא <strong>iterable</strong>, בדיוק כמו מערך, ולכן <code>for...of</code> ו־spread (<code>...</code>) עובדים עליו:</p>
+<pre><code class="lang-ts">function* inChunks&lt;T&gt;(items: T[], size: number): Generator&lt;T[]&gt; {
+  for (let i = 0; i &lt; items.length; i += size) {
+    yield items.slice(i, i + size);
+  }
+}
+
+const orders = [101, 102, 103, 104, 105, 106, 107];
+for (const part of inChunks(orders, 3)) {
+  console.log(part);
+}
+console.log([...inChunks(orders, 5)]);
+
+const once = inChunks(orders, 4);
+console.log([...once].length, [...once].length);</code></pre>
+<pre class="terminal">[ 101, 102, 103 ]
+[ 104, 105, 106 ]
+[ 107 ]
+[ [ 101, 102, 103, 104, 105 ], [ 106, 107 ] ]
+2 0</pre>
+  <p>‏<code>for...of</code> קורא ל־<code>next()</code> בשבילך, ונעצר לבד כש־<code>done</code> הופך ל־<code>true</code>. (את הערך של <code>return</code> הוא לא מעביר ללולאה.) ושים לב לשורה האחרונה: generator עובר על הערכים <strong>פעם אחת</strong>. ה־spread הראשון מיצה אותו, והשני קיבל מערך ריק, בלי שום שגיאה. רוצה לעבור שוב? קוראים שוב ל־<code>inChunks(...)</code> ומקבלים generator חדש.</p>
+
+  <h3>סדרה אינסופית, ו־<code>break</code></h3>
+  <p>מכיוון שה־generator מחשב ערך רק כשמבקשים אותו, מותר לו לא להיגמר אף פעם. <code>while (true)</code> בתוך generator לא תוקע את התוכנית, כי כל <code>yield</code> עוצר אותה:</p>
+<pre><code class="lang-ts">function* orderIds(prefix: string): Generator&lt;string&gt; {
+  let n = 1;
+  try {
+    while (true) {
+      yield `${prefix}-${n}`;
+      n++;
+    }
+  } finally {
+    console.log(`  [${prefix}: נעצר אחרי ${n}]`);
+  }
+}
+
+const ids = orderIds("ORD");
+console.log(ids.next().value, ids.next().value);
+
+for (const id of orderIds("INV")) {
+  if (id === "INV-4") break;
+  console.log(id);
+}
+console.log("אחרי הלולאה");</code></pre>
+<pre class="terminal">ORD-1 ORD-2
+INV-1
+INV-2
+INV-3
+  [INV: נעצר אחרי 4]
+אחרי הלולאה</pre>
+  <ul>
+    <li>‏<code>ids</code> נתן שני מזהים, ולא ביקשנו יותר. אף אחד לא חישב את השלישי. זו <strong>עצלות</strong> (lazy): עבודה נעשית רק כשמבקשים את התוצאה.</li>
+    <li>‏<code>break</code> בתוך <code>for...of</code> קורא ל־<code>return()</code> של ה־generator. הגוף מסתיים במקום שבו הוא עצר, וה־<code>finally</code> רץ. כאן זה הדפסה, אבל בקוד אמיתי זה המקום לסגור קובץ, חיבור למסד, או לעצור עבודה שעולה כסף.</li>
+    <li>ל־<code>ids</code> לא קראנו <code>break</code> ולא <code>return()</code>. לכן ה־<code>finally</code> שלו לא רץ: הוא עדיין מחכה ב־<code>yield</code> השני.</li>
+  </ul>
+  <p>ובחזרה לבעיה של סעיף 1: עם generator אפשר לייצר תשובה ענקית בחתיכות, ובין חתיכה לחתיכה לשחרר את ה־event loop:</p>
+<pre><code class="lang-ts">for (const part of inChunks(rows, 500)) {
+  res.write(JSON.stringify(part));
+  await new Promise((r) =&gt; setImmediate(r)); // בקשות אחרות מקבלות תור כאן
+}</code></pre>
+  <p>(זה עדיין לא JSON תקין. כל חתיכה היא מערך בפני עצמו, וביחד יוצא <code>[…][…]</code>. איך מחברים את החתיכות לתשובה אחת תקינה — בתרגיל E51.)</p>
+
+  <h3>‏<code>async function*</code> ו־<code>for await</code>: עמודים וזרמים</h3>
+  <p>הרבה פעמים הערך הבא לא מוכן מיד: הוא מגיע מה־API, מהמסד, או מקובץ. בשביל זה יש <strong>async generator</strong>: <code>async function*</code>. בתוכו מותר <code>await</code>, ומי שצורך אותו עובר עליו ב־<code>for await</code>, שלמדת בפרק 13 על <code>readline</code>. הדוגמה הקלאסית היא API עם עמודים (pagination): כל קריאה מחזירה כמה פריטים ואת מספר העמוד הבא.</p>
+<pre><code class="lang-ts">type Page = { items: string[]; next: number | null };
+const fakeApi: Record&lt;number, Page&gt; = {
+  1: { items: ["a1", "a2"], next: 2 },
+  2: { items: ["b1", "b2"], next: 3 },
+  3: { items: ["c1"], next: null },
+};
+
+async function fetchPage(n: number): Promise&lt;Page&gt; {
+  console.log(`  [GET /orders?page=${n}]`);
+  await new Promise((r) =&gt; setTimeout(r, 10));
+  return fakeApi[n];
+}
+
+async function* allOrders(): AsyncGenerator&lt;string&gt; {
+  let page: number | null = 1;
+  while (page !== null) {
+    const res = await fetchPage(page);
+    for (const item of res.items) yield item;
+    page = res.next;
+  }
+}
+
+for await (const id of allOrders()) {
+  console.log(id);
+}
+console.log("---");
+for await (const id of allOrders()) {
+  console.log(id);
+  if (id === "b1") break;
+}</code></pre>
+<pre class="terminal">  [GET /orders?page=1]
+a1
+a2
+  [GET /orders?page=2]
+b1
+b2
+  [GET /orders?page=3]
+c1
+---
+  [GET /orders?page=1]
+a1
+a2
+  [GET /orders?page=2]
+b1</pre>
+  <p>מי שמשתמש ב־<code>allOrders()</code> לא יודע שיש עמודים. הוא רואה רצף אחד של הזמנות. העמוד הבא נטען רק כשהלולאה צריכה אותו. ובלולאה השנייה, אחרי <code>break</code> על <code>b1</code>, עמוד 3 לא נטען בכלל. אותה עצלות, עכשיו עם <code>await</code>: לא קוראים ל־API יותר ממה שצריך, וגם זה backpressure. הצרכן קובע את הקצב, והיצרן מחכה לו.</p>
+  <p>אותו דפוס משמש בכל מקום שבו נתונים מגיעים ברצף: שורות מקובץ (שיעור 3), אצוות של INSERT (שיעור 3, תרגיל E64), הודעות מתור (יחידה 26.5), ואירועי התקדמות של סוכן AI (יחידה 29.5, שיעור 5). ו־<code>Readable.from(allOrders())</code> מ־<code>node:stream</code> הופך async generator ל־stream רגיל, שאפשר לחבר ב־<code>pipeline</code>.</p>
+
+  <div class="box warn">
+    <span class="box-title">⚠️ טעויות נפוצות עם generators</span>
+    <ul>
+      <li><strong>"קראתי לפונקציה ושום דבר לא קרה".</strong> <code>countdown()</code> בלבד לא מריץ את הגוף. צריך <code>next()</code>, ‏<code>for...of</code> או spread.</li>
+      <li><strong>לעבור פעמיים על אותו generator.</strong> בפעם השנייה הוא ריק, בלי שגיאה. שומרים את התוצאה במערך, או יוצרים generator חדש.</li>
+      <li><strong>‏<code>yield</code> בתוך callback.</strong> <code>yield</code> עובד רק ישירות בגוף של <code>function*</code>, לא בתוך פונקציה פנימית כמו החץ של <code>forEach</code>. משתמשים ב־<code>for...of</code> רגיל (למטה, השגיאה הראשונה).</li>
+      <li><strong>‏<code>for...of</code> על async generator.</strong> צריך <code>for await</code>. TypeScript מסמן את זה מראש (השגיאה השנייה למטה). בלי TypeScript, Node נכשל בזמן ריצה עם <code class="long">TypeError: allOrders is not a function or its return value is not iterable</code>.</li>
+    </ul>
+  </div>
+<pre><code class="lang-ts">function* each(items: string[]) {
+  items.forEach((x) =&gt; {
+    yield x;
+  });
+}</code></pre>
+<pre class="terminal">snippet.ts(3,5): error TS1163: A 'yield' expression is only allowed in a generator body.</pre>
+<pre><code class="lang-ts">async function* allOrders(): AsyncGenerator&lt;string&gt; {
+  yield "a1";
+}
+for (const id of allOrders()) console.log(id);</code></pre>
+<pre class="terminal">snippet.ts(4,18): error TS2488: Type 'AsyncGenerator&lt;string, any, any&gt;' must have a '[Symbol.iterator]()' method that returns an iterator.</pre>
+
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>20 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>26 שאלות</strong>: חלק 1 — 19 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 7 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-2.html">← לתרגול של שיעור 2</a></p>
   </div>
 

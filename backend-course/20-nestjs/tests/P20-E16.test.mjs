@@ -12,6 +12,11 @@ test("ה־pipe לבד", () => {
     assert.throws(() => pipe.transform(bad, { type: "param", data: "id" }), { message: "id חייב להיות מספר שלם חיובי" }, JSON.stringify(bad));
   }
 });
+test("שם הפרמטר בהודעה מגיע מ־metadata.data", () => {
+  const pipe = new ParsePositiveIntPipe();
+  assert.throws(() => pipe.transform("0", { type: "param", data: "orderId" }), { message: "orderId חייב להיות מספר שלם חיובי" });
+  assert.throws(() => pipe.transform("1e3", { type: "param", data: "id" }), { message: "id חייב להיות מספר שלם חיובי" }, "1e3 — לא ספרות בלבד");
+});
 test("בתוך route", async (t) => {
   const { call } = await nestApp(t, ItemsModule);
   assert.deepEqual((await call("GET", "/items/42")).body, { id: 42, type: "number" });

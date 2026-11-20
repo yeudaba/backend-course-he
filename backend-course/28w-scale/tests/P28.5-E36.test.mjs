@@ -19,3 +19,7 @@ test("גבול בדיוק, וריק", () => {
   assert.deepEqual(sloReport([{ ms: 200, status: 200 }, { ms: 201, status: 200 }, { ms: 10, status: 500 }], { latencyMs: 200, target: 0.5 }), { total: 3, good: 1, ratio: 0.3333, burnRate: 1.3, ok: false });
   assert.deepEqual(sloReport([], { latencyMs: 100, target: 0.99 }), { total: 0, good: 0, ratio: 1, burnRate: 0, ok: true });
 });
+test("ratio שווה בדיוק ל־target — עומד ב־SLO", () => {
+  const reqs = [...Array.from({ length: 99 }, () => ({ ms: 10, status: 200 })), { ms: 10, status: 500 }];
+  assert.equal(sloReport(reqs, { latencyMs: 300, target: 0.99 }).ok, true);
+});

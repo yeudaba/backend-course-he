@@ -46,6 +46,7 @@ test("400", async (t) => {
   assert.equal((await call("POST", "/follow", { follower: "a" })).status, 400);
   assert.equal((await call("POST", "/posts", { author: "a", text: "  " })).status, 400);
   assert.equal((await call("POST", "/posts", { text: "x" })).status, 400);
+  assert.equal((await call("POST", "/posts", { author: 5, text: "x" })).status, 400, "author שאינו מחרוזת");
 });
 test("limit עד 100", async (t) => {
   const { call } = await start(t, 1000);

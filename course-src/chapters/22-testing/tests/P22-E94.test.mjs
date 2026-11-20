@@ -27,3 +27,9 @@ test("ריק", async () => {
   assert.deepEqual(classify([]).problems, ["צריך לפחות 2 קובצי unit (יש 0)", "צריך לפחות קובץ e2e אחד", "צריך לפחות קובץ integration אחד"]);
   assert.deepEqual(classify(["src/a.spec.ts", "src/b.spec.ts", "test/c.e2e-spec.ts"]).problems, ["צריך לפחות קובץ integration אחד"]);
 });
+test("הרשימות ממוינות", async () => {
+  const classify = await get();
+  const r = classify(["test/z.e2e-spec.ts", "src/b.spec.ts", "test/a.e2e-spec.ts", "src/a.spec.ts"]);
+  assert.deepEqual(r.e2e, ["test/a.e2e-spec.ts", "test/z.e2e-spec.ts"]);
+  assert.deepEqual(r.unit, ["src/a.spec.ts", "src/b.spec.ts"]);
+});

@@ -34,6 +34,7 @@ test("ערכים falsy נשמרים; get של חסר לא מוסיף", () => {
   assert.equal(c.get("nope"), undefined);
   assert.equal(c.size, 2);
 });
+test("capacity 1 — תקין: שומר פריט אחד", () => { const c = new LRUCache(1); c.set("a", 1); c.set("b", 2); assert.equal(c.get("a"), undefined); assert.equal(c.get("b"), 2); });
 test("capacity לא תקין ← שגיאה", () => {
   assert.throws(() => new LRUCache(0));
   assert.throws(() => new LRUCache(-1));

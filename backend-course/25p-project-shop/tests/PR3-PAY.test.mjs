@@ -94,3 +94,13 @@ test("ביטול כפול במקביל — המלאי חוזר פעם אחת", a
   assert.equal(results.filter((r) => r.status === 200).length, 1, results.map((r) => r.status).join());
   assert.equal((await call("GET", `/products/${p.id}`)).body.stock, 5);
 });
+
+test("שני תשלומים במקביל עם מפתחות שונים — רק אחד מצליח", async (t) => {
+  const { customer, product, orderOf } = await shop(t);
+  const p = await product({ stock: 5 });
+  const dana = await customer();
+  const order = await orderOf(dana, [[p.id, 1]]);
+  const results = await Promise.all(Array.from({ length: 4 }, () => dana("POST", `/orders/${order.id}/pay`, { cardNumber: OK }, key("pay"))));
+  const codes = results.map((r) => r.status).join();
+  assert.equal(results.filter((r) => r.status === 200).length, 1, `בדיוק תשלום אחד מצליח — מעבר מותנה (WHERE status = 'pending_payment'), לא בדיקה ואז עדכון: ${codes}`);
+});

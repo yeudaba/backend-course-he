@@ -8,6 +8,7 @@ const tr = (names, finalText = "", steps = names.length + 1) => ({ toolCalls: na
 test("מסלול טוב עובר", () => {
   const r = evaluateTrajectory(tr(["get_order", "refund_order"], "הוחזרו 89.90 ₪"), { mustCall: ["get_order", "refund_order"], order: [["get_order", "refund_order"]], finalIncludes: ["89.90"], maxSteps: 5 });
   assert.deepEqual(r, { pass: true, failures: [] });
+  assert.deepEqual(evaluateTrajectory(tr(["get_order"], "x", 4), { maxSteps: 4 }), { pass: true, failures: [] }, "steps שווה ל־maxSteps — מותר");
 });
 test("כל סוג כישלון מדווח", () => {
   const r = evaluateTrajectory(tr(["refund_order", "get_order", "delete_account", "x", "y"], "Done!", 9), {

@@ -20,6 +20,7 @@ test("ארוך ← התחלה (70%) וסוף (30%), עם הודעה כמה הו�
 test("paginate", () => {
   const items = Array.from({ length: 45 }, (_, i) => i);
   assert.deepEqual(paginate(items, { offset: 0, limit: 20 }), { items: items.slice(0, 20), total: 45, nextOffset: 20 });
+  assert.deepEqual(paginate(items, { offset: 0, limit: 1 }).items, items.slice(0, 1), "limit 1 — תקין");
   assert.deepEqual(paginate(items, { offset: 40, limit: 20 }), { items: [40, 41, 42, 43, 44], total: 45, nextOffset: null });
   assert.equal(paginate(items, { limit: 500 }).items.length, 45, "maxLimit 50");
   assert.equal(paginate(Array(200).fill(0), { limit: 500 }).items.length, 50);

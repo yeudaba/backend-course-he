@@ -29,3 +29,7 @@ test("Levenshtein: 1–2 בלבד, הראשון ברשימה", () => {
   assert.deepEqual(packageRisk("zodd", reg, POP, NOW), ["typosquat:zod"]);
   assert.deepEqual(packageRisk("expresss-x", reg, POP, NOW), [], "מרחק 3");
 });
+test("1,000 הורדות בשבוע — לא low_downloads", () => {
+  const reg = { ...REG, "exact-lib": { createdAt: "2020-01-01", weeklyDownloads: 1000, repository: "github.com/x/y" } };
+  assert.ok(!packageRisk("exact-lib", reg, POP, NOW).includes("low_downloads"));
+});

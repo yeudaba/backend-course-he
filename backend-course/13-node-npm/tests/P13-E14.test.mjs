@@ -15,5 +15,9 @@ test("שגיאות שימוש — קוד 2", () => {
   assert.deepEqual(call([]), { code: 2, out: [], err: ["חסר --name"] });
   assert.deepEqual(call(["--name", "a", "--times", "11"]).err, ["--times חייב להיות בין 1 ל־10"]);
   assert.deepEqual(call(["--name", "a", "--times", "x"]).code, 2);
+  assert.deepEqual(call(["--name", "a", "--times", "0"]), { code: 2, out: [], err: ["--times חייב להיות בין 1 ל־10"] }, "--times 0 — מחוץ לטווח 1–10");
+  assert.deepEqual(call(["--name", "a", "--times", "2.5"]).code, 2, "--times 2.5 — לא מספר שלם");
+  assert.equal(call(["--name", "a", "--times", "10"]).out.length, 10, "--times 10 — בתוך הטווח");
+  assert.equal(call(["--name", "a", "--times", "1"]).code, 0, "--times 1 — בתוך הטווח");
   assert.deepEqual(call(["--name", "a", "--color", "red"]), { code: 2, out: [], err: ["דגל לא מוכר: --color"] });
 });

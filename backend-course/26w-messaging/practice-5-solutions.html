@@ -198,9 +198,12 @@ export function parseOrderPlaced(raw: string): EventEnvelope&lt;OrderPlaced&gt; 
 }</code></pre>
 <p>למה שתי גרסאות? כי אי אפשר לעדכן את כל ה־producers וה־consumers באותה שנייה. הכלל: <strong>consumer מתעדכן קודם</strong> (מקבל גם v1 וגם v2), ורק אחר כך ה־producer מתחיל לשלוח v2. ובחברות עם הרבה צוותים — Schema Registry שאוכף את זה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לאמת את ה־data לפני שבודקים את <code>version</code>. סכמה של v2 תדחה אירוע v1 תקין.</li><li><code>.strict()</code> על הסכמה. שירות ששולח שדה חדש ישבור את הצרכנים, והתרגיל מבקש לאפשר שדות נוספים.</li><li>להחזיר v1 כמו שהוא (<code>totalCents</code>) במקום להמיר לצורה של v2. הקוד שאחרי הפרסור יצטרך לטפל בשתי צורות.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E13">
     <h3>P26.5-E13 · projection מזרם לא מסודר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -243,9 +246,12 @@ export function project(events: OrderEvent[]) {
 }</code></pre>
 <p>ה־<code>seq</code> מגיע מה־producer — מהמסד שלו (מספר גרסה בשורת ההזמנה, שעולה בכל עדכון). בלעדיו, consumer לא יכול לדעת ש־"paid" שהגיע עכשיו ישן מ־"shipped" שכבר ראה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות לסדר ההגעה במקום ל־<code>seq</code> השמור. אירוע ישן שמגיע מאוחר ידרוס מצב חדש יותר.</li><li>להשוות עם <code>&gt;=</code> במקום <code>&gt;</code>. אז כפילות של אותו אירוע תיספר כ"הוחל".</li><li>לא לבדוק <code>cancelled</code>. אירוע <code>paid</code> שמגיע אחרי ביטול "מחיה" הזמנה מבוטלת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E15">
     <h3>P26.5-E15 · consumer אידמפוטנטי 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -338,9 +344,12 @@ export function nextRetry(attempt: number, err: unknown, { baseMs = 500, maxMs =
 }</code></pre>
 <p>למה jitter? שירות התשלומים נפל לדקה, ואלף consumers נכשלו יחד. בלי jitter — כולם חוזרים יחד אחרי 500ms, ושוב אחרי 1000ms: גלים שמפילים את השירות בדיוק כשהוא מנסה לקום ("thundering herd"). עם jitter — הניסיונות מתפזרים.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לנסות שוב גם על 400 או 404. שגיאה קבועה לא תשתנה בניסיון נוסף, ולכן היא הולכת ישר ל־dead letter. 408 ו־429 הם החריגים.</li><li><code>2^attempt</code> במקום <code>2^(attempt−1)</code>. אז הניסיון הראשון כבר מחכה פי 2.</li><li>jitter של "תקרה ± 10%". כל ה־workers עדיין מנסים שוב כמעט באותו רגע. full jitter בוחר מכל הטווח, מ־0 עד התקרה.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E17">
     <h3>P26.5-E17 · transactional outbox 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -415,9 +424,12 @@ export async function relayOutbox(pool: Pool, publish: (row: OutboxRow) =&gt; Pr
 }</code></pre>
 <p>outbox נותן at-least-once: אם ה־relay שלח ונפל לפני ה־COMMIT — השורה תישלח שוב. לכן ה־consumer אידמפוטנטי (E15) — שני הדפוסים באים יחד. ובקנה מידה גדול, במקום relay שסורק — CDC (Debezium) שקורא את ה־WAL של PostgreSQL ושולח ל־Kafka.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>pool.query</code> לשורת ה־outbox במקום <code>client.query</code>. היא רצה על חיבור אחר, מחוץ לטרנזקציה, ונשמרת גם כשההזמנה נכשלת.</li><li><code>FOR UPDATE</code> בלי <code>SKIP LOCKED</code>. relay שני מחכה לראשון במקום לקחת שורות אחרות, או ששניהם שולחים את אותן שורות.</li><li>לסמן <code>published_at</code> לכל ה־batch מראש. אם publish נכשל באמצע, שורות שלא נשלחו מסומנות כנשלחו ונעלמות.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E23">
     <h3>P26.5-E23 · outbox — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
@@ -477,9 +489,12 @@ export async function relayOutbox(pool: Pool, publish: (row: any) =&gt; Promise&
 }</code></pre>
 <p>בתיקון הזה, publish שנכשל באמצע מבטל (ROLLBACK) גם את הסימון של מה שכבר נשלח באותה ריצה — אז אלה יישלחו שוב. זה at-least-once, ובסדר — ה־consumers אידמפוטנטיים. E17 מראה גרסה שמסמנת את מה שהצליח.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את ה־INSERT ל־<code>client.query</code> רק בשורה אחת. כל שאילתה בתוך הטרנזקציה חייבת לרוץ על אותו <code>client</code>.</li><li>לסמן <code>published_at</code> לפני ה־publish. אם ה־broker נופל, האירוע מסומן כנשלח ואובד.</li><li><code>SELECT … FOR UPDATE</code> מחוץ ל־BEGIN. הנעילה משתחררת מיד, וה־relay השני לוקח את אותן שורות.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E24">
     <h3>P26.5-E24 · אתגר: צינור ההזמנות ב־RabbitMQ 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
@@ -590,9 +605,12 @@ export async function startConsumer(
 }</code></pre>
 <p>בלי confirms, <code>publish</code> חוזר כשההודעה נכנסה ל־buffer של הספרייה — לא כשהגיעה ל־broker. נפילה של הרשת באותו רגע ← ההזמנה נשמרה, האירוע לא. עם confirms — יודעים, ואפשר לנסות שוב (או: outbox, E17).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לסמן <code>markIfNew</code> עם <code>eventId</code> בלבד. אז רק השירות הראשון מטפל באירוע, והשני רואה "כבר טופל".</li><li>לא לקרוא ל־<code>unmark</code> כש־handle נכשל. אז ניסיון חוזר של אותו אירוע ידלג עליו, והאירוע לא יטופל לעולם.</li><li>לחזור מ־<code>publishOrderPlaced</code> בלי <code>waitForConfirms</code>. אם ה־broker נופל רגע אחרי השליחה, ההזמנה אבדה ואף אחד לא יודע.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E25">
     <h3>P26.5-E25 · אתגר: אנליטיקה מ־Kafka, בדיוק פעם אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
@@ -669,9 +687,12 @@ export async function runRevenueAggregator({ brokers, topic, pool, max }: Aggreg
 }</code></pre>
 <p>זה הדפוס שמאחורי "exactly-once" אמיתי מול מסד: התוצאה וה"איפה עצרתי" נכתבים אטומית, אז אין מצב ביניים. הבודק מפיל את התהליך בשני מקומות שונים — ומימוש עם שתי טרנזקציות (קודם התוצאה, אחר כך ה־offset) נכשל באחד מהם: אירוע נספר פעמיים.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעשות commit ל־offset גם ב־Kafka, או לסמוך על autocommit. מה שקובע הוא רק ה־offset שבמסד, באותה טרנזקציה עם הסכום.</li><li>לשמור <code>m.offset</code> במקום <code>m.offset + 1n</code>. בעלייה, האירוע האחרון ייספר פעמיים.</li><li>לערבב <code>bigint</code> ו־<code>number</code> (<code>m.offset + 1</code>). זה זורק <code>TypeError</code>.</li></ul>
+
 
 </div></details>
-    
   </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P26.5-E97">

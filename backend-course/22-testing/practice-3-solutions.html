@@ -443,53 +443,32 @@ export async function start(t: { after(fn: () =&gt; void | Promise&lt;void&gt;):
 </div></details>
   </div>
 <div class="ex" id="P22-E55">
-    <h3>P22-E55 · ‏aUser ו־aTask 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <h3>P22-E55 · ‏invalidCases — כל הגופים הלא תקינים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p><code>let userSeq = 0;</code> ואז <code class="mid">const id = overrides.id ?? ++userSeq;</code> — רגע: המונה צריך להתקדם <em>תמיד</em>. ‏<code class="mid">const seq = ++userSeq; const id = overrides.id ?? seq;</code></p>
+<p>‏<code>Object.entries(bad)</code> שומר על הסדר. ובלי השדה: <code class="mid">const { [field]: _, ...rest } = valid;</code></p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<pre><code class="lang-ts">return { id, email: `user${id}@example.com`, role: "user", createdAt: ..., ...overrides };</code></pre>
-<p>— ה־overrides אחרונים, אז הם גוברים.</p>
+<p>‏<code>JSON.stringify("")</code> הוא <code>""</code> עם המירכאות, ו־<code>JSON.stringify(5)</code> הוא <code>5</code>. כך שם הבדיקה מראה בדיוק מה נשלח.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P22-E55: builders לנתוני בדיקה
-export type User = { id: number; email: string; role: "user" | "admin"; createdAt: string };
-export type Task = {
-  id: number;
-  ownerId: number;
-  title: string;
-  status: "todo" | "in_progress" | "done";
-  dueDate: string | null;
-  createdAt: string;
-};
-
-const CREATED = "2026-11-04T10:00:00.000Z";
-let userSeq = 0;
-let taskSeq = 0;
-
-export function aUser(overrides: Partial&lt;User&gt; = {}): User {
-  const seq = ++userSeq;
-  const id = overrides.id ?? seq;
-  return { id, email: `user${id}@example.com`, role: "user", createdAt: CREATED, ...overrides };
-}
-
-export function aTask(overrides: Partial&lt;Task&gt; = {}): Task {
-  const seq = ++taskSeq;
-  const id = overrides.id ?? seq;
-  return { id, ownerId: 1, title: `משימה ${id}`, status: "todo", dueDate: null, createdAt: CREATED, ...overrides };
-}
-
-export function resetBuilders(): void {
-  userSeq = 0;
-  taskSeq = 0;
+<pre><code class="lang-ts">// P22-E55: invalidCases — גוף תקין עם שדה אחד שגוי בכל פעם
+export function invalidCases(valid: Record&lt;string, unknown&gt;, bad: Record&lt;string, unknown[]&gt;) {
+  const cases: { name: string; body: Record&lt;string, unknown&gt; }[] = [];
+  for (const [field, values] of Object.entries(bad)) {
+    if (!(field in valid)) throw new Error(`אין שדה ${field} בגוף התקין`);
+    const { [field]: _, ...rest } = valid;
+    cases.push({ name: `בלי ${field}`, body: rest });
+    for (const v of values) cases.push({ name: `${field} = ${JSON.stringify(v)}`, body: { ...valid, [field]: v } });
+  }
+  return cases;
 }</code></pre>
-<p>כאן מונה ברמת הקובץ הוא בכוונה (שונה מ־E43): <code>resetBuilders()</code> נקרא ב־<code>beforeEach</code>, וכך כל בדיקה מתחילה מ־1. כשמחר מוסיפים שדה חובה ל־Task, משנים שורה אחת כאן.</p>
+<p>שדה אחד שגוי בכל פעם, כל השאר תקינים. כך כשבדיקה נכשלת, ברור איזה שדה לא נבדק בשרת. ושם הבדיקה (<code>title = "   "</code>) מופיע בפלט של <code>node --test</code>, בלי לפתוח את הקוד.</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>overrides.id ?? ++taskSeq</code> — כשיש id ב־overrides המונה לא מתקדם, והקריאה הבאה עלולה לקבל אותו id.</li><li>email לפי המונה ולא לפי ה־id הסופי — <code>aUser({ id: 7 })</code> מקבל <code>user1@...</code>.</li></ul>
+<ul><li>לשנות את <code>valid</code> (<code>valid[field] = v</code>) ולהחזיר אותו. כל המקרים מצביעים על אותו אובייקט, ובסוף כולם עם הערך האחרון.</li><li>להחליף כמה שדות באותו מקרה. אם השרת בודק רק אחד מהם, הבדיקה עדיין מקבלת 400, והבאג בשדה השני לא נתפס.</li><li>‏<code>delete body[field]</code> על <code>{ ...valid }</code>. זה עובד, אבל קל לשכוח את העותק ולמחוק מ־<code>valid</code> עצמו.</li></ul>
 
 
 </div></details>
@@ -497,7 +476,7 @@ export function resetBuilders(): void {
 <div class="ex" id="P22-E56">
     <h3>P22-E56 · מסד בדיקות: schema זמני 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p><code>const schema = <code class="mid">test_${randomBytes(4).toString("hex")}</code>;</code> (‏<code>node:crypto</code>). ‏<code class="mid">new pg.Client({ connectionString: url })</code> ו־<code>await client.connect()</code>.</p>
+<p><code class="mid">const schema = `test_${randomBytes(4).toString("hex")}`;</code> (‏<code>node:crypto</code>). ‏<code class="mid">new pg.Client({ connectionString: url })</code> ו־<code>await client.connect()</code>.</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
@@ -612,6 +591,80 @@ test("DELETE ← 204, ואחר כך 404", async (t) =&gt; {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לבדוק רק <code>status</code> בלי <code>Location</code> ובלי הגוף. רוב הבאגים כאן הם בפרטים.</li><li>לבדוק 404 רק על id שמעולם לא היה קיים, ולא אחרי מחיקה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P22-E102">
+    <h3>P22-E102 · בדיקות HTTP ירוקות שלא תופסות כלום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הרץ את <code>npm run check</code>: ההודעה מונה את הבאגים ששרדו. לכל אחד שאל: איזו בדיקה הייתה אמורה להיכשל עליו, ולמה היא לא נכשלה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"‏ids משותפים" שורד כי יש שרת אחד; כשלכל בדיקה יש <code>createApp()</code> משלה, בדיקה שמצפה ל־id ‏1 תופסת אותו. ‏<code>res.ok</code> נכון גם ל־200 וגם ל־201. ובגבולות: 50 תווים מותר, 51 לא.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P22-E102 — בדיקות HTTP, מתוקנות
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import { createApp } from "./P22-E102.ts";
+
+async function start(t: { after(fn: () =&gt; void): void }) {
+  const server = await new Promise&lt;Server&gt;((resolve) =&gt; {
+    const s = createApp().listen(0, () =&gt; resolve(s));
+  });
+  t.after(() =&gt; server.close());
+  const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  return (method: string, path: string, body?: unknown) =&gt;
+    fetch(base + path, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+test("POST ← 201, Location, ו־name אחרי trim", async (t) =&gt; {
+  const call = await start(t);
+  const res = await call("POST", "/items", { name: "  Mug " });
+  assert.equal(res.status, 201);
+  assert.equal(res.headers.get("location"), "/items/1");
+  assert.deepEqual(await res.json(), { id: 1, name: "Mug" });
+});
+
+test("ids מתחילים מ־1 בכל אפליקציה", async (t) =&gt; {
+  const call = await start(t);
+  assert.deepEqual(await (await call("POST", "/items", { name: "A" })).json(), { id: 1, name: "A" });
+});
+
+test("name לא תקין ← 400, ו־50 תווים מותר", async (t) =&gt; {
+  const call = await start(t);
+  for (const body of [{}, { name: "" }, { name: "   " }, { name: 5 }, { name: "x".repeat(51) }]) {
+    assert.equal((await call("POST", "/items", body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call("POST", "/items", { name: "x".repeat(50) })).status, 201);
+});
+
+test("GET ← הפריט, ו־404 על id שלא קיים", async (t) =&gt; {
+  const call = await start(t);
+  await call("POST", "/items", { name: "Mug" });
+  const res = await call("GET", "/items/1");
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { id: 1, name: "Mug" });
+  assert.equal((await call("GET", "/items/2")).status, 404);
+});
+
+test("DELETE ← 204, והפריט באמת נמחק", async (t) =&gt; {
+  const call = await start(t);
+  await call("POST", "/items", { name: "Mug" });
+  assert.equal((await call("DELETE", "/items/1")).status, 204);
+  assert.equal((await call("GET", "/items/1")).status, 404);
+  assert.equal((await call("DELETE", "/items/1")).status, 404);
+});</code></pre>
+<ol><li><strong>שרת אחד לכל הקובץ.</strong> הבדיקות חלקו מצב: ה־id של בדיקה תלוי בכמה פריטים נוצרו לפניה, ובאג של "מונה משותף לכל האפליקציות" לא נראה. שרת חדש לכל בדיקה (<code>start(t)</code>, עם <code>t.after</code> שסוגר).</li><li><strong>"GET מחזיר את הפריט" לא יצר פריט.</strong> היא עבדה רק כי בדיקת ה־POST רצה לפניה. בדיקה שרצה לבד חייבת להכין את מה שהיא צריכה.</li><li><strong>‏<code>assert.ok(res.ok)</code></strong> נכון לכל 2xx, ולכן 200 במקום 201 עבר. ‏status מדויק, וגם <code>Location</code>.</li><li><strong>חסרו גבולות ומקרים שליליים:</strong> ‏<code>"  Mug "</code> בודק trim; ‏51 ו־50 תווים בודקים את הגבול; ‏404 על id שלא קיים; ו־GET אחרי DELETE בודק שהמחיקה קרתה באמת.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להוסיף בדיקות בלי לפרק את השרת המשותף. הבאג של המונה המשותף ממשיך לשרוד, כי כל הבדיקות רואות אותו מונה.</li><li>‏<code class="mid">assert.notEqual(res.status, 500)</code>. זה עובר כמעט על כל באג.</li><li>לשכוח <code class="mid">t.after(() =&gt; server.close())</code>. השרתים נשארים פתוחים, והבדיקות לא מסתיימות.</li></ul>
 
 
 </div></details>

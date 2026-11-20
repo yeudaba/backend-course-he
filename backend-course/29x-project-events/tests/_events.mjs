@@ -7,7 +7,15 @@ import { load, target } from "../../tools/load.mjs";
 import { connectAdmin, mysqlUrl } from "../../tools/mysql.mjs";
 
 export const P = (file) => `events-platform/${file}`;
-export const loadP = (testUrl, file) => load(testUrl, P(file));
+// כשקובץ עוד לא קיים: איזה שלב יוצר אותו ומה הוא מייצא (הטבלה בשלב 0)
+const HINTS = {
+  "src/ingest.ts": { step: "שלב 1", exports: "createIngestServer({ producer, topic, apiKeys, maxBatch, now })" },
+  "src/processor.ts": { step: "שלב 2", exports: "runProcessor({ brokers, topic, groupId, pool, max })" },
+  "src/export.ts": { step: "שלב 3", exports: "exportToLake({ pool, conn, lakeDir, pageSize })" },
+  "src/query.ts": { step: "שלב 3", exports: "createQueryServer({ pool, lakeDir, apiKeys, cacheTtlMs, now })" },
+  "src/assistant.ts": { step: "שלב 5", exports: "createAnalyticsAssistant({ client, query, now, maxSteps })" },
+};
+export const loadP = (testUrl, file) => load(testUrl, P(file), HINTS[file]);
 export const fileP = (testUrl, file) => target(testUrl, P(file));
 
 // database חדש, עם ה־migrations שלך (events-platform/migrations/*.sql, לפי הסדר)

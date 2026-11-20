@@ -27,3 +27,8 @@ test("אין מה לעדכן ← RangeError; לקוח לא קיים ← null", a
   await assert.rejects(updateProfile(db, "c1", { role: "admin" }), RangeError);
   assert.equal(await updateProfile(db, "nope", { name: "x" }), null);
 });
+test("ערכים עם רווחים בקצוות — נשמרים אחרי trim", async (t) => {
+  const { db } = await mongoSandbox(t, import.meta.url);
+  const doc = await updateProfile(db, "c1", { name: "  Dana L.  " });
+  assert.equal(doc?.name, "Dana L.");
+});

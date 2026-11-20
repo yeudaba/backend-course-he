@@ -8,4 +8,5 @@ test("sortAsc ממיין מספרים נכון", () => assert.deepEqual(sortAsc(
 test("sortDesc", () => assert.deepEqual(sortDesc([10, 1, 5, 100]), [100, 10, 5, 1]));
 test("sortByLength", () => assert.deepEqual(sortByLength(["ccc", "a", "bb"]), ["a", "bb", "ccc"]));
 test("sortAlpha (גם עברית)", () => { assert.deepEqual(sortAlpha(["דנה", "אבי", "גיל"]), ["אבי", "גיל", "דנה"]); });
+test("sortAlpha עם אותיות גדולות וקטנות (localeCompare ולא sort() רגיל)", () => assert.deepEqual(sortAlpha(["banana", "Cherry", "apple"]), ["apple", "banana", "Cherry"]));
 test("המערך המקורי לא משתנה", () => { const a = [3, 1, 2]; sortAsc(a); sortDesc(a); assert.deepEqual(a, [3, 1, 2]); const w = ["bb", "a"]; sortByLength(w); sortAlpha(w); assert.deepEqual(w, ["bb", "a"]); });

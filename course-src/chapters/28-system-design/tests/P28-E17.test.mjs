@@ -49,3 +49,10 @@ test("תפוגה ← 410, בלי לספור קליק", async () => {
   assert.deepEqual(await s.resolve("abc1234"), { status: 410 });
   assert.equal(store.links.get("abc1234").clicks, 1);
 });
+test("בלי alias — לכל היותר 5 ניסיונות", async () => {
+  let inserts = 0;
+  const full = { get: async () => undefined, insert: async () => (inserts++, false), incrementClicks: async () => {} };
+  const s = createShortener(full, { newCode: () => "same000", now: () => 0 });
+  await assert.rejects(s.create({ url: "https://a.com" }));
+  assert.equal(inserts, 5, "המשימה: newCode() עד 5 ניסיונות");
+});

@@ -33,3 +33,16 @@ test("migration שנכשל — עוצר, ולא נרשם", async (t) => {
   const [{ n }] = await db.rows("SELECT IS_FREE_LOCK('schema_migrations') n");
   assert.equal(n, 1, "גם אחרי שגיאה — הנעילה משתחררת");
 });
+test("מישהו אחר מחזיק בנעילה ← שגיאה, ולא מריצים כלום", async (t) => {
+  const db = await mysqlSandbox(t, import.meta.url, "shop.sql");
+  const pool = db.pool(3);
+  const holder = await pool.getConnection();
+  await holder.query("SELECT GET_LOCK('schema_migrations', 5)");
+  try {
+    await assert.rejects(migrate(pool, migrations, { lockTimeoutSeconds: 1 }), "בלי נעילה — לא ממשיכים");
+  } finally {
+    await holder.query("SELECT RELEASE_LOCK('schema_migrations')");
+    holder.release();
+  }
+  assert.equal((await db.rows("SELECT COUNT(*) n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'reviews_m'"))[0].n, 0, "reviews_m לא נוצרה");
+});

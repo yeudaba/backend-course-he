@@ -31,3 +31,10 @@ test("המפתח מת לבד", async (t) => {
   const pttl = await redis.pttl("sw:u");
   assert.ok(pttl > 0 && pttl <= 2000, `PEXPIRE (${pttl})`);
 });
+test("retryAfterSeconds מעוגל למעלה", async (t) => {
+  const { redis } = await redisSandbox(t);
+  const T = 2_000_000_000;
+  const o = (now) => ({ limit: 1, windowMs: 10_000, now });
+  await slidingHit(redis, "v", o(T));
+  assert.equal((await slidingHit(redis, "v", o(T + 7300))).retryAfterSeconds, 3, "נשארו 2.7 שניות ← 3");
+});

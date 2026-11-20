@@ -24,6 +24,22 @@ function check(r, fee) {
 
 test("ארבע הוספות, ואז סיכום עם דמי משלוח 30", () => check(run(import.meta.url, FILE), 30));
 
+test("אין סכום שחושב בראש, ודמי המשלוח לא משנים את סכום העגלה", () => {
+  const r = run(import.meta.url, FILE);
+  printed(r);
+  const sums = r.lines.slice(1, 4).map((l) => l.match(ADDED)?.[3]).filter(Boolean);
+  const src = code(source(import.meta.url, FILE));
+  for (const s of sums) {
+    assert.ok(!new RegExp(`(?<![\\d.])${s.replace(".", "\\.")}(?![\\d.])`).test(src), `הסכום ${s} כתוב בקוד — הסכום המצטבר צריך להיות מחושב (סכום = סכום + מחיר)`);
+  }
+  const fee = src.match(/\b(?:const|let)\s+(\w+)\s*=\s*30\s*;/)?.[1];
+  if (fee) {
+    const adds = new RegExp(`\\b(\\w+)\\s*(?:\\+=\\s*${fee}\\b|=\\s*\\1\\s*\\+\\s*${fee}\\b|=\\s*${fee}\\s*\\+\\s*\\1\\b)`);
+    const m = src.match(adds);
+    assert.ok(!m, `"${m?.[0]}" — זה משנה את ${m?.[1]} עצמו. המשלוח "כאילו": שמור את הסכום לתשלום במשתנה חדש (const)`);
+  }
+});
+
 test("דמי המשלוח שמורים במשתנה אחד (שינוי ל־45 משנה את הסכום לתשלום)", (t) => {
   const src = code(source(import.meta.url, FILE));
   const count = src.match(/=\s*30\s*;/g)?.length ?? 0;

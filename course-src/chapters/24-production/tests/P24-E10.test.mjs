@@ -35,6 +35,11 @@ test("בקשות במקביל לא מתערבבות", async () => {
     { msg: "done", requestId: "r-3", userId: 3 },
   ]);
 });
+test("runWithContext עובד על עותק — האובייקט שהעברת לא משתנה", () => {
+  const ctx = { requestId: "r-7" };
+  runWithContext(ctx, () => setUser(7));
+  assert.deepEqual(ctx, { requestId: "r-7" }, "setUser שינה את האובייקט שהעברת — runWithContext צריך לרוץ עם עותק ({ ...ctx })");
+});
 test("setUser מחוץ להקשר", () => {
   assert.throws(() => setUser(1), { message: "אין הקשר של בקשה" });
 });

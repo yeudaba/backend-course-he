@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load, listen, api } from "../../tools/load.mjs";
 
-const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts");
+const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts", { step: "שלב 2", exports: "createApp" });
 
 async function seeded(t) {
   const clock = { now: new Date("2026-11-01T09:00:00.000Z") };
@@ -58,7 +58,7 @@ test("pagination", async (t) => {
   assert.deepEqual(res.body.data, []);
   res = await call("GET", "/tasks?status=todo&limit=2");
   assert.deepEqual(res.body.meta, { page: 1, limit: 2, total: 3, totalPages: 2 }, "total — אחרי סינון");
-  for (const q of ["limit=51", "page=0", "sort=title", "status=open"]) {
+  for (const q of ["limit=51", "page=0", "sort=title", "status=open", "limit=0", "page=1.5", "limit=abc"]) {
     res = await call("GET", "/tasks?" + q);
     assert.equal(res.status, 400, q);
     assert.equal(res.body.error.code, "VALIDATION_ERROR");

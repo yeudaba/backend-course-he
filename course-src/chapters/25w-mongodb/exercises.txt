@@ -918,7 +918,7 @@ RangeError minPrice גדול מ־maxPrice
 @mistakes
 <ul><li><code>{ price: { $gte: query.minPrice } }</code> — מחרוזת. ב־Mongo <code>"50"</code> ו־<code>50</code> הם טיפוסים שונים, ואף מוצר לא יתאים.</li><li><code>$regex: query.q</code> בלי escape — ‏<code>q=(</code> מחזיר 500.</li><li><code>filter.price = { $gte: min, $lte: max }</code> גם כשנשלח רק אחד — ‏<code>$lte: undefined</code>. הדרייבר משמיט שדות <code>undefined</code>, אבל כדאי לא לסמוך על זה.</li><li><code>tags: { $in: [...] }</code> — מוצר עם <em>אחת</em> מהתגיות. המשימה: כולן (<code>$all</code>).</li></ul>
 
-@@ P25.7-E27 | 3 | בדיקות ל־parseSort 🤖 | 25 | שיעור 2
+@@ P25.7-E27 | 3 | בדיקות ל־parseSort 🤖 | 25 | פרק 22, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -982,7 +982,7 @@ test("שדה לא מותר, ריק או כפול ← RangeError", () => {
 @mistakes
 <ul><li><code>assert.deepEqual</code> על אובייקט המיון — לא תופס סדר מפתחות לא נכון.</li><li>לבדוק רק את <code>"-price,name"</code> — כל הבאגים במקרי הקצה: <code>_id</code>, ריק, כפול, לא מותר.</li><li>לבדוק את הודעת השגיאה המדויקת — מימוש תקין עם ניסוח אחר נכשל. מספיק <code>RangeError</code>.</li></ul>
 
-@@ P25.7-E28 | 2 | מה מסתתר ב־ObjectId 🤖 | 20 | שיעור 1
+@@ P25.7-E28 | 2 | מה מסתתר ב־ObjectId 🤖 | 20 | פרק 13, פרק 24, שיעור 1
 @lesson 1
 @part 2
 @type review
@@ -3149,3 +3149,77 @@ export async function touchCart(db: Db, customerId: string, now: Date): Promise<
 <p>‏"7 ימים" כאן הוא משך (‏7 × 24 שעות) — ולא "אותה שעה על השעון בעוד שבוע" (פרק 24). לתפוגה זה בדיוק מה שרוצים.</p>
 @mistakes
 <ul><li><code>$set: { items: [] }</code> בכל touch — כל פעולה מרוקנת את העגלה.</li></ul>
+
+@@ P25.7-E101 | 4 | המסמך שהשתנה אחרי ה־API 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>toApiOrder(doc)</code> ב־<code>25w-mongodb/starter/P25.7-E101.ts</code> הופכת מסמך הזמנה (כמו ב־<code>seed.mjs</code>, עם <code>_id</code> שיכול להיות ObjectId) ל־JSON של ה־API:</p>
+<ul><li><code>{ id, customerId, status, createdAt, items, total }</code> — ‏<code>id</code> מחרוזת, ‏<code>createdAt</code> ב־ISO, ובלי <code>_id</code>.</li><li><code>total</code> מחושב מהפריטים: מחיר × כמות.</li><li>את המסמך שהתקבל <strong>לא משנים</strong> (הוא יכול להגיע מ־cache, ומשמש שוב).</li></ul>
+<p>התלונות: באפליקציה התאריך מוצג כ־<code>Mon Nov 03 2026 …</code>; הסכום בהזמנה של 4 ספלים הוא מחיר של ספל אחד; והקריאה השנייה לאותה הזמנה מה־cache מחזירה <code>id</code> שהוא <code>"undefined"</code>. מצא ותקן.</p>
+```term
+% npm run check P25.7-E101
+```
+@hint1
+<p>קרא ל־<code>toApiOrder</code> פעמיים עם אותו אובייקט, והדפס אותו אחרי כל קריאה. מה קרה ל־<code>_id</code>?</p>
+@hint2
+<p>‏<code>const out = doc</code> הוא אותו אובייקט, לא עותק. ‏<code>String(date)</code> אינו ISO. ובסכום: איפה הכמות?</p>
+@solution
+```ts save=solutions/P25.7-E101.ts
+// P25.7-E101: ממסמך הזמנה ל־JSON של API — מתוקן
+import type { ObjectId } from "mongodb";
+
+export interface OrderDoc {
+  _id: ObjectId | string;
+  customerId: string;
+  status: string;
+  createdAt: Date;
+  items: { productId: string; name: string; price: number; qty: number }[];
+}
+
+export function toApiOrder(doc: OrderDoc) {
+  const { _id, createdAt, items, ...rest } = doc;
+  return {
+    ...rest,
+    id: String(_id),
+    createdAt: createdAt.toISOString(),
+    items: items.map((i) => ({ ...i })),
+    total: items.reduce((s, i) => s + i.price * i.qty, 0),
+  };
+}
+```
+<ol><li><strong>‏<code>const out = doc</code></strong> ואחר כך <code>delete out._id</code> מחקו את ה־<code>_id</code> מהמסמך עצמו. בקריאה השנייה עם אותו מסמך, <code>String(undefined)</code> הוא <code>"undefined"</code>. בונים אובייקט חדש (destructuring ו־spread), והמקור נשאר כמו שהוא.</li><li><strong>‏<code>String(doc.createdAt)</code></strong> נותן את הפורמט המקומי של Date, תלוי באזור הזמן של השרת. ב־API תמיד <code>toISOString()</code> (פרק 7).</li><li><strong>‏<code>s + i.price</code></strong> סכם מחיר של יחידה אחת לכל שורה. הסכום הוא מחיר × כמות.</li></ol>
+@mistakes
+<ul><li>‏<code>structuredClone(doc)</code> ואז אותו קוד. זה מתקן את השינוי במקור, אבל <code>structuredClone</code> לא מעתיק ObjectId כמו שהוא (הוא הופך לאובייקט רגיל), ו־<code>String</code> שלו כבר לא ה־hex.</li><li>להחזיר <code>items</code> כמו שהם (אותו מערך). מי שישנה את התשובה ישנה גם את המסמך שב־cache.</li><li>לקחת <code>total</code> מהמסמך אם יש בו. המשימה מבקשת לחשב, כדי שמסמך ישן עם סכום שגוי לא יגיע ל־API.</li></ul>
+
+@@ P25.7-E102 | 4 | ביקורת שנספרת פעמיים 🤖 | 20 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>‏<code>addReview(db, productId, { by, rating })</code> ב־<code>25w-mongodb/starter/P25.7-E102.ts</code> מוסיפה ביקורת למערך <code>reviews</code> שבמוצר (embed), ומעדכנת את התקציר <code>ratingCount</code> ו־<code>ratingSum</code>:</p>
+<ul><li><code>rating</code> שלם בין 1 ל־5, אחרת <code>RangeError</code>.</li><li>מוצר שלא קיים, או לקוח שכבר כתב ביקורת למוצר ← <code>false</code>, בלי שינוי.</li><li>אחרת: הביקורת נוספת, ‏<code>ratingCount</code> עולה ב־1 ו־<code>ratingSum</code> ב־rating, ומחזירה <code>true</code>.</li><li>שתי בקשות במקביל לא מקלקלות את התקציר.</li></ul>
+<p>התלונות: ‏<code>ratingCount</code> לא זז; כשמגיעות שתי ביקורות באותו רגע, ‏<code>ratingSum</code> כולל רק אחת מהן, ולקוח שלחץ פעמיים מהר נכנס פעמיים; ודירוג 7 התקבל. מצא ותקן.</p>
+```term
+% npm run check P25.7-E102
+```
+@hint1
+<p>בין ה־<code>findOne</code> ל־<code>updateOne</code> יש <code>await</code>. מה יכול לקרות באמצע, כששתי בקשות רצות יחד?</p>
+@hint2
+<p>‏<code>$set</code> עם ערך שחושב בקוד דורס עדכון של בקשה אחרת; ‏<code>$inc</code> מחושב בשרת. ותנאי ה"עוד לא כתב" יכול להיות חלק מה־filter של אותו <code>updateOne</code>: ‏<code>"reviews.by": { $ne: by }</code>.</p>
+@solution
+```ts save=solutions/P25.7-E102.ts
+// P25.7-E102: ביקורת במוצר, עם תקציר — מתוקן
+import type { Db } from "mongodb";
+
+export async function addReview(db: Db, productId: string, review: { by: string; rating: number }): Promise<boolean> {
+  if (!Number.isInteger(review.rating) || review.rating < 1 || review.rating > 5) throw new RangeError("rating חייב להיות 1–5");
+  const res = await db.collection<{ _id: string }>("products").updateOne(
+    { _id: productId, "reviews.by": { $ne: review.by } },
+    { $push: { reviews: { by: review.by, rating: review.rating } } as never, $inc: { ratingCount: 1, ratingSum: review.rating } },
+  );
+  return res.modifiedCount === 1;
+}
+```
+<ol><li><strong>‏<code>ratingCount</code> לא עודכן</strong> בכלל. ‏<code>$inc</code> אחד מעדכן את שני השדות של התקציר.</li><li><strong>קרא, חשב, כתוב (<code>$set: { ratingSum: p.ratingSum + rating }</code>).</strong> שתי בקשות קראו את אותו <code>ratingSum</code>, וכל אחת כתבה את הסכום שלה, והשנייה דרסה את הראשונה. ‏<code>$inc</code> מחושב במסד, על הערך הנוכחי.</li><li><strong>הבדיקה "כבר כתב" הייתה בקוד, לפני העדכון.</strong> שתי לחיצות עברו אותה יחד, ושתיהן הוסיפו. כשהתנאי בתוך ה־filter, העדכון והבדיקה הם פעולה אחת על המסמך, ולכן רק אחת מצליחה (‏<code>modifiedCount</code> ‏0 לשנייה).</li><li><strong>אין בדיקה של <code>rating</code>.</strong> דירוג 7 עבר, וכל הממוצעים של המוצר זזו.</li></ol>
+@mistakes
+<ul><li>‏<code>$addToSet</code> במקום <code>$push</code>. זה מונע רק ביקורת <strong>זהה לגמרי</strong>; אותו לקוח עם דירוג אחר עדיין נכנס פעמיים.</li><li>להחזיר <code>res.matchedCount === 1</code>. אם המסמך נמצא אבל לא השתנה, זה עדיין 1. ‏<code>modifiedCount</code> אומר אם משהו השתנה.</li><li>לבדוק rating אחרי העדכון. אז דירוג 7 כבר נכנס למסד.</li></ul>

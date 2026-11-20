@@ -257,9 +257,12 @@ export async function createAnalyticsServer({ parquetPath, cacheTtlMs = 60_000, 
 }</code></pre>
 <p>הארכיטקטורה הזו — Parquet (על S3) + DuckDB בתוך שירות — נפוצה יותר ויותר לדשבורדים פנימיים: בלי cluster של מחסן נתונים, ושאילתות של מילי־שניות על מיליוני שורות. כשהנתונים גדלים לטרה־בייטים — אותן שאילתות עוברות ל־BigQuery/Snowflake כמעט בלי שינוי.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשרשר את <code>from</code> ו־<code>to</code> לתוך ה־SQL. זה SQL injection; משתמשים בפרמטרים.</li><li>לחשב את היום בישראל בכל שאילתה. זה מאט מאוד; מחשבים אותו פעם אחת בעלייה, בטבלה.</li><li>cache לפי <code>req.url</code> כמו שהוא. <code>?to=…&amp;from=…</code> ו־<code>?from=…&amp;to=…</code> הם אותה בקשה, ולכן המפתח בנוי מהפרמטרים אחרי אימות.</li><li>TTL לפי <code>Date.now()</code> במקום ה־<code>now</code> המוזרק. הבודק מזיז את השעון, וה־cache לא פג.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E25">
     <h3>P28.5-E25 · אתגר: data lake מצטבר 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l5">רמה 5</span></h3>
@@ -353,9 +356,12 @@ export async function lakeReport(conn: DuckDBConnection, lakeDir: string) {
 }</code></pre>
 <p>זה ETL מצטבר "אמיתי" בקטן: Fivetran, Airbyte ו־Debezium עושים את אותו דבר (Debezium — מה־WAL, בלי לשאול את הטבלה). ו־"append-only + גרסה אחרונה בקריאה" הוא הבסיס של פורמטים כמו Delta Lake (Databricks) ו־Apache Iceberg — שמוסיפים מעל Parquet טרנזקציות ו־time travel.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>watermark לפי <code>updated_at</code> בלבד, עם <code>&gt;</code>. שורות עם אותו זמן שנפלו בין שני עמודים לא ייקראו לעולם.</li><li>לכתוב את <code>_state.json</code> לפני שהקובץ נשמר. נפילה באמצע מדלגת על השינויים לתמיד.</li><li>דוח שסופר את כל הגרסאות של הזמנה. הזמנה שעודכנה שלוש פעמים נספרת שלוש פעמים, או שהזמנה שבוטלה בגרסה האחרונה עדיין נספרת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E89">
     <h3>P28.5-E89 · השוואת watermarks 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
@@ -583,6 +589,37 @@ export async function runSync&lt;T extends Wm&gt;(
 
 </div></details>
   </div>
+<div class="ex" id="P28.5-E101">
+    <h3>P28.5-E101 · סנכרון שמדלג על שורות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הרץ את הלולאה ביד: שלוש שורות עם אותו <code>updatedAt</code>, ‏<code>size</code> 2. אילו שורות נכנסות בסבב הראשון, מה ה־watermark אחריו, ומה נכנס בסבב השני?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אחרי" ו"מיון" — על הזוג <code>(updatedAt, id)</code>. וה־watermark החדש הוא של השורה האחרונה <em>שיוצאה</em>, לא של האחרונה שקיימת.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P28.5-E101: batch הבא בסנכרון מצטבר — מתוקן
+export type Mark = { updatedAt: string; id: number };
+
+const cmp = (a: Mark, b: Mark) =&gt; a.updatedAt.localeCompare(b.updatedAt) || a.id - b.id;
+
+export function nextBatch&lt;R extends Mark&gt;(rows: R[], watermark: Mark | null, size: number) {
+  const after = rows.filter((r) =&gt; !watermark || cmp(r, watermark) &gt; 0).sort(cmp);
+  const batch = after.slice(0, size);
+  const last = batch.at(-1);
+  return { batch, watermark: last ? { updatedAt: last.updatedAt, id: last.id } : watermark };
+}</code></pre>
+<ol><li><strong>‏<code class="mid">r.updatedAt &gt; watermark.updatedAt</code> בלבד.</strong> שורה עם אותו <code>updatedAt</code> ו־id גבוה יותר, שלא נכנסה לסבב הקודם, נשארה "מאחורי" ה־watermark לתמיד. משווים את הזוג.</li><li><strong>מיון לפי <code>updatedAt</code> בלבד.</strong> בתיקו, הסדר תלוי בסדר הקלט, ואז ה־watermark (שורה אחרונה) לא באמת הגבול של מה שיוצא.</li><li><strong>ה־watermark החדש היה המקסימום של כל השורות</strong>, גם של אלה שלא נכנסו ל־batch. מה שנשאר מעבר ל־size דולג. ה־watermark הוא של מה שיוצא בפועל.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>&gt;=</code> על <code>updatedAt</code>. אין דילוג, אבל השורה האחרונה של כל סבב יוצאת שוב, והדוח סופר אותה פעמיים.</li><li>להמיר את <code>updatedAt</code> ל־<code>Date</code> לפני ההשוואה. ‏Date מאבד את המיקרו־שניות של PostgreSQL, ושתי שורות שונות נראות באותו זמן.</li><li>לשמור את ה־watermark לפני שהקובץ נכתב. נפילה באמצע מדלגת על ה־batch.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P28.5-E95">
     <h3>P28.5-E95 · ‏CDC עם Kafka במקום watermark <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
@@ -686,7 +723,7 @@ export async function fetchChanges(pool: { query: Function }, wm: Wm | null, lim
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>מפתח: <code><code class="mid">${from}|${to}|${country ?? ""}</code></code> — אחרי הנרמול. ימים: <code class="mid">(Date.parse(to) - Date.parse(from)) / 86_400_000</code>.</p>
+<p>מפתח: <code class="mid">`${from}|${to}|${country ?? ""}`</code> — אחרי הנרמול. ימים: <code class="mid">(Date.parse(to) - Date.parse(from)) / 86_400_000</code>.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>

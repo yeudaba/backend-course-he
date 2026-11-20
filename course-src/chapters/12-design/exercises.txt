@@ -56,6 +56,7 @@ console.log(a.value, b.value, c.value, a === c, a.name);
 3 1 3 true a
 ```
 <p><code>return this</code> מאפשר שרשור (<code>a.inc().inc()</code>).</p>
+<p><strong>למה:</strong> <code>c = a</code> לא יוצר מונה חדש. <code>c</code> ו־<code>a</code> מצביעים על אותו אובייקט, ולכן <code>c.inc()</code> מעלה גם את <code>a</code>, ו־<code>a === c</code>. ל־<code>b</code> יש <code>#count</code> משלו, כי כל <code>new</code> יוצר אובייקט נפרד. <code>value</code> הוא getter, ולכן קוראים לו בלי סוגריים.</p>
 @mistakes
 <ul><li>לחשוב ש־<code>#count</code> משותף לכל המופעים — הוא שייך לכל מופע בנפרד (משותף היה רק <code>static</code>).</li></ul>
 
@@ -773,7 +774,7 @@ console.log(await service.rename(1, "דנה כהן"));
 @@ P12-E16 | 3 | OrderService עם צילום מחיר 🤖 | 25 | שיעור 3
 @task
 <p>בקובץ <code>12-design/starter/P12-E16.ts</code> השלם <code>OrderService</code>, שמקבל ב־constructor <code>{ products, orders, now }</code> (שני repositories ושעון). <code>placeOrder(userId, items: { productId, qty }[])</code>:</p>
-<ul><li>הזמנה ריקה ← <code>ValidationError("items", "הזמנה ריקה")</code>.</li><li>מוצר לא קיים ← <code>NotFoundError("מוצר", id)</code>; אין מספיק מלאי ← <code>ConflictError(`אין מספיק מלאי למוצר ${id}`)</code>.</li><li><strong>הכול או כלום</strong>: בדוק את כל הפריטים לפני שמשנים מלאי.</li><li>שמור הזמנה <code>{ id, userId, createdAt: now(), lines: [{ productId, qty, unitPrice }], total }</code> — <code>unitPrice</code> הוא <strong>המחיר ברגע ההזמנה</strong> (אם המחיר ישתנה אחר כך — ההזמנה לא משתנה).</li></ul>
+<ul><li>הזמנה ריקה ← <code>ValidationError("items", "הזמנה ריקה")</code>; כמות שאינה מספר שלם חיובי ← <code>ValidationError("qty", "כמות לא תקינה")</code>.</li><li>מוצר לא קיים ← <code>NotFoundError("מוצר", id)</code>; אין מספיק מלאי ← <code>ConflictError(`אין מספיק מלאי למוצר ${id}`)</code>.</li><li><strong>הכול או כלום</strong>: בדוק את כל הפריטים לפני שמשנים מלאי. אם אותו מוצר מופיע בכמה שורות — המלאי צריך להספיק לסכום הכמויות שלו.</li><li>שמור הזמנה <code>{ id, userId, createdAt: now(), lines: [{ productId, qty, unitPrice }], total }</code> — <code>unitPrice</code> הוא <strong>המחיר ברגע ההזמנה</strong> (אם המחיר ישתנה אחר כך — ההזמנה לא משתנה).</li></ul>
 @hint1
 <p>שלב 1: שלוף את כל המוצרים ובדוק. שלב 2: הורד מלאי ושמור הזמנה.</p>
 @hint2
@@ -830,8 +831,16 @@ export class OrderService {
     if (items.length === 0) {
       throw new ValidationError("items", "הזמנה ריקה");
     }
-    const products: Product[] = [];
+    // שלב 1: בדיקות בלבד. כמות לכל מוצר — אותו מוצר בכמה שורות נספר פעם אחת, עם סכום הכמויות
+    const wanted = new Map<number, number>();
     for (const { productId, qty } of items) {
+      if (!Number.isInteger(qty) || qty < 1) {
+        throw new ValidationError("qty", "כמות לא תקינה");
+      }
+      wanted.set(productId, (wanted.get(productId) ?? 0) + qty);
+    }
+    const products = new Map<number, Product>();
+    for (const [productId, qty] of wanted) {
       const product = await this.#products.findById(productId);
       if (!product) {
         throw new NotFoundError(`מוצר ${productId} לא נמצא`);
@@ -839,12 +848,14 @@ export class OrderService {
       if (product.stock < qty) {
         throw new ConflictError(`אין מספיק מלאי למוצר ${productId}`);
       }
-      products.push(product);
+      products.set(productId, product);
     }
 
-    const lines: OrderLine[] = items.map((item, i) => ({ ...item, unitPrice: products[i].price }));
-    for (let i = 0; i < items.length; i++) {
-      await this.#products.save({ ...products[i], stock: products[i].stock - items[i].qty });
+    // שלב 2: רק אחרי שהכול תקין — מורידים מלאי ושומרים
+    const lines: OrderLine[] = items.map((item) => ({ ...item, unitPrice: products.get(item.productId)!.price }));
+    for (const [productId, qty] of wanted) {
+      const product = products.get(productId)!;
+      await this.#products.save({ ...product, stock: product.stock - qty });
     }
     const total = Math.round(lines.reduce((s, l) => s + l.unitPrice * l.qty, 0) * 100) / 100;
     const order: Order = { id: (await this.#orders.count()) + 1, userId, createdAt: this.#now(), lines, total };
@@ -862,9 +873,9 @@ console.log(order.total, order.lines[0].unitPrice, (await products.findById(1))?
 ```out
 15 5 7
 ```
-<p>שים לב לשתי הגבלות בפתרון: (1) אם אותו מוצר מופיע פעמיים בהזמנה — הבדיקה לא מצרפת כמויות (תרגיל להרחבה); (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
+<p>שים לב: (1) <code>wanted</code> מצרף כמויות לפי מוצר — בלי זה, שתי שורות של "תיק" כשיש במלאי תיק אחד היו עוברות את הבדיקה (כל שורה לבד "מספיקה") ומוכרות תיק שאין; ובלי בדיקת הכמות, <code>qty: -5</code> היה <strong>מגדיל</strong> את המלאי. (2) "הכול או כלום" כאן מוגן רק מפני שגיאות בדיקה, לא מפני שתי הזמנות מקבילות על אותו מלאי — את זה רק transaction במסד פותר (פרק 18). (<code>structuredClone</code> ב־repo — כדי שגם התאריך והמערך הפנימי יועתקו עמוק.)</p>
 @mistakes
-<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li></ul>
+<ul><li>לשמור <code>productId</code> בלבד בלי מחיר — כשהמחיר ישתנה, ההיסטוריה "תשקר".</li><li>לבדוק כל שורה לחוד מול המלאי — אותו מוצר בשתי שורות נמכר פעמיים.</li></ul>
 
 @@ P12-E17 | 3 | repository עם cache (הרכבה) 🤖 | 20 | שיעור 3
 @task
@@ -1453,7 +1464,8 @@ console.log(inv.count("pen"), inv.totalItems(), inv.skus());
 @mistakes
 <ul><li>לשנות את הכמות ורק אחר כך לבדוק — אחרי שגיאה המלאי כבר שלילי.</li><li>להשאיר פריטים עם 0 ב־Map — ‏<code>skus()</code> מחזירה פריטים שאזלו.</li><li><code>items = new Map()</code> בלי <code>#</code> — הבודק מגלה ש־<code>Object.keys(inv)</code> לא ריק, כלומר אפשר לגשת לנתונים מבחוץ.</li><li><code>sort()</code> ישירות על <code>this.#items.keys()</code> — ל־iterator אין <code>sort</code>. קודם <code>[...]</code>.</li></ul>
 
-@@ P12-E27 | 3 | Money: אובייקט ערך 🤖 | 20 | שיעור 1
+@@ P12-E27 | 3 | Money: אובייקט ערך 🤖 | 20 | פרק 2, שיעור 1
+@lesson 1
 @part 2
 @type review
 @task
@@ -1544,7 +1556,8 @@ true
 @mistakes
 <ul><li>לשמור שקלים (<code>this.amount = 19.9</code>) — <code>0.1 + 0.2</code> חוזר, ו־<code>equals</code> נכשל.</li><li><code>times</code> בלי <code>Math.round</code> — <code>fromAgorot</code> זורקת על <code>1990 * 1.17</code>.</li><li>להוסיף פסיקים למחרוזת שכבר יש בה מינוס — <code>"-123456"</code> הופך ל־<code>"-,123,456"</code>, בדיוק הטעות מ־P05-E25.</li></ul>
 
-@@ P12-E28 | 3 | דוח הלקוחות הגדולים 🤖 | 20 | שיעור 3
+@@ P12-E28 | 3 | דוח הלקוחות הגדולים 🤖 | 20 | פרק 6, פרק 7, פרק 10, שיעור 3
+@lesson 3
 @part 2
 @type review
 @task

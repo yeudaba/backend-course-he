@@ -1,14 +1,14 @@
-// P05-E33: ריבוע
-// השלם את square(n): מחזירה את n בריבוע.
+// P05-E33: שטח מלבן
+// השלם את rectangleArea(width, height): מחזירה רוחב × גובה.
 //
 // הרצה:   node 05-functions/starter/P05-E33.js
 // בדיקה:  npm run check P05-E33
 
-function square(n) {
+function rectangleArea(width, height) {
   // כתוב כאן
 }
 
-console.log(square(7));
+console.log(rectangleArea(4, 2.5));
 
 // השורה הזו מאפשרת לבודק להשתמש בפונקציה. אל תמחק אותה.
-module.exports = { square };
+module.exports = { rectangleArea };

@@ -21,6 +21,7 @@ test("ימים, עיגול לסנט", () => {
 });
 test("קלט לא תקין", () => {
   assert.throws(() => compareModels({ requestsPerDay: -1, inputTokens: 1, outputTokens: 1 }), RangeError);
+  assert.doesNotThrow(() => compareModels({ requestsPerDay: 0, inputTokens: 0, outputTokens: 0 }), "0 — תקין (לא שלילי)");
   assert.throws(() => compareModels({ requestsPerDay: 1, inputTokens: NaN, outputTokens: 1 }), RangeError);
   assert.throws(() => compareModels({ requestsPerDay: 1, inputTokens: 1, outputTokens: 1, days: Infinity }), RangeError);
 });

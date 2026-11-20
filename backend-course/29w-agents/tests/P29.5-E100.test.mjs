@@ -28,3 +28,7 @@ test("בלי שינוי, ריק, תיאור חסר, סדר במערך", () => {
   assert.deepEqual(toolsDiff([{ name: "a", inputSchema: {} }], [{ name: "a", description: "", inputSchema: {} }]).description, [], "חסר = ריק");
   assert.deepEqual(toolsDiff(x, [{ name: "a", inputSchema: { required: ["q", "p"] } }]).schema, ["a"]);
 });
+test("removed ממוין לפי שם", () => {
+  const t = (name) => ({ name, description: name, inputSchema: {} });
+  assert.deepEqual(toolsDiff([t("zeta"), t("alpha"), t("mid")], []).removed, ["alpha", "mid", "zeta"]);
+});

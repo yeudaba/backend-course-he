@@ -38,6 +38,13 @@ test("רשת, 503, 409 ואז 201 — אותו מפתח, backoff", async () => {
   assert.deepEqual(calls.map((c) => c.key), ["key-1", "key-1", "key-1", "key-1"], "מפתח אחד לכל הניסיונות");
   assert.deepEqual(sleeps, [200, 400, 800]);
 });
+test("500 בדיוק — מנסים שוב", async () => {
+  const sendWithRetry = await get();
+  const { send, calls } = fake([500, 201]);
+  const r = await sendWithRetry(send, {}, opts(3).o);
+  assert.equal(r.status, 201);
+  assert.equal(calls.length, 2);
+});
 test("4xx אחרים — בלי ניסיון נוסף", async () => {
   const sendWithRetry = await get();
   for (const status of [400, 401, 404, 422, 429]) {

@@ -45,3 +45,11 @@ test("route חסר ← 404", async () => {
   assert.equal((await f("https://api.example/x/y")).status, 404);
   assert.deepEqual(f.calls.map((c) => c.path), ["/a", "/x/y"]);
 });
+test("204 ← Response בלי גוף", async () => {
+  const createFakeFetch = await get();
+  const f = createFakeFetch({ "DELETE /items/1": { status: 204 }, "GET /x": { status: 200 } });
+  const r = await f("http://api.test/items/1", { method: "DELETE" });
+  assert.equal(r.status, 204);
+  assert.equal(await r.text(), "");
+  assert.equal(await (await f("http://api.test/x")).text(), "", "בלי body ← גוף ריק");
+});

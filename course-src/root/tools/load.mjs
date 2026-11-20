@@ -15,9 +15,36 @@ export function target(testUrl, file) {
   return path.join(testsDir, "..", process.env.CHECK_TARGET || "starter", file);
 }
 
+// שגיאה בעברית בשורה אחת: המדווח של npm run check מציג את השורה "Error: ..." מתוך הפלט
+const hebrewError = (message) => new Error(message);
+
 // מחזיר את מה שהקובץ ייצא (module.exports או export)
-export async function load(testUrl, file) {
-  const mod = await import(pathToFileURL(target(testUrl, file)).href);
+// hint (לא חובה, לפרויקטים): { step: "שלב 1", exports: "createApp" } — לאן להפנות כשהקובץ עוד לא קיים
+export async function load(testUrl, file, hint = {}) {
+  const full = target(testUrl, file);
+  // בפרויקט ("tasks-api/src/app.ts") מציגים את הנתיב בתוך הפרויקט: src/app.ts
+  const shown = file.includes("/") ? file.split("/").slice(1).join("/") : file;
+  const where = hint.step ? `לפי הדרישות ב${hint.step}` : "לפי הדרישות במשימה";
+  const what = hint.exports ? ` ויצא ממנו ${hint.exports}` : "";
+  if (!fs.existsSync(full)) {
+    throw hebrewError(`לא נמצא ${shown} — צור אותו ${where}${what}. (חיפשנו ב־${full})`);
+  }
+  let mod;
+  try {
+    mod = await import(pathToFileURL(full).href);
+  } catch (err) {
+    if (err?.code !== "ERR_MODULE_NOT_FOUND") throw err;
+    const msg = String(err.message);
+    const pkg = msg.match(/Cannot find package '([^']+)'/);
+    if (pkg) throw hebrewError(`החבילה ${pkg[1]} לא מותקנת (${shown} או קובץ שהוא מייבא צריך אותה) — הרץ npm install בתיקיית הפרויקט`);
+    const missing = msg.match(/Cannot find module '([^']+)' imported from (\S+)/);
+    if (missing) {
+      const base = full.slice(0, full.length - shown.length) || path.dirname(full);
+      const rel = (p) => path.relative(base, p.startsWith("file:") ? fileURLToPath(p) : p) || path.basename(p);
+      throw hebrewError(`${rel(missing[2])} מייבא את ${rel(missing[1])}, שלא נמצא — צור את הקובץ או תקן את שורת ה־import (שים לב לסיומת: ‎.js או ‎.ts)`);
+    }
+    throw err;
+  }
   return { ...(mod.default ?? {}), ...mod };
 }
 
@@ -78,4 +105,19 @@ export function api(base) {
     try { parsed = text === "" ? undefined : JSON.parse(text); } catch { /* נשאר טקסט */ }
     return { status: res.status, headers: res.headers, body: parsed };
   };
+}
+
+// מריץ ESLint (עם eslint.config.mjs של תיקיית הקורס) על הקובץ שלך, ומחזיר את ההודעות (פרק 8 והלאה)
+// [{ line, rule, message, severity: "error" | "warning" }] — מערך ריק = נקי
+export async function lint(testUrl, file) {
+  const root = path.resolve(path.dirname(fileURLToPath(testUrl)), "..", "..");
+  let ESLint;
+  try {
+    ({ ESLint } = await import("eslint"));
+  } catch {
+    throw new Error("ESLint לא מותקן. הרץ npm install בתיקיית הקורס (פרק 8, קופסת 🧰).");
+  }
+  const eslint = new ESLint({ cwd: root, overrideConfigFile: path.join(root, "eslint.config.mjs"), ignore: false });
+  const [result] = await eslint.lintFiles([target(testUrl, file)]);
+  return (result?.messages ?? []).map((m) => ({ line: m.line, rule: m.ruleId, message: m.message, severity: m.severity === 2 ? "error" : "warning" }));
 }

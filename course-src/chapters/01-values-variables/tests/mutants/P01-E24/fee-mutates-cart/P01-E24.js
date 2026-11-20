@@ -1,0 +1,13 @@
+const shippingFee = 30;
+let cartTotal = 0;
+let n = 0;
+const p1 = 250, p2 = 90, p3 = 35, p4 = 25;
+n = n + 1; cartTotal = cartTotal + p1; console.log("נוסף: מקלדת | פריטים:", n, "| סכום:", cartTotal);
+n = n + 1; cartTotal = cartTotal + p2; console.log("נוסף: עכבר | פריטים:", n, "| סכום:", cartTotal);
+n = n + 1; cartTotal = cartTotal + p3; console.log("נוסף: משטח לעכבר | פריטים:", n, "| סכום:", cartTotal);
+n = n + 1; cartTotal = cartTotal + p4; console.log("נוסף: כבל USB | פריטים:", n, "| סכום:", cartTotal);
+console.log("---");
+console.log("סכום העגלה:", cartTotal);
+console.log("דמי משלוח:", shippingFee);
+cartTotal = cartTotal + shippingFee;
+console.log("לתשלום:", cartTotal);

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertSameRows } from "../../tools/rows.mjs";
 import { sandbox } from "../../tools/sql.mjs";
 import { exportsOf, typecheck } from "./_ts.mjs";
 
@@ -29,7 +30,7 @@ test("buildReport — אותה תוצאה כמו השאילתה הנכונה, ל
     const q = buildReport({ by, minOrders: min });
     const got = await db.rows(q.text, q.values);
     const expected = await db.rows(expectedSql(by), [Number(min)]);
-    assert.deepEqual(got, expected, `by=${by}, minOrders=${min}`);
+    assertSameRows(got, expected, `by=${by}, minOrders=${min}`);
   }
   const q = buildReport({ by: "status" });
   assert.deepEqual(q.values, [1], "minOrders כפרמטר יחיד");

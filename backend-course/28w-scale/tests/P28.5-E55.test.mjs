@@ -14,19 +14,21 @@ test("תוצאה נכונה", async (t) => {
   assert.deepEqual(await (await fetch(`${base}/health`)).json(), { ok: true });
 });
 test("/health עונה באמצע דוח כבד", async (t) => {
-  const values = Array.from({ length: 2_000_000 }, (_, i) => i);
+  const values = Array.from({ length: 600_000 }, (_, i) => i);
   const { base, close } = await listen(reportApp(values));
   t.after(close);
+  // מודדים לפי סדר ולא לפי זמן קבוע: אם ה־event loop חסום, /health יענה רק אחרי שהדוח נגמר
+  let reportDone = 0;
   const t0 = performance.now();
-  const report = fetch(`${base}/report`).then((r) => r.json());
+  const report = fetch(`${base}/report`).then(async (r) => { const body = await r.json(); reportDone = performance.now(); return body; });
   await new Promise((r) => setTimeout(r, 150));
   const h0 = performance.now();
   const h = await fetch(`${base}/health`);
-  const healthMs = performance.now() - h0;
+  const healthDone = performance.now();
   assert.equal(h.status, 200);
   const r = await report;
-  const reportMs = performance.now() - t0;
-  assert.equal(r.count, 2_000_000);
-  assert.ok(reportMs > healthMs, "הדוח צריך להיות עדיין באמצע כשה־health נשלח");
-  assert.ok(healthMs < 150, `/health ענה אחרי ${Math.round(healthMs)}ms — ה־event loop חסום (הדוח לקח ${Math.round(reportMs)}ms)`);
+  assert.equal(r.count, 600_000);
+  const reportMs = reportDone - t0;
+  assert.ok(reportMs > 150, `הדוח לקח רק ${Math.round(reportMs)}ms — צריך שיהיה עדיין באמצע כשה־health נשלח`);
+  assert.ok(healthDone < reportDone, `/health ענה רק אחרי שהדוח הסתיים (${Math.round(healthDone - h0)}ms) — ה־event loop חסום. חלק את העבודה למנות עם await של setImmediate ביניהן`);
 });

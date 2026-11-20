@@ -14,6 +14,7 @@ test("FIFO, peek, size, ריק", () => {
   assert.equal(q.size, 3);
   assert.equal(q.peek(), 1);
   assert.equal(q.shift(), 1);
+  assert.equal(q.size, 2, "size — כמה נשארו בתור, אחרי shift");
   q.push(4);
   assert.deepEqual([q.shift(), q.shift(), q.shift(), q.shift()], [2, 3, 4, undefined]);
   assert.equal(q.size, 0);

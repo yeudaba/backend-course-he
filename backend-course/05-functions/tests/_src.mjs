@@ -24,3 +24,11 @@ export async function exportsOf(testUrl, file, names, how = "module.exports") {
   }
   return mod;
 }
+
+// מריץ fn(...args) ומוודא שהקלט (מערכים ואובייקטים) לא השתנה. מחזיר את מה ש־fn החזירה
+export function assertUnchanged(fn, args, what = "הקלט") {
+  const before = structuredClone(args);
+  const result = fn(...args);
+  assert.deepEqual(args, before, `${what} השתנה — הפונקציה צריכה להחזיר תוצאה חדשה, בלי לשנות את מה שקיבלה`);
+  return result;
+}

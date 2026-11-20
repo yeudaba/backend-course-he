@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertSameRows } from "../../tools/rows.mjs";
 import { mysqlSandbox } from "../../tools/mysql.mjs";
 
 const FILE = "P25.5-E26.sql";
@@ -19,7 +20,7 @@ test("P25.5-E26: העמודות, השורות והסדר — מול MySQL", asyn
   assert.equal(Number(dana.spent), 278.9, "רק paid ו־shipped. אם יצא 557.80 — ה־JOIN לעגלה הכפיל את ההזמנות: סכם כל טבלה בנפרד (CTE)");
   assert.equal(Number(dana.cart_units), 3, "cart_units = סכום הכמויות בעגלה");
   assert.equal(dana.last_order, "01/03/2026", "DATE_FORMAT(..., '%d/%m/%Y')");
-  assert.deepEqual(norm(got), norm(await db.expectedRows(FILE)));
+  assertSameRows(norm(got), norm(await db.expectedRows(FILE)));
 });
 test("P25.5-E26: הזמנה נוספת, ותיקו בעיר", async (t) => {
   const db = await mysqlSandbox(t, import.meta.url, "shop.sql");

@@ -48,8 +48,16 @@ export class OrderService {
     if (items.length === 0) {
       throw new ValidationError("items", "הזמנה ריקה");
     }
-    const products: Product[] = [];
+    // שלב 1: בדיקות בלבד. כמות לכל מוצר — אותו מוצר בכמה שורות נספר פעם אחת, עם סכום הכמויות
+    const wanted = new Map<number, number>();
     for (const { productId, qty } of items) {
+      if (!Number.isInteger(qty) || qty < 1) {
+        throw new ValidationError("qty", "כמות לא תקינה");
+      }
+      wanted.set(productId, (wanted.get(productId) ?? 0) + qty);
+    }
+    const products = new Map<number, Product>();
+    for (const [productId, qty] of wanted) {
       const product = await this.#products.findById(productId);
       if (!product) {
         throw new NotFoundError(`מוצר ${productId} לא נמצא`);
@@ -57,12 +65,14 @@ export class OrderService {
       if (product.stock < qty) {
         throw new ConflictError(`אין מספיק מלאי למוצר ${productId}`);
       }
-      products.push(product);
+      products.set(productId, product);
     }
 
-    const lines: OrderLine[] = items.map((item, i) => ({ ...item, unitPrice: products[i].price }));
-    for (let i = 0; i < items.length; i++) {
-      await this.#products.save({ ...products[i], stock: products[i].stock - items[i].qty });
+    // שלב 2: רק אחרי שהכול תקין — מורידים מלאי ושומרים
+    const lines: OrderLine[] = items.map((item) => ({ ...item, unitPrice: products.get(item.productId)!.price }));
+    for (const [productId, qty] of wanted) {
+      const product = products.get(productId)!;
+      await this.#products.save({ ...product, stock: product.stock - qty });
     }
     const total = Math.round(lines.reduce((s, l) => s + l.unitPrice * l.qty, 0) * 100) / 100;
     const order: Order = { id: (await this.#orders.count()) + 1, userId, createdAt: this.#now(), lines, total };

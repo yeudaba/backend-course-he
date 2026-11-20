@@ -24,3 +24,6 @@ test("must מעבר לתקציב, עיגולים, שגיאות", () => {
   assert.throws(() => takeHomePlan(T, -1), RangeError);
   assert.throws(() => takeHomePlan([{ id: "x", hours: NaN, priority: "must" }], 3), RangeError);
 });
+test("משימה של 0 שעות — תקינה", () => {
+  assert.doesNotThrow(() => takeHomePlan([{ id: "note", hours: 0, priority: "must" }], 1));
+});

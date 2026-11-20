@@ -9,6 +9,7 @@ test("קלט ופלט", () => {
   assert.equal(costUsd("claude-opus-5-5", { input_tokens: 1_000_000, output_tokens: 0 }), 4);
   assert.equal(costUsd("claude-opus-5-5", { input_tokens: 2000, output_tokens: 500 }), 0.018);
   assert.equal(costUsd("claude-haiku-5-5", { input_tokens: 2000, output_tokens: 500 }), 0.00045);
+  assert.equal(costUsd("claude-haiku-5-5", { input_tokens: 7, output_tokens: 3 }), 0.000002, "0.0000022 דולר ← מעוגל למיליונית: 0.000002");
 });
 test("cache: כתיבה וקריאה נספרות בנפרד", () => {
   const u = { input_tokens: 50, output_tokens: 300, cache_creation_input_tokens: 10_000, cache_read_input_tokens: 0 };

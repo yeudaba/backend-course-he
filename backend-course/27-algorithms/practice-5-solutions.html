@@ -498,6 +498,48 @@ export function requestId(): express.RequestHandler {
 
 </div></details>
   </div>
+<div class="ex" id="P27-E104">
+    <h3>P27-E104 · cursor שמדלג על הזמנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>‏<code class="mid">Buffer.from(s).toString("base64")</code> מול <code>"base64url"</code>. ‏<code>JSON.parse</code> על זבל — מה הוא עושה?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>"אחרי" בסדר של שני שדות: <code>createdAt</code> קטן יותר, <strong>או</strong> אותו <code>createdAt</code> ו־<code>id</code> קטן יותר.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P27-E104: עימוד עם cursor — מתוקן
+export type Cursor = { createdAt: string; id: number };
+
+export function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: c.createdAt, id: c.id })).toString("base64url");
+}
+
+export function decodeCursor(s: string): Cursor | null {
+  try {
+    const v = JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+    return typeof v?.createdAt === "string" &amp;&amp; Number.isInteger(v?.id) ? { createdAt: v.createdAt, id: v.id } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function pageAfter&lt;T extends Cursor&gt;(items: T[], cursor: Cursor | null, limit: number) {
+  const after = cursor ? items.filter((i) =&gt; i.createdAt &lt; cursor.createdAt || (i.createdAt === cursor.createdAt &amp;&amp; i.id &lt; cursor.id)) : items;
+  const page = after.slice(0, limit);
+  const last = page.at(-1);
+  return { items: page, nextCursor: after.length &gt; limit &amp;&amp; last ? encodeCursor(last) : null };
+}</code></pre>
+<ol><li><strong>‏<code>"base64"</code></strong> מייצר <code>+</code>, ‏<code>/</code> ו־<code>=</code>. בכתובת, <code>+</code> נקרא כרווח ו־<code>/</code> מתבלבל עם הנתיב. ‏<code>base64url</code> משתמש ב־<code>-</code> ו־<code>_</code>, בלי ריפוד.</li><li><strong>‏<code>JSON.parse</code> בלי try.</strong> cursor מגיע מהלקוח, ולכן הוא קלט לא אמין. זבל ← <code>null</code> (ה־route מחזיר 400), לא חריגה (500).</li><li><strong>‏<code class="mid">i.createdAt &lt; cursor.createdAt</code> בלבד.</strong> פריטים עם אותו <code>createdAt</code> ו־id קטן יותר נשארו "מאחורי" ה־cursor, ולא הופיעו באף עמוד. ההשוואה היא על הזוג.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>עימוד עם <code>offset</code>. הזמנה חדשה בראש הרשימה מזיזה הכול באחד, ופריט מופיע פעמיים בשני עמודים.</li><li>‏<code>&lt;=</code> על ה־id. הפריט של ה־cursor עצמו חוזר בעמוד הבא.</li><li>להחזיר <code>nextCursor</code> תמיד כשהעמוד מלא. כשבדיוק <code>limit</code> פריטים נשארו, הלקוח מבקש עמוד ריק.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P27-E97">
     <h3>P27-E97 · "הבקשה איטית בפרודקשן" — הצעדים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>

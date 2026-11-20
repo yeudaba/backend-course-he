@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { load } from "../../tools/load.mjs";
 
-const { run } = await load(import.meta.url, "expenses-cli/src/cli.js");
+const { run } = await load(import.meta.url, "expenses-cli/src/cli.js", { step: "שלב 3", exports: "run" });
 function setup() {
   const filePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pr1cli-")), "expenses.json");
   const out = [];

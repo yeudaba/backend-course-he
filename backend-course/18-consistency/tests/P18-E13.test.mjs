@@ -10,6 +10,11 @@ test("העברה ותוצאה", async (t) => {
   const pool = db.pool(3);
   assert.deepEqual(await transferSafe(pool, 1, 3, 100), { transferId: 1, fromBalance: 900, toBalance: 100 });
 });
+test("העברה של כל היתרה — מותרת", async (t) => {
+  const db = await sandbox(t, import.meta.url, "bank.sql");
+  const pool = db.pool(3);
+  assert.equal((await transferSafe(pool, 2, 3, 250)).fromBalance, 0, "יתרה 250, העברה של 250 — בדיוק מספיק");
+});
 test("שגיאות", async (t) => {
   const db = await sandbox(t, import.meta.url, "bank.sql");
   const pool = db.pool(3);

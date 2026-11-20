@@ -11,6 +11,7 @@ test("JSON נקי, בתוך גדר, ועם טקסט מסביב", () => {
   assert.deepEqual(parseJsonReply('{"category":"a","score":3}', S), { ok: true, data: { category: "a", score: 3 } });
   assert.deepEqual(parseJsonReply('הנה:\n```json\n{"category":"b","score":1}\n```\nבהצלחה', S), { ok: true, data: { category: "b", score: 1 } });
   assert.deepEqual(parseJsonReply('בטח! {"category":"a","score":0} — זה הכול.', S), { ok: true, data: { category: "a", score: 0 } });
+  assert.deepEqual(parseJsonReply('הנה: {"category":"a","meta":{"x":1},"score":2} וזהו', S), { ok: true, data: { category: "a", score: 2 } }, "אובייקט מקונן — עד ה־} האחרון, לא הראשון");
 });
 test("לא JSON / JSON שבור / לא לפי הסכמה ← ok: false עם הסבר", () => {
   assert.equal(parseJsonReply("אין לי מושג", S).ok, false);

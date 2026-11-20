@@ -12,6 +12,8 @@ const cases = [
   ["owner", 45, true],
   ["admin", 17, false],
   ["owner", 5, false],
+  ["admin", 18, true],
+  ["owner", 18, true],
 ];
 
 for (const [role, age, ok] of cases) {

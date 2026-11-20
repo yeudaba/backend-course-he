@@ -56,3 +56,7 @@ test("כשל ← Error", async () => {
   assert.throws(() => expect(1).toBe(2), Error);
   assert.doesNotThrow(() => expect({ a: [1] }).toEqual({ a: [1] }));
 });
+test("toThrow על משהו שאינו פונקציה — כישלון עם הודעה, כמו Jest", async () => {
+  const expect = await get();
+  assert.throws(() => expect(42).toThrow(), Error, "expect(42).toThrow() צריך להיכשל (לא פונקציה)");
+});

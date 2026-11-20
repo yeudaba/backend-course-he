@@ -21,3 +21,6 @@ test("רק minor/patch, או רק הסרה ← לא צריך review", () => {
   assert.deepEqual(depChanges({ dependencies: { a: "latest" } }, { dependencies: { a: "^3.0.0" } }).major, [], "בלי מספר — לא major");
   assert.deepEqual(depChanges({ devDependencies: { a: "^1.0.0" } }, { dependencies: { a: "^1.0.0" } }), { added: [], removed: [], major: [], needsReview: false }, "מעבר בין sections — לא שינוי");
 });
+test("רק תלות חדשה (בלי major) ← needsReview", () => {
+  assert.equal(depChanges({ dependencies: {} }, { dependencies: { x: "^1.0.0" } }).needsReview, true, "תלות חדשה לבדה — כבר צריך בדיקה");
+});

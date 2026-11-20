@@ -24,3 +24,4 @@ test("עקבי: הוספה מזיזה רק מפתחות לשרת החדש", () =
   r.add("d");
   for (const k of keys) if (r.get(k) !== before.get(k)) assert.equal(r.get(k), "d");
 });
+test("טבעת ריקה ← null", () => assert.equal(createRing().get("k"), null));

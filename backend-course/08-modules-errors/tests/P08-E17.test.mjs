@@ -9,6 +9,8 @@ test("parseLine", () => {
   assert.throws(() => parseLine("2026-10-02, תחבורה"), { message: "חסרים שדות" });
   assert.throws(() => parseLine("2026-10-03, קפה, abc"), { message: "סכום לא תקין" });
   assert.throws(() => parseLine("2026-10-03, קפה, -5"), { message: "סכום לא תקין" });
+  assert.throws(() => parseLine("2026-10-03, קפה, 0"), { message: "סכום לא תקין" }, "0 הוא לא סכום חיובי");
+  assert.throws(() => parseLine("2026-10-03, קפה, 12abc"), { message: "סכום לא תקין" }, "\"12abc\" הוא לא מספר (parseFloat מחזיר 12 — Number מחזיר NaN)");
 });
 test("parseExpenses ממשיך אחרי שגיאות", () => {
   const input = "2026-10-01, אוכל, 54.5\n2026-10-02, תחבורה\n\n2026-10-03, קפה, abc\n2026-10-04, ספרים, 89";

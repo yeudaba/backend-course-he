@@ -351,7 +351,9 @@ export function nextPage<T extends Cursor>(rows: readonly T[], limit: number, af
 <ul><li>cursor של <code>createdAt</code> לבד — שתי שורות באותה מילישנייה, ואחת מהן נעלמת בין העמודים. תמיד עם id כ"שובר שוויון".</li></ul>
 
 @@ P28-E12 | 2 | retry נכון 🤖 | 20 | שיעור 2
+@type review
 @task
+<p><strong>🔁 חזרה:</strong> את <code>retry</code> עם backoff כתבת ב־P25-E19. כאן חוזרים אליו כחלק מעיצוב מערכת.</p>
 <p>בקובץ <code>P28-E12.ts</code>: <code>retry(fn, { retries, baseMs, maxMs, random, sleep })</code>. קורא ל־<code>fn(attempt)</code>; נכשל ← מחכה <code>Math.floor(random() × min(maxMs, baseMs × 2^attempt))</code> ("full jitter") ומנסה שוב, עד <code>retries</code> ניסיונות חוזרים. לא מחכים אחרי האחרון, וזורקים את השגיאה המקורית. <code>HttpError</code> עם status 4xx (חוץ מ־429) — לא מנסים שוב בכלל.</p>
 @hint1
 <p><code>for (let attempt = 0; ; attempt++)</code> עם try/catch, ו־<code>throw</code> בתנאי.</p>
@@ -1085,7 +1087,7 @@ read: { value: 'address: Haifa', version: 1, repaired: 1 }
 @mistakes
 <ul><li>לקרוא מכל ההעתקים ולבחור את החדש — "עובד", אבל זה R=N: כל העתק שנופל מפיל את הקריאה.</li><li>לבחור את הערך הנפוץ ביותר במקום את הגרסה הגבוהה — שני העתקים ישנים "מנצחים" העתק אחד חדש.</li><li>read repair גם להעתקים שלא נקראו — הקורא לא יודע מה יש בהם.</li><li><code>quorumWrite</code> שעוצרת אחרי <code>w</code> אישורים — שאר ההעתקים נשארים ישנים, והחפיפה נשענת על מזל.</li></ul>
 
-@@ P28-E27 | 3 | בדיקות ל־GET /health 🤖 | 25 | שיעור 2
+@@ P28-E27 | 3 | בדיקות ל־GET /health 🤖 | 25 | פרק 22, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -1137,7 +1139,7 @@ test("איטיות: מעל slowMs ← degraded; בדיוק slowMs — עוד ל�
 @mistakes
 <ul><li>לבדוק כל כלל לבד — באגים בסדר העדיפויות עוברים.</li><li>לבנות כל בדיקה עם כל ארבעת השדות — קשה לראות מה הבדיקה בודקת. פונקציית עזר עם ברירות מחדל ו־<code>...over</code> מראה רק את מה שחשוב.</li><li><code>assert.ok(result.status !== "up")</code> — עובר גם על <code>"down"</code> כשציפית ל־<code>"degraded"</code>.</li></ul>
 
-@@ P28-E28 | 3 | hedged request: בקשה שנייה אם הראשונה מתעכבת 🤖 | 25 | שיעור 2
+@@ P28-E28 | 3 | hedged request: בקשה שנייה אם הראשונה מתעכבת 🤖 | 25 | פרק 10, שיעור 2
 @lesson 2
 @part 2
 @type review
@@ -3372,3 +3374,73 @@ export function verdict(results: { ms: number; status: number }[], targets: { p9
 <p>‏<code>sort()</code> בלי פונקציית השוואה ממיין מחרוזות: ‏<code>100</code> לפני <code>20</code>. עם מספרים — תמיד <code>(a, b) =&gt; a - b</code>.</p>
 @mistakes
 <ul><li>לספור 429 כשגיאה — בבדיקת עומס הגבלת קצב היא התנהגות נכונה, לא כשל.</li><li>ממוצע במקום p99 — ממוצע של 120ms יכול להסתיר אחוז בקשות של 4 שניות.</li></ul>
+
+@@ P28-E101 | 4 | אומדן שיצא פי 24 קטן 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>estimate(input)</code> ב־<code>28-system-design/starter/P28-E101.ts</code> עושה את חשבון ה"גב של המעטפה" מהשיעור. הקלט: ‏<code>{ dau, actionsPerUser, peakFactor, bytesPerAction, retentionDays }</code>. הפלט, כל ערך מעוגל לספרה אחת:</p>
+<ul><li><code>avgRps</code> — פעולות ביום חלקי שניות ביום.</li><li><code>peakRps</code> — ‏<code>avgRps × peakFactor</code>.</li><li><code>storageGB</code> — כל הפעולות בכל ימי השמירה, בבתים, חלקי 10<sup>9</sup>.</li></ul>
+<p>המהנדסת שבדקה את המסמך ראתה שה־RPS יצא גבוה מאוד, ושהאחסון יצא נמוך מאוד. בדיקה ביד: ‏1,000,000 משתמשים × 20 פעולות ← כ־231 RPS בממוצע, לא 5,556. מצא ותקן שלוש תקלות.</p>
+```term
+% npm run check P28-E101
+```
+@hint1
+<p>כמה שניות יש ביום? ובאחסון: כמה ימים נכנסים לחשבון, ומה היחידה?</p>
+@hint2
+<p>86,400, לא 3,600. ‏GB הוא 10<sup>9</sup> בתים, לא 10<sup>6</sup>. ו־<code>retentionDays</code> צריך להופיע בנוסחה.</p>
+@solution
+```ts save=solutions/P28-E101.ts
+// P28-E101: אומדן גב־המעטפה — מתוקן
+const round1 = (x: number) => Math.round(x * 10) / 10;
+
+export function estimate({ dau, actionsPerUser, peakFactor, bytesPerAction, retentionDays }: { dau: number; actionsPerUser: number; peakFactor: number; bytesPerAction: number; retentionDays: number }) {
+  const perDay = dau * actionsPerUser;
+  const avg = perDay / 86_400;
+  return {
+    avgRps: round1(avg),
+    peakRps: round1(avg * peakFactor),
+    storageGB: round1((perDay * bytesPerAction * retentionDays) / 1e9),
+  };
+}
+```
+<ol><li><strong>‏<code>/ 3600</code></strong> הוא שעה, לא יום. התוצאה גבוהה פי 24. ביום יש 86,400 שניות (בשיעור: "כ־100 אלף" לחשבון בראש).</li><li><strong>‏<code>/ 1e6</code></strong> הוא MB. ‏GB הוא 10<sup>9</sup> (בחשבון כזה עובדים בעשרות, לא ב־1024).</li><li><strong>‏<code>retentionDays</code> לא נכנס.</strong> האחסון של יום אחד הוא לא האחסון של שנה. ‏× ימי השמירה.</li></ol>
+@mistakes
+<ul><li>לעגל את <code>avgRps</code> ואז להכפיל ב־<code>peakFactor</code>. העיגול מתנפח: 0.04 הופך ל־0, וכל השיא יוצא 0.</li><li>לחשב שיא כ־<code>avg + peakFactor</code>. מקדם שיא הוא כפל.</li><li>לבלבל בין "פעולות ביום" ל"משתמשים ביום". כל משתמש עושה כמה פעולות.</li></ul>
+
+@@ P28-E102 | 4 | פיד עם כפילויות 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>בפיד של חנות הקפה (fan-out on read), הפיד של משתמש נבנה מכמה רשימות: הפוסטים של כל חנות שהוא עוקב אחריה, כל רשימה כבר ממוינת מהחדש לישן. ‏<code>mergeFeeds(lists, limit)</code> ב־<code>28-system-design/starter/P28-E102.ts</code> מחזירה את <code>limit</code> הפוסטים החדשים ביותר מכל הרשימות:</p>
+<ul><li>מהחדש לישן (<code>createdAt</code> יורד, ובתיקו <code>id</code> יורד).</li><li>פוסט שמופיע בשתי רשימות (שיתוף משותף של שתי חנויות) — פעם אחת.</li><li>בדיוק <code>limit</code> פוסטים (או פחות, אם אין מספיק). את הרשימות לא משנים.</li></ul>
+<p>התלונות: הפיד מתחיל מהפוסטים הישנים; פוסטים משותפים מופיעים פעמיים; ובכל עמוד יש פוסט אחד יותר מהמבוקש. מצא ותקן.</p>
+```term
+% npm run check P28-E102
+```
+@hint1
+<p>בדוק את פונקציית המיון: מה היא מחזירה כש־<code>a</code> חדש מ־<code>b</code>? ומה ‏<code>slice(0, limit + 1)</code> מחזיר?</p>
+@hint2
+<p>‏<code>Set</code> של ids שכבר נוספו. ומיון יורד: <code>b.createdAt.localeCompare(a.createdAt) || b.id - a.id</code>.</p>
+@solution
+```ts save=solutions/P28-E102.ts
+// P28-E102: מיזוג פידים — מתוקן
+export type Post = { id: number; createdAt: string; shop: string };
+
+export function mergeFeeds(lists: Post[][], limit: number): Post[] {
+  const all = lists.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+  const seen = new Set<number>();
+  const out: Post[] = [];
+  for (const p of all) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+    if (out.length === limit) break;
+  }
+  return out;
+}
+```
+<ol><li><strong>מיון עולה.</strong> ‏<code>a.createdAt.localeCompare(b.createdAt)</code> מסדר מהישן לחדש. בפיד רוצים הפוך: <code>b</code> לפני <code>a</code>. ‏<code>id</code> שובר תיקו, כדי שהסדר לא יקפוץ בין טעינות.</li><li><strong>בלי סינון כפילויות.</strong> פוסט משותף נמצא ברשימה של כל חנות. ‏<code>Set</code> של ids.</li><li><strong>‏<code>slice(0, limit + 1)</code></strong> החזיר פוסט אחד יותר. וחשוב: מסננים כפילויות <em>לפני</em> שחותכים ל־limit, אחרת עמוד עם כפילות יוצא קצר.</li></ol>
+<p>(בקנה מידה, במקום לחבר הכול ולמיין, ממזגים את הרשימות הממוינות עם תור עדיפויות ועוצרים אחרי limit: O(limit · log k). הרעיון זהה.)</p>
+@mistakes
+<ul><li>לסנן כפילויות אחרי ה־<code>slice</code>. העמוד מקבל פחות מ־<code>limit</code> פוסטים.</li><li>למיין את אחת הרשימות במקום (<code>lists[0].sort(...)</code>). ‏<code>sort</code> משנה את המערך, והרשימה של החנות משתנה. ‏<code>flat()</code> יוצר מערך חדש, ולכן למיין אחריו בטוח.</li><li>להשוות תאריכים עם <code>-</code> בין מחרוזות. ‏<code>"2026-…" - "2026-…"</code> הוא <code>NaN</code>, והמיון לא עושה כלום.</li></ul>

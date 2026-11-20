@@ -2,9 +2,11 @@
 // ומשווה את התוצאה של קובץ ה־SQL שלך לפתרון לדוגמה — כמו tools/sql.mjs, אבל מול MySQL.
 // החיבור: COURSE_MYSQL_URL ב־.env של תיקיית הקורס (יחידה 25.5, קופסת 🧰)
 import fs from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
+import { assertSameRows, parseVariants } from "./rows.mjs";
 
 export const mysqlUrl = process.env.COURSE_MYSQL_URL || "mysql://root:course@localhost:3306";
 
@@ -86,4 +88,33 @@ export async function mysqlSandbox(t, testUrl, seed) {
     },
   };
   return db;
+}
+
+// הבודק הסטנדרטי לשאלות SQL ביחידה 25.5 (כמו sameAsSolution של tools/sql.mjs): מריץ את הקובץ שלך ואת הפתרון לדוגמה,
+// כל אחד ב־database נקי, על: (1) קובץ הנתונים כמו שהוא; (2) כל קטע ב־files/<seed>.variants.sql (נתונים נוספים ושינויים);
+// (3) changes: [["תיאור", "SQL"], ...]. אם יש הבדל — רמז (מה חסר / עודף / הסדר), בלי להציג את כל התשובה.
+export async function sameAsSolution(t, testUrl, file, { seed = "shop.sql", changes = [], variants = true } = {}) {
+  const solution = fs.readFileSync(chapterPath(testUrl, "solutions", file), "utf8");
+  const sets = [{ label: `על הנתונים של ${seed}`, sql: "" }];
+  const vfile = chapterPath(testUrl, "files", seed.replace(/\.sql$/, ".variants.sql"));
+  if (variants && fs.existsSync(vfile)) {
+    const vs = parseVariants(fs.readFileSync(vfile, "utf8"));
+    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql }));
+  }
+  for (const [label, sql] of changes) sets.push({ label, sql });
+  for (const set of sets) {
+    const mine = await mysqlSandbox(t, testUrl, seed);
+    if (set.sql) await mine.query(set.sql);
+    let got;
+    try {
+      got = await mine.runFile(file);
+    } catch (err) {
+      if (!set.sql) throw err;
+      assert.fail(`${set.label}: השאילתה שלך נכשלה — ${err.message}`);
+    }
+    const ref = await mysqlSandbox(t, testUrl, seed);
+    if (set.sql) await ref.query(set.sql);
+    const [result, fields] = await ref.conn.query(solution);
+    assertSameRows(got, lastResult(result, fields), set.label);
+  }
 }

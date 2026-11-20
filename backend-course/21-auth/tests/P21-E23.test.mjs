@@ -25,3 +25,10 @@ test("תוקף של 7 ימים — לא 10 דקות", () => {
   clock.now = new Date("2026-11-12T09:59:00Z");
   assert.equal(s.rotate(refreshToken).userId, 1, "6 ימים ו־23 שעות אחרי");
 });
+test("בדיוק 7 ימים — כבר פג", () => {
+  const clock = { now: new Date("2026-11-04T10:00:00Z") };
+  const s = new RefreshTokenService({ now: () => clock.now });
+  const t1 = s.issue(1);
+  clock.now = new Date("2026-11-11T10:00:00Z");
+  assert.throws(() => s.rotate(t1));
+});

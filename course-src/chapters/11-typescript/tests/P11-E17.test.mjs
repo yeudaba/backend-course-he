@@ -12,6 +12,10 @@ test("parseAge", () => {
   assert.deepEqual(parseAge(""), { ok: false, error: "לא מספר" });
   assert.deepEqual(parseAge("2.5"), { ok: false, error: "לא מספר" });
   assert.deepEqual(parseAge("500"), { ok: false, error: "מחוץ לטווח" });
+  assert.deepEqual(parseAge("0"), { ok: true, value: 0 }, "0 בתוך הטווח 0–120");
+  assert.deepEqual(parseAge("120"), { ok: true, value: 120 }, "120 בתוך הטווח 0–120");
+  assert.deepEqual(parseAge("121"), { ok: false, error: "מחוץ לטווח" });
+  assert.deepEqual(parseAge("-1"), { ok: false, error: "מחוץ לטווח" });
 });
 test("sumResults", () => {
   assert.deepEqual(sumResults([ok(1), ok(2)]), { ok: true, value: 3 });

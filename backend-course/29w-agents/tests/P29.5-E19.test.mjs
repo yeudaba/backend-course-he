@@ -36,3 +36,15 @@ test("generator עצל: לא קורא למודל לפני שמבקשים איר�
   await gen.next();
   assert.equal(requests.length, 1);
 });
+test("maxSteps — בדיוק maxSteps קריאות, ואז אירוע error", async () => {
+  const { client, bodies } = fakeClaude(() => message([toolUse("a", {})], { stop_reason: "tool_use" }));
+  const tools = { a: { definition: def("a"), run: async () => "A" } };
+  const events = await collect(agentEvents(client, { system: "s", tools, prompt: "go", maxSteps: 3 }));
+  assert.equal(bodies().length, 3);
+  assert.equal(events.at(-1).type, "error");
+});
+test("כלי שלא קיים ← tool_end עם isError", async () => {
+  const { client } = fakeClaude((b, i) => (i === 0 ? message([toolUse("ghost", {}, "g1")], { stop_reason: "tool_use" }) : message("ok")));
+  const events = await collect(agentEvents(client, { system: "s", tools: {}, prompt: "go" }));
+  assert.deepEqual(events.find((e) => e.type === "tool_end"), { type: "tool_end", id: "g1", name: "ghost", isError: true });
+});

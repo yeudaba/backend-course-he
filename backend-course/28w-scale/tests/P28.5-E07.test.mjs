@@ -44,3 +44,10 @@ test("merge של שני שרתים = histogram של כל הדגימות; ממו�
   assert.ok(Math.abs(avgOfP99 - truth) / truth > 0.3, "בדיקת שפיות: ממוצע של p99 רחוק מהאמת");
   assert.equal(a.total, 9000, "merge לא משנה את המקור");
 });
+test("merge של היסטוגרמות עם אותם דליים — מחברים ספירות", () => {
+  const a = createHistogram(), b = createHistogram();
+  for (let i = 0; i < 5; i++) { record(a, 10); record(b, 10); }
+  const m = merge(a, b);
+  assert.equal(m.total, 10);
+  assert.equal(m.counts.reduce((s, c) => s + (c ?? 0), 0), 10, "כל דלי — סכום הספירות של שתיהן");
+});

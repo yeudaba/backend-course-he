@@ -17,4 +17,9 @@ test("תוקף לפי CLOCK", async (t) => {
   clock.now = new Date("2026-11-04T10:15:00Z");
   await assert.rejects(tokens.verify(token), (err) => err.getStatus?.() === 401 && err.message === "פג תוקף הטוקן");
   await assert.rejects(tokens.verify("abc"), (err) => err.getStatus?.() === 401 && err.message === "טוקן לא תקין");
+  // טוקן מזויף: payload אחר (sub: 1) עם החתימה של הטוקן המקורי
+  clock.now = new Date("2026-11-04T10:05:00Z");
+  const [h, p, sig] = token.split(".");
+  const forged = [h, Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(p, "base64url").toString()), sub: 1 })).toString("base64url"), sig].join(".");
+  await assert.rejects(tokens.verify(forged), (err) => err.getStatus?.() === 401 && err.message === "טוקן לא תקין", "טוקן שה־payload שלו שונה — החתימה לא מתאימה. verify (ולא decode) בודק חתימה");
 });

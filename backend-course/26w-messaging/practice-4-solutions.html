@@ -50,9 +50,12 @@ order-2 paid     → partition 2, offset 2
 order-1 shipped  → partition 1, offset 2</pre>
 <ol><li><strong>כן.</strong> אותו key ← אותו partition, וה־offsets שלו עולים לפי סדר השליחה. consumer קורא partition לפי הסדר.</li><li><strong>לא מובטח.</strong> אם הם ב־partitions שונים — כל partition נקרא בקצב משלו, אולי ע״י consumers שונים. וזה בסדר: אין קשר סיבתי בין הזמנות שונות. אם יש — צריך key משותף.</li><li><strong>3.</strong> כל partition ל־consumer אחד; שניים נשארים בלי עבודה (standby למקרה שאחד נופל). מספר ה־partitions הוא תקרת המקביליות של group — לכן בוחרים אותו מראש עם מרווח.</li></ol>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב שהסדר נשמר בין הזמנות שונות. הסדר מובטח רק בתוך partition, והזמנות עם key שונה יכולות להגיע לפי סדר אחר.</li><li>לחשוב ש־5 consumers מחלקים ביניהם 3 partitions "בחצאים". כל partition שייך ל־consumer אחד, ולכן שניים יישבו בטלים.</li><li>לצפות ש־<code>order-1</code> ו־<code>order-2</code> יגיעו בהכרח ל־partitions שונים. ה־hash יכול לשים שני keys באותו partition.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E77">
     <h3>P26.5-E77 · הוספנו partitions — מה קרה לסדר? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
@@ -189,9 +192,12 @@ export async function publishOrderEvents(producer: Producer&lt;string, string, s
 }</code></pre>
 <p>ובקוד קיים תפגוש את <strong>KafkaJS</strong> — הספרייה הנפוצה ביותר ל־Node.js במשך שנים (<code class="mid">producer.send({ topic, messages })</code>, <code class="mid">consumer.run({ eachMessage })</code>), שלא קיבלה עדכון מאז 2023. הרעיונות זהים; ה־API שונה מעט.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לקרוא ל־<code>send</code> בלולאה, פעם לכל אירוע. זה עובד, אבל כל קריאה היא סבב רשת. התרגיל מבקש קריאה אחת.</li><li><code>key: e.orderId</code> כמספר. ה־serializer הוא של מחרוזות, ולכן <code>String(e.orderId)</code>.</li><li>לשכוח את ה־key לגמרי. אז האירועים של אותה הזמנה מתפזרים בין partitions, והסדר ביניהם אובד.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E14">
     <h3>P26.5-E14 · commit אחרי טיפול 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -240,9 +246,12 @@ export async function consumeAndCommit(
 }</code></pre>
 <p>commit אחרי כל הודעה הוא הכי בטוח, ולא הכי מהיר: בנפח גבוה עושים commit כל N הודעות או כל שנייה (autocommit עם מרווח) — ומקבלים שאחרי קריסה כמה הודעות יטופלו שוב. שוב: consumer אידמפוטנטי.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>autocommit: true</code>. ה־offset נשמר גם כשה־handler זורק, וההודעה אובדת.</li><li>commit לפני ה־handler. זה at-most-once: נפילה באמצע הטיפול מדלגת על ההודעה.</li><li>לסגור את ה־consumer רק במסלול ההצלחה. בלי <code>finally</code>, שגיאה משאירה חיבור פתוח, והבדיקה (והתהליך) נתקעים.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E19">
     <h3>P26.5-E19 · consumer lag 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -287,9 +296,12 @@ export function isFallingBehind(samples: number[], { window = 3 } = {}): boolean
 }</code></pre>
 <p>lag גבוה אחרי deploy זה טבעי (consumer עלה ומדביק פער). lag ש<em>עולה</em> כל הזמן — הצרכנים איטיים מהקצב: מוסיפים consumers (עד מספר ה־partitions), או מגלים שה־handler איטי (שאילתה בלי אינדקס, קריאת API בכל הודעה).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להתייחס ל־<code>-1</code> (אין commit) כמספר. <code>end − (−1)</code> נותן lag גדול באחד מהאמת. בלי commit מחשבים מ־<code>earliest</code>.</li><li><code>isFallingBehind</code> שבודק רק את הדגימה הראשונה מול האחרונה. lag שעלה וירד באמצע ייחשב בטעות כעלייה.</li><li>להשתמש במפתחות של <code>Object.entries</code> כמספרים בלי <code>Number(p)</code>. הם מחרוזות.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P26.5-E22">
     <h3>P26.5-E22 · סטטוסים ב־Kafka — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
@@ -338,9 +350,12 @@ export async function syncStatuses(
   return n;
 }</code></pre>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לשלוח בלי key, או עם key קבוע לכל ההודעות. בלי key אין סדר בין עדכונים של אותה הזמנה. key קבוע שם את כל התנועה ב־partition אחד.</li><li>commit לפני <code>save</code>. כשהמסד נופל, ה־offset כבר התקדם, והעדכון אבד.</li><li><code>fallbackMode: LATEST</code>. group חדש רואה רק הודעות שנשלחו אחרי שעלה, ולא את ההיסטוריה.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex typed" id="P26.5-E26">
     <h3>P26.5-E26 · להחזיר סדר להודעות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>

@@ -80,6 +80,7 @@ test("משימות במסד — עם owner_id", async (t) => {
   const owners = await db.rows("SELECT t.title, u.email FROM tasks t JOIN users u ON u.id = t.owner_id ORDER BY t.id");
   assert.deepEqual(owners.map((r) => r.email), ["dana@example.com", "dana@example.com", "yossi@example.com"]);
   assert.deepEqual((await yossi("GET", "/tasks")).body.meta.total, 1);
+  assert.equal((await yossi("GET", "/tasks/1")).status, 404, "GET של משימה של משתמש אחר ← 404 (גם ב־Prisma repository)");
   assert.equal((await yossi("PATCH", "/tasks/1", { title: "נפרץ" })).status, 404);
   assert.equal((await yossi("DELETE", "/tasks/1")).status, 404);
   assert.equal((await db.rows("SELECT title FROM tasks WHERE id = 1"))[0].title, "של דנה", "לא השתנה במסד");

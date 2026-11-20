@@ -8,7 +8,7 @@ export default {
   checker: true,
   testTimeout: 900000, // PR2-DOCKER בונה ומריץ את כל המערכת ב־docker compose
   time: "5 מפגשים",
-  expectedExercises: 100,
+  expectedExercises: 102,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24, VS Code, ופרויקט 2 בשלב ה׳.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>

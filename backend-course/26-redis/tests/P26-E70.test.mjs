@@ -23,7 +23,10 @@ test("תפוס עד הסוף ← LOCKED, אחרי retries ניסיונות", asy
   await raw.set(`${prefix}lock:x`, "someone-else", "PX", 5000);
   let ran = false;
   const start = Date.now();
-  await assert.rejects(withLockRetry(redis, "x", 1000, async () => { ran = true; }, { retries: 3, delayMs: 40 }), { message: "LOCKED" });
+  let attempts = 0;
+  const counting = new Proxy(redis, { get: (target, k) => (k === "set" ? (...a) => (attempts++, target.set(...a)) : typeof target[k] === "function" ? target[k].bind(target) : target[k]) });
+  await assert.rejects(withLockRetry(counting, "x", 1000, async () => { ran = true; }, { retries: 3, delayMs: 40 }), { message: "LOCKED" });
+  assert.equal(attempts, 4, "ניסיון ראשון + 3 חוזרים");
   const took = Date.now() - start;
   assert.ok(took >= 110 && took < 1000, `3 המתנות של 40ms (${took}ms)`);
   assert.equal(ran, false);

@@ -5,8 +5,9 @@ export default {
   code: "09",
   title: "Git ו־GitHub",
   part: "חטיבה א׳ — יסודות JavaScript",
+  checker: true,
   time: "4 מפגשים",
-  expectedExercises: 80,
+  expectedExercises: 81,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <div class="table-wrap"><table>
@@ -22,7 +23,7 @@ export default {
 <span class="prompt">% </span>git config --global init.defaultBranch main
 <span class="prompt">% </span>git config --global core.editor "code --wait"</pre>
 <p>(השורה האחרונה: כש־Git צריך שתכתוב טקסט ארוך, הוא יפתח את VS Code.)</p>
-<p><strong>בודק אוטומטי:</strong> רוב התרגילים בפרק נעשים ב־Terminal, ובודקים אותם בעיניים (<code>git log</code>, ‏<code>git status</code>). לשלושת תרגולי הכתיבה שבראש דף התרגילים (E26–E28) יש בודק, כמו בפרקים 1–8: <code>npm run check P09-E26</code>. ב־E26 הבודק מריץ את סקריפט ה־Git שלך בתיקייה זמנית ריקה, עם שם ואימייל של בדיקה — ההגדרות שלך לא משתנות.</p>
+<p><strong>בודק אוטומטי:</strong> בשאלות שמסומנות 🤖 יש בודק, כמו בפרקים 1–8: כותבים בקובץ ההתחלה ומריצים <code>npm run check</code> עם מזהה השאלה, למשל <code>npm run check P09-E26</code>. בשאלות שבהן כותבים סקריפט Git, הבודק מריץ אותו בתיקייה זמנית ריקה, עם שם ואימייל של בדיקה — ההגדרות שלך לא משתנות. התרגילים בלי 🤖 נעשים ישירות ב־Terminal, ובודקים אותם בעיניים (<code>git log</code>, ‏<code>git status</code>).</p>
 ${copyStep("09-git")}
 <p><strong>✔ בדיקה:</strong> <code>git --version</code> מציג גרסה 2.x, ו־<code>git config --global user.name</code> מציג את השם שלך.</p>`,
   goals: [

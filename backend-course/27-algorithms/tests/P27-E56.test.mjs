@@ -15,6 +15,7 @@ test("added, removed, changed", () => {
   });
   assert.deepEqual(diffObjects({ b: 1, a: [1, 2] }, { a: [2, 1] }), { added: [], removed: ["b"], changed: [{ key: "a", from: [1, 2], to: [2, 1] }] });
   assert.deepEqual(diffObjects({}, {}), { added: [], removed: [], changed: [] });
+  assert.deepEqual(diffObjects({ z: 1, m: 2, a: 3 }, {}).removed, ["a", "m", "z"], "removed — ממוין לפי שם המפתח");
   assert.deepEqual(diffObjects({ toString: 1 }, {}).removed, ["toString"], "רק מפתחות של האובייקט עצמו");
   assert.deepEqual(diffObjects({}, { toString: 1 }).added, ["toString"]);
 });

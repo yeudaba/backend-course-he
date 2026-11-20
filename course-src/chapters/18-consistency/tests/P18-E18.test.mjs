@@ -23,5 +23,7 @@ test("keyset pagination", async (t) => {
   assert.equal(last.nextCursor, null);
   assert.deepEqual(await listOrders(pool, { after: 200000 }), { data: [], nextCursor: null });
   await assert.rejects(listOrders(pool, { limit: 0 }), RangeError);
+  assert.deepEqual((await listOrders(pool, { limit: 1 })).data.map((o) => o.id), [1], "limit 1 — מותר");
+  assert.equal((await listOrders(pool, { limit: 100 })).data.length, 100, "limit 100 — מותר");
   await assert.rejects(listOrders(pool, { limit: 101 }), RangeError);
 });

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load, listen, api } from "../../tools/load.mjs";
 
-const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts");
+const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts", { step: "שלב 2", exports: "createApp" });
 async function start(t, options) {
   const { base, close } = await listen(createApp({ now: () => new Date("2026-11-04T10:00:00.000Z"), ...options }));
   t.after(close);

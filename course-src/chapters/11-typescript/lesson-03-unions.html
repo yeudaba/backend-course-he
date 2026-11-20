@@ -5,6 +5,7 @@
       <li>literal types — רשימה סגורה של ערכים מותרים.</li>
       <li>narrowing — איך TypeScript "מבין" את הטיפוס אחרי בדיקה.</li>
       <li>discriminated unions ו־`never` — לא לשכוח אף מקרה.</li>
+      <li>`keyof` ו־`T[K]` — שמות השדות של טיפוס כ־union, והטיפוס של שדה אחד.</li>
     </ul>
   </div>
 
@@ -104,6 +105,115 @@ function fee(p: Payment): number {
 snippet.ts(13,13): error TS2322: Type '{ method: "bit"; phone: string; }' is not assignable to type 'never'.
 ```
   <p>מישהו הוסיף "bit" לטיפוס — ו־TypeScript מראה בדיוק איפה הקוד לא מטפל בו. `never` = "טיפוס שאין לו אף ערך"; אם הגענו לשם עם ערך — שכחנו מקרה. דפוס חזק מאוד בקוד עסקי.</p>
+
+  <h2>5. `keyof` ו־`T[K]`: טיפוסים מתוך טיפוסים</h2>
+  <p>בפרק 7 קראת שדה ששמו במשתנה: `product[key]`. ב־TypeScript זה נתקע:</p>
+```ts tsc
+type Product = { id: number; name: string; price: number };
+
+function getField(p: Product, key: string) {
+  return p[key];
+}
+```
+```out
+snippet.ts(4,10): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Product'.
+  No index signature with a parameter of type 'string' was found on type 'Product'.
+```
+  <p>`key` הוא "כל מחרוזת", ו־TypeScript לא יכול לדעת מה יחזור עבור `"color"`. מה שחסר הוא טיפוס שאומר "אחד משמות השדות של `Product`". הוא כבר קיים, ושמו `keyof Product`:</p>
+```ts tsc
+type Product = { id: number; name: string; price: number };
+
+type ProductKey = keyof Product;
+const ok: ProductKey = "price";
+const typo: ProductKey = "prise";
+
+type Price = Product["price"];
+const p: Price = "200";
+```
+```out
+snippet.ts(5,7): error TS2820: Type '"prise"' is not assignable to type 'keyof Product'. Did you mean '"price"'?
+snippet.ts(8,7): error TS2322: Type 'string' is not assignable to type 'number'.
+```
+  <ul>
+    <li>`keyof Product` הוא union של literal types (סעיף 3): `"id" | "name" | "price"`. הוא נבנה מהטיפוס, ולכן שדה חדש ב־`Product` נכנס אליו לבד.</li>
+    <li>`Product["price"]` (indexed access) הוא <strong>הטיפוס</strong> של השדה: `number`.</li>
+  </ul>
+  <p>יחד עם generics (שיעור 2) מקבלים פונקציה שיודעת בדיוק מה היא מחזירה:</p>
+```ts tsc
+type Product = { id: number; name: string; price: number };
+
+function getField<K extends keyof Product>(p: Product, key: K): Product[K] {
+  return p[key];
+}
+
+const keyboard: Product = { id: 1, name: "מקלדת", price: 200 };
+const price: number = getField(keyboard, "price");
+const title: string = getField(keyboard, "name");
+const wrong: string = getField(keyboard, "price");
+getField(keyboard, "color");
+```
+```out
+snippet.ts(10,7): error TS2322: Type 'number' is not assignable to type 'string'.
+snippet.ts(11,20): error TS2345: Argument of type '"color"' is not assignable to parameter of type 'keyof Product'.
+```
+  <p>שתי שגיאות, בדיוק איפה שצריך: ב־`wrong` (המחיר הוא `number`, לא `string`), וב־`"color"`. ‏`K extends keyof Product` = "`K` הוא אחד משמות השדות". בקריאה עם `"price"`, ‏`K` הוא `"price"`, והתוצאה `Product["price"]`, כלומר `number`. ואפשר להחליף גם את `Product` בפרמטר, ואז הפונקציה עובדת על כל אובייקט:</p>
+```ts run
+function pluck<T, K extends keyof T>(items: T[], key: K): T[K][] {
+  return items.map((item) => item[key]);
+}
+
+const products = [
+  { id: 1, name: "מקלדת", price: 200 },
+  { id: 2, name: "עכבר", price: 90 },
+];
+const prices = pluck(products, "price");
+console.log(prices, prices.reduce((s, n) => s + n, 0));
+console.log(pluck(products, "name"));
+```
+```out
+[ 200, 90 ] 290
+[ 'מקלדת', 'עכבר' ]
+```
+
+  <h3>`keyof typeof`: שמות מתוך אובייקט קיים</h3>
+  <p>לפעמים אין `type`, יש אובייקט רגיל, למשל טבלת המרה. `typeof` (בתוך טיפוס) לוקח את הטיפוס של משתנה, ו־`keyof` את שמות השדות שלו:</p>
+```ts tsc
+const UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000 };
+type Unit = keyof typeof UNIT_MS;
+
+function toMs(amount: number, unit: Unit): number {
+  return amount * UNIT_MS[unit];
+}
+
+toMs(2, "h");
+toMs(2, "d");
+```
+```out
+snippet.ts(9,9): error TS2345: Argument of type '"d"' is not assignable to parameter of type '"s" | "m" | "h"'.
+```
+  <p>הוספת `d: 86_400_000` לאובייקט מוסיפה את `"d"` לטיפוס לבד. רשימה אחת, בלי להעתיק את השמות ל־union נפרד.</p>
+
+  <h3>הצצה: לבנות טיפוס חדש מכל השדות</h3>
+  <p>`[K in keyof T]` עובר על כל השדות של טיפוס ובונה טיפוס חדש עם אותם שמות. כך בנויים `Partial` ו־`Record` שתכיר ב־P11-E26:</p>
+```ts tsc
+type Product = { id: number; name: string; price: number };
+type Flags<T> = { [K in keyof T]: boolean };
+
+const changed: Flags<Product> = { id: false, name: true, price: true };
+const missing: Flags<Product> = { id: false, name: true };
+```
+```out
+snippet.ts(5,7): error TS2741: Property 'price' is missing in type '{ id: false; name: true; }' but required in type 'Flags<Product>'.
+```
+
+  <div class="box warn">
+    <span class="box-title">⚠️ טעויות נפוצות עם keyof</span>
+    <ul>
+      <li><strong>`Object.keys` מחזיר `string[]`, לא `(keyof T)[]`.</strong> לולאה `for (const k of Object.keys(p)) p[k]` נותנת את אותה שגיאה `TS7053` כמו בתחילת הסעיף. TypeScript לא מניח שאין באובייקט שדות נוספים. כשאפשר, עוברים על רשימה מפורשת של שדות עם טיפוס `(keyof Product)[]`.</li>
+      <li><strong>`keyof` על משתנה:</strong> `keyof UNIT_MS` (בלי `typeof`) הוא שגיאה (`TS2749: 'UNIT_MS' refers to a value`), כי `keyof` עובד על טיפוסים ו־`UNIT_MS` הוא ערך. ההודעה אפילו מציעה את התיקון: `Did you mean 'typeof UNIT_MS'?`</li>
+      <li><strong>`keyof` הוא רק בזמן כתיבה.</strong> כמו כל טיפוס, הוא נמחק לפני ההרצה. מחרוזת שמגיעה מהמשתמש (`?sort=price`) צריך עדיין לבדוק בזמן ריצה, למשל עם `key in UNIT_MS` (סעיף 2), לפני שמשתמשים בה כשם שדה. ואיך "מספרים" ל־TypeScript שהבדיקה עברה? עם type guard, בשיעור 4.</li>
+    </ul>
+  </div>
 
   <div class="box practice">
     <span class="box-title">✍️ עכשיו בדף התרגילים</span>

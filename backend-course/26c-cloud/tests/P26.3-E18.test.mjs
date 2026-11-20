@@ -45,3 +45,7 @@ test("ה־requests נספרים, לא השמות: 500m + 500m + 1 = 2 ליבות
   assert.deepEqual(r.pending, []);
   assert.equal(r.free.n.cpu, 0);
 });
+test("זיכרון בדיוק כמו שנשאר — נכנס", () => {
+  const r = schedule([{ name: "n", cpu: "1", memory: "1Gi" }], [{ name: "exact", cpu: "500m", memory: "1Gi" }]);
+  assert.deepEqual(r.placements, { exact: "n" });
+});

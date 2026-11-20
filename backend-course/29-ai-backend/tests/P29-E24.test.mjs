@@ -32,6 +32,7 @@ test("החזר קטן ← טיוטה; refundLimitIls ניתן לשינוי", asy
   const mk = () => fakeClaude((b, i) => (i === 0 ? cls({ category: "refund", refund_amount_ils: 120, confidence: "medium" }) : message("טיוטה")));
   assert.equal((await triageTicket(mk().client, "x")).action, "draft");
   assert.equal((await triageTicket(mk().client, "x", { refundLimitIls: 100 })).reason, "refund_over_limit");
+  assert.equal((await triageTicket(mk().client, "x", { refundLimitIls: 120 })).action, "draft", "החזר ששווה בדיוק לתקרה — לא מעליה");
 });
 test("סיווג שנכשל או טיוטה חתוכה ← בן אדם; שגיאת API עולה", async () => {
   assert.equal((await triageTicket(fakeClaude(() => message("{bad", { stop_reason: "max_tokens" })).client, "x")).reason, "classification_failed");

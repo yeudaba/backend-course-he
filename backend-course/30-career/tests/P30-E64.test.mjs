@@ -41,3 +41,6 @@ test("בלי title, בלי אנשי קשר, בלי שם", () => {
   assert.deepEqual(parseCv(late).contacts, {}, "רק ב־10 השורות הראשונות");
   assert.throws(() => parseCv("## Skills\n- x"), Error);
 });
+test("בלי שורת שם ← שגיאה", () => {
+  assert.throws(() => parseCv("mail: dan@x.com\n## Skills\n- TS"));
+});

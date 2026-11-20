@@ -26,8 +26,8 @@ test("נדחות לא נספרות", async (t) => {
   clock.t += 30_000;
   await login();
   for (let i = 0; i < 10; i++) { clock.t += 1000; assert.equal((await login()).status, 429); }
-  clock.t = 1_000_000 + 60_001; // הראשונה יצאה מהחלון
-  assert.equal((await login()).status, 200, "מקום התפנה — למרות 10 ניסיונות שנדחו");
+  clock.t = 1_000_000 + 60_000; // בדיוק דקה אחרי הראשונה — היא כבר מחוץ לחלון
+  assert.equal((await login()).status, 200, "מקום התפנה — למרות 10 ניסיונות שנדחו (והראשונה יצאה בדיוק אחרי windowMs)");
 });
 test("Retry-After בשניות", async (t) => {
   const { login, clock } = await start(t);

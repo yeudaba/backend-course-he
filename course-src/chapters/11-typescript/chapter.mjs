@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ב׳ — TypeScript ו־Node.js",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 80,
+  expectedExercises: 85,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js 24+, הבודק האוטומטי.</p>
 <p><strong>מה מתקינים עכשיו: TypeScript</strong> — בתוך תיקיית הקורס, לא כתוכנה במחשב.</p>
 <ol class="steps">
@@ -27,6 +27,7 @@ ${copyStep("11-typescript")}
     "לתת טיפוסים למשתנים, פרמטרים, ערכי החזרה, מערכים ואובייקטים.",
     "להגדיר טיפוסים עם `type` ו־`interface`, כולל שדות אופציונליים ו־`readonly`.",
     "להשתמש ב־union ו־literal types, ולצמצם טיפוסים (narrowing).",
+    "לגזור טיפוסים מטיפוסים עם `keyof`, `T[K]` ו־`keyof typeof`, ולכתוב פונקציה generic שמקבלת שם של שדה.",
     "לעבוד נכון עם `unknown` במקום `any`, ולכתוב type guards.",
   ],
   intro: `<h2>🤔 למה צריך את זה?</h2>
@@ -34,7 +35,7 @@ ${copyStep("11-typescript")}
   lessons: [
     { file: "lesson-01-basics.html", title: "מה זה TypeScript, וטיפוסים בסיסיים", minutes: 35 },
     { file: "lesson-02-objects-functions.html", title: "אובייקטים, מערכים ופונקציות", minutes: 40 },
-    { file: "lesson-03-unions.html", title: "union, literal types ו־narrowing", minutes: 40 },
+    { file: "lesson-03-unions.html", title: "union, literal types, narrowing ו־keyof", minutes: 55 },
     { file: "lesson-04-unknown.html", title: "unknown, any ו־type guards", minutes: 30 },
   ],
   glossary: [
@@ -49,6 +50,8 @@ ${copyStep("11-typescript")}
     ["Literal type", "לִיטֶרַל", "טיפוס של ערך מדויק: `\"paid\" | \"pending\"`"],
     ["Narrowing", "נָרוֹאִינְג", "צמצום טיפוס בעזרת בדיקה (`typeof`, `===`, `in`)"],
     ["Discriminated union", "דִיסְקְרִימִינֵייטֶד", "union של אובייקטים עם שדה משותף שמבחין ביניהם"],
+    ["keyof", "קִי־אוֹף", "union של שמות השדות של טיפוס: `keyof Product` ← `\"id\" | \"name\" | \"price\"`"],
+    ["Indexed access type", "אִינְדֶקְסְט אָקְסֶס", "הטיפוס של שדה אחד: `Product[\"price\"]` ← `number`"],
     ["any", "אֶנִי", "\"כבה את הבדיקה\" — מסוכן"],
     ["unknown", "אַנְנוֹאוּן", "\"לא ידוע\" — חייב לבדוק לפני שימוש"],
     ["Type guard", "גַארְד", "פונקציה שמוכיחה ל־TypeScript מה הטיפוס: `x is User`"],
@@ -57,6 +60,7 @@ ${copyStep("11-typescript")}
   passTest: `<ul class="check">
 <li>להמיר קובץ JavaScript מפרק 7 ל־TypeScript עם טיפוסים מלאים ובלי <code>any</code>, כך ש־<code>npx tsc --noEmit</code> עובר.</li>
 <li>להגדיר discriminated union לסטטוס הזמנה ולכתוב פונקציה שמטפלת בכל המקרים — כך ששכחה של מקרה תיתן שגיאת טיפוסים.</li>
+<li>לכתוב <code>getField&lt;K extends keyof T&gt;(obj: T, key: K): T[K]</code> ולהסביר למה <code>obj[key]</code> עם <code>key: string</code> לא עובר.</li>
 <li>לקבל <code>unknown</code> (למשל מ־<code>JSON.parse</code>) ולהוכיח עם type guard שזה אובייקט מהצורה הנכונה.</li>
 <li>להסביר למה TypeScript לא מגן על קלט שמגיע מהרשת בזמן ריצה.</li>
 <li><code>npm run check P11</code>: 80% מ־E06–E19, ולפחות תרגיל תיקון אחד.</li>

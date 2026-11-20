@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 
 test("כפילויות לפי email מנורמל", async (t) => {
   const db = await sandbox(t, import.meta.url, "interview.sql");
@@ -11,4 +11,7 @@ test("כפילויות לפי email מנורמל", async (t) => {
   await db.query("INSERT INTO customers (name, email, city) VALUES ('x', 'Noa@Example.com ', 'Eilat'), ('y', 'unique@example.com', 'Eilat')");
   const rows = await db.fileRows("P27-E43.sql");
   assert.deepEqual(rows.map((r) => [r.email, r.copies]), [["avi@example.com", 2], ["dana@example.com", 2], ["noa@example.com", 2]]);
+});
+test("נתונים נסתרים (והשורות בסדר פיזי אחר)", async (t) => {
+  await sameAsSolution(t, import.meta.url, "P27-E43.sql", { seed: "interview.sql", base: false });
 });

@@ -29,3 +29,8 @@ test("ממיין מספרים, לא מחרוזות", () => {
 test("ריק", () => {
   assert.deepEqual(verdict([], T), { count: 0, p50: 0, p99: 0, errorRate: 0, pass: false, reasons: ["no results"] });
 });
+test("500 בדיוק — שגיאה", () => {
+  const results = Array.from({ length: 999 }, () => ({ ms: 10, status: 200 }));
+  results.push({ ms: 10, status: 500 });
+  assert.equal(verdict(results, T).errorRate, 1 / 1000);
+});

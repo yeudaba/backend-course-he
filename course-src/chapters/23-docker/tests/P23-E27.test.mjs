@@ -22,6 +22,7 @@ test("מירכאות כפולות, בודדות, והערה בסוף השורה"
   assert.deepEqual(parseEnv("A=a#b"), { A: "a#b" }, "# בלי רווח לפניו הוא חלק מהערך (סיסמה)");
   assert.deepEqual(parseEnv('A="a # b"'), { A: "a # b" }, "בתוך מירכאות # הוא לא הערה");
   assert.deepEqual(parseEnv("EMPTY=\nQ=\""), { EMPTY: "", Q: '"' }, "ערך ריק, ומירכה בודדת שאינה סגורה");
+  assert.deepEqual(parseEnv("A=''\nB=\"\""), { A: "", B: "" }, "מירכאות ריקות ← ערך ריק");
 });
 test("שם שחוזר — האחרון קובע", async () => {
   const parseEnv = await get();

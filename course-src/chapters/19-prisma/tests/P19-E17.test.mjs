@@ -18,3 +18,13 @@ test("cursor", async (t) => {
   assert.equal((await listOrders(prisma, { after: 7, limit: 5 })).nextCursor, null, "בדיוק 5 נשארו");
   assert.equal((await listOrders(prisma)).data.length, 5);
 });
+test("cursor לפי id, לא לפי מיקום (אחרי מחיקה המזהים לא רציפים)", async (t) => {
+  const { prisma } = await shop(t, import.meta.url);
+  await prisma.$executeRawUnsafe("DELETE FROM order_items WHERE order_id IN (3, 4)");
+  await prisma.$executeRawUnsafe("DELETE FROM orders WHERE id IN (3, 4)");
+  const a = await listOrders(prisma, { limit: 3 });
+  assert.deepEqual(a.data.map((o) => o.id), [1, 2, 5]);
+  assert.equal(a.nextCursor, 5);
+  const b = await listOrders(prisma, { after: 5, limit: 3 });
+  assert.deepEqual(b.data.map((o) => o.id), [6, 7, 8], "אחרי 5 באות 6, 7, 8 — skip לפי מספר שורות היה מדלג/חוזר");
+});

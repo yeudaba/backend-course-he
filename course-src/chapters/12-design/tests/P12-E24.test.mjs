@@ -11,6 +11,15 @@ function setup() {
   return { store, svc: new TransferService(repo) };
 }
 test("העברה באגורות", async () => { const { store, svc } = setup(); const r = await svc.transfer({ from: "a", to: "b", amount: 19.9, idempotencyKey: "k" }); assert.deepEqual(r, { transferId: 1, fromBalance: 80.1, toBalance: 19.9 }); assert.equal(store.get("a").balanceAgorot, 8010); });
+test("סכומים שלא מתעגלים במקרה (1.15, ‏1.13) — חישוב באגורות שלמות", async () => {
+  const { store, svc } = setup();
+  await svc.transfer({ from: "a", to: "b", amount: 1.15, idempotencyKey: "x1" });
+  const r = await svc.transfer({ from: "b", to: "a", amount: 1.13, idempotencyKey: "x2" });
+  assert.equal(store.get("b").balanceAgorot, 2, "1.15 - 1.13 = 0.02 ש״ח = 2 אגורות");
+  assert.equal(store.get("a").balanceAgorot, 9998);
+  for (const w of store.values()) assert.ok(Number.isInteger(w.balanceAgorot), `balanceAgorot חייב להיות מספר שלם (קיבלנו ${w.balanceAgorot}) — המר לאגורות עם Math.round(amount * 100)`);
+  assert.equal(r.fromBalance, 0.02);
+});
 test("idempotency", async () => {
   const { store, svc } = setup();
   const r1 = await svc.transfer({ from: "a", to: "b", amount: 60, idempotencyKey: "k" });

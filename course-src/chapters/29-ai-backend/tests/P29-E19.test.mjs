@@ -29,3 +29,10 @@ test("רץ במקביל עד concurrency", async () => {
   assert.equal(peak, 3);
   assert.deepEqual(await runEval([], async () => 1), { passed: 0, total: 0, score: 0, failures: [] });
 });
+test("עובד מתפנה ← מקרה חדש מתחיל מיד (pool, לא מנות)", async () => {
+  const log = [];
+  const durations = [60, 10, 10, 10, 10];
+  const cs = durations.map((ms, i) => ({ name: String(i), input: i, check: () => true }));
+  await runEval(cs, async (i) => { log.push(`start ${i}`); await new Promise((r) => setTimeout(r, durations[i])); log.push(`end ${i}`); return 1; }, { concurrency: 2 });
+  assert.ok(log.indexOf("start 2") < log.indexOf("end 0"), `מקרה 2 התחיל רק אחרי שמקרה 0 (האיטי) הסתיים — זו הרצה במנות (${log.join(", ")})`);
+});

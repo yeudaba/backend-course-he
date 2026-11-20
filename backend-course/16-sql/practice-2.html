@@ -171,23 +171,23 @@ console.log(byPriceDesc.slice(4 * limit, 5 * limit), byPriceDesc.slice(-1 * limi
 <div class="ex" id="P16-E55">
     <h3>P16-E55 · % של המשתמש בתוך ILIKE</h3>
     <div class="ex-meta"><span class="tag kind understand">🧠 הבנה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 10 דק׳</span><span class="tag">ידע נדרש: פרק 13, שיעור 2</span></div>
-<p>החיפוש עובר כפרמטר (בטוח מ־injection), ובקוד: <code>values: [<code>%${q}%</code>]</code>. אבל מה אם המשתמש מחפש תו שיש לו משמעות ב־LIKE? כמה שורות תחזיר כל שאילתה?</p>
+<p>החיפוש עובר כפרמטר (בטוח מ־injection), ובקוד: <code>values: [`%${q}%`]</code>. אבל מה אם המשתמש מחפש תו שיש לו משמעות ב־LIKE? כמה שורות תחזיר כל שאילתה?</p>
 <pre><code class="lang-sql">SELECT COUNT(*) FROM products WHERE name ILIKE '%' || '_' || '%';
 SELECT COUNT(*) FROM products WHERE name ILIKE '%' || '%' || '%';
 SELECT COUNT(*) FROM products WHERE name ILIKE '%' || '\_' || '%';
 SELECT COUNT(*) FROM products WHERE name ILIKE '%' || '(100)' || '%';</code></pre>
-<p>(<code>||</code> מחבר מחרוזות ב־SQL — כמו <code>+</code> ב־JavaScript. כך נראה מה שהמסד מקבל מ־<code><code>%${q}%</code></code>.)</p>
+<p>(<code>||</code> מחבר מחרוזות ב־SQL — כמו <code>+</code> ב־JavaScript. כך נראה מה שהמסד מקבל מ־<code>`%${q}%`</code>.)</p>
 <p>🔗 <strong>איך זה מתחבר:</strong> "תווים מיוחדים" ו־escape ב־regex מפרק 13 — אותו רעיון בדיוק. השיעור: <code>ILIKE</code>, ו־P16-E53 (פרמטרים מגינים מ־injection — לא מתווים מיוחדים של LIKE).</p>
 
   </div>
 <div class="ex typed" id="P16-E27">
     <h3>P16-E27 · בונה שאילתות עם פרמטרים 🤖</h3>
-    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: שיעור 2</span></div>
+    <div class="ex-meta"><span class="tag kind code">💻 כתיבת קוד 🤖</span><span class="tag type review">🔁 חזרה</span><span class="tag l3">רמה 3</span><span class="tag">⏱ 25 דק׳</span><span class="tag">ידע נדרש: פרק 3, פרק 11, שיעור 2</span></div>
 <p><strong>🔁 חזרה על <code>switch</code> (פרק 4), ‏<code>type</code> עם שדות אופציונליים ו־union (פרק 11) ו־<code>join</code> (פרק 6)</strong>, הפעם ב־TypeScript שמייצר SQL. מסך חיפוש מוצרים שולח לשרת מסננים, והשרת צריך לבנות מהם שאילתה. לעולם לא מדביקים ערכים מהמשתמש לתוך הטקסט של השאילתה. במקומם כותבים <code>$1</code>, ‏<code>$2</code>..., והערכים נשלחים בנפרד (זה יקרה בפרק 18 עם <code>pg</code>).</p>
 <p>בקובץ <code>16-sql/starter/P16-E27.ts</code> כתוב וייצא:</p>
 <ul><li><code>type ProductFilters</code> — כל השדות לא חובה: <code>category: string</code>, ‏<code>minPrice: number</code>, ‏<code>maxPrice: number</code>, ‏<code>search: string</code>, ‏<code>inStock: boolean</code>, ‏<code class="mid">sort: "price" | "-price" | "name"</code>, ‏<code>limit: number</code>.</li><li><code class="long">buildProductQuery(filters: ProductFilters): { text: string; values: unknown[] }</code>.</li></ul>
 <p>הטקסט: <code class="mid">SELECT id, name, price FROM products WHERE is_active</code>, ואחריו תנאים עם <code> AND </code>, ‏<code> ORDER BY ...</code> ובסוף <code> LIMIT $n</code> (רק אם יש <code>limit</code>). התנאים, בסדר הזה, ורק למסננים שנשלחו:</p>
-<ul><li><code>category = $n</code>, ‏<code>price &gt;= $n</code> (‏minPrice), ‏<code>price &lt;= $n</code> (‏maxPrice), ‏<code>name ILIKE $n</code> (הערך: <code>%search%</code>).</li><li><code>inStock: true</code> ← <code>stock &gt; 0</code>. ‏<code>inStock: false</code> ← <code>stock = 0</code>. (בלי פרמטר — אלה לא ערכים מהמשתמש.)</li><li>מיון, עם <code>switch</code>: ‏<code>"price"</code> ← <code>price, id</code>; ‏<code>"-price"</code> ← <code>price DESC, id</code>; ‏<code>"name"</code> ← <code>name</code>; בלי sort ← <code>id</code>. ערך אחר (מקוד JavaScript שלא עבר בדיקת טיפוסים) ← <code>Error(<code>מיון לא מוכר: ${sort}</code>)</code>.</li><li>המספרים של הפרמטרים לפי הסדר שבו נוספו: <code>$1</code>, ‏<code>$2</code>... ‏<code>values</code> באותו סדר.</li></ul>
+<ul><li><code>category = $n</code>, ‏<code>price &gt;= $n</code> (‏minPrice), ‏<code>price &lt;= $n</code> (‏maxPrice), ‏<code>name ILIKE $n</code> (הערך: <code>%search%</code>).</li><li><code>inStock: true</code> ← <code>stock &gt; 0</code>. ‏<code>inStock: false</code> ← <code>stock = 0</code>. (בלי פרמטר — אלה לא ערכים מהמשתמש.)</li><li>מיון, עם <code>switch</code>: ‏<code>"price"</code> ← <code>price, id</code>; ‏<code>"-price"</code> ← <code>price DESC, id</code>; ‏<code>"name"</code> ← <code>name</code>; בלי sort ← <code>id</code>. ערך אחר (מקוד JavaScript שלא עבר בדיקת טיפוסים) ← <code class="mid">Error(`מיון לא מוכר: ${sort}`)</code>.</li><li>המספרים של הפרמטרים לפי הסדר שבו נוספו: <code>$1</code>, ‏<code>$2</code>... ‏<code>values</code> באותו סדר.</li></ul>
 <pre><code class="lang-ts">buildProductQuery({ category: "beans", maxPrice: 90, inStock: true, sort: "-price", limit: 2 });
 // text:   "SELECT id, name, price FROM products WHERE is_active AND category = $1 AND price &lt;= $2 AND stock &gt; 0 ORDER BY price DESC, id LIMIT $3"
 // values: ["beans", 90, 2]</code></pre>

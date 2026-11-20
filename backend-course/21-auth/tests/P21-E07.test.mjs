@@ -20,5 +20,6 @@ test("נפוצה, ומכילה את האימייל", () => {
   assert.deepEqual(validatePassword("12345678", "x@example.com"), ["סיסמה נפוצה מדי"]);
   assert.deepEqual(validatePassword("my-DANA-pass", "dana@example.com"), ["הסיסמה לא יכולה להכיל את האימייל"]);
   assert.deepEqual(validatePassword("abcdefgh-1", "ab@example.com"), [], "חלק מקומי קצר מ־3 — לא בודקים");
+  assert.deepEqual(validatePassword("xx-abc-yyyy", "abc@example.com"), ["הסיסמה לא יכולה להכיל את האימייל"], "חלק מקומי של 3 תווים בדיוק — כן בודקים");
   assert.deepEqual(validatePassword("dana", "dana@example.com"), ["לפחות 8 תווים", "הסיסמה לא יכולה להכיל את האימייל"], "כמה בעיות — כולן, לפי הסדר");
 });

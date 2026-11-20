@@ -560,6 +560,44 @@ export async function results(redis: Redis, pollId: string) {
 
 </div></details>
   </div>
+<div class="ex" id="P26-E121">
+    <h3>P26-E121 · דירוג שמתאפס בכל משחק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־<code>redis-cli</code>: ‏<code>ZADD b 10 dana</code> ואז <code>ZADD b 5 dana</code>. מה הניקוד של dana? ומה <code>ZRANGE b 0 3</code> מחזיר: כמה איברים, ובאיזה סדר?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>ZINCRBY</code> מוסיף. ‏<code>ZRANGE … REV</code> (או <code>ZREVRANGE</code>) מהגבוה, והאינדקס האחרון <strong>כלול</strong>. ‏<code>ZREVRANK</code> מתחיל מ־0.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26-E121: לוח דירוג — מתוקן
+import type { Redis } from "ioredis";
+
+export async function addPoints(redis: Redis, board: string, user: string, points: number): Promise&lt;number&gt; {
+  return Number(await redis.zincrby(`board:${board}`, points, user));
+}
+
+export async function top(redis: Redis, board: string, n: number) {
+  const flat = await redis.zrange(`board:${board}`, 0, n - 1, "REV", "WITHSCORES");
+  const out: { user: string; score: number }[] = [];
+  for (let i = 0; i &lt; flat.length; i += 2) out.push({ user: flat[i], score: Number(flat[i + 1]) });
+  return out;
+}
+
+export async function rankOf(redis: Redis, board: string, user: string): Promise&lt;number | null&gt; {
+  const r = await redis.zrevrank(`board:${board}`, user);
+  return r === null ? null : r + 1;
+}</code></pre>
+<ol><li><strong>‏<code>ZADD</code></strong> קובע ניקוד, ולכן כל משחק דרס את הקודם. ‏<code>ZINCRBY</code> מוסיף לניקוד הקיים (ויוצר את המשתמש אם אין), בפקודה אטומית אחת.</li><li><strong>‏<code>ZRANGE key 0 n</code></strong> מחזיר <code>n + 1</code> איברים, כי שני הקצוות כלולים. והסדר הוא מהנמוך לגבוה. ‏<code>0, n - 1</code> עם <code>REV</code>.</li><li><strong>‏<code>ZRANK</code></strong> סופר מהנמוך ומתחיל מ־0. ‏<code>ZREVRANK</code> סופר מהגבוה, ומוסיפים 1 כדי שהראשון יהיה 1.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>ZSCORE</code> ואז <code>ZADD</code> עם הסכום. שני שרתים שמוסיפים יחד דורסים זה את זה. ‏<code>ZINCRBY</code> אטומי.</li><li>להפוך את המערך בקוד אחרי <code>ZRANGE</code> רגיל. כך מקבלים את <code>n</code> החלשים בסדר הפוך, לא את <code>n</code> החזקים.</li><li>‏<code>return r + 1</code> בלי לבדוק <code>null</code>. ‏<code>null + 1</code> הוא 1, ומשתמש שלא קיים מקבל מקום ראשון.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P26-E39">
     <h3>P26-E39 · ‏Map בזיכרון מול Redis <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>

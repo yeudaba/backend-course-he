@@ -16,6 +16,28 @@ const fills = new Map(); // קוד הדוגמה ← הפלט שהתקבל
 const only = args.filter((a) => !a.startsWith("--"));
 
 const problems = [];
+// אזהרות: כללי התרגול שעוד יש להם הפרות קיימות (לא מכשילות את הבנייה). רשימה מלאה עם --warnings
+const SHOW_WARNINGS = args.includes("--warnings");
+const warnings = [];
+// כללי תרגול ותצוגה שהם שגיאה — כל ההפרות הקיימות שלהם תוקנו. כלל עובר לכאן רק כשאין לו אף הפרה (HANDOFF 7.6)
+const STRICT = new Set([
+  "test-no-robot", // יש tests/<ID>.test.mjs ואין 🤖 בכותרת
+  "robot-no-test", // 🤖 בכותרת ואין tests/<ID>.test.mjs (HANDOFF 7.8)
+  "orphan-test", // בודק בלי תרגיל (חוץ מבודקי פרויקט PR*)
+  "checker-flag", // יש בודקים לתרגילים ואין checker: true
+  "understand-test", // שאלת הבנה עם בודק
+  "explicit-lesson", // "ידע נדרש" מזכיר פרק ואין @lesson מפורש
+  "link-line", // חלק 2 בלי שורת "🔗 איך זה מתחבר"
+  "part2-requires", // חלק 2, ו"ידע נדרש" הוא רק השיעור הנוכחי
+  "balance", // בכל שיעור: חלק 2 ≥ 5, שאלות הבנה בחלק 1 ≥ 4
+  "nested-code", // <code> בתוך <code> בדף בנוי
+  "table-wrap", // <table> בלי <div class="table-wrap">
+  "missing-field", // חסר @hint1, ‏@hint2 או @mistakes (HANDOFF 7.9)
+  "understand-explained", // פתרון של שאלת הבנה בלי משפט שמסביר למה (HANDOFF 7.9)
+  "level4", // בכל שיעור לפחות תרגיל אחד ברמה 4 (תיקון תקלות) (HANDOFF 7.9)
+]);
+// אזהרה בלבד: ‏code-test (תרגילי ה־Terminal של פרק 9 — חריג מכוון)
+const flag = (rule, msg) => (STRICT.has(rule) ? problems.push(`[${rule}] ${msg}`) : warnings.push({ rule, msg: `[${rule}] ${msg}` }));
 let runCount = 0;
 let currentOutDir = null;
 const lbl = (ch) => ch.label ?? `פרק ${ch.num}`;
@@ -103,8 +125,9 @@ function renderFences(src, ctx) {
 }
 
 function inline(text) {
-  // `קוד` → <code>, מחוץ לתגיות svg/pre שנכתבו ידנית
-  return text.replace(/(<svg[\s\S]*?<\/svg>|<pre[\s\S]*?<\/pre>)|`([^`\n]+)`/g, (all, keep, code) =>
+  // `קוד` → <code>, מחוץ לתגיות svg/pre/code שנכתבו ידנית
+  // (backtick בתוך <code>…</code> ידני — למשל template literal — נשאר כמו שהוא, בלי <code> מקונן)
+  return text.replace(/(<svg[\s\S]*?<\/svg>|<pre[\s\S]*?<\/pre>|<code\b[^>]*>[\s\S]*?<\/code>)|`([^`\n]+)`/g, (all, keep, code) =>
     keep ? keep : `<code>${esc(code)}</code>`
   );
 }
@@ -184,8 +207,18 @@ function markLongCode(html) {
   });
 }
 
+// בדיקות תצוגה על הדף הבנוי (מחוץ ל־<pre>)
+function lintPage(title, body) {
+  const flat = body.replace(/<pre[\s\S]*?<\/pre>/g, "");
+  for (const m of flat.matchAll(/<code\b[^>]*>((?:(?!<\/code>)[\s\S])*?)<\/code>/g))
+    if (/<code\b/.test(m[1])) flag("nested-code", `${title}: <code> בתוך <code>: ${m[0].slice(0, 80)}`);
+  for (const m of flat.matchAll(/<table\b/g))
+    if (!/<div class="table-wrap">\s*$/.test(flat.slice(Math.max(0, m.index - 40), m.index))) flag("table-wrap", `${title}: <table> בלי <div class="table-wrap">: ${flat.slice(m.index, m.index + 80)}`);
+}
+
 function page({ title, depth, crumbs, body }) {
   const up = depth ? "../" : "";
+  lintPage(title, body);
   body = markLongCode(body);
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -375,6 +408,67 @@ ${pager({ href: "index.html", small: "חזרה", label: `פתיחת ${lbl(ch)}` 
   return { pages, idToPage };
 }
 
+// ---------- כללי התרגול (HANDOFF 7.6, אפיון סעיף 6). STRICT ← שגיאה, השאר ← אזהרה ----------
+const LINK_LINE = /🔗\s*<strong>איך זה מתחבר/;
+const PROJECT_TEST = /^PR\d/; // בודקי פרויקט בתיקיית tests של יחידה — מכוון, בלי תרגיל
+const numOf = (s) => String(s).replace(/^0+(?=\d)/, "");
+// האם "ידע נדרש" של שאלה בחלק 2 משלב משהו מעבר לשיעור שלה: פרק אחר, שיעור אחר, טווח שיעורים או "כל הפרק"
+function requiresIntegrates(e, ch) {
+  const mine = new Set([numOf(ch.code ?? ch.num), String(ch.num)]);
+  let scope = numOf(ch.code ?? ch.num);
+  for (const m of e.requires.matchAll(/(פרק|יחידה)\s+([\d.]+)|כל (?:הפרק|היחידה)|שיעור(?:ים)?\s+([\d\s,–\-ו־]+)/g)) {
+    if (m[1]) {
+      scope = numOf(m[2]);
+      if (!mine.has(scope)) return true;
+    } else if (!mine.has(scope)) continue;
+    else if (m[0].startsWith("כל")) return true;
+    else if (/–|-/.test(m[3]) || [...m[3].matchAll(/\d+/g)].some((x) => +x[0] !== e.lesson)) return true;
+  }
+  return false;
+}
+// פתרון של שאלת הבנה צריך משפט הסבר, לא רק קוד ופלט
+function hasExplanation(solution) {
+  const prose = solution
+    .replace(/^```[\s\S]*?^```[ \t]*$/gm, " ")
+    .replace(/<pre[\s\S]*?<\/pre>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/`[^`\n]*`/g, " ");
+  return (prose.match(/[֐-׿]{2,}/g) || []).length >= 4 || (prose.match(/\b[A-Za-z]{3,}\b/g) || []).length >= 12;
+}
+
+function lintPractice(ch, exs, lessons, rawExs) {
+  const dir = path.join(ch.dir, "tests");
+  const tests = new Set(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".test.mjs") && !f.startsWith("_")).map((f) => f.slice(0, -".test.mjs".length)) : []);
+  const ids = new Set(exs.map((e) => e.id));
+  for (const e of exs) {
+    const where = `${ch.slug}: ${e.id}`;
+    const test = tests.has(e.id);
+    const robot = /🤖/.test(e.title);
+    if (robot && !test) flag("robot-no-test", `${where}: 🤖 בכותרת ואין tests/${e.id}.test.mjs`);
+    if (test && !robot) flag("test-no-robot", `${where}: יש tests/${e.id}.test.mjs ואין 🤖 בכותרת`);
+    if (e.kind === "understand" && test) flag("understand-test", `${where}: שאלת הבנה עם בודק`);
+    if (e.kind === "code" && !test) flag("code-test", `${where}: שאלת קוד בלי בודק`);
+    for (const f of ["hint1", "hint2", "mistakes"]) if (!e[f].trim()) flag("missing-field", `${where}: חסר @${f}`);
+    if (!rawExs.get(e.id) && /פרק|יחידה/.test(e.requires) && !/כל (?:הפרק|היחידה)/.test(e.requires))
+      flag("explicit-lesson", `${where}: "ידע נדרש" ("${e.requires}") מזכיר פרק — חייב @lesson מפורש, אחרת מספר הפרק נספר כמספר שיעור`);
+    if (e.part === 2) {
+      if (!LINK_LINE.test(e.task)) flag("link-line", `${where}: חלק 2 בלי שורת "🔗 <strong>איך זה מתחבר:</strong>"`);
+      if (!requiresIntegrates(e, ch)) flag("part2-requires", `${where}: חלק 2, אבל "ידע נדרש" ("${e.requires}") הוא רק שיעור ${e.lesson} — הוסף את הפרק או השיעור הקודם`);
+    }
+    if (e.kind === "understand" && !hasExplanation(e.solution)) flag("understand-explained", `${where}: פתרון שאלת הבנה בלי משפט הסבר`);
+  }
+  for (const t of tests) if (!ids.has(t) && !PROJECT_TEST.test(t)) flag("orphan-test", `${ch.slug}: tests/${t}.test.mjs בלי תרגיל`);
+  if ([...ids].some((id) => tests.has(id)) && !ch.checker) flag("checker-flag", `${ch.slug}: יש בודקים לתרגילים ואין checker: true ב־chapter.mjs`);
+  for (let n = 1; n <= Math.max(lessons.length, 1); n++) {
+    const L = exs.filter((e) => e.lesson === n);
+    if (!L.length) continue;
+    const p2 = L.filter((e) => e.part === 2).length;
+    const p1u = L.filter((e) => e.part === 1 && e.kind === "understand").length;
+    if (p2 < 5 || p1u < 4) flag("balance", `${ch.slug}: שיעור ${n}: חלק 2 = ${p2} (מינימום 5), הבנה בחלק 1 = ${p1u} (מינימום 4)`);
+    if (!L.some((e) => e.level === 4)) flag("level4", `${ch.slug}: שיעור ${n}: אין תרגיל ברמה 4 (תיקון תקלות)`);
+  }
+}
+
 // ---------- פרק ----------
 async function loadChapters() {
   const dir = path.join(SRC, "chapters");
@@ -413,8 +507,10 @@ function buildChapter(ch, prevCh, nextCh) {
       if (!e.solution.trim()) problems.push(`${ch.slug}: אין פתרון ל־${e.id}`);
     });
     if (ch.expectedExercises && exs.length !== ch.expectedExercises) problems.push(`${ch.slug}: ${exs.length} תרגילים במקום ${ch.expectedExercises}`);
+    const explicitLesson = new Map(exs.map((e) => [e.id, e.lesson != null])); // לפני ש־placeExercise ממלא את lesson
     const r = exercisesPages(ch, exs, lessons);
     idToPage = r.idToPage;
+    lintPractice(ch, exs, lessons, explicitLesson);
     for (const [f, html] of Object.entries(r.pages)) fs.writeFileSync(path.join(outDir, f), html);
   }
 
@@ -451,7 +547,13 @@ ${pager(
   });
 
   // קבצים נלווים
-  for (const sub of ["starter", "solutions", "tests", "files"]) copyDir(path.join(ch.dir, sub), path.join(outDir, sub));
+  // tests/mutants/ (פתרונות שגויים לרגרסיה של הבודקים) נשאר ב־course-src ולא מגיע ללומד
+  const mutantsDir = path.join(ch.dir, "tests", "mutants");
+  const notMutants = (from) => from !== mutantsDir && !from.startsWith(mutantsDir + path.sep);
+  for (const sub of ["starter", "solutions", "tests", "files"]) {
+    const from = path.join(ch.dir, sub);
+    if (fs.existsSync(from)) fs.cpSync(from, path.join(outDir, sub), { recursive: true, filter: sub === "tests" ? notMutants : undefined });
+  }
 
   // דף פתיחה
   const lessonCards = lessons
@@ -532,8 +634,36 @@ function verifyTests(ch) {
       const st = run("starter");
       if (st.status === 0) problems.push(`${ch.slug}/${t}: עובר גם על קובץ ההתחלה`);
     }
+    // רגרסיה של הבודק (HANDOFF 7.8): כל מוטנט ב־tests/mutants/<ID>/<שם>/ הוא פתרון שגוי סביר — הקבצים בו
+    // מחליפים את קובצי solutions/ (קובץ _DELETE: רשימת קבצים למחיקה). הבודק חייב להיכשל על כל אחד מהם.
+    const id = t.replace(".test.mjs", "");
+    const mutDir = path.join(ch.dir, "tests", "mutants", id);
+    if (!fs.existsSync(mutDir)) continue;
+    for (const m of fs.readdirSync(mutDir).filter((d) => fs.statSync(path.join(mutDir, d)).isDirectory()).sort()) {
+      const rel = `.mut-${id}-${m}`;
+      const dir = path.join(OUT, ch.slug, rel);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.cpSync(path.join(OUT, ch.slug, "solutions"), dir, { recursive: true });
+      fs.cpSync(path.join(mutDir, m), dir, { recursive: true, filter: (f) => path.basename(f) !== "_DELETE" });
+      const del = path.join(mutDir, m, "_DELETE");
+      if (fs.existsSync(del)) for (const f of fs.readFileSync(del, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+      mutantDirs.push(dir);
+      // פרויקט Nest שהבודק מריץ מ־dist: מקמפלים מחדש את העותק של המוטנט
+      for (const np of ch.nestProjects ?? []) {
+        const pdir = path.join(dir, path.relative("solutions", np));
+        if (!fs.existsSync(path.join(mutDir, m, path.relative("solutions", np)))) continue;
+        const b = spawnSync("node", [path.join(SRC, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"], { cwd: pdir, encoding: "utf8" });
+        if (b.status !== 0) problems.push(`${ch.slug}: המוטנט tests/mutants/${id}/${m} לא מתקמפל\n${b.stdout}\n${b.stderr}`);
+      }
+      const r = run(rel);
+      if (r.status === 0) problems.push(`${ch.slug}/${t}: עובר על המוטנט tests/mutants/${id}/${m} (הבודק אמור להיכשל עליו)`);
+      fs.rmSync(dir, { recursive: true, force: true });
+      mutantCount++;
+    }
   }
 }
+const mutantDirs = [];
+let mutantCount = 0;
 
 // ---------- דף הבית ומילון ----------
 function buildHome(chapters) {
@@ -602,6 +732,7 @@ process.on("exit", () => {
   for (const dir of generatedDirs) {
     for (const g of ["generated", "dist", path.join("src", "generated")]) fs.rmSync(path.join(dir, g), { recursive: true, force: true });
   }
+  for (const dir of mutantDirs) fs.rmSync(dir, { recursive: true, force: true });
   if (linkedModules) fs.unlinkSync(path.join(OUT, "node_modules"));
   fs.rmSync(path.join(SRC, ".run"), { recursive: true, force: true });
 });
@@ -637,7 +768,13 @@ if (FILL && fills.size) {
 }
 
 console.log(`נבנו ${chapters.length} פרקים/יחידות, ${exCount} תרגילים בפרקים שנבנו עכשיו.`);
+if (warnings.length) {
+  const byRule = {};
+  for (const w of warnings) byRule[w.rule] = (byRule[w.rule] ?? 0) + 1;
+  console.warn(`⚠ ${warnings.length} אזהרות תרגול (לא מכשילות): ${Object.entries(byRule).map(([r, n]) => `${r} ${n}`).join(", ")}${SHOW_WARNINGS ? "" : " — הרשימה המלאה עם --warnings"}`);
+  if (SHOW_WARNINGS) console.warn(warnings.map((w) => "  " + w.msg).join("\n"));
+}
 if (problems.length) {
   console.error(`\n✘ ${problems.length} בעיות:\n\n` + problems.join("\n\n"));
   process.exit(1);
-} else if (VERIFY) console.log(`✔ כל הדוגמאות והבדיקות אומתו (${runCount} דוגמאות קוד הורצו).`);
+} else if (VERIFY) console.log(`✔ כל הדוגמאות והבדיקות אומתו (${runCount} דוגמאות קוד הורצו, ${mutantCount} מוטנטים נכשלו כמו שצריך).`);

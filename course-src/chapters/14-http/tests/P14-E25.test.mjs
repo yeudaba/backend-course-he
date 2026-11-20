@@ -4,6 +4,19 @@ import { load, listen } from "../../tools/load.mjs";
 
 const { createLimitedServer } = await load(import.meta.url, "P14-E25.mjs");
 
+test("Retry-After מעוגל למעלה (Math.ceil)", async (t) => {
+  let clock = 5_000_000;
+  const { base, close } = await listen(createLimitedServer({ limit: 1, windowMs: 10_000, now: () => clock }));
+  t.after(close);
+  const hit = () => fetch(base + "/", { headers: { "X-Client-Id": "c" }, signal: AbortSignal.timeout(1000) });
+  assert.equal((await hit()).status, 200);
+  clock += 2_800; // נשארו 7.2 שניות
+  const res = await hit();
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "8", "7.2 שניות ← 8 (עיגול למעלה — אחרת הלקוח יחזור מוקדם מדי ויקבל שוב 429)");
+  clock += 7_100; // נשארו 0.1 שניות
+  assert.equal((await hit()).headers.get("retry-after"), "1", "0.1 שניות ← 1");
+});
 test("rate limit", async (t) => {
   let clock = 1_000_000;
   const { base, close } = await listen(createLimitedServer({ limit: 3, windowMs: 10_000, now: () => clock }));

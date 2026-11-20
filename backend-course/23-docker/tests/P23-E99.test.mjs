@@ -44,3 +44,16 @@ services:
   assert.deepEqual(f(doc), ["api.JWT_SECRET", "api.STRIPE_API_KEY", "api.DATABASE_URL", "db.POSTGRES_PASSWORD", "worker.password"]);
   assert.deepEqual(f({ services: {} }), []);
 });
+test("רק DATABASE_URL — כתובת אחרת עם סיסמה לא נספרת בכלל הזה", async () => {
+  const f = await get();
+  const doc = YAML.parse(`
+services:
+  api:
+    environment:
+      CACHE_URL: redis://app:pw@cache:6379
+  cache:
+    image: redis:8
+    ports: ["6379:6379"]
+`);
+  assert.deepEqual(f(doc), []);
+});

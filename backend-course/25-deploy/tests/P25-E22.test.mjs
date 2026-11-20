@@ -29,3 +29,7 @@ test("גרסה חדשה בלי מסד — לא הצלחה", async (t) => {
   const base = await server(t, { versions: ["new1234"], ready: false });
   assert.equal(await smokeCheck(base, "new1234", { attempts: 3, intervalMs: 5 }), false);
 });
+test("לא יותר מ־attempts ניסיונות", async (t) => {
+  const base = await server(t, { versions: [null, null, null, "new1234"] });
+  assert.equal(await smokeCheck(base, "new1234", { attempts: 3, intervalMs: 5 }), false, "attempts: 3 — הניסיון הרביעי כבר לא קורה");
+});

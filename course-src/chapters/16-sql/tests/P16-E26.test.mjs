@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 
 const accepts = async (db, sql, msg) => {
   try {
@@ -12,11 +12,10 @@ const accepts = async (db, sql, msg) => {
 const rejects = async (db, sql, msg) => assert.rejects(db.query(sql), undefined, `${msg} — המסד היה צריך לדחות את השורה`);
 
 test("P16-E26: התוצאה של השאילתה (עמודות, שורות וסדר)", async (t) => {
-  const db = await sandbox(t, import.meta.url);
-  const got = await db.fileRows("P16-E26.sql");
-  const expected = await db.expectedRows("P16-E26.sql");
-  assert.deepEqual(Object.keys(got?.[0] ?? {}), Object.keys(expected[0]), "שמות העמודות והסדר שלהן (done_on, kind, min_per_km)");
-  assert.deepEqual(got, expected);
+  // אחרי הקובץ שלך הבודק מוסיף עוד אימונים ומריץ שוב את השאילתה האחרונה — כדי שתוצאה מועתקת לא תעבור
+  await sameAsSolution(t, import.meta.url, "P16-E26.sql", {
+    after: "INSERT INTO workouts (kind, minutes, distance_km, done_on) VALUES ('bike', 60, 24, '2026-10-30'), ('swim', 20, NULL, '2026-11-04'), ('run', 50, 8, '2026-11-04')",
+  });
 });
 test("P16-E26: ארבעת האימונים נשמרו", async (t) => {
   const db = await sandbox(t, import.meta.url);

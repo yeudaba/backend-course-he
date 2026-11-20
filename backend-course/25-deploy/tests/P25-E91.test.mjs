@@ -11,6 +11,7 @@ test("מבנה כללי", () => {
   assert.deepEqual(wf.permissions, { contents: "read" });
   assert.equal(wf.env, undefined, "בלי env ברמת הקובץ");
   assert.ok(wf.jobs.test && wf.jobs.docker && deploy, "jobs: test, docker, deploy");
+  for (const [name, job] of Object.entries(wf.jobs)) assert.ok(job["runs-on"], `ל־job ${name} חסר runs-on`);
 });
 test("deploy — מתי ואחרי מה", () => {
   assert.deepEqual([deploy.needs].flat().sort(), ["docker", "test"]);
