@@ -4172,3 +4172,73 @@ unhandledRejection: המסד לא זמין
 <p>ה־<code>catch</code> לא רץ: <code>createServer</code> רק <strong>רשם</strong> את ה־handler ויצא. השגיאה נזרקה מאוחר יותר, בתוך Promise שאיש לא מחכה לו — ‏unhandled rejection. הלקוח לא קיבל כלום (אף אחד לא קרא ל־<code>res.end</code>) ונפל ב־timeout. בלי <code>process.on</code>, ‏Node (מגרסה 15) <strong>מפיל את כל התהליך</strong> על unhandled rejection — כל המשתמשים מתנתקים בגלל בקשה אחת. הפתרון: <code>try/catch</code> <strong>בתוך</strong> ה־handler האסינכרוני, שמחזיר 500. ‏Express 5 (פרק 15) עושה את זה בשבילך.</p>
 @mistakes
 <ul><li>לפתור עם <code>process.on("unhandledRejection")</code> בקוד אמיתי ולהמשיך כרגיל — השרת לא קורס, אבל הלקוח עדיין תקוע בלי תשובה.</li></ul>
+
+@@ P14-E83 | 4 | status שמבלבל את הלקוח 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p><code>checkRequest(method, urlText)</code> ב־<code>14-http/starter/P14-E83.mjs</code> מחליטה איזה status יחזור לבקשה ל־API של מוצרים, עוד לפני שהשרת עושה משהו:</p>
+<ul><li>נתיב שאינו <code>/products</code> או <code>/products/&lt;id&gt;</code> ← 404.</li><li>‏method שלא מתאים לנתיב ← 405. ב־<code>/products</code> מותרים GET ו־POST; ב־<code>/products/&lt;id&gt;</code> מותרים GET ו־DELETE.</li><li>‏<code>?maxPrice=</code>, אם הוא קיים, חייב להיות מספר ≥ 0. אחרת ← 400.</li><li>אחרת: POST ← 201, ‏DELETE ← 204, ‏GET ← 200.</li></ul>
+<p>יש בה שלוש תקלות. הבודק בודק כל אחת מהדרישות, גם בגבולות.</p>
+```term
+% node 14-http/starter/P14-E83.mjs
+% npm run check P14-E83
+```
+@hint1
+<p>נסה <code>checkRequest("PUT", "http://x/products")</code>, ‏<code>checkRequest("GET", "http://x/products?maxPrice=abc")</code> ו־<code>checkRequest("POST", "http://x/products")</code>. מה כל אחת צריכה להחזיר?</p>
+@hint2
+<p>‏404 אומר "אין דבר כזה", ו־405 אומר "יש, אבל לא ב־method הזה". ובבדיקת המחיר: מה <code>Number("abc")</code>, ומה התוצאה של השוואה איתו? וגם <code>Number("")</code>.</p>
+@solution
+```js run mjs save=solutions/P14-E83.mjs
+// P14-E83: איזה status — מתוקן
+export function checkRequest(method, urlText) {
+  const url = new URL(urlText);
+  const parts = url.pathname.split("/").filter(Boolean); // "/products/7" ← ["products", "7"]
+  if (parts[0] !== "products" || parts.length > 2) return 404;
+  const isItem = parts.length === 2;
+  const allowed = isItem ? ["GET", "DELETE"] : ["GET", "POST"];
+  if (!allowed.includes(method)) return 405;
+  const maxPrice = url.searchParams.get("maxPrice");
+  if (maxPrice !== null && (maxPrice.trim() === "" || !(Number(maxPrice) >= 0))) return 400;
+  if (method === "POST") return 201;
+  if (method === "DELETE") return 204;
+  return 200;
+}
+
+console.log(checkRequest("PUT", "http://localhost:4000/products"));
+console.log(checkRequest("GET", "http://localhost:4000/products?maxPrice=abc"));
+console.log(checkRequest("POST", "http://localhost:4000/products"));
+```
+```out
+405
+400
+201
+```
+<ol><li><strong>404 במקום 405.</strong> הנתיב קיים, רק ה־method לא מתאים. 405 אומר ללקוח שהכתובת נכונה, ושצריך לבדוק את ה־method.</li><li><strong>המחיר.</strong> <code>Number("abc")</code> הוא <code>NaN</code>, וכל השוואה עם <code>NaN</code> היא <code>false</code>. לכן <code>NaN &lt; 0</code> לא תפס אותו. בודקים את מה שתקין (<code>&gt;= 0</code>) ושוללים את כל השאר. ו־<code>Number("")</code> הוא 0, ולכן מחרוזת ריקה נבדקת לבד.</li><li><strong>201 ל־POST.</strong> יצירה מוצלחת היא 201 Created, לא 200.</li></ol>
+@mistakes
+<ul><li>לבדוק <code>isNaN(maxPrice)</code> בלבד. <code>"-5"</code> הוא מספר, ועובר. גם <code>""</code> עובר, כי <code>Number("")</code> הוא 0.</li><li>לבדוק את הנתיב עם <code>url.href.includes("/products")</code>. אז <code>/products-old</code> ו־<code>/api/products</code> נחשבים נכונים.</li><li>להחזיר 404 על method לא מתאים "כי ככה Express עושה". Express מחזיר 404 כשאין route; API מסודר מחזיר 405 כשהמשאב קיים.</li></ul>
+
+@@ P14-E84 | 4 | שלוש פקודות curl שלא עושות מה שחשבת 🤖 | 15 | שיעור 3
+@lesson 3
+@part 1
+@task
+<p>ב־<code>14-http/starter/P14-E84.sh</code> שלוש פקודות curl שמישהו שמר כדי לבדוק את ה־API. אף אחת לא עושה מה שהוא חשב:</p>
+<ol><li>החיפוש מחזיר את כל המוצרים בקטגוריה, בלי סינון לפי מחיר, וה־Terminal מדפיס משהו כמו <code>[1] 48213</code>.</li><li>ה־POST מקבל 400 "name חובה", למרות שה־JSON נראה תקין.</li><li>ה־PATCH מקבל 400 "JSON לא תקין".</li></ol>
+<p>תקן כל פקודה כך שתשלח בדיוק את הבקשה שהתכוונו אליה. אל תשנה את הכתובות, ה־methods או הנתונים.</p>
+```term
+% npm run check P14-E84
+```
+@hint1
+<p>חשוב מה ה־shell עושה לפני ש־curl בכלל רץ: לאילו תווים יש משמעות מיוחדת ב־shell, ומה קורה למירכאות.</p>
+@hint2
+<p>‏<code>&amp;</code> בלי מירכאות מריץ את מה שלפניו ברקע. שרת שמקבל JSON צריך לדעת שזה JSON. ומירכאות כפולות בתוך מירכאות כפולות סוגרות אותן.</p>
+@solution
+```bash save=solutions/P14-E84.sh
+# P14-E84: שלוש פקודות curl — מתוקנות
+curl 'http://localhost:4000/products?category=coffee&maxPrice=50'
+curl -X POST http://localhost:4000/products -H 'Content-Type: application/json' -d '{"name": "Latte", "price": 14}'
+curl -X PATCH http://localhost:4000/products/7 -H 'Content-Type: application/json' -d '{"price": 12}'
+```
+<ol><li><strong><code>&amp;</code> בלי מירכאות.</strong> ה־shell קורא את <code>&amp;</code> כ"הרץ ברקע". curl קיבל רק את <code>…?category=coffee</code>, ו־<code>maxPrice=50</code> הפך לפקודה נפרדת (הצבת משתנה). <code>[1] 48213</code> הוא מספר העבודה ברקע. כתובת עם <code>&amp;</code> או <code>?</code> עוטפים במירכאות.</li><li><strong>חסר Content-Type.</strong> עם <code>-d</code>, curl שולח <code>application/x-www-form-urlencoded</code>. ‏<code>express.json()</code> לא נוגע בגוף כזה, ולכן <code>req.body</code> ריק. ה־header אומר לשרת שזה JSON.</li><li><strong>מירכאות כפולות בתוך כפולות.</strong> <code>"{"price": 12}"</code> הוא שלושה חלקים צמודים: <code>"{"</code>, ‏<code>price</code> ו־<code>": 12}"</code>. ה־shell מוריד את המירכאות ומדביק אותם, וכך curl שולח <code>{price: 12}</code>, שאינו JSON. גוף JSON עוטפים במירכאות בודדות.</li></ol>
+@mistakes
+<ul><li>לפתור את 1 עם <code>\&amp;</code>. זה עובד, אבל קל לפספס תו מיוחד אחר (<code>?</code>, ‏<code>#</code>). מירכאות סביב כל הכתובת בטוחות יותר.</li><li>לשנות ב־3 ל־<code>-d "{\"price\": 12}"</code>. זה עובד, אבל קשה לקרוא. מירכאות בודדות פשוטות יותר.</li><li>להוסיף <code>-H 'Accept: application/json'</code> במקום Content-Type. ‏<code>Accept</code> מדבר על התשובה, לא על הגוף שנשלח.</li></ul>
