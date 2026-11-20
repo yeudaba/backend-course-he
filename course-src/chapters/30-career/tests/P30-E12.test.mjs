@@ -16,6 +16,13 @@ test("שתי דקות: עברית 140–280 מילים, English 200–330", () =
     assert.ok(n >= min && n <= max, `${s}: ${n} מילים (צריך ${min}–${max} — בערך שתי דקות דיבור)`);
   }
 });
+test("טקסט אמיתי, לא מילים חוזרות", () => {
+  for (const s of ["עברית", "English"]) {
+    const w = words(section(md, s) ?? "").map((x) => x.toLowerCase());
+    const ratio = new Set(w).size / Math.max(w.length, 1);
+    assert.ok(ratio >= 0.4, `${s}: רק ${Math.round(ratio * 100)}% מהמילים שונות זו מזו — נראה כמו מילוי, לא pitch. כתוב טקסט אמיתי`);
+  }
+});
 test("יש מספר, נימוק להחלטה, ומה הלאה", () => {
   const he = section(md, "עברית") ?? "";
   const en = section(md, "English") ?? "";

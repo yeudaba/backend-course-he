@@ -1,18 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertSameRows } from "../../tools/rows.mjs";
 import { sandbox } from "../../tools/sql.mjs";
 
 test("P30-E91: הלקוח המוביל בכל עיר", async (t) => {
   const db = await sandbox(t, import.meta.url, "sales.sql");
   const got = await db.fileRows("P30-E91.sql");
   assert.deepEqual(Object.keys(got[0] ?? {}), ["city", "name", "revenue", "share_pct"], "שמות העמודות והסדר שלהן");
-  assert.deepEqual(got, [
+  assertSameRows(got, [
     { city: "Beer Sheva", name: "Omer", revenue: 303.8, share_pct: 100 },
     { city: "Haifa", name: "Dana", revenue: 332.9, share_pct: 56.3 },
     { city: "Jerusalem", name: "Eli", revenue: 229, share_pct: 85.4 },
     { city: "Tel Aviv", name: "Noa", revenue: 649, share_pct: 70 },
   ]);
-  assert.deepEqual(got, await db.expectedRows("P30-E91.sql"));
+  assertSameRows(got, await db.expectedRows("P30-E91.sql"));
 });
 test("P30-E91: תיקו ← id קטן; הזמנה מבוטלת לא נספרת", async (t) => {
   const db = await sandbox(t, import.meta.url, "sales.sql");

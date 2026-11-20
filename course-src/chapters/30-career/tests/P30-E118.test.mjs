@@ -1,18 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertSameRows } from "../../tools/rows.mjs";
 import { sandbox } from "../../tools/sql.mjs";
 
 test("P30-E118: אחוז תגובה לפי ערוץ", async (t) => {
   const db = await sandbox(t, import.meta.url, "applications.sql");
   const got = await db.fileRows("P30-E118.sql");
   assert.deepEqual(Object.keys(got[0] ?? {}), ["channel", "applications", "responses", "interviews", "response_pct"], "שמות העמודות והסדר שלהן");
-  assert.deepEqual(got, [
+  assertSameRows(got, [
     { channel: "referral", applications: 4, responses: 3, interviews: 2, response_pct: 75 },
     { channel: "community", applications: 2, responses: 1, interviews: 0, response_pct: 50 },
     { channel: "company_site", applications: 4, responses: 2, interviews: 1, response_pct: 50 },
     { channel: "linkedin", applications: 8, responses: 2, interviews: 0, response_pct: 25 },
   ]);
-  assert.deepEqual(got, await db.expectedRows("P30-E118.sql"));
+  assertSameRows(got, await db.expectedRows("P30-E118.sql"));
 });
 test("P30-E118: נתונים אחרים", async (t) => {
   const db = await sandbox(t, import.meta.url, "applications.sql");
