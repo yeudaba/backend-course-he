@@ -34,8 +34,9 @@ const STRICT = new Set([
   "table-wrap", // <table> בלי <div class="table-wrap">
   "missing-field", // חסר @hint1, ‏@hint2 או @mistakes (HANDOFF 7.9)
   "understand-explained", // פתרון של שאלת הבנה בלי משפט שמסביר למה (HANDOFF 7.9)
+  "level4", // בכל שיעור לפחות תרגיל אחד ברמה 4 (תיקון תקלות) (HANDOFF 7.9)
 ]);
-// אזהרה בלבד: ‏code-test, ‏level4
+// אזהרה בלבד: ‏code-test (תרגילי ה־Terminal של פרק 9 — חריג מכוון)
 const flag = (rule, msg) => (STRICT.has(rule) ? problems.push(`[${rule}] ${msg}`) : warnings.push({ rule, msg: `[${rule}] ${msg}` }));
 let runCount = 0;
 let currentOutDir = null;
