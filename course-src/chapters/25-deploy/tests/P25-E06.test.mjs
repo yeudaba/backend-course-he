@@ -26,3 +26,7 @@ test("ערכים לא תקינים — בכל סביבה", () => {
   assert.throws(() => loadConfig({ NODE_ENV: "prod" }), /NODE_ENV/);
   assert.throws(() => loadConfig({ LOG_LEVEL: "verbose" }), /LOG_LEVEL/);
 });
+test("JWT_SECRET באורך 32 בדיוק — תקין, 31 — לא", () => {
+  assert.equal(loadConfig({ ...PROD, JWT_SECRET: "s".repeat(32) }).jwtSecret.length, 32);
+  assert.throws(() => loadConfig({ ...PROD, JWT_SECRET: "s".repeat(31) }), /JWT_SECRET/);
+});

@@ -36,4 +36,6 @@ test("מפתחות לא תקינים", async () => {
   const create = await get();
   assert.throws(() => create([]), { message: "מפתח לא תקין" });
   assert.throws(() => create([NEW, "short"]), { message: "מפתח לא תקין" });
+  assert.throws(() => create(["k".repeat(31)]), { message: "מפתח לא תקין" }, "31 תווים — קצר מדי");
+  assert.equal(typeof create(["k".repeat(32)]), "function", "32 תווים בדיוק — מספיק");
 });

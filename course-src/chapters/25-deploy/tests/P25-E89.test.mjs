@@ -21,4 +21,5 @@ test("שגיאות", async () => {
     assert.throws(() => f({ BASE_URL: "https://a.com", INTERVAL_SECONDS: v }), /INTERVAL_SECONDS/, v);
   }
   assert.throws(() => f({ BASE_URL: "https://a.com", TIMEOUT_SECONDS: "5", INTERVAL_SECONDS: "10" }), { message: "INTERVAL_SECONDS גדול מ־TIMEOUT_SECONDS" });
+  assert.equal(f({ BASE_URL: "https://a.com", TIMEOUT_SECONDS: "10", INTERVAL_SECONDS: "10" }).intervalSeconds, 10, "שווה — מותר (רק גדול מ־ זו שגיאה)");
 });

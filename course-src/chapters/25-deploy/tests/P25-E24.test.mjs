@@ -83,3 +83,18 @@ jobs:
 `;
   assert.deepEqual(rules(yaml), ["deploy:deploy-without-needs"]);
 });
+test("on: push (מחרוזת) — אין pull_request", () => {
+  const yaml = `
+on: push
+permissions: { contents: read }
+jobs:
+  deploy:
+    needs: []
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: curl "$H"
+        env: { H: "\${{ secrets.H }}" }
+`;
+  assert.deepEqual(rules(yaml), ["deploy:deploy-without-needs"]);
+});

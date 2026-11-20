@@ -21,7 +21,18 @@ const { PrismaService } = req(dist("prisma/prisma.service.js"));
 test("/ready מול מסד אמיתי", async (t) => {
   const db = await sandbox(t, import.meta.url);
   await db.applyMigrations(target(import.meta.url, "tasks-api/prisma/migrations"));
-  const prisma = await db.prisma({ clientPath: dist("generated/prisma/client.js") });
+  const real = await db.prisma({ clientPath: dist("generated/prisma/client.js") });
+  // עוטפים את ה־client: סופרים שאילתות raw, ואפשר "להפיל" את המסד
+  const state = { raw: 0, down: false };
+  const prisma = new Proxy(real, {
+    get(target, prop) {
+      const v = Reflect.get(target, prop);
+      if (typeof v === "function" && /^\$(query|execute)/.test(String(prop))) {
+        return (...args) => { state.raw++; return state.down ? Promise.reject(new Error("connection refused")) : v.apply(target, args); };
+      }
+      return typeof v === "function" ? v.bind(target) : v;
+    },
+  });
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService).useValue(prisma)
     .overrideProvider(CONFIG).useValue({ jwtSecret: "x".repeat(40), accessTokenTtlSeconds: 900, refreshTokenTtlDays: 7, bcryptRounds: 4, logLevel: "error", authRateLimitPerMinute: 10, idempotencyTtlHours: 24 })
@@ -37,6 +48,11 @@ test("/ready מול מסד אמיתי", async (t) => {
   const ready = await call("GET", "/ready");
   assert.equal(ready.status, 200, "/ready ← 200 כשהמסד זמין");
   assert.equal(ready.body.ok, true);
+  assert.ok(state.raw > 0, "/ready צריך לשאול את המסד באמת (למשל SELECT 1)");
+  state.down = true;
+  const down = await call("GET", "/ready");
+  assert.equal(down.status, 503, "/ready ← 503 כשהשאילתה למסד נכשלת");
+  state.down = false;
   assert.equal((await call("GET", "/version")).status, 200);
 
 });
