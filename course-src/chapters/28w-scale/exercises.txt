@@ -3424,3 +3424,35 @@ export function checkBatch(rows: Record<string, unknown>[], rules: Rule[]) {
 ```
 @mistakes
 <ul><li>ב־<code>unique</code> לספור את <em>כל</em> ההופעות של ערך כפול — שתי שורות עם אותו id הן הפרה אחת, לא שתיים.</li></ul>
+
+@@ P28.5-E101 | 4 | סנכרון שמדלג על שורות 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>הלב של הסנכרון המצטבר מ־PostgreSQL ל־data lake (כמו ב־P28.5-E25), בלי מסד. ‏<code>nextBatch(rows, watermark, size)</code> ב־<code>28w-scale/starter/P28.5-E101.ts</code>:</p>
+<ul><li><code>rows</code> — שורות <code>{ id, updatedAt }</code>, בכל סדר (‏<code>updatedAt</code> מחרוזת ISO).</li><li><code>watermark</code> — ‏<code>{ updatedAt, id }</code> של השורה האחרונה שכבר יוצאה, או <code>null</code> בפעם הראשונה.</li><li>מחזירה <code>{ batch, watermark }</code>: עד <code>size</code> שורות שבאות <strong>אחרי</strong> ה־watermark, בסדר <code>(updatedAt, id)</code> עולה; ו־watermark חדש — של השורה האחרונה ב־batch (או הישן, אם ה־batch ריק).</li></ul>
+<p>אחרי חודש, ב־data lake חסרות מאות שורות: כאלה שעודכנו באותה מיקרו־שנייה כמו שורה אחרת, וכאלה שנפלו מעבר ל־size. מצא ותקן.</p>
+```term
+% npm run check P28.5-E101
+```
+@hint1
+<p>הרץ את הלולאה ביד: שלוש שורות עם אותו <code>updatedAt</code>, ‏<code>size</code> 2. אילו שורות נכנסות בסבב הראשון, מה ה־watermark אחריו, ומה נכנס בסבב השני?</p>
+@hint2
+<p>"אחרי" ו"מיון" — על הזוג <code>(updatedAt, id)</code>. וה־watermark החדש הוא של השורה האחרונה <em>שיוצאה</em>, לא של האחרונה שקיימת.</p>
+@solution
+```ts save=solutions/P28.5-E101.ts
+// P28.5-E101: batch הבא בסנכרון מצטבר — מתוקן
+export type Mark = { updatedAt: string; id: number };
+
+const cmp = (a: Mark, b: Mark) => a.updatedAt.localeCompare(b.updatedAt) || a.id - b.id;
+
+export function nextBatch<R extends Mark>(rows: R[], watermark: Mark | null, size: number) {
+  const after = rows.filter((r) => !watermark || cmp(r, watermark) > 0).sort(cmp);
+  const batch = after.slice(0, size);
+  const last = batch.at(-1);
+  return { batch, watermark: last ? { updatedAt: last.updatedAt, id: last.id } : watermark };
+}
+```
+<ol><li><strong>‏<code>r.updatedAt &gt; watermark.updatedAt</code> בלבד.</strong> שורה עם אותו <code>updatedAt</code> ו־id גבוה יותר, שלא נכנסה לסבב הקודם, נשארה "מאחורי" ה־watermark לתמיד. משווים את הזוג.</li><li><strong>מיון לפי <code>updatedAt</code> בלבד.</strong> בתיקו, הסדר תלוי בסדר הקלט, ואז ה־watermark (שורה אחרונה) לא באמת הגבול של מה שיוצא.</li><li><strong>ה־watermark החדש היה המקסימום של כל השורות</strong>, גם של אלה שלא נכנסו ל־batch. מה שנשאר מעבר ל־size דולג. ה־watermark הוא של מה שיוצא בפועל.</li></ol>
+@mistakes
+<ul><li>‏<code>&gt;=</code> על <code>updatedAt</code>. אין דילוג, אבל השורה האחרונה של כל סבב יוצאת שוב, והדוח סופר אותה פעמיים.</li><li>להמיר את <code>updatedAt</code> ל־<code>Date</code> לפני ההשוואה. ‏Date מאבד את המיקרו־שניות של PostgreSQL, ושתי שורות שונות נראות באותו זמן.</li><li>לשמור את ה־watermark לפני שהקובץ נכתב. נפילה באמצע מדלגת על ה־batch.</li></ul>
