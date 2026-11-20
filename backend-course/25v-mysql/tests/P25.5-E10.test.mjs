@@ -11,6 +11,7 @@ test("toProduct: מחרוזת DECIMAL ← אגורות, 0/1 ← boolean, JSON", 
   assert.equal(toProduct({ id: 2, name: "y", price: "0.10", is_active: 0, attributes: null }).priceCents, 10);
   assert.equal(toProduct({ id: 2, name: "y", price: "1150.70", is_active: 0, attributes: null }).isActive, false);
   assert.equal(toProduct({ id: 2, name: "y", price: "1150.70", is_active: 0, attributes: null }).priceCents, 115070);
+  for (const [price, cents] of [["19.99", 1999], ["0.29", 29], ["8.20", 820]]) assert.equal(toProduct({ id: 3, name: "z", price, is_active: 1, attributes: null }).priceCents, cents, `${price} ← ${cents} אגורות (Number("${price}") * 100 לא יוצא שלם — צריך לעגל)`);
 });
 test("listProducts מול MySQL אמיתי, עם ההגדרות הרגילות של mysql2", async (t) => {
   const db = await mysqlSandbox(t, import.meta.url, "shop.sql");

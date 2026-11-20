@@ -27,3 +27,8 @@ test("dayParam: מחרוזת, לא Date", () => {
   assert.equal(dayParam("2026-03-01"), "2026-03-01");
   assert.throws(() => dayParam("1/3/2026"));
 });
+test("גבולות היום: 00:00 בפנים, 00:00 של מחר בחוץ", async (t) => {
+  const { db, c } = await conn(t);
+  await db.query("INSERT INTO orders (customer_id, status, total, created_at) VALUES (1, 'paid', 10.00, '2026-03-04 00:00:00'), (1, 'paid', 20.00, '2026-03-05 00:00:00')");
+  assert.deepEqual(await dailyReport(c, dayParam("2026-03-04")), { day: "2026-03-04", orders: 2, totalCents: 24800 });
+});

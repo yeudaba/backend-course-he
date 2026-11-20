@@ -39,3 +39,9 @@ test("קטגוריה ושגיאות", async (t) => {
     assert.deepEqual([x.status, x.body?.error?.code], [400, "VALIDATION_ERROR"], q);
   }
 });
+test("גבולות: limit=1, limit=50, after=0 — תקינים", async (t) => {
+  const call = await start(t);
+  assert.deepEqual((await call("GET", "/products?limit=1")).body.items.map((p) => p.id), [1], "limit=1");
+  assert.equal((await call("GET", "/products?limit=50")).status, 200, "limit=50 — המקסימום עצמו מותר");
+  assert.equal((await call("GET", "/products?after=0&limit=2")).body.nextAfter, 2, "after=0 — מותר");
+});

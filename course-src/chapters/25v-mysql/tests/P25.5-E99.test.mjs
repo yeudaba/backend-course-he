@@ -29,3 +29,8 @@ test("slowLogReport", async () => {
   ]);
   assert.deepEqual(slowLogReport(""), []);
 });
+test("slowLogReport: הכבדה ביותר ראשונה, גם כשהיא מופיעה אחרונה", async () => {
+  const { slowLogReport } = await get();
+  const log = entry("0.100000", 10, "SELECT 1 FROM a WHERE x = 1;") + entry("3.000000", 99, "SELECT 2 FROM b WHERE y = 2;");
+  assert.deepEqual(slowLogReport(log).map((r) => r.totalSeconds), [3, 0.1]);
+});

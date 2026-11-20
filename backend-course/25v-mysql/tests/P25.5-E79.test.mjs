@@ -33,3 +33,9 @@ test("לא תלוי ב־TZ של התהליך", async (t) => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(JSON.parse(r.stdout.trim().split("\n").at(-1)).createdAt, ORDER1.createdAt, "עם TZ=Asia/Jerusalem");
 });
+test("הפריטים ממוינים לפי productId — גם כשנוספו בסדר אחר", async (t) => {
+  const f = await get();
+  const db = await mysqlSandbox(t, import.meta.url, "shop.sql");
+  await db.query("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (4, 9, 1, 24.90), (4, 3, 1, 29.90)");
+  assert.deepEqual((await f(plainPool(t, db), 4)).items.map((i) => i.productId), [3, 6, 9]);
+});

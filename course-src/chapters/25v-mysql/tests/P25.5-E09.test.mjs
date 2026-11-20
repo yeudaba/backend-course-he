@@ -34,3 +34,9 @@ test("החיבורים חוזרים ל־pool (גם אחרי שגיאה)", async 
   const r = await insertOrder(pool, { customerId: 1, items: [{ productId: 3, quantity: 1 }] });
   assert.ok(r.orderId > 0, "עם pool של 2, חיבור שלא שוחרר היה תוקע את הקריאה הזו");
 });
+test("כמות ששווה בדיוק למלאי — מותר, והמלאי מתאפס", async (t) => {
+  const db = await mysqlSandbox(t, import.meta.url, "shop.sql");
+  const r = await insertOrder(db.pool(3), { customerId: 2, items: [{ productId: 4, quantity: 8 }] });
+  assert.ok(r.orderId > 0);
+  assert.equal((await db.rows("SELECT stock FROM products WHERE id = 4"))[0].stock, 0);
+});

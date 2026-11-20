@@ -25,6 +25,7 @@ test("במקביל — fn רצה פעם אחת; האחרות: InProgress או re
   const results = await Promise.allSettled(Array.from({ length: 8 }, () => once(pool, "k2", async () => { runs++; await new Promise((r) => setTimeout(r, 100)); return { ok: true }; })));
   assert.equal(runs, 1);
   for (const r of results) if (r.status === "rejected") assert.ok(r.reason instanceof InProgress);
+  for (const r of results) if (r.status === "fulfilled") assert.deepEqual(r.value.result, { ok: true }, "מי שלא קיבל InProgress — מקבל את התוצאה האמיתית, לא null של בקשה שעוד בטיפול");
 });
 test("fn נכשל ← אפשר לנסות שוב עם אותו מפתח", async (t) => {
   const db = await mysqlSandbox(t, import.meta.url, "shop.sql");
