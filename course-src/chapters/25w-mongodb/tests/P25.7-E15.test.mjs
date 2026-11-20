@@ -13,6 +13,12 @@ test("שלושת הלקוחות המובילים — בלי הזמנות שבו�
     { customerId: "c2", name: "Yossi Cohen", spent: 254, orders: 2 },
   ]);
 });
+test("שוויון ב־spent ← לפי customerId", async (t) => {
+  const { db } = await mongoSandbox(t, import.meta.url);
+  // c2 מגיע ל־422 — כמו c3
+  await db.collection("orders").insertOne({ _id: "o99", customerId: "c2", status: "paid", createdAt: new Date("2026-11-04T10:00:00Z"), items: [], total: 168 });
+  assert.deepEqual((await topCustomers(db)).map((c) => [c.customerId, c.spent]), [["c1", 702], ["c2", 422], ["c3", 422]], "תיקו — c2 לפני c3 ($sort: { spent: -1, _id: 1 })");
+});
 test("n", async (t) => {
   const { db } = await mongoSandbox(t, import.meta.url);
   assert.deepEqual((await topCustomers(db, 1)).map((c) => c.customerId), ["c1"]);
