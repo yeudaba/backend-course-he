@@ -36,4 +36,8 @@ test("תיקו בזמן — id גבוה קודם", async (t) => {
   const { prisma, db } = await shop(t, import.meta.url);
   await db.query("INSERT INTO orders (customer_id, status, created_at) VALUES (1, 'paid', '2026-06-01 10:00:00+03'), (2, 'paid', '2026-06-01 10:00:00+03')");
   assert.deepEqual(ids(await listOrders(prisma, { pageSize: 3 })), [14, 13, 12]);
+  await db.query("INSERT INTO orders (customer_id, status, created_at) VALUES (3, 'paid', '2026-06-01 10:00:00+03'), (4, 'paid', '2026-06-01 10:00:00+03')");
+  await db.query("UPDATE orders SET status = status WHERE id IN (13, 14)"); // סדר פיזי אחר
+  const all = [...ids(await listOrders(prisma, { pageSize: 2 })), ...ids(await listOrders(prisma, { pageSize: 2, page: 2 })), ...ids(await listOrders(prisma, { pageSize: 2, page: 3 }))];
+  assert.deepEqual(all, [16, 15, 14, 13, 12, 11], "בתיקו ב־createdAt — orderBy משני לפי id (אחרת הזמנות קופצות בין עמודים)");
 });

@@ -10,4 +10,5 @@ test("לפי קטגוריה", async (t) => {
   assert.deepEqual(await productsInCategory(prisma, "beans"), ["Brazil Beans 250g", "Colombia Beans 1kg", "Ethiopia Beans 1kg"]);
   assert.deepEqual(await productsInCategory(prisma, "gift cards"), []);
   assert.deepEqual(await productsInCategory(prisma, "nope"), []);
+  assert.deepEqual(await productsInCategory(prisma, "bean"), [], "שם קטגוריה מדויק — לא חלק ממנו");
 });

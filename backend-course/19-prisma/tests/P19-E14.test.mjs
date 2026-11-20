@@ -26,3 +26,8 @@ test("5 הזמנות במקביל, 3 במלאי", async (t) => {
   assert.equal(results.filter((r) => r.status === "fulfilled").length, 3);
   assert.equal((await prisma.product.findUnique({ where: { id: 5 } })).stock, 0);
 });
+test("total מעוגל לאגורות (בלי זנבות של float)", async (t) => {
+  const { prisma } = await shop(t, import.meta.url);
+  const r = await placeOrder(prisma, 4, [{ productId: 1, quantity: 1 }, { productId: 3, quantity: 1 }]);
+  assert.equal(r.total, 119.8, "89.90 + 29.90");
+});
