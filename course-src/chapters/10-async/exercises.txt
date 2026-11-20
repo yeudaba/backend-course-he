@@ -27,6 +27,7 @@ C
 E
 B
 ```
+<p><strong>למה:</strong> קוד רגיל רץ קודם, עד הסוף, ולכן A ו־D ראשונים. ה־callbacks של <code>setTimeout</code> רצים רק אחרי זה, לפי הזמן שנקבע להם ולא לפי סדר הכתיבה: 0, אחר כך 50, ובסוף 100.</p>
 @mistakes
 <ul><li>לשים C מיד אחרי A — גם 0ms ממתין שהקוד הנוכחי יסתיים.</li></ul>
 
@@ -66,6 +67,7 @@ console.log(6);
 2
 5
 ```
+<p><strong>למה:</strong> הקוד הרגיל רץ קודם (1, 6). אחריו רצים כל ה־callbacks של Promises (microtasks), ולכן 3 ו־4. רק אחר כך מגיעים ה־timers. 2 נקבע לפני 5: ה־timer של 5 נוצר רק בתוך ה־then, ולכן הוא נכנס לתור אחרי 2.</p>
 @mistakes
 <ul><li>להדפיס 2 לפני 3 — Promises קודמים לטיימרים.</li></ul>
 
@@ -150,6 +152,7 @@ A undefined
 C אופס
 D 7
 ```
+<p><strong>למה:</strong> כל <code>then</code> מעביר הלאה את מה שה־callback שלו מחזיר. ה־callback השני עם סוגריים מסולסלים ובלי <code>return</code>, ולכן A מקבל <code>undefined</code>. שגיאה מדלגת על כל ה־<code>then</code> עד ה־<code>catch</code> הקרוב, ולכן B לא מודפס. <code>catch</code> שמחזיר ערך "מתקן" את השרשרת, וה־<code>then</code> שאחריו מקבל 7.</p>
 @mistakes
 <ul><li>לחשוב ש־D לא ירוץ — אחרי catch השרשרת ממשיכה כרגיל.</li></ul>
 
@@ -186,6 +189,7 @@ console.log(await show(Promise.race([ok(5, "a"), fail(10, "x")])));
 נכשל: x
 "a"
 ```
+<p><strong>למה:</strong> <code>Promise.all</code> מחזיר את התוצאות לפי הסדר שבו הועברו, לא לפי סדר הסיום. מספיקה דחייה אחת כדי שכולו יידחה. <code>allSettled</code> אף פעם לא נדחה: הוא מחכה לכולם ומדווח מה קרה לכל אחד. <code>race</code> נגמר עם הראשון שמסתיים, בין אם הצליח ובין אם נכשל. לכן התוצאה תלויה בזמנים: 10 לפני 30, אבל 5 לפני 10.</p>
 @mistakes
 <ul><li>לחשוב ש־all מחזיר <code>["b","a"]</code> לפי סדר הסיום.</li></ul>
 
@@ -3728,3 +3732,49 @@ async function report() {
 <ol><li>ארבע שורות, ו־<code>catch</code> אחד לכל השלבים — כולל שגיאה שנזרקת בקוד שלנו (למשל <code>config.userId</code> על <code>undefined</code>).</li><li>מקום אחד: <code>finally</code>. בגרסת ה־callbacks היו צריכים חמישה.</li><li>לא כמו שהקוד כתוב: כל שלב צריך את התוצאה של הקודם (<code>config</code> ← <code>user</code> ← <code>orders</code>). אילו <code>readOrdersP</code> הייתה מקבלת את <code>config.userId</code> ישירות — אפשר היה להביא את המשתמש וההזמנות יחד: <code>await Promise.all([readUserP(id), readOrdersP(id)])</code>.</li></ol>
 @mistakes
 <ul><li>לשים <code>try/catch</code> נפרד סביב כל שורה — חוזרים לפירמידה, רק בלי ההזחה.</li><li>לשכוח את <code>await</code> לפני <code>sendReportP</code> — "done" מודפס לפני שהדוח נשלח, וכישלון שלו לא נתפס.</li></ul>
+
+@@ P10-E83 | 4 | תזכורות שמגיעות כולן יחד 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p><code>scheduleReminders(messages, gapMs, log)</code> ב־<code>10-async/starter/P10-E83.js</code> אמורה לתזמן את ההודעות במרווחים: הודעה <code>i</code> אחרי <code>i × gapMs</code> מילישניות (הראשונה — אחרי 0), ואחרי ההודעה האחרונה, במרווח נוסף, <code>log("סיימנו")</code>. הפונקציה עצמה לא קוראת ל־<code>log</code> בכלל: הכול קורה בטיימרים.</p>
+```js
+scheduleReminders(["לקנות חלב", "להתקשר לסבתא", "לשלם חשבון"], 100, console.log);
+// 0ms: לקנות חלב · 100ms: להתקשר לסבתא · 200ms: לשלם חשבון · 300ms: סיימנו
+```
+<p>במקום זה, "סיימנו" מודפס מיד, והקובץ קורס:</p>
+```text
+TypeError [ERR_INVALID_ARG_TYPE]: The "callback" argument must be of type function. Received undefined
+```
+<p>ואחרי שמתקנים את הקריסה, מודפס שלוש פעמים <code>undefined</code>, כולן באותו רגע. בסך הכול שלוש תקלות. מצא ותקן.</p>
+```term
+% node 10-async/starter/P10-E83.js
+% npm run check P10-E83
+```
+@hint1
+<p>מה <code>setTimeout</code> מקבל בפרמטר הראשון: פונקציה, או את התוצאה של קריאה לפונקציה?</p>
+@hint2
+<p>כשהטיימרים רצים, הלולאה כבר הסתיימה. מה הערך של <code>i</code> אז, אם הוא הוגדר עם <code>var</code>? ובדוק מה כל טיימר מקבל כזמן.</p>
+@solution
+```js run save=solutions/P10-E83.js
+// P10-E83: תזכורות במרווחים — מתוקן
+function scheduleReminders(messages, gapMs, log) {
+  for (let i = 0; i < messages.length; i++) {
+    setTimeout(() => log(messages[i]), i * gapMs);
+  }
+  setTimeout(() => log("סיימנו"), messages.length * gapMs);
+}
+
+scheduleReminders(["לקנות חלב", "להתקשר לסבתא", "לשלם חשבון"], 100, console.log);
+
+module.exports = { scheduleReminders };
+```
+```out
+לקנות חלב
+להתקשר לסבתא
+לשלם חשבון
+סיימנו
+```
+<ol><li><code>setTimeout(log("סיימנו"), …)</code> קורא ל־<code>log</code> <strong>עכשיו</strong> (לכן "סיימנו" הודפס ראשון), ומעביר ל־<code>setTimeout</code> את מה שהיא החזירה, <code>undefined</code>. ‏<code>setTimeout</code> דורש פונקציה, ולכן זרק <code>TypeError</code>. צריך להעביר פונקציה שתרוץ אחר כך: <code>() =&gt; log("סיימנו")</code>.</li><li>עם <code>var</code> יש <code>i</code> אחד לכל הלולאה. הטיימרים רצים אחרי שהלולאה הסתיימה, כש־<code>i</code> כבר 3, ו־<code>messages[3]</code> הוא <code>undefined</code>. עם <code>let</code> כל סיבוב מקבל <code>i</code> משלו.</li><li>כל הטיימרים קיבלו את אותו זמן, <code>gapMs</code>, ולכן רצו יחד. הזמן של הודעה <code>i</code> הוא <code>i * gapMs</code>.</li></ol>
+@mistakes
+<ul><li>לתקן רק את <code>let</code>. ההודעות נכונות, אבל עדיין מגיעות יחד, ו"סיימנו" עדיין ראשון.</li><li><code>setTimeout(log, …, "סיימנו")</code> עובד, אבל קל לבלבל את סדר הפרמטרים. פונקציית חץ ברורה יותר.</li><li>לתזמן את "סיימנו" ב־<code>(messages.length - 1) * gapMs</code>. זה אותו רגע של ההודעה האחרונה, והמשימה מבקשת מרווח נוסף.</li></ul>
