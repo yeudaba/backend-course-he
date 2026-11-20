@@ -27,6 +27,50 @@ function commentRanges(src) {
   return [...src.matchAll(TOKENS)].filter((m) => m[1] === undefined).map((m) => [m.index, m.index + m[0].length]);
 }
 
+// הקוד שלך בלי הערות ובלי טקסט: "..." ו־'...' הופכים ל־"", ומ־`...` נשארים רק החלקים של ${...}
+// (גם כשיש template literal בתוך ${...}, למשל `ORD-${`${n}`.padStart(5, "0")}`)
+export function bareCode(src) {
+  let i = 0;
+  const out = [];
+  // קוד רגיל, עד הסוף או עד } שסוגר את ${ (כש־inExpr)
+  const codeUntil = (inExpr) => {
+    let depth = 0;
+    let s = "";
+    while (i < src.length) {
+      const c = src[i];
+      const two = src.slice(i, i + 2);
+      if (two === "//") { while (i < src.length && src[i] !== "\n") i++; continue; }
+      if (two === "/*") { const end = src.indexOf("*/", i + 2); i = end === -1 ? src.length : end + 2; s += " "; continue; }
+      if (c === '"' || c === "'") {
+        i++;
+        while (i < src.length && src[i] !== c && src[i] !== "\n") i += src[i] === "\\" ? 2 : 1;
+        if (src[i] === c) i++; // מחרוזת שלא נסגרה — נעצרים בסוף השורה
+        s += '""';
+        continue;
+      }
+      if (c === "`") { i++; s += template(); continue; }
+      if (c === "{") depth++;
+      if (c === "}") { if (inExpr && depth === 0) { i++; return s; } depth--; }
+      s += c;
+      i++;
+    }
+    return s;
+  };
+  // בתוך `...`: מחזיר רק את הביטויים ${...}, מופרדים ברווח
+  const template = () => {
+    const parts = [];
+    while (i < src.length) {
+      if (src[i] === "\\") { i += 2; continue; }
+      if (src[i] === "`") { i++; break; }
+      if (src.startsWith("${", i)) { i += 2; parts.push("${" + codeUntil(true) + "}"); continue; }
+      i++;
+    }
+    return parts.join(" ");
+  };
+  out.push(codeUntil(false));
+  return out.join("");
+}
+
 // כל המחרוזות שכתבת בקוד (בתוך "...", '...' או `...`, בלי הביטויים שבתוך ${...})
 export function strings(src) {
   return [...code(src).matchAll(/"((?:\\.|[^"\\\n])*)"|'((?:\\.|[^'\\\n])*)'|`((?:\\.|[^`\\])*)`/g)].map((m) => m[1] ?? m[2] ?? m[3].replace(/\$\{[^}]*\}/g, "")); // בתוך `...` — בלי החלקים של ${...}
