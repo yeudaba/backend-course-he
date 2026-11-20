@@ -1,18 +1,13 @@
 const year = 1900;
 
-// גרסה 1: if / else if
-let isLeap;
+let kind;
 if (year % 400 === 0) {
-  isLeap = true;
+  kind = "מעוברת";
 } else if (year % 100 === 0) {
-  isLeap = false;
+  kind = "רגילה";
 } else if (year % 4 === 0) {
-  isLeap = true;
+  kind = "מעוברת";
 } else {
-  isLeap = false;
+  kind = "רגילה";
 }
-console.log(`${year}: ${isLeap ? "מעוברת" : "רגילה"}`);
-
-// גרסה 2: ביטוי אחד
-const isLeap2 = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-console.log(`${year}: ${isLeap2 ? "מעוברת" : "רגילה"}`);
+console.log(`${year}: ${kind}`);

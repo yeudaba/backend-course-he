@@ -12,12 +12,10 @@ for (const [y, kind] of [
   [2000, "מעוברת"],
   [2100, "רגילה"],
 ]) {
-  test(`${y}: ${kind} — בשתי הגרסאות`, () => sameOutput(y === 1900 ? run(import.meta.url, FILE) : withYear(y), [`${y}: ${kind}`, `${y}: ${kind}`]));
+  test(`${y}: ${kind}`, () => sameOutput(y === 1900 ? run(import.meta.url, FILE) : withYear(y), [`${y}: ${kind}`]));
 }
 
-test("שתי גרסאות: if / else if, וביטוי אחד עם && ו־||", () => {
+test("שרשרת if / else if", () => {
   const src = code(source(import.meta.url, FILE));
-  assert.match(src, /else\s+if/, "גרסה 1 צריכה if / else if");
-  assert.match(src, /&&/, "גרסה 2: ביטוי אחד עם &&");
-  assert.match(src, /\|\|/, "גרסה 2: ביטוי אחד עם ||");
+  assert.match(src, /else\s+if/, "כתוב את הבדיקה כשרשרת if / else if");
 });
