@@ -4800,3 +4800,46 @@ export function createTracer({ onSpan, now, randomHex }: { onSpan: (s: Span) => 
 <p>שימוש: <code>tracer.withSpan("db: SELECT tasks", () =&gt; pool.query(...))</code>. זה בדיוק מה ש־OpenTelemetry עושה אוטומטית ל־pg ול־fetch (סעיף 6) — וגם הוא שומר את ה־span הנוכחי ב־AsyncLocalStorage.</p>
 @mistakes
 <ul><li>משתנה <code>let current</code> במקום AsyncLocalStorage — שני spans במקביל "דורסים" זה את זה, וילדים נתלים על ההורה הלא נכון.</li><li><code>onSpan</code> רק בהצלחה — ואז דווקא הפעולות שנכשלו לא מופיעות ב־trace.</li></ul>
+
+@@ P24-E121 | 4 | שורת לוג שמדליפה טוקן 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>‏<code>toLogEntry(info)</code> ב־<code>24-production/starter/P24-E121.ts</code> בונה את שורת הלוג של כל בקשה בפרויקט 2. ‏<code>info</code>: ‏<code>{ method, url, status, ms, requestId, headers }</code>. התוצאה:</p>
+<ul><li><code>{ level, msg: "request", requestId, method, path, status, ms }</code> — ובלי שום שדה אחר.</li><li><code>level</code>: ‏status 500 ומעלה ← <code>"error"</code>; ‏400 ומעלה ← <code>"warn"</code>; אחרת <code>"info"</code>.</li><li><code>path</code>: ה־url בלי query string (שם יש לפעמים טוקנים ואימיילים).</li><li><code>ms</code>: מעוגל לספרה אחת אחרי הנקודה.</li></ul>
+<p>בבדיקה של צוות האבטחה נמצאו בלוגים טוקנים, ו־header של <code>authorization</code>. וגם: שגיאות 500 מסומנות <code>warn</code>, ו־404 מסומן <code>info</code>. מצא ותקן.</p>
+```term
+% npm run check P24-E121
+```
+@hint1
+<p>‏<code>console.log(toLogEntry({ method: "GET", url: "/tasks?token=abc", status: 500, ms: 12.345, requestId: "r1", headers: { authorization: "Bearer x" } }))</code>. מה מופיע שם שלא צריך להופיע?</p>
+@hint2
+<p>‏<code>...info</code> מעתיק את כל השדות, כולל <code>headers</code>. ‏<code>&gt; 500</code> לא כולל את 500. ו־<code>url</code> כולל את ה־query.</p>
+@solution
+```ts save=solutions/P24-E121.ts
+// P24-E121: שורת הלוג של בקשה — מתוקן
+export interface RequestInfo {
+  method: string;
+  url: string;
+  status: number;
+  ms: number;
+  requestId: string;
+  headers: Record<string, string>;
+}
+
+export function toLogEntry(info: RequestInfo) {
+  const level = info.status >= 500 ? "error" : info.status >= 400 ? "warn" : "info";
+  return {
+    level,
+    msg: "request",
+    requestId: info.requestId,
+    method: info.method,
+    path: info.url.split("?")[0],
+    status: info.status,
+    ms: Math.round(info.ms * 10) / 10,
+  };
+}
+```
+<ol><li><strong>‏<code>...info</code></strong> העתיק לשורת הלוג את כל מה שהגיע, כולל <code>headers</code> עם <code>authorization</code>. בלוג בונים רשימה מפורשת של שדות (allowlist), לא "הכול חוץ מ־".</li><li><strong>‏<code>path: info.url</code></strong> כלל את ה־query string, ושם היה <code>?token=…</code>. חותכים ב־<code>?</code>.</li><li><strong>‏<code>&gt; 500</code> ו־<code>&gt; 400</code></strong> השאירו את 500 ואת 400 בדרגה הנמוכה. הגבולות כוללים: <code>&gt;=</code>.</li></ol>
+@mistakes
+<ul><li>‏<code>delete entry.headers</code> אחרי ה־spread. השדה הבא שיתווסף ל־<code>info</code> (למשל <code>body</code>) ידלוף שוב.</li><li>להסתיר רק את <code>authorization</code>. גם <code>cookie</code> ו־<code>x-api-key</code> הם סודות; לכן לא מעתיקים headers בכלל.</li><li>‏<code>ms.toFixed(1)</code>. זה מחזיר מחרוזת, ובכלי הלוגים אי אפשר לחשב עליה ממוצע.</li></ul>
