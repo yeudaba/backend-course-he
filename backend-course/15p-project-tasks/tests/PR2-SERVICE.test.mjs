@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../../tools/load.mjs";
 
-const { TasksService } = await load(import.meta.url, "tasks-api/src/tasks/tasks.service.ts");
-const { InMemoryTasksRepository } = await load(import.meta.url, "tasks-api/src/tasks/tasks.repository.ts");
-const { HttpError } = await load(import.meta.url, "tasks-api/src/errors.ts");
+const { TasksService } = await load(import.meta.url, "tasks-api/src/tasks/tasks.service.ts", { step: "שלב 1", exports: "TasksService" });
+const { InMemoryTasksRepository } = await load(import.meta.url, "tasks-api/src/tasks/tasks.repository.ts", { step: "שלב 1", exports: "InMemoryTasksRepository" });
+const { HttpError } = await load(import.meta.url, "tasks-api/src/errors.ts", { step: "שלב 1", exports: "HttpError" });
 
 const input = (o = {}) => ({ title: "משימה", description: null, status: "todo", priority: "medium", dueDate: null, ...o });
 function setup(start = "2026-11-04T10:00:00.000Z") {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { load, listen } from "../../tools/load.mjs";
 
 // יחידה 15.5: CORS — רק הדף שלנו רשאי לקרוא ל־API מהדפדפן
-const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts");
+const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts", { step: "שלב 2", exports: "createApp" });
 
 async function start(t, options) {
   const { base, close } = await listen(createApp(options));

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load, listen, api } from "../../tools/load.mjs";
 
-const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts");
+const { createApp } = await load(import.meta.url, "tasks-api/src/app.ts", { step: "שלב 2", exports: "createApp" });
 
 async function seeded(t) {
   const clock = { now: new Date("2026-11-01T09:00:00.000Z") };
