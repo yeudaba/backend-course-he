@@ -31,3 +31,8 @@ test("עלות שלילית או NaN ← שגיאה", () => {
   assert.throws(() => b.record("a", -1));
   assert.throws(() => b.record("a", NaN));
 });
+test("record של 0 — תקין", () => {
+  const b = createBudget({ dailyUsdPerUser: 1, now: () => 0 });
+  b.record("dana", 0);
+  assert.deepEqual(b.check("dana"), { allowed: true, remainingUsd: 1 });
+});

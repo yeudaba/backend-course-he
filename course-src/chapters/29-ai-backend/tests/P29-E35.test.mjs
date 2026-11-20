@@ -20,6 +20,12 @@ test("מפתח חסר או שגוי — בלי לחשוף אותו", () => {
     assert.ok(!String(e.message).includes("SECRETGITHUB"), "ההודעה כוללת את הערך שהתקבל");
   }
 });
+test("הגבולות עצמם תקינים", () => {
+  assert.equal(aiConfig({ ANTHROPIC_API_KEY: KEY, AI_MAX_RETRIES: "5" }).maxRetries, 5);
+  assert.equal(aiConfig({ ANTHROPIC_API_KEY: KEY, AI_MAX_RETRIES: "0" }).maxRetries, 0);
+  assert.equal(aiConfig({ ANTHROPIC_API_KEY: KEY, AI_TIMEOUT_MS: "600000" }).timeoutMs, 600000);
+  assert.equal(aiConfig({ ANTHROPIC_API_KEY: KEY, AI_TIMEOUT_MS: "1000" }).timeoutMs, 1000);
+});
 test("ערכים לא תקינים", () => {
   for (const [k, v] of [["AI_MODEL", "gpt-x"], ["AI_MAX_RETRIES", "6"], ["AI_MAX_RETRIES", "2.5"], ["AI_MAX_RETRIES", "abc"], ["AI_TIMEOUT_MS", "999"], ["AI_TIMEOUT_MS", "700000"]]) {
     assert.throws(() => aiConfig({ ANTHROPIC_API_KEY: KEY, [k]: v }), new RegExp(k), `${k}=${v}`);

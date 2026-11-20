@@ -32,3 +32,9 @@ test("ריק", async () => {
   const { client } = fakeClaude(() => message('{"items":[]}'));
   assert.deepEqual(await extractOrder(client, "שלום", CATALOG), { ok: true, items: [], totalCents: 0, skipped: [] });
 });
+test("כמות 20 — הגבול תקין", async () => {
+  const { client } = fakeClaude(() => message(JSON.stringify({ items: [{ product: "V60 Dripper", quantity: 20 }] })));
+  const r = await extractOrder(client, "20 V60", CATALOG);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.skipped, []);
+});

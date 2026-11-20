@@ -16,8 +16,8 @@ function repo() {
 
 test("רק של המשתמש, בלי כפילויות", async () => {
   const r = repo();
-  const out = await verifyOrderIds([10, "11", 12, 99, 11, -3, 10, 2.5, null, 11], 7, r);
-  assert.deepEqual(out, { valid: [10, 11], rejected: ["11", 12, 99, -3, 2.5, null] });
+  const out = await verifyOrderIds([10, "11", 12, 99, 11, -3, 10, 2.5, null, 11, 0], 7, r);
+  assert.deepEqual(out, { valid: [10, 11], rejected: ["11", 12, 99, -3, 2.5, null, 0] });
   assert.deepEqual([...r.calls].sort((a, b) => a - b), [10, 11, 12, 99]);
   assert.ok(r.peak() > 1, "במקביל");
 });

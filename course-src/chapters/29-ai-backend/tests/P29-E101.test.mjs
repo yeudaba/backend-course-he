@@ -31,3 +31,7 @@ test("ערכים לא תקינים ← ok: false, בלי לזרוק", () => {
     assert.equal(typeof r.error, "string");
   }
 });
+test("confidence 0 ו־1 — הגבולות תקינים", () => {
+  assert.equal(f('{"category":"billing","confidence":0}').ok, true);
+  assert.equal(f('{"category":"billing","confidence":1}').ok, true);
+});

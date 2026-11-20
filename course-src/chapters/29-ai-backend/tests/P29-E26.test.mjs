@@ -23,6 +23,8 @@ test("chunk — פסקה ארוכה מדי: לפי משפטים, ומשפט אר
   assert.deepEqual(chunk("abcdefghij", 4), ["abcd", "efgh", "ij"]);
   for (const c of chunk("x".repeat(1000) + "\n\nshort", 300)) assert.ok(c.length <= 300, `קטע של ${c.length} תווים`);
   assert.throws(() => chunk("x", 0), RangeError);
+  assert.throws(() => chunk("x", 2.5), RangeError);
+  assert.deepEqual(chunk("ab", 1), ["a", "b"], "maxChars 1 — תקין");
 });
 test("retrieve — ניקוד לפי מילים משותפות (3 אותיות ומעלה, בלי תלות באותיות גדולות)", async () => {
   const { retrieve } = await get();

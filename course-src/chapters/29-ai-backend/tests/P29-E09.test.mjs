@@ -32,3 +32,9 @@ test("שגיאת API (500) — עולה, לא נבלעת", async () => {
   const { client } = fakeClaude(() => ({ error: 500 }));
   await assert.rejects(classifyTicket(client, "x"), (e) => e.status === 500);
 });
+test("JSON תקין אבל stop_reason אינו end_turn ← other + needsHuman", async () => {
+  const { client } = fakeClaude(() => message(JSON.stringify({ category: "refund", urgency: "low", summary: "x" }), { stop_reason: "max_tokens" }));
+  const r = await classifyTicket(client, "טקסט");
+  assert.equal(r.category, "other");
+  assert.equal(r.needsHuman, true);
+});
