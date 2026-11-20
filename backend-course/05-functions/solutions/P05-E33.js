@@ -1,7 +1,7 @@
-function square(n) {
-  return n * n;
+function rectangleArea(width, height) {
+  return width * height;
 }
 
-console.log(square(7));
+console.log(rectangleArea(4, 2.5));
 
-module.exports = { square };
+module.exports = { rectangleArea };
