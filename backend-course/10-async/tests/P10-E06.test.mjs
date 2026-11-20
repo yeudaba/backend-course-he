@@ -9,8 +9,8 @@ const failAfter = (ms, m) => new Promise((_, rej) => setTimeout(() => rej(new Er
 test("delay מחזירה Promise עם הערך אחרי הזמן", async () => {
   const t = Date.now();
   const v = await delay(40, "x");
-  assert.equal(v, "x");
-  assert.ok(Date.now() - t >= 35);
+  assert.equal(v, "x", `await delay(40, "x") החזיר ${String(v)} — ה־Promise צריך להצליח עם value`);
+  assert.ok(Date.now() - t >= 35, `delay(40, "x") הצליח אחרי ${Date.now() - t}ms — צריך לחכות ms מילישניות (setTimeout) לפני resolve`);
 });
 test("countdown", async () => {
   const out = [];

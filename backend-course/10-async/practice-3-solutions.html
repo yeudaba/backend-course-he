@@ -317,44 +317,6 @@ module.exports = { slowSquareRoot };</code></pre>
 
 </div></details>
   </div>
-<div class="ex" id="P10-E13">
-    <h3>P10-E13 · הקובץ הראשון שקיים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p><code class="long">for (const file of files) { try { return { file, text: await fs.readFile(file, "utf8") }; } catch { /* ממשיכים */ } }</code></p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>כאן ההמתנה ברצף היא <em>בכוונה</em> — לא רוצים לקרוא את כולם.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P10-E13
-const fs = require("node:fs/promises");
-
-async function readFirstExisting(files) {
-  for (const file of files) {
-    try {
-      const text = await fs.readFile(file, "utf8");
-      return { file, text };
-    } catch {
-      // הקובץ לא קיים או לא קריא — ננסה את הבא
-    }
-  }
-  throw new Error("לא נמצא אף קובץ");
-}
-
-readFirstExisting(["/nope1", "/nope2"]).catch((e) =&gt; console.log(e.message));
-
-module.exports = { readFirstExisting };</code></pre>
-<pre class="terminal">לא נמצא אף קובץ</pre>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code>return fs.readFile(...)</code> בלי await בתוך try — השגיאה לא נתפסת שם, והלולאה לא ממשיכה.</li></ul>
-
-
-</div></details>
-  </div>
 <div class="ex" id="P10-E14">
     <h3>P10-E14 · שורות בכל הקבצים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -398,11 +360,11 @@ module.exports = { lineCounts, countLines };</code></pre>
 <div class="ex" id="P10-E21">
     <h3>P10-E21 · שרשרת שאיבדה ערכים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p>then שלא מחזיר; Promise שנוצר בתוך then ולא הוחזר.</p>
+<p>הוסף <code>console.log</code> בתחילת כל <code>then</code> שמדפיס את הערך שהוא קיבל. באיזה שלב הערך הופך ל־<code>undefined</code>? ומה ה־<code>then</code> שלפניו <strong>מחזיר</strong>?</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>כל then שעושה עבודה אסינכרונית חייב <code>return</code> ל־Promise.</p>
+<p>שני המקומות: <code>then</code> שלא מחזיר כלום, ו־Promise שנוצר בתוך <code>then</code> ולא הוחזר. כל <code>then</code> שעושה עבודה אסינכרונית חייב <code>return</code> ל־Promise.</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
@@ -566,6 +528,45 @@ ENOENT</pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>fs.writeFile(...)</code> בלי <code>return</code> — ה־Promise מצליח לפני שהכתיבה הסתיימה, ושגיאת כתיבה הולכת לאיבוד.</li><li><code>fs.writeFileSync</code> בתוך ה־then — עובד, אבל חוסם; המשימה היא שרשרת.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P10-E84">
+    <h3>P10-E84 · מדליקים ומכבים "טוען..." 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בטבלה של סעיף 2 יש מתודה שרצה "תמיד, בסוף" — גם אחרי הצלחה וגם אחרי כישלון.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>אל תשכח <code>return</code> לשרשרת: מי שקרא ל־<code>withLoading</code> צריך לקבל את ה־Promise, כדי שיוכל לעשות עליו <code>then</code> או <code>catch</code>. ו־<code>finally</code> לא משנה את התוצאה — הערך (או השגיאה) עובר דרכו הלאה.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P10-E84: "טוען..." נדלק ונכבה תמיד
+function withLoading(task, setLoading) {
+  setLoading(true);
+  return task().finally(() =&gt; setLoading(false));
+}
+
+const show = (on) =&gt; console.log(on ? "טוען..." : "סיימנו");
+withLoading(() =&gt; Promise.resolve(42), show)
+  .then((v) =&gt; console.log("קיבלנו", v))
+  .then(() =&gt; withLoading(() =&gt; Promise.reject(new Error("השרת לא עונה")), show))
+  .catch((err) =&gt; console.log("נכשל:", err.message));
+
+module.exports = { withLoading };</code></pre>
+<pre class="terminal">טוען...
+סיימנו
+קיבלנו 42
+טוען...
+סיימנו
+נכשל: השרת לא עונה</pre>
+<p>למה <code>finally</code>: הוא רץ גם אחרי הצלחה וגם אחרי כישלון, ולא משנה את התוצאה — מה ש־<code>task</code> החזיר (או השגיאה שלו) ממשיך הלאה בשרשרת, כאילו <code>finally</code> לא היה שם. בלעדיו היה צריך לכבות פעמיים: פעם ב־<code>then</code> ופעם ב־<code>catch</code>, וב־<code>catch</code> גם לזרוק את השגיאה שוב.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכבות רק ב־<code>then</code> — בכישלון "טוען..." נשאר דולק.</li><li>לקרוא ל־<code>setLoading(false)</code> מיד אחרי <code>task()</code>, בלי לחכות — הוא נכבה לפני שהבקשה הסתיימה.</li><li><code class="mid">.catch(() =&gt; setLoading(false))</code> — מכבה, אבל "בולע" את השגיאה: מי שקרא מקבל הצלחה עם <code>undefined</code>.</li><li>לשכוח <code>return</code> — הפונקציה מחזירה <code>undefined</code>, ואי אפשר לחכות לתוצאה.</li></ul>
 
 
 </div></details>

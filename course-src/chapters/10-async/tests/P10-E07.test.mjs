@@ -13,4 +13,4 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p10e07-"));
 const call = (file) => new Promise((resolve) => { let n = 0; readJson(file, (err, data) => { n++; setTimeout(() => resolve({ err, data, n }), 20); }); });
 test("קובץ תקין", async () => { const f = path.join(dir, "a.json"); fs.writeFileSync(f, '{"a":1}'); const r = await call(f); assert.equal(r.err, null); assert.deepEqual(r.data, { a: 1 }); assert.equal(r.n, 1); });
 test("קובץ לא קיים", async () => { const r = await call(path.join(dir, "none.json")); assert.equal(r.err.code, "ENOENT"); assert.equal(r.n, 1); });
-test("JSON פגום", async () => { const f = path.join(dir, "b.json"); fs.writeFileSync(f, "{oops"); const r = await call(f); assert.ok(r.err instanceof SyntaxError); assert.equal(r.n, 1); });
+test("JSON פגום", async () => { const f = path.join(dir, "b.json"); fs.writeFileSync(f, "{oops"); const r = await call(f); assert.ok(r.err instanceof SyntaxError, `על JSON פגום ה־callback צריך לקבל את השגיאה של JSON.parse (SyntaxError) כפרמטר הראשון, וקיבל: ${String(r.err)}`); assert.equal(r.n, 1); });

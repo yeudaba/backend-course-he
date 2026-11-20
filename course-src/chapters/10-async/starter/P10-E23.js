@@ -1,5 +1,5 @@
 // P10-E23: איטי (~300ms) וכשל בהמלצות מפיל הכול.
-// דרישות: פחות מ־150ms; כשל ב־getRecommendations → recommendations: []
+// דרישות: שלוש הקריאות במקביל; כשל ב־getRecommendations → recommendations: []
 // מחזירה { name, orderCount, recommendations }
 async function getProfilePage(userId, api) {
   const user = await api.getUser(userId);
