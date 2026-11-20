@@ -21,6 +21,8 @@
 <p>ARN של bucket וה־ARN של האובייקטים בתוכו — שני דברים שונים.</p>
 @solution
 <ol><li><strong>לא.</strong> מפתח קבוע של אדם, עם כל ההרשאות שלו, שלא פג. דולף מלוג, מגיבוי, ממחשב של מפתח. לשרת — <strong>role</strong>: הרשאות רק למה שהוא צריך, ו־credentials זמניים שמתחלפים לבד (STS).</li><li><strong>לא.</strong> <code>arn:aws:s3:::coffee-uploads</code> הוא ה־bucket עצמו (לפעולות כמו <code>ListBucket</code>). אובייקטים הם <code>arn:aws:s3:::coffee-uploads/*</code>. זה בדיוק הבאג של E21: "AccessDenied, אבל נתתי הרשאה!".</li><li><strong>נכון</strong> — implicit deny. ברירת המחדל היא "לא".</li><li><strong>לא.</strong> Deny מפורש מנצח תמיד, לא משנה כמה Allow יש. כך חוסמים פעולה מסוכנת לכולם (למשל מחיקה של גיבויים) בלי לבדוק כל policy (E13).</li><li><strong>נכון.</strong> <strong>IRSA</strong> או <strong>EKS Pod Identity</strong>: ה־ServiceAccount של ה־pod מקושר ל־IAM role, וה־SDK מקבל credentials זמניים אוטומטית. אין סוד לנהל.</li><li><strong>לא.</strong> <code>s3:*</code> כולל <code>DeleteObject</code>, <code>PutBucketPolicy</code> (להפוך את ה־bucket לציבורי!) ו־<code>DeleteBucket</code>. least privilege = רשימת פעולות מפורשת (E08).</li></ol>
+@mistakes
+<ul><li>לחשוב ש־Allow אחד "מבטל" Deny. הסדר הפוך: Deny מפורש בודקים קודם, והוא מנצח תמיד.</li><li>לכתוב ARN של ה־bucket (<code>arn:aws:s3:::coffee-uploads</code>) ולצפות שיכסה את הקבצים. לקבצים צריך <code>/*</code> בסוף.</li><li>"המפתח ב־.env, אז הוא בטוח". קובץ .env מגיע ללוגים, לגיבויים ולמחשבים של מפתחים. לשרת נותנים role עם credentials זמניים.</li></ul>
 
 @@ P26.3-E03 | 1 | מה S3 מחזיר? | 15 | שיעור 2
 @task
@@ -68,6 +70,8 @@ console.log("3.", top.Contents!.map((o) => o.Key), top.CommonPrefixes!.map((p) =
 3. [ 'img10.png', 'img2.png' ] [ 'receipts/' ]
 ```
 <ol><li><strong>v2</strong> — הכתיבה השנייה החליפה את האובייקט כולו. (מאז 2020 S3 עקבי מיידית: קריאה אחרי כתיבה מחזירה את הגרסה החדשה. אם צריך היסטוריה — Versioning על ה־bucket.)</li><li><strong>img10 לפני img2</strong> — מיון של מחרוזות: "1" &lt; "2". מי שרוצה סדר מספרי — מרפד באפסים (<code>img002</code>) או מפתח עם תאריך ISO (E19).</li><li>אין תיקיות ב־S3: <code>receipts/2026/a.pdf</code> הוא מפתח אחד עם לוכסנים. <code>Delimiter: "/"</code> רק <em>מקבץ</em> מפתחות לפי ה־prefix עד הלוכסן הראשון — ומחזיר את <code>receipts/</code> ב־<code>CommonPrefixes</code>, כאילו הייתה תיקייה.</li></ol>
+@mistakes
+<ul><li>לצפות ש־<code>img2.png</code> יופיע לפני <code>img10.png</code>. המפתחות ממוינים כמחרוזות, תו אחרי תו, ו־"1" קטן מ־"2".</li><li>לחשוב ש־<code>receipts/</code> היא תיקייה שקיימת ב־S3. זה רק prefix של מפתח, ו־<code>Delimiter</code> מקבץ לפיו בתשובה.</li><li>לחשוב שהכתיבה השנייה ל־<code>img2.png</code> נכשלת או יוצרת עותק. היא מחליפה את האובייקט כולו (בלי Versioning, v1 נעלם).</li></ul>
 
 @@ P26.3-E04 | 1 | מה Kubernetes יעשה? | 15 | שיעור 3
 @task
@@ -79,6 +83,8 @@ console.log("3.", top.Contents!.map((o) => o.Key), top.CommonPrefixes!.map((p) =
 <p>ה־Deployment כל הזמן משווה בין מה שכתוב (desired) למה שקיים (actual).</p>
 @solution
 <ol><li>ה־ReplicaSet רואה 2 במקום 3, ויוצר pod חדש תוך שניות. זה הרעיון של <strong>desired state</strong>: לא אומרים "תפעיל", אומרים "צריכים להיות 3".</li><li><strong>שום pod לא מופעל מחדש</strong> (liveness תקין). כולם יוצאים מה־endpoints של ה־Service (readiness נכשל) — הבקשות נכשלות מהר ב־Ingress במקום להיתקע, וכשהמסד חוזר, הם חוזרים לבד. אם liveness היה בודק את המסד — Kubernetes היה מפעיל מחדש את כל ה־pods בלולאה, בלי שזה עוזר בכלום (פרק 25).</li><li>אחרי <code>failureThreshold</code> כישלונות של liveness — הקונטיינר מופעל מחדש (<code>RESTARTS</code> עולה ב־<code>kubectl get pods</code>).</li><li><strong>OOMKilled</strong> — הקונטיינר נהרג ומופעל מחדש. (חריגה מ־limit של CPU לא הורגת — היא מאטה: throttling.)</li><li>ה־pods החדשים ב־<code>CrashLoopBackOff</code>, אף אחד לא Ready — וה־rolling update <strong>נעצר</strong>: הישנים לא מוסרים מעבר ל־<code>maxUnavailable</code>. האתר ממשיך לעבוד על הגרסה הישנה. <code>kubectl rollout undo</code> (או revert ב־Git, עם Argo CD — שיעור 4).</li><li>ה־scheduler יוצר שני pods חדשים על nodes אחרים (אם יש מקום — אחרת הם <code>Pending</code>, E18). ו־PodDisruptionBudget מגן מכיבוי <em>מתוכנן</em> של nodes, לא מתקלה (E11).</li></ol>
+@mistakes
+<ul><li>לבלבל בין readiness ל־liveness: readiness שנכשל רק מוציא את ה־pod מה־Service, ולא מפעיל אותו מחדש.</li><li>לחשוב שחריגה מ־limit של CPU הורגת את הקונטיינר. רק memory גורם ל־OOMKilled. ב־CPU יש throttling, כלומר האטה.</li><li>לחשוב ש־image שקורס יפיל את האתר. ה־rolling update נעצר, והגרסה הישנה ממשיכה לשרת.</li></ul>
 
 @@ P26.3-E05 | 1 | Helm ו־GitOps: מה יוצא, ומי עושה מה | 20 | שיעור 4
 @task
@@ -413,6 +419,8 @@ spec:
       app: coffee-api
 ```
 <p>ה־HPA קורא מדדים מ־metrics-server כל 15 שניות בערך, ומחשב <code>ceil(עותקים × נוכחי / יעד)</code>: 3 עותקים ב־140% ← 6. עלייה מהר, ירידה לאט — כדי לא "לנשום" למעלה ולמטה כל דקה.</p>
+@mistakes
+<ul><li><code>apiVersion: autoscaling/v1</code>: בגרסה הזו אין <code>metrics</code> ואין <code>behavior</code>, יש רק <code>targetCPUUtilizationPercentage</code>.</li><li>לכתוב <code>stabilizationWindowSeconds: 5</code> מתוך "5 דקות". השדה הוא בשניות, כלומר 300.</li><li>ב־PDB לשכוח את <code>selector</code>, או לכתוב label שלא תואם ל־pods. PDB כזה לא מגן על אף pod.</li></ul>
 
 @@ P26.3-E12 | 2 | סודות כקבצים: *_FILE 🤖 | 20 | שיעור 3
 @task
@@ -516,6 +524,8 @@ export function evaluate(policies: Policy[], action: string, resource: string): 
 }
 ```
 <p>באמת יש עוד שכבות: policies של ה־bucket עצמו (resource-based), Permission Boundaries, Service Control Policies של הארגון, ו־Conditions. העיקרון לא משתנה: Deny מפורש בכל שכבה מנצח.</p>
+@mistakes
+<ul><li>לבנות RegExp בלי escape: <code>.</code> ב־ARN מתאים לכל תו, ו־<code>coffee.uploads</code> יתאים גם ל־<code>coffeeXuploads</code>.</li><li>להחזיר <code>"allow"</code> ב־Allow הראשון שנמצא. Deny שמופיע אחריו חייב לנצח, ולכן בודקים את כל ה־statements.</li><li>להשוות את ה־ARN בלי רגישות לרישיות, או את שם הפעולה עם רגישות. הפוך: <code>S3:getobject</code> הוא אותה פעולה, אבל ARN רגיש.</li><li>לשכוח <code>^</code> ו־<code>$</code>: אז <code>s3:Get*</code> יתאים גם ל־<code>xs3:GetObject</code>, כי התבנית תימצא באמצע.</li></ul>
 
 @@ P26.3-E14 | 3 | כמויות של Kubernetes 🤖 | 15 | שיעור 3
 @task
@@ -593,6 +603,8 @@ spec:
       - CreateNamespace=true
 ```
 <p><strong>selfHeal</strong>: מישהו הריץ <code>kubectl scale --replicas=1</code> בלילה — Argo CD מחזיר ל־3 תוך דקות. מה שב־Git הוא האמת. ושינוי אמיתי? pull request ל־repo התצורה.</p>
+@mistakes
+<ul><li>לשים את ה־Application ב־namespace <code>coffee</code>. ה־Application עצמו יושב ב־<code>argocd</code>; <code>coffee</code> הוא היעד (<code>destination.namespace</code>).</li><li><code>valueFiles</code> עם נתיב מלא (<code>charts/coffee-api/values-prod.yaml</code>). הנתיב יחסי ל־<code>path</code> של ה־chart.</li><li>לכתוב <code>automated: {}</code> ולחשוב שזה כולל מחיקה ותיקון. בלי <code>prune: true</code> ו־<code>selfHeal: true</code>, Argo CD לא מוחק ולא מחזיר שינויים ידניים.</li></ul>
 
 @@ P26.3-E16 | 3 | Jenkinsfile 🤖 | 25 | שיעור 5
 @task
@@ -719,6 +731,8 @@ export function simulateRollout(replicas: number, maxSurge: Amount, maxUnavailab
 }
 ```
 <p>הבחירה בפועל: <code>maxUnavailable: 0</code> + <code>maxSurge: 1</code> — אף פעם לא פחות קיבולת, אבל איטי ודורש מקום ל־pod נוסף. <code>25%/25%</code> (ברירת המחדל של Kubernetes) — מהר יותר. <code>maxSurge: 0</code> — כשאין מקום פנוי ב־cluster.</p>
+@mistakes
+<ul><li>לעגל את שני האחוזים באותו כיוון. surge מעגלים למעלה ו־unavailable למטה. כך 25% מ־3 נותן surge 1 ו־unavailable 0.</li><li>לספור כ"זמינים" גם pods חדשים שנוצרו באותו צעד. הם עוד לא Ready, ולכן מורידים ישנים רק לפי מה שהיה בתחילת הצעד.</li><li>לולאה בלי בדיקת "תקוע": אם בצעד לא הוסר ולא נוסף אף pod, הלולאה תרוץ לנצח.</li></ul>
 
 @@ P26.3-E18 | 3 | scheduler קטן 🤖 | 25 | שיעור 3
 @task
@@ -774,6 +788,8 @@ export function schedule(nodes: NodeSpec[], pods: PodSpec[]) {
 }
 ```
 <p>ה־scheduler האמיתי מחליט לפי <strong>requests</strong> — לא לפי השימוש בפועל. pod עם request של 100m שמשתמש ב־2 ליבות "לא תופס מקום" מבחינת ה־scheduler, ומאט את השכנים. לכן requests קרובים למציאות, מתוך המדדים.</p>
+@mistakes
+<ul><li>לא למיין, או למיין מהקטן לגדול. אז קטנים "מפוררים" את המקום, וה־pod הגדול נשאר ב־pending גם כשבסך הכול יש מספיק מקום.</li><li>לבדוק רק CPU ולשכוח את ה־memory, או להפך. node מתאים רק אם יש בו מספיק משניהם.</li><li>להשוות מחרוזות כמו <code>"500m"</code> ו־<code>"1"</code> בלי <code>parseCpu</code>, או לשכוח להוריד מה־node את מה שה־pod תפס.</li></ul>
 
 @@ P26.3-E19 | 3 | pagination ב־S3 🤖 | 20 | שיעור 2
 @task
@@ -900,6 +916,8 @@ spec:
 }
 ```
 <p>שלוש תקלות: <code>Resource</code> של bucket לפעולות על אובייקטים (הסיבה ל־AccessDenied); <code>s3:*</code> — worker פרוץ יכול למחוק הכול או לשנות את ה־bucket policy; ו־<code>sqs:*</code> על <code>*</code> — כל תור בחשבון, כולל מחיקת תורים.</p>
+@mistakes
+<ul><li>"לתקן" רק את ה־AccessDenied ולהשאיר <code>s3:*</code>. התרגיל מבקש גם least privilege: רק <code>GetObject</code> על <code>uploads/*</code> ו־<code>PutObject</code> על <code>thumbnails/*</code>.</li><li><code>Resource: "arn:aws:s3:::coffee-uploads/*"</code> לשתי הפעולות. כך ה־worker יכול לדרוס גם את הקבצים המקוריים.</li><li>לשכוח את <code>sqs:DeleteMessage</code>. ההודעה חוזרת לתור אחרי ה־visibility timeout, והתמונה מעובדת שוב ושוב.</li></ul>
 
 @@ P26.3-E22 | 4 | הדשבורד מראה "אין מכירות" — שלוש תקלות 🤖 | 15 | שיעור 2
 @task
@@ -942,6 +960,8 @@ export async function loadReport(s3: S3Client, bucket: string, date: string): Pr
 }
 ```
 <p>הלקח הוא בשניים יחד: <code>String(res.Body)</code> נותן <code>"[object IncomingMessage]"</code>, <code>JSON.parse</code> זורק — וה־catch הכללי הופך את זה ל"אין דוח". catch שבולע הכול לא רק מסתיר תקלות עתידיות; הוא הסתיר את הבאג שכבר היה.</p>
+@mistakes
+<ul><li>לתקן רק את <code>Body</code> ולהשאיר את ה־catch הכללי. התקלה הבאה (הרשאות, רשת) תיראה שוב כמו "אין דוח".</li><li><code>JSON.parse(res.Body)</code> או <code>String(res.Body)</code>. <code>Body</code> הוא stream, וצריך לקרוא אותו עם <code>transformToString()</code>.</li><li>לבדוק <code>err.message.includes("NoSuchKey")</code>. נוסח ההודעה יכול להשתנות; בודקים <code>instanceof NoSuchKey</code> (או <code>err.name</code>).</li></ul>
 
 @@ P26.3-E23 | 4 | pipeline "שעובד" — ארבע תקלות 🤖 | 15 | שיעור 5
 @task
@@ -1240,6 +1260,8 @@ export function bumpImageTag(text: string, repository: string, tag: string): { t
 }
 ```
 <p>בפועל יש לזה כלים מוכנים — <code>kustomize edit set image</code>, <code>yq</code>, או Argo CD Image Updater — אבל כולם עושים בדיוק את זה. וה־commit עצמו (ב־Jenkins): <code>git commit -am "coffee-api 1.5.0" &amp;&amp; git push</code> ל־repo התצורה, עם token שיש לו הרשאה רק ל־repo הזה.</p>
+@mistakes
+<ul><li><code>text.replace(repository + ":", …)</code>: מחליף גם repository ארוך יותר שמתחיל באותו שם, וגם שורה בתוך ConfigMap.</li><li><code>YAML.parse</code> ואז <code>YAML.stringify</code>: ההערות והמרכאות נעלמות, וה־diff ב־repo התצורה הופך לקובץ שלם.</li><li>לחתוך את ה־tag ב־<code>:</code> הראשון. ב־<code>localhost:5000/app:1.2</code> זה ה־port של ה־registry, ולכן חותכים רק ב־<code>:</code> שאחרי ה־<code>/</code> האחרון.</li><li>לשכוח <code>initContainers</code> ו־CronJob, שבו ה־pod spec נמצא עמוק יותר (<code>jobTemplate.spec.template.spec</code>).</li></ul>
 
 @@ P26.3-E26 | 3 | label selector של Kubernetes 🤖 | 30 | שיעור 3
 @type scratch
