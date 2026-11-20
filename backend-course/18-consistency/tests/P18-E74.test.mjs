@@ -13,7 +13,7 @@ test("P18-E74: העמוד הבא", async (t) => {
   const db = await sandbox(t, import.meta.url, "bank.sql");
   await db.query(`INSERT INTO big_orders (customer_id, status, total, created_at) VALUES
     (1, 'paid', 11, '2025-06-01 12:00:00+00'), (2, 'paid', 12, '2025-06-01 12:00:00+00'), (3, 'paid', 13, '2025-06-01 11:59:59+00')`);
-  await db.query("UPDATE big_orders SET created_at = '2025-06-01 12:00:00+00' WHERE id IN (99990, 100005, 99000)");
+  await db.query("UPDATE big_orders SET created_at = '2025-06-01 12:00:00+00' WHERE id IN (99990, 100000, 100005, 99000)");
   const got = await db.fileRows("P18-E74.sql");
   const expected = await db.rows(reference);
   assert.deepEqual(Object.keys(got?.[0] ?? {}), ["id", "created_at", "total"], "העמודות: id, created_at, total");

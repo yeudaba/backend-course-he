@@ -127,15 +127,16 @@ const resultOf = (res) => (Array.isArray(res) ? res.at(-1) : res);
 //   3. changes — שינויים ספציפיים לשאלה: [["תיאור", "SQL"], ...].
 // after: לקובץ שבונה טבלה בעצמו — SQL שרץ אחרי הקובץ שלך, ואז הפקודה האחרונה בקובץ רצה שוב.
 // אם יש הבדל — הודעה עם רמז (מה חסר / עודף / הסדר), בלי להציג את כל התשובה.
-export async function sameAsSolution(t, testUrl, file, { seed, changes = [], variants = true, after } = {}) {
+// base: false — בלי סבב על ה־seed עצמו (כשהבדיקה כבר השוותה אותו); shuffle: false — בלי הזזה פיזית (טבלאות ענקיות)
+export async function sameAsSolution(t, testUrl, file, { seed, changes = [], variants = true, after, base = true, shuffle: doShuffle = true } = {}) {
   const solutionText = fs.readFileSync(chapterPath(testUrl, "solutions", file), "utf8");
-  const sets = [{ label: seed ? `על הנתונים של ${seed}` : "", sql: "" }];
+  const sets = base ? [{ label: seed ? `על הנתונים של ${seed}` : "", sql: "" }] : [];
   const vfile = seed && chapterPath(testUrl, "files", seed.replace(/\.sql$/, ".variants.sql"));
   if (variants && vfile && fs.existsSync(vfile)) {
     const vs = parseVariants(fs.readFileSync(vfile, "utf8"));
-    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql, shuffle: true }));
+    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql, shuffle: doShuffle }));
   }
-  for (const [label, sql] of changes) sets.push({ label, sql, shuffle: true });
+  for (const [label, sql] of changes) sets.push({ label, sql, shuffle: doShuffle });
 
   const run = async (text, set, mode) => {
     const db = await sandbox(t, testUrl, seed);

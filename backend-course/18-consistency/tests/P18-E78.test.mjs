@@ -49,6 +49,8 @@ test("שורה לא חוקית — אף אחת לא נכנסת; ריק — בל�
   rows[1200] = { from: 1, to: 1, amount: 1 };
   await assert.rejects(insertTransfers(pool, rows), (e) => e.code === "23514", "from = to — CHECK בקבוצה השנייה");
   assert.equal((await db.rows("SELECT COUNT(*) AS n FROM transfers"))[0].n, 0, "גם הקבוצה הראשונה בוטלה (transaction אחד)");
+  const thousand = await insertTransfers(pool, Array.from({ length: 1000 }, () => ({ from: 1, to: 2, amount: 1 })));
+  assert.equal(thousand.length, 1000, "בדיוק 1,000 שורות — פקודה אחת, בלי INSERT ריק אחריה");
   counter.n = 0;
   assert.deepEqual(await insertTransfers(pool, []), []);
   assert.equal(counter.n, 0);

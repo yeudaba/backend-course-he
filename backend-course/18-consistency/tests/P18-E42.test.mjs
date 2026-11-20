@@ -27,6 +27,7 @@ test("שורה לא תקינה — שגיאה עם מספר השורה, בלי �
     ["from,to,amount\n1,2,10\n\n1,x,10\n", 4],
     ["from,to,amount\n1,2,-1\n", 2],
     ["from,to,amount\n0,2,1\n", 2],
+    ["from,to,amount\n1,0,1\n", 2],
     ["from,to,amount\n1.5,2,1\n", 2],
     ["from,to,amount\n1,2,1,9\n", 2],
     ["from,to,amount\n1,,1\n", 2],

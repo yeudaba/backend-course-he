@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 import { assertSameRows } from "../../tools/rows.mjs";
 
 test("P18-E28: התוצאה (עמודות, שורות וסדר)", async (t) => {
@@ -10,6 +10,9 @@ test("P18-E28: התוצאה (עמודות, שורות וסדר)", async (t) => {
   assert.deepEqual(Object.keys(got?.[0] ?? {}), Object.keys(expected[0]), "שמות העמודות והסדר שלהן (month, place, customer_id, revenue)");
   assert.equal(got.length, 9, `${got.length} שורות — שלושה חודשים × שלושה לקוחות = 9`);
   assertSameRows(got, expected);
+});
+test("P18-E28: נתונים נסתרים", async (t) => {
+  await sameAsSolution(t, import.meta.url, "P18-E28.sql", { seed: "bank.sql", base: false, shuffle: false });
 });
 test("P18-E28: תיקו ← customer_id הקטן קודם", async (t) => {
   const db = await sandbox(t, import.meta.url, "bank.sql");
