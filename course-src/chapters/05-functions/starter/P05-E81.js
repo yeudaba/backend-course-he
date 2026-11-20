@@ -7,8 +7,12 @@ function shippingFee(total, isMember = "false") {
   if (typeof total !== "number" || total < 0) {
     console.log("סכום לא תקין:", total);
   }
-  if (isMember) return 0;
-  if (total > 200) return 0;
+  if (isMember) {
+    return 0;
+  }
+  if (total > 200) {
+    return 0;
+  }
   return 25;
 }
 

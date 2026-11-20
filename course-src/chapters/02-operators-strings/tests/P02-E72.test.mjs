@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { run, sameOutput, source, code, strings } from "./_out.mjs";
+import { run, sameOutput, source, code, strings, bareCode } from "./_out.mjs";
 
 const FILE = "P02-E72.js";
 // הקוד שלך בלי הערות ובלי טקסט במירכאות (מה שבתוך ${...} נשאר)
-const bare = () => code(source(import.meta.url, FILE)).replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g, '""').replace(/`(?:\\.|[^`\\])*`/g, (t) => (t.match(/\$\{[^}]*\}/g) ?? []).join(" "));
+const bare = () => bareCode(source(import.meta.url, FILE));
 // מריץ את הקובץ (אפשר עם ערכים מוחלפים) ומשווה לפלט הרצוי
 const ok = (lines, ...changes) => sameOutput(run(import.meta.url, FILE, { changes }), lines);
 // המספרים האלה צריכים להיות מחושבים — לא כתובים בקוד

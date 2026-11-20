@@ -3,8 +3,12 @@ function shippingFee(total, isMember = false) {
   if (typeof total !== "number" || total < 0) {
     return null;
   }
-  if (isMember) return 0;
-  if (total >= 200) return 0;
+  if (isMember) {
+    return 0;
+  }
+  if (total >= 200) {
+    return 0;
+  }
   return 25;
 }
 

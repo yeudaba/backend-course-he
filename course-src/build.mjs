@@ -635,7 +635,8 @@ function verifyTests(ch) {
       if (st.status === 0) problems.push(`${ch.slug}/${t}: עובר גם על קובץ ההתחלה`);
     }
     // רגרסיה של הבודק (HANDOFF 7.8): כל מוטנט ב־tests/mutants/<ID>/<שם>/ הוא פתרון שגוי סביר — הקבצים בו
-    // מחליפים את קובצי solutions/ (קובץ _DELETE: רשימת קבצים למחיקה). הבודק חייב להיכשל על כל אחד מהם.
+    // מחליפים את קובצי solutions/ (קובץ _DELETE: רשימת קבצים למחיקה). הבודק חייב להיכשל על כל אחד מהם,
+    // חוץ ממוטנט עם קובץ _PASS (פתרון נכון אחר) — עליו הבודק חייב לעבור.
     const id = t.replace(".test.mjs", "");
     const mutDir = path.join(ch.dir, "tests", "mutants", id);
     if (!fs.existsSync(mutDir)) continue;
@@ -644,7 +645,7 @@ function verifyTests(ch) {
       const dir = path.join(OUT, ch.slug, rel);
       fs.rmSync(dir, { recursive: true, force: true });
       fs.cpSync(path.join(OUT, ch.slug, "solutions"), dir, { recursive: true });
-      fs.cpSync(path.join(mutDir, m), dir, { recursive: true, filter: (f) => path.basename(f) !== "_DELETE" });
+      fs.cpSync(path.join(mutDir, m), dir, { recursive: true, filter: (f) => !["_DELETE", "_PASS"].includes(path.basename(f)) });
       const del = path.join(mutDir, m, "_DELETE");
       if (fs.existsSync(del)) for (const f of fs.readFileSync(del, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
       mutantDirs.push(dir);
@@ -656,7 +657,10 @@ function verifyTests(ch) {
         if (b.status !== 0) problems.push(`${ch.slug}: המוטנט tests/mutants/${id}/${m} לא מתקמפל\n${b.stdout}\n${b.stderr}`);
       }
       const r = run(rel);
-      if (r.status === 0) problems.push(`${ch.slug}/${t}: עובר על המוטנט tests/mutants/${id}/${m} (הבודק אמור להיכשל עליו)`);
+      // קובץ _PASS: זה פתרון נכון בדרך אחרת (למשל שלומד כתב ונדחה בטעות) — הבודק חייב לעבור עליו
+      if (fs.existsSync(path.join(mutDir, m, "_PASS"))) {
+        if (r.status !== 0) problems.push(`${ch.slug}/${t}: נכשל על הפתרון הנכון tests/mutants/${id}/${m} (_PASS — הבודק אמור לעבור עליו)\n${r.stdout}`);
+      } else if (r.status === 0) problems.push(`${ch.slug}/${t}: עובר על המוטנט tests/mutants/${id}/${m} (הבודק אמור להיכשל עליו)`);
       fs.rmSync(dir, { recursive: true, force: true });
       mutantCount++;
     }
