@@ -3473,3 +3473,74 @@ Error: הגדרות שרת לא תקינות — DATABASE_URL: חובה בפרו
 ```
 @mistakes
 <ul><li>לפצל כל בעיה ב־<code>":"</code> — ההודעה של CORS מכילה <code>http://</code>, ויוצא שם "CORS_ORIGINS" עם הודעה קטועה.</li></ul>
+
+@@ P25-E102 | 4 | workflow שלא רץ על pull request 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>ה־workflow ב־<code>25-deploy/starter/P25-E102.yml</code> אמור לרוץ על כל push ל־<code>main</code> <strong>וגם</strong> על כל pull request, להתקין בדיוק את מה שב־<code>package-lock.json</code> (עם cache של npm), ולהריץ את הבדיקות.</p>
+<p>התלונות: על pull request לא רץ כלום; ב־push הריצה נכשלת כבר בצעד השני עם <code>Dependencies lock file is not found</code>; ולפעמים ב־CI מותקנות גרסאות אחרות מאלה שבמחשב. מצא ותקן שלוש תקלות.</p>
+```term
+% npm run check P25-E102
+```
+@hint1
+<p>בכל ריצה ב־Actions, המכונה מתחילה ריקה. מה יש בתיקייה כשהצעד הראשון רץ?</p>
+@hint2
+<p>‏<code>cache: npm</code> מחפש את <code>package-lock.json</code>. ‏<code>on:</code> צריך את שני האירועים. ‏<code>npm install</code> מעדכן את ה־lockfile לפי הטווחים; ‏<code>npm ci</code> מתקין בדיוק לפיו.</p>
+@solution
+```yaml save=solutions/P25-E102.yml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+```
+<ol><li><strong>‏<code>on</code> בלי <code>pull_request</code>.</strong> ה־workflow רץ רק על push ל־main, כלומר אחרי שהקוד כבר נכנס. בדיקה על PR היא הנקודה של CI.</li><li><strong>‏<code>setup-node</code> לפני <code>checkout</code>.</strong> ‏<code>cache: npm</code> מחפש את <code>package-lock.json</code> כדי לחשב מפתח, והתיקייה עוד ריקה. קודם מורידים את הקוד.</li><li><strong>‏<code>npm install</code></strong> יכול להתקין גרסה חדשה יותר בתוך הטווח (<code>^</code>) ולעדכן את ה־lockfile. ‏<code>npm ci</code> מתקין בדיוק את מה שב־lockfile, ונכשל אם הוא לא תואם ל־<code>package.json</code>.</li></ol>
+@mistakes
+<ul><li>‏<code>on: [push, pull_request]</code> בלי <code>branches</code>. זה עובד, אבל מריץ גם על כל push לכל ענף, כולל ענפים של PR. בכל push ל־PR רצות שתי ריצות.</li><li>למחוק את <code>cache: npm</code> כדי "לתקן" את השגיאה. השגיאה נעלמת, אבל כל ריצה מורידה את כל החבילות מחדש.</li><li>לכתוב <code>node-version: 24.10</code> בלי מירכאות. YAML קורא אותו כמספר 24.1 (סעיף 3 בשיעור).</li></ul>
+
+@@ P25-E103 | 4 | בדיקת ההגדרות שמאשרת הכול 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>לפני deploy של פרויקט 2, ‏<code>prodEnvProblems(env)</code> ב־<code>25-deploy/starter/P25-E103.ts</code> בודקת את משתני הסביבה ומחזירה רשימת בעיות (מחרוזות; רשימה ריקה = הכול תקין):</p>
+<ul><li><code>NODE_ENV</code> חייב להיות בדיוק <code>production</code>.</li><li><code>DATABASE_URL</code> קיים, ובו <code>sslmode=require</code> (Neon דורש).</li><li><code>JWT_SECRET</code> — לפחות 32 תווים, ולא <code>change-me</code>.</li><li><code>CORS_ORIGINS</code> — רשימה מופרדת בפסיקים, בלי <code>*</code>.</li></ul>
+<p>ה־deploy האחרון עלה עם <code>sslmode=disable</code>, עם סוד של 31 תווים, ועם <code>CORS_ORIGINS=https://app.example.com,*</code>, והבדיקה לא מצאה אף בעיה. מצא ותקן.</p>
+```term
+% npm run check P25-E103
+```
+@hint1
+<p>נסה כל דרישה בגבול שלה: סוד של 31 תווים ושל 32; ‏<code>sslmode=disable</code>; ‏<code>*</code> בסוף הרשימה.</p>
+@hint2
+<p>‏<code>includes("sslmode")</code> מתקיים גם ל־disable. ‏<code>&gt; 32</code> ו־<code>&gt;= 32</code> שונים בדיוק בגבול. ו־<code>origins[0]</code> בודק רק את הראשון.</p>
+@solution
+```ts save=solutions/P25-E103.ts
+// P25-E103: בדיקת ההגדרות לפני deploy — מתוקן
+export function prodEnvProblems(env: Record<string, string | undefined>): string[] {
+  const problems: string[] = [];
+  if (env.NODE_ENV !== "production") problems.push("NODE_ENV חייב להיות production");
+  const db = env.DATABASE_URL ?? "";
+  if (!db) problems.push("חסר DATABASE_URL");
+  else if (new URL(db).searchParams.get("sslmode") !== "require") problems.push("DATABASE_URL בלי sslmode=require");
+  const secret = env.JWT_SECRET ?? "";
+  if (secret.length < 32 || secret === "change-me") problems.push("JWT_SECRET קצר מדי או ברירת מחדל");
+  const origins = (env.CORS_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (origins.length === 0 || origins.includes("*")) problems.push("CORS_ORIGINS חייב להיות רשימה מפורשת, בלי *");
+  return problems;
+}
+```
+<ol><li><strong>‏<code>db.includes("sslmode")</code></strong> מתקיים גם ל־<code>sslmode=disable</code>. בודקים את הערך: <code>searchParams.get("sslmode") === "require"</code>.</li><li><strong>‏<code>secret.length &lt; 31</code></strong> העביר סוד של 31 תווים. "לפחות 32" פירושו שהבעיה היא <code>&lt; 32</code>. בגבולות כדאי לבדוק את שני הצדדים: 31 נדחה, 32 עובר.</li><li><strong>‏<code>origins[0] === "*"</code></strong> בודק רק את האיבר הראשון. ‏<code>*</code> בכל מקום ברשימה פותח את ה־API לכל אתר: <code>includes("*")</code>.</li></ol>
+@mistakes
+<ul><li>‏<code>db.includes("sslmode=require")</code>. זה עובד ברוב המקרים, אבל גם <code>?x=sslmode=require</code> עובר. פירוק עם <code>URL</code> בודק את הפרמטר עצמו.</li><li>לבדוק <code>CORS_ORIGINS !== "*"</code>. רשימה כמו <code>https://a.com,*</code> עוברת.</li><li>להחזיר בעיה אחת ולעצור. מי שמגדיר צריך לראות את כל מה שחסר בבת אחת.</li></ul>
