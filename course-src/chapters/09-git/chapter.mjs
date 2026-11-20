@@ -7,7 +7,7 @@ export default {
   part: "חטיבה א׳ — יסודות JavaScript",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 80,
+  expectedExercises: 81,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> VS Code, Node.js.</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <div class="table-wrap"><table>
