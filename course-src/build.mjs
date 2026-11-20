@@ -645,6 +645,13 @@ function verifyTests(ch) {
       const del = path.join(mutDir, m, "_DELETE");
       if (fs.existsSync(del)) for (const f of fs.readFileSync(del, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
       mutantDirs.push(dir);
+      // פרויקט Nest שהבודק מריץ מ־dist: מקמפלים מחדש את העותק של המוטנט
+      for (const np of ch.nestProjects ?? []) {
+        const pdir = path.join(dir, path.relative("solutions", np));
+        if (!fs.existsSync(path.join(mutDir, m, path.relative("solutions", np)))) continue;
+        const b = spawnSync("node", [path.join(SRC, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"], { cwd: pdir, encoding: "utf8" });
+        if (b.status !== 0) problems.push(`${ch.slug}: המוטנט tests/mutants/${id}/${m} לא מתקמפל\n${b.stdout}\n${b.stderr}`);
+      }
       const r = run(rel);
       if (r.status === 0) problems.push(`${ch.slug}/${t}: עובר על המוטנט tests/mutants/${id}/${m} (הבודק אמור להיכשל עליו)`);
       fs.rmSync(dir, { recursive: true, force: true });
