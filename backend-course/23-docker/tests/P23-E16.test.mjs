@@ -24,4 +24,5 @@ test("HEALTHCHECK על PORT מה־env", { timeout: 300000 }, async (t) => {
   const b = runContainer(t, tag, { port: 9000, env: { PORT: "9000" } });
   assert.equal(await waitHealthy(b.id), "healthy", "עם PORT=9000 — ה־healthcheck צריך לבדוק את 9000");
   assert.notEqual(docker(["run", "--rm", tag, "id", "-u"]).stdout.trim(), "0", "לא root");
+  assert.match(docker(["image", "inspect", "--format", "{{json .Config.ExposedPorts}}", tag]).stdout, /"8080\/tcp"/, "EXPOSE 8080");
 });
