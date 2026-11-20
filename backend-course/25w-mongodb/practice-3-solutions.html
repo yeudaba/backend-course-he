@@ -461,6 +461,37 @@ export async function ordersWithCustomer(db: Db, status: string) {
 
 </div></details>
   </div>
+<div class="ex" id="P25.7-E102">
+    <h3>P25.7-E102 · ביקורת שנספרת פעמיים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>בין ה־<code>findOne</code> ל־<code>updateOne</code> יש <code>await</code>. מה יכול לקרות באמצע, כששתי בקשות רצות יחד?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>‏<code>$set</code> עם ערך שחושב בקוד דורס עדכון של בקשה אחרת; ‏<code>$inc</code> מחושב בשרת. ותנאי ה"עוד לא כתב" יכול להיות חלק מה־filter של אותו <code>updateOne</code>: ‏<code>"reviews.by": { $ne: by }</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P25.7-E102: ביקורת במוצר, עם תקציר — מתוקן
+import type { Db } from "mongodb";
+
+export async function addReview(db: Db, productId: string, review: { by: string; rating: number }): Promise&lt;boolean&gt; {
+  if (!Number.isInteger(review.rating) || review.rating &lt; 1 || review.rating &gt; 5) throw new RangeError("rating חייב להיות 1–5");
+  const res = await db.collection&lt;{ _id: string }&gt;("products").updateOne(
+    { _id: productId, "reviews.by": { $ne: review.by } },
+    { $push: { reviews: { by: review.by, rating: review.rating } } as never, $inc: { ratingCount: 1, ratingSum: review.rating } },
+  );
+  return res.modifiedCount === 1;
+}</code></pre>
+<ol><li><strong>‏<code>ratingCount</code> לא עודכן</strong> בכלל. ‏<code>$inc</code> אחד מעדכן את שני השדות של התקציר.</li><li><strong>קרא, חשב, כתוב (<code class="mid">$set: { ratingSum: p.ratingSum + rating }</code>).</strong> שתי בקשות קראו את אותו <code>ratingSum</code>, וכל אחת כתבה את הסכום שלה, והשנייה דרסה את הראשונה. ‏<code>$inc</code> מחושב במסד, על הערך הנוכחי.</li><li><strong>הבדיקה "כבר כתב" הייתה בקוד, לפני העדכון.</strong> שתי לחיצות עברו אותה יחד, ושתיהן הוסיפו. כשהתנאי בתוך ה־filter, העדכון והבדיקה הם פעולה אחת על המסמך, ולכן רק אחת מצליחה (‏<code>modifiedCount</code> ‏0 לשנייה).</li><li><strong>אין בדיקה של <code>rating</code>.</strong> דירוג 7 עבר, וכל הממוצעים של המוצר זזו.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>‏<code>$addToSet</code> במקום <code>$push</code>. זה מונע רק ביקורת <strong>זהה לגמרי</strong>; אותו לקוח עם דירוג אחר עדיין נכנס פעמיים.</li><li>להחזיר <code>res.matchedCount === 1</code>. אם המסמך נמצא אבל לא השתנה, זה עדיין 1. ‏<code>modifiedCount</code> אומר אם משהו השתנה.</li><li>לבדוק rating אחרי העדכון. אז דירוג 7 כבר נכנס למסד.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P25.7-E66">
     <h3>P25.7-E66 · נרמול מפרק 17 מול embed <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
