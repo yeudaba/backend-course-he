@@ -3,9 +3,9 @@ function discountPrice(price, percent) {
   return price - (price * percent) / 100;
 }
 
-const addShipping = (total) => {
+function addShipping(total) {
   return total + 25;
-};
+}
 
 function finalPrice(price, percent) {
   return addShipping(discountPrice(price, percent));
