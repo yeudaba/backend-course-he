@@ -2,35 +2,32 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exportsOf } from "./_ts.mjs";
 
-const get = () => exportsOf(import.meta.url, "P22-E55.ts", ["aUser", "aTask", "resetBuilders"]);
-const C = "2026-11-04T10:00:00.000Z";
+const get = async () => (await exportsOf(import.meta.url, "P22-E55.ts", ["invalidCases"])).invalidCases;
 
-test("ברירות מחדל ומונים", async () => {
-  const { aUser, aTask, resetBuilders } = await get();
-  resetBuilders();
-  assert.deepEqual(aUser(), { id: 1, email: "user1@example.com", role: "user", createdAt: C });
-  assert.deepEqual(aUser({ role: "admin" }), { id: 2, email: "user2@example.com", role: "admin", createdAt: C });
-  assert.deepEqual(aTask(), { id: 1, ownerId: 1, title: "משימה 1", status: "todo", dueDate: null, createdAt: C }, "מונה נפרד ל־Task");
-  assert.deepEqual(aTask({ ownerId: 2, status: "done", dueDate: "2026-11-01" }), { id: 2, ownerId: 2, title: "משימה 2", status: "done", dueDate: "2026-11-01", createdAt: C });
+test("מקרה בלי השדה, ואז ערך שגוי אחד בכל פעם", async () => {
+  const f = await get();
+  const valid = { title: "חלב", priority: "high", done: false };
+  assert.deepEqual(f(valid, { title: ["", 5], priority: ["urgent"] }), [
+    { name: "בלי title", body: { priority: "high", done: false } },
+    { name: 'title = ""', body: { title: "", priority: "high", done: false } },
+    { name: "title = 5", body: { title: 5, priority: "high", done: false } },
+    { name: "בלי priority", body: { title: "חלב", done: false } },
+    { name: 'priority = "urgent"', body: { title: "חלב", priority: "urgent", done: false } },
+  ]);
 });
-test("id מה־overrides — והמונה ממשיך", async () => {
-  const { aUser, aTask, resetBuilders } = await get();
-  resetBuilders();
-  assert.deepEqual(aUser({ id: 7 }), { id: 7, email: "user7@example.com", role: "user", createdAt: C }, "email לפי ה־id הסופי");
-  assert.equal(aUser().id, 2, "המונה התקדם גם כשה־id הגיע מבחוץ");
-  assert.equal(aUser({ email: "dana@example.com" }).email, "dana@example.com");
-  aTask({ id: 50 });
-  assert.equal(aTask().id, 2);
+test("valid לא משתנה, וכל מקרה הוא אובייקט חדש", async () => {
+  const f = await get();
+  const valid = { a: 1, b: 2 };
+  const cases = f(valid, { a: [null, "x"], b: [] });
+  assert.deepEqual(valid, { a: 1, b: 2 }, "valid השתנה");
+  assert.equal(cases.length, 4);
+  assert.notEqual(cases[1].body, cases[2].body);
+  assert.ok(cases.every((c) => c.body !== valid), "מקרה מחזיר את valid עצמו");
+  assert.deepEqual(cases[1], { name: "a = null", body: { a: null, b: 2 } });
+  assert.deepEqual(cases[3], { name: "בלי b", body: { a: 1 } });
 });
-test("resetBuilders ואובייקטים חדשים", async () => {
-  const { aUser, aTask, resetBuilders } = await get();
-  aUser(); aUser(); aTask();
-  resetBuilders();
-  assert.equal(aUser().id, 1);
-  assert.equal(aTask().id, 1);
-  const a = aTask({ ownerId: 3 });
-  const b = aTask({ ownerId: 3 });
-  assert.notEqual(a.id, b.id, "ids ייחודיים");
-  a.title = "שונה";
-  assert.equal(aTask().title.startsWith("משימה"), true);
+test("שדה שלא בגוף התקין, ו־bad ריק", async () => {
+  const f = await get();
+  assert.throws(() => f({ title: "x" }, { dueDate: ["אתמול"] }), { message: "אין שדה dueDate בגוף התקין" });
+  assert.deepEqual(f({ title: "x" }, {}), []);
 });
