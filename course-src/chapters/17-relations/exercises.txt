@@ -3336,3 +3336,90 @@ SELECT category, name, price FROM ranked WHERE rn <= 2 ORDER BY category, rn;
 <ol start="3"><li>בלולאה, gift cards מופיעה עם <code>top: []</code>. בשאילתה — היא לא מופיעה בכלל (אין לה שורות). אם צריך אותה — מתחילים מ־<code>categories</code> עם LEFT JOIN, או מוסיפים בקוד.</li><li>לא. ‏<code>Promise.all</code> שולח את כל ה־500 במקביל — זה יותר מהיר בזמן, אבל אותו מספר שאילתות, ועומס של 500 בקשות בבת אחת על המסד (ו־pool של 10 חיבורים יגרום להן לחכות בתור). הפתרון הוא פחות שאילתות, לא שאילתות מהירות יותר.</li></ol>
 @mistakes
 <ul><li>"זה רק 5 קטגוריות" — הקוד הזה ייכתב שוב לכל לקוח ("ההזמנות האחרונות של כל לקוח") — ושם יש 50,000.</li></ul>
+
+@@ P17-E81 | 4 | ביקורות שנמחקות עם הלקוח 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>ב־<code>17-relations/starter/P17-E81.sql</code> טבלת ביקורות על מוצרים, שלושה INSERT ו־SELECT. הדרישות:</p>
+<ul><li>כל ביקורת שייכת למוצר אחד ולקוח אחד (שניהם חובה, ושניהם קיימים).</li><li>דירוג (<code>rating</code>) בין 1 ל־5.</li><li>לקוח כותב לכל היותר ביקורת אחת לכל מוצר.</li><li>מוצר שנמחק ← הביקורות שלו נמחקות איתו.</li><li>לקוח שיש לו ביקורות ← אי אפשר למחוק אותו.</li></ul>
+<p>הקובץ רץ בלי שגיאה, אבל שלוש מהדרישות לא נאכפות. תקן את <code>CREATE TABLE</code> בלבד.</p>
+```term
+% npm run check P17-E81
+```
+@hint1
+<p>עבור על הדרישות אחת־אחת, ולכל אחת נסה INSERT או DELETE שאמור להיכשל. איזה מהם עובר?</p>
+@hint2
+<p>מה עושה <code>REFERENCES</code> בלי <code>NOT NULL</code> כשהערך הוא NULL? מה ההבדל בין <code>ON DELETE CASCADE</code> לבין בלי <code>ON DELETE</code> בכלל? ואיך אוכפים "פעם אחת לכל זוג"?</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E81.sql
+CREATE TABLE reviews (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  product_id   integer NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  customer_id  integer NOT NULL REFERENCES customers (id),
+  rating       integer NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body         text,
+  UNIQUE (product_id, customer_id)
+);
+
+INSERT INTO reviews (product_id, customer_id, rating, body) VALUES
+  (5, 4, 5, 'Great grinder'),
+  (5, 8, 3, NULL),
+  (1, 4, 4, 'Good beans');
+
+SELECT product_id, customer_id, rating FROM reviews ORDER BY product_id, customer_id;
+```
+```out
+CREATE TABLE
+INSERT 0 3
+ product_id | customer_id | rating
+------------+-------------+--------
+          1 |           4 |      4
+          5 |           4 |      5
+          5 |           8 |      3
+(3 rows)
+```
+<ol><li><strong><code>product_id</code> בלי <code>NOT NULL</code> ובלי <code>ON DELETE CASCADE</code>.</strong> ‏FK בודק רק ערך שקיים; NULL עובר אותו. ובלי <code>ON DELETE</code>, מחיקת מוצר עם ביקורות נחסמת במקום למחוק אותן.</li><li><strong><code>ON DELETE CASCADE</code> על הלקוח.</strong> הדרישה הפוכה: לא למחוק לקוח שיש לו ביקורות. ברירת המחדל (בלי <code>ON DELETE</code>) חוסמת.</li><li><strong>חסר <code>UNIQUE (product_id, customer_id)</code>.</strong> בלי זה אותו לקוח יכול לכתוב עשר ביקורות לאותו מוצר. כאן יש <code>id</code> משלו, ולכן הייחודיות של הזוג נכתבת בנפרד.</li></ol>
+@mistakes
+<ul><li>להפוך את הזוג ל־<code>PRIMARY KEY</code> ולהשאיר גם את <code>id</code> כמפתח ראשי. לטבלה יש רק מפתח ראשי אחד; את השאר אוכפים עם <code>UNIQUE</code>.</li><li>‏<code>UNIQUE</code> על <code>customer_id</code> לבד. אז לקוח יכול לכתוב ביקורת אחת בלבד, על כל החנות.</li><li><code>ON DELETE SET NULL</code> על המוצר. זה סותר את <code>NOT NULL</code>, וגם משאיר ביקורות על "מוצר לא ידוע".</li></ul>
+
+@@ P17-E82 | 4 | ההזמנה האחרונה של כל לקוח 🤖 | 15 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>השאילתה ב־<code>17-relations/starter/P17-E82.sql</code> אמורה להחזיר, לכל לקוח שיש לו הזמנה שלא בוטלה, את ההזמנה <strong>האחרונה</strong> שלו מבין ההזמנות שלא בוטלו: <code>id</code>, ‏<code>customer_id</code>, ‏<code>created_at</code>, לפי <code>customer_id</code>. (בתיקו בזמן — ה־id הגבוה.)</p>
+<p>היא מחזירה שורה אחת בלבד, ואחרי תיקון ראשון — את ההזמנה הראשונה של כל לקוח. יש בה שלוש תקלות. הבודק מריץ אותה גם על נתונים שבהם ההזמנה האחרונה של לקוח בוטלה.</p>
+```term
+% npm run check P17-E82
+```
+@hint1
+<p>הרץ רק את ה־CTE, עם עמודת <code>rn</code>, ותסתכל: לפי מה המספור מתחיל מחדש? ומאיזה כיוון?</p>
+@hint2
+<p>‏<code>WHERE</code> בשאילתה החיצונית רץ <strong>אחרי</strong> שהשורות כבר מוספרו. מה קורה ללקוח שההזמנה מספר 1 שלו בוטלה?</p>
+@solution
+```sql run db=17-relations/files/store.sql save=solutions/P17-E82.sql
+WITH ranked AS (
+  SELECT id, customer_id, created_at,
+         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC, id DESC) AS rn
+  FROM orders
+  WHERE status <> 'cancelled'
+)
+SELECT id, customer_id, created_at
+FROM ranked
+WHERE rn = 1
+ORDER BY customer_id;
+```
+```out
+ id | customer_id |       created_at
+----+-------------+------------------------
+  8 |           1 | 2026-03-28 21:10:00+03
+  6 |           2 | 2026-03-02 14:05:00+02
+ 10 |           3 | 2026-04-22 11:00:00+03
+ 11 |           5 | 2026-05-01 07:55:00+03
+ 12 |           6 | 2026-05-03 19:30:00+03
+  9 |           7 | 2026-04-09 16:20:00+03
+(6 rows)
+```
+<ol><li><strong>בלי <code>PARTITION BY customer_id</code></strong> כל ההזמנות מוספרו יחד, ולכן רק שורה אחת בכל הטבלה קיבלה <code>rn = 1</code>. ‏<code>PARTITION BY</code> מתחיל את המספור מחדש לכל לקוח.</li><li><strong><code>ORDER BY created_at</code> עולה</strong> נותן מספר 1 להזמנה הראשונה. האחרונה היא <code>DESC</code>, ו־<code>id DESC</code> שובר תיקו.</li><li><strong>הסינון של הביטולים היה אחרי המספור.</strong> אם ההזמנה האחרונה של לקוח בוטלה, היא קיבלה <code>rn = 1</code> ואז נזרקה, והלקוח נעלם מהתוצאה. מסננים בתוך ה־CTE, לפני שממספרים.</li></ol>
+@mistakes
+<ul><li>‏<code>WHERE rn = 1</code> בתוך ה־CTE. ‏<code>WHERE</code> רץ לפני פונקציות החלון, ולכן אי אפשר לסנן שם לפי <code>rn</code>. בשביל זה יש שאילתה חיצונית.</li><li>‏<code>MAX(created_at)</code> עם <code>GROUP BY customer_id</code>. זה נותן את הזמן, אבל לא את ה־id של ההזמנה.</li><li>‏<code>RANK()</code> במקום <code>ROW_NUMBER()</code>. בתיקו בזמן שתי הזמנות מקבלות 1, והלקוח מופיע פעמיים.</li></ul>
