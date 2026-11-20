@@ -28,9 +28,12 @@
 <ol><li><strong>OLTP.</strong> שורה אחת לפי מפתח, ב־1ms, והנתון חייב להיות עדכני.</li><li><strong>OLAP.</strong> סורק את כל ההזמנות אבל רק 3–4 עמודות. ב־PostgreSQL של האפליקציה זה גם איטי וגם מאט את הלקוחות שקונים באותו רגע.</li><li><strong>OLTP.</strong> כתיבה קטנה עם טרנזקציה — מחסני נתונים לא בנויים לזה (ומשלמים בהם לפי סריקה, לא לפי כתיבה).</li><li><strong>OLAP</strong>, ועם <code>APPROX_COUNT_DISTINCT</code> (HyperLogLog, E18) — ספירה מדויקת של ייחודיים על 2 מיליארד שורות יקרה מאוד, והערכה של כמה אחוזים מספיקה לדוח (שיעור 4 מראה כמה היא סוטה בפועל).</li><li><strong>OLTP</strong> — ובתוך הטרנזקציה של ה־checkout (פרק 18). מחסן נתונים מתעדכן בדרך כלל באיחור של דקות־שעות (ETL).</li></ol>
 <p>הדפוס הנפוץ: האפליקציה כותבת ל־OLTP; תהליך (ETL/CDC) מעתיק למחסן; דוחות ואנליטיקה רצים שם. E25 בונה גרסה קטנה של זה.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>"מחסן נתונים מהיר יותר, אז הכול לשם". שאילתה על שורה אחת, או כתיבה קטנה עם טרנזקציה, מהירות יותר ב־PostgreSQL. מחסן מתאים לסריקות גדולות.</li><li>לבדוק מלאי ב־checkout מול המחסן. הנתונים שם מתעדכנים באיחור, וההחלטה חייבת להתבסס על הנתון העדכני ביותר.</li><li>להריץ את הדוח של שלוש שנים על המסד של האפליקציה, "רק פעם בשבוע". הסריקה מאטה את הלקוחות שקונים באותו רגע.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E04">
     <h3>P28.5-E04 · שורות מול עמודות <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
@@ -74,9 +77,12 @@ parquet: 14.6 MB
 add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000</pre>
 <p>הקובץ קטן פי כמה, ועוד יותר חשוב — מה נקרא: לשאילתה על <code>type</code>, DuckDB קורא מה־Parquet <strong>רק את העמודה type</strong> (ועמודה עם 5 ערכים שונים נדחסת כמעט לאפס — dictionary encoding). מה־CSV הוא חייב לקרוא ולפרש את כל הקובץ, כל העמודות, כטקסט. כך בדיוק עובדים BigQuery, Snowflake ו־Databricks — ולכן שם משלמים לפי <em>עמודות שנסרקו</em> (E05, E17).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־DuckDB קורא את כל ה־Parquet כדי לספור לפי סוג. הוא קורא רק את העמודה <code>type</code>.</li><li>לחשוב ש־Parquet קטן רק בגלל דחיסה כללית (כמו zip). הרווח הגדול בא מאחסון לפי עמודות: ערכים דומים יושבים יחד ונדחסים טוב.</li><li>לצפות שב־CSV אפשר לקרוא "רק עמודה אחת". שורות הטקסט עוברות סריקה מלאה כדי למצוא את הפסיקים.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E05">
     <h3>P28.5-E05 · כמה עולה שאילתה? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
@@ -92,9 +98,12 @@ add_to_cart=200000 checkout=200000 click=200000 purchase=200000 view=200000</pre
 <ol><li><strong>2TB.</strong> כל העמודות, כל השורות — ה־LIMIT מופעל אחרי הסריקה. (בקונסולה של BigQuery יש "preview" חינמי בדיוק בשביל זה.)</li><li><strong>~100GB</strong> — עמודה אחת, כל השנה.</li><li><strong>~270MB</strong> — עמודה אחת, יום אחד (100GB / 365).</li><li><strong>~100GB</strong> — המנוע לא יודע שיום ב־<code>ts</code> שווה ל־<code>day</code>, אז אין pruning. אותה תוצאה, פי 365 בעלות.</li></ol>
 <p>כללי אצבע: לא <code>SELECT *</code>; תמיד WHERE על עמודת ה־partition; ו־clustering (מיון לפי עמודה שמסננים עליה הרבה, כמו <code>customer_id</code>) מקטין עוד. E17 מחשב את זה בקוד.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>LIMIT 10</code> מוזיל את השאילתה. הוא מקטין רק את התשובה; הסריקה כבר קרתה, ומשלמים עליה.</li><li>לחשוב ש־<code>DATE(ts) = …</code> שקול ל־<code>day = …</code>. המנוע לא יודע שהם קשורים, ולכן אין partition pruning.</li><li>לחשב לפי מספר השורות שמוחזרות, ולא לפי הבתים שנסרקים. במחסן on-demand משלמים לפי בתים.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E72">
     <h3>P28.5-E72 · עשרת אלפים קבצים קטנים <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
@@ -178,9 +187,12 @@ FROM orders
 GROUP BY category
 ORDER BY revenue DESC;</code></pre>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>sum(price_cents)</code> בלי הכפלה בכמות. ההכנסה יוצאת נמוכה מדי.</li><li>לחלק ב־100 (שלם) ולא ב־100.0. מקבלים עיגול לשלם ומאבדים את האגורות.</li><li><code>share_pct</code> עם תת־שאילתה נפרדת על כל הטבלה, או מחושב לפני ה־GROUP BY. <code>sum(sum(x)) OVER ()</code> מחשב את הסך הכולל על התוצאה המקובצת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E16">
     <h3>P28.5-E16 · Parquet מחולק לפי יום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -215,9 +227,12 @@ export async function ordersPerDay(conn: DuckDBConnection, outDir: string): Prom
 }</code></pre>
 <p>זו בדיוק הצורה של data lake על S3 (יחידה 26.3): <code class="mid">s3://lake/orders/day=2026-10-01/part-0.parquet</code>. שאילתה עם <code>WHERE day = '2026-10-15'</code> קוראת תיקייה אחת מתוך 32 — partition pruning, כמו ב־BigQuery (E05).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>יום לפי <code>created_at::DATE</code>, כלומר UTC. הזמנות של אחרי חצות בישראל נכנסות לתיקייה של היום הקודם.</li><li>לקרוא את החלקים בלי <code>hive_partitioning = true</code>. עמודת <code>day</code> לא חוזרת מתוך שמות התיקיות.</li><li>לבנות נתיב עם גרש בתוכו בלי escape. מחרוזת SQL נשברת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E17">
     <h3>P28.5-E17 · הערכת עלות סריקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -256,9 +271,12 @@ export function estimateScan(t: TableStats, q: QueryShape, { pricePerTiB = 6.25 
 }</code></pre>
 <p>(המחיר כאן — פרמטר. מחירים של שירותי ענן משתנים; בעבודה — מהדף הרשמי, ובדרך כלל דרך "dry run" שמחזיר את מספר הבתים לפני שמריצים.)</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להקטין את הסריקה לפי <code>LIMIT</code>. במחסן עמודתי LIMIT לא משנה את מה שנסרק.</li><li>pruning לפי <code>days</code> גם כשהטבלה לא מחולקת. בלי <code>partitionedBy</code> נסרקת כל הטבלה.</li><li>1TiB כ־10<sup>12</sup> בתים. כאן TiB הוא 2<sup>40</sup>, והעלות יוצאת שונה בכ־10%.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E18">
     <h3>P28.5-E18 · HyperLogLog 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -313,9 +331,12 @@ export function mergeHLL(a: HLL, b: HLL): HLL {
 }</code></pre>
 <p>זה מה שמאחורי <code>PFADD</code>/<code>PFCOUNT</code> ב־Redis, <code>APPROX_COUNT_DISTINCT</code> ב־BigQuery ו־<code>approx_count_distinct</code> ב־DuckDB ו־Spark. ו־merge הוא הקסם: HLL לכל יום ← איחוד ← ייחודיים לחודש, בלי לספור מחדש.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>x &gt;&gt; (32 − p)</code> במקום <code>&gt;&gt;&gt;</code>. עם ביט עליון 1 מקבלים אינדקס שלילי.</li><li>לשכוח את המקרה "כולם אפס" ב־ρ. <code>Math.clz32(0)</code> הוא 32, אבל המקסימום הנכון הוא <code>32 − p + 1</code>.</li><li><code>mergeHLL</code> שמחבר רגיסטרים. איחוד הוא מקסימום לכל רגיסטר, אחרת ההערכה מתנפחת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E22">
     <h3>P28.5-E22 · דוח יומי — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
@@ -339,9 +360,12 @@ GROUP BY day
 ORDER BY day
 LIMIT 10;</code></pre>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>count(customer_id)</code> במקום <code class="mid">count(DISTINCT customer_id)</code>. לקוח עם שלוש הזמנות נספר שלוש פעמים.</li><li>להמיר לשעון ישראל ב־SELECT, אבל לקבץ לפי <code>created_at::DATE</code>. ה־GROUP BY חייב להשתמש באותו ביטוי של היום בישראל (כאן — לפי הכינוי <code>day</code>).</li><li><code>sum(price_cents)</code>. המחיר הוא ליחידה, ולכן צריך <code>quantity * price_cents</code>.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E75">
     <h3>P28.5-E75 · מדינות: הזמנות, לקוחות ודירוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>

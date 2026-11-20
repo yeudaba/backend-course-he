@@ -57,9 +57,12 @@ pbkdf2 (async)   timer fired while the work was running
 busy loop        timer waited until the work finished</pre>
 <p><code>pbkdf2Sync</code> ולולאת החישוב תופסים את ה־thread היחיד של JavaScript — שום timer, שום בקשת HTTP ושום health check לא ייענו עד שיסתיימו. ב־API עם 100 משתמשים, התחברות אחת "מקפיאה" את כולם. <code>pbkdf2</code> האסינכרוני עושה בדיוק את אותה עבודה — ב־thread אחר. עבודת CPU של JavaScript עצמו (הלולאה) — מעבירים ל־worker thread (E13).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לחשוב ש־<code>async</code> בפונקציה מספיק כדי שלולאת חישוב לא תחסום. הקוד בתוכה עדיין רץ על ה־thread היחיד.</li><li>לחשוב ש־pbkdf2 עם callback חוסם כמו <code>pbkdf2Sync</code>. הוא רץ ב־thread pool של libuv, וה־timer רץ בינתיים.</li><li>לצפות שה־timer ירוץ בדיוק אחרי 10ms גם בזמן לולאה חוסמת. 10ms הוא מינימום, לא הבטחה.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E42">
     <h3>P28.5-E42 · חוסם או לא? <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>
@@ -220,9 +223,12 @@ export async function countPrimesParallel(limit: number, { threads = 4, chunks =
 }</code></pre>
 <p>worker threads הם לא "async": כל worker הוא thread נוסף עם V8 משלו (כ־10MB זיכרון, ועשרות ms לעלות). לכן — pool קבוע, לא worker לכל בקשה (בפרודקשן: <code>piscina</code>). ולעבודה ש־Node כבר מריץ ב־thread pool (crypto, zlib, fs) — מספיקה הגרסה האסינכרונית (E03, E23).</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>worker חדש לכל chunk. יצירת worker יקרה, והתרגיל מבקש <code>threads</code> workers שלוקחים מתור משותף.</li><li>לחלק את הטווחים בלי לכסות את הקצוות (למשל <code>to</code> לא כולל, ו־<code>from</code> של הבא מתחיל +1). מספרים בגבול נספרים פעמיים או לא בכלל.</li><li>לשכוח <code>worker.terminate()</code> בסוף. התהליך לא נסגר, והבדיקה נתקעת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E14">
     <h3>P28.5-E14 · מוניטור ל־event loop 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
@@ -259,9 +265,12 @@ export function startLagMonitor({ thresholdMs, intervalMs = 1000, onLag }: { thr
 }</code></pre>
 <p>בפרודקשן מייצאים את זה כמדד (<code class="mid">nodejs_eventloop_lag_seconds</code> ב־prom-client) ומתריעים עליו: p99 lag של 200ms אומר שכל בקשה בשרת הזה מחכה עד 200ms — לפני שהקוד שלה בכלל התחיל.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להשוות את <code>h.max</code> ל־threshold במילישניות. הערכים בננו־שניות, ולכן מחלקים ב־1e6.</li><li>לשכוח <code>h.reset()</code> אחרי דיווח. אז ה־max הישן מדווח שוב ושוב, בכל חלון.</li><li>בלי <code>unref()</code>. ה־interval משאיר את התהליך חי גם כשאין שום עבודה אחרת.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E23">
     <h3>P28.5-E23 · שרת שנתקע — שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
@@ -314,9 +323,12 @@ export function createServer(): http.Server {
 }</code></pre>
 <p>איך מוצאים את זה בפרודקשן: מוניטור lag (E14) מראה שה־event loop נחסם; ואז <code>node --cpu-prof</code> (או <code>clinic flame</code>) — פרופיל שמראה באיזו פונקציה ה־CPU בילה. <code>pbkdf2Sync</code> בראש ה־flame graph — וזהו.</p>
 
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לעטוף את <code>pbkdf2Sync</code> ב־<code>async</code> או ב־Promise. הפונקציה עדיין רצה על ה־event loop וחוסמת.</li><li>ב־<code>/slow</code>: לולאת <code>while (Date.now() &lt; end)</code> במקום <code>await sleep</code>. זו המתנה שחוסמת הכול.</li><li>לשכוח את <code>gzipSync</code> של הייצוא. גם דחיסה של קובץ גדול חוסמת לכמה מאות מילישניות.</li></ul>
+
 
 </div></details>
-    
   </div>
 <div class="ex" id="P28.5-E47">
     <h3>P28.5-E47 · לעבד מערך גדול בלי לחסום 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
