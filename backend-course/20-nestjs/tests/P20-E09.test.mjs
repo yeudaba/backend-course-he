@@ -14,8 +14,10 @@ test("PATCH ו־DELETE", async (t) => {
   assert.equal(res.status, 400, "PartialType שומר על החוקים");
   assert.equal((await call("PATCH", "/products/1", { color: "red" })).status, 400, "שדה לא מוכר");
   assert.equal((await call("PATCH", "/products/9", { price: 1 })).status, 404);
+  await call("POST", "/products", { name: "Jug", price: 30, stock: 1 });
   res = await call("DELETE", "/products/1");
   assert.equal(res.status, 204);
+  assert.equal((await call("GET", "/products/2")).status, 200, "DELETE מחק את המוצר הנכון — Jug נשאר");
   assert.equal((await call("GET", "/products/1")).status, 404);
   assert.equal((await call("DELETE", "/products/1")).status, 404);
 });

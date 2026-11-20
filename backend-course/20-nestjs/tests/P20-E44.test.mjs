@@ -14,6 +14,7 @@ test("אחד, הרבה, 404 ו־500", async (t) => {
   assert.equal(boom.status, 500);
   assert.doesNotMatch(JSON.stringify(boom.body), /db timeout/, "ההודעה הפנימית לא נשלחת ללקוח");
   assert.deepEqual((await call("GET", "/users?ids=2,9,1")).body, [{ id: 2, name: "Yossi" }, { id: 1, name: "Dana" }]);
+  assert.deepEqual((await call("GET", "/users?ids=2,,1,")).body, [{ id: 2, name: "Yossi" }, { id: 1, name: "Dana" }], "פסיקים מיותרים — מתעלמים מערכים ריקים");
   assert.equal((await call("GET", "/users?ids=1,13")).status, 500, "תקלה אמיתית — לא 'לא נמצא'");
   const start = Date.now();
   const many = await call("GET", "/users?ids=" + Array.from({ length: 10 }, (_, i) => (i % 2) + 1).join(","));

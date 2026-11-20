@@ -27,6 +27,7 @@ test("SlugPipe לבד", () => {
   const { SlugPipe } = load();
   const pipe = new SlugPipe();
   assert.equal(pipe.transform("hello-world", { type: "param" }), "hello-world");
+  assert.equal(pipe.transform("a".repeat(60), { type: "param" }), "a".repeat(60), "60 תווים — הגבול מותר");
   for (const bad of ["Hello", "hello--world", "-hello", "hello-", "hello world", "שלום", "", "a".repeat(61)]) {
     assert.throws(() => pipe.transform(bad, { type: "param" }), (e) => e.getStatus?.() === 400 && e.message === `slug לא תקין: ${bad}`, `"${bad}" ← BadRequestException("slug לא תקין: ${bad}")`);
   }

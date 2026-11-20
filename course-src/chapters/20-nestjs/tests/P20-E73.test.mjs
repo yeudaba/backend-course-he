@@ -23,3 +23,11 @@ test("/docs-json", async (t) => {
   assert.equal((await call("POST", "/books", { title: "Dune", year: 1965 })).status, 201);
   assert.equal((await call("POST", "/books", { title: "Dune" })).status, 400, "ולידציה של class-validator");
 });
+test("GET /books/:id — הספר הנכון, ו־404", async (t) => {
+  const { BooksModule } = exportsOf(import.meta.url, "P20-E73.ts", ["BooksModule"]);
+  const { call } = await nestApp(t, BooksModule, { validation: true });
+  await call("POST", "/books", { title: "Dune", year: 1965 });
+  await call("POST", "/books", { title: "Emma", year: 1815 });
+  assert.equal((await call("GET", "/books/2")).body.title, "Emma");
+  assert.equal((await call("GET", "/books/9")).status, 404);
+});
