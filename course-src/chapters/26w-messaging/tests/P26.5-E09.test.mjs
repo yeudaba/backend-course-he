@@ -54,3 +54,9 @@ test("אותו eventId פעמיים ← הודעה אחת (deduplication)", asyn
   await sendOrderEvents(sqs, queueUrl, [e]); // retry של ה־producer אחרי timeout
   assert.equal((await receiveAll(sqs, queueUrl)).length, 1);
 });
+test("חלק מה־batch נכשל ← זורקת", async () => {
+  // לקוח SQS מדומה: ההודעה השנייה בכל batch נכשלת
+  const fake = { send: async (cmd) => ({ Successful: cmd.input.Entries.filter((e) => e.Id !== "1").map((e) => ({ Id: e.Id })), Failed: [{ Id: "1", Code: "InternalError", SenderFault: false }] }) };
+  const events = [{ eventId: "e-1", orderId: 1, type: "created" }, { eventId: "e-2", orderId: 1, type: "paid" }];
+  await assert.rejects(sendOrderEvents(fake, "https://sqs.local/q.fifo", events), undefined, "res.Failed לא ריק ← צריך לזרוק שגיאה, לא להחזיר \"הצלחה\"");
+});
