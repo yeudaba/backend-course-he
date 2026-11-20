@@ -10,7 +10,7 @@ export default {
   database: true, // P26.3-E46: דוח עלויות ב־SQL
   testTimeout: 60000,
   time: "4 מפגשים",
-  expectedExercises: 101,
+  expectedExercises: 103,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Docker Desktop (פרק 23), ופרק 25 — ה־CI וה־deploy של פרויקט 2.</p>
 <p><strong>מה מתקינים / מריצים עכשיו:</strong></p>
 <ul>

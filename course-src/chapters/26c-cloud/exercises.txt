@@ -3814,3 +3814,86 @@ export function changedTargets(files: string[]): Target[] {
 <p>ב־Jenkins זה <code>when { changeset 'web/**' }</code>, וב־GitHub Actions — ‏<code>on.push.paths</code>. ברירת המחדל "לא מוכר ← api" חשובה: קובץ חדש שאף אחד לא חשב עליו צריך לגרום ל־build מיותר, לא לפספס build הכרחי.</p>
 @mistakes
 <ul><li>ברירת מחדל "לא מוכר ← כלום" — מישהו מוסיף <code>tsconfig.json</code> חדש, וה־image הישן נשאר בפרודקשן.</li></ul>
+
+@@ P26.3-E102 | 4 | Lambda שעונה 502 🤖 | 20 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>handler(event)</code> ב־<code>26c-cloud/starter/P26.3-E102.ts</code> רץ ב־Lambda מאחורי API Gateway (אותו פורמט אירוע כמו ב־P26.3-E37, עם <code>queryStringParameters</code> שהוא <code>null</code> כשאין query). תמיד מחזיר <code>{ statusCode, headers: { "Content-Type": "application/json" }, body }</code>, כש־<code>body</code> מחרוזת JSON:</p>
+<ul><li><code>GET /products</code> ← 200 ורשימת המוצרים; עם <code>?category=…</code> — רק מהקטגוריה.</li><li><code>POST /products</code> — גוף JSON (אולי ב־base64, לפי <code>isBase64Encoded</code>) עם <code>name</code> ו־<code>price</code> חיובי ← 201 והמוצר. JSON שבור ← 400.</li><li>כל השאר ← 404.</li></ul>
+<p>התלונות: ‏<code>GET /products</code> בלי query מחזיר 502 מ־API Gateway; עם query — הגוף ריק בדפדפן; ו־POST מהאפליקציה בנייד (ששולחת base64) תמיד מקבל 400. מצא ותקן.</p>
+```term
+% npm run check P26.3-E102
+```
+@hint1
+<p>502 מ־API Gateway אומר שה־Lambda זרקה, או החזירה משהו בצורה לא נכונה. מה <code>event.queryStringParameters</code> כשאין query?</p>
+@hint2
+<p>‏<code>body</code> חייב להיות מחרוזת. ובגוף ב־base64: ‏<code>Buffer.from(body, "base64").toString("utf8")</code> לפני <code>JSON.parse</code>.</p>
+@solution
+```ts save=solutions/P26.3-E102.ts
+// P26.3-E102: Lambda של מוצרים — מתוקן
+type Event = { httpMethod: string; path: string; queryStringParameters: Record<string, string> | null; body: string | null; isBase64Encoded?: boolean };
+const products = [
+  { id: 1, name: "Ethiopia", category: "beans", price: 62 },
+  { id: 2, name: "V60", category: "gear", price: 89 },
+  { id: 3, name: "Espresso Blend", category: "beans", price: 48 },
+];
+const json = (statusCode: number, data: unknown) => ({ statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+
+export async function handler(event: Event) {
+  if (event.httpMethod === "GET" && event.path === "/products") {
+    const category = event.queryStringParameters?.category;
+    return json(200, category ? products.filter((p) => p.category === category) : products);
+  }
+  if (event.httpMethod === "POST" && event.path === "/products") {
+    const raw = event.isBase64Encoded && event.body ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+    let data: { name?: unknown; price?: unknown };
+    try {
+      data = JSON.parse(raw ?? "");
+    } catch {
+      return json(400, { error: "JSON לא תקין" });
+    }
+    if (typeof data.name !== "string" || typeof data.price !== "number" || !(data.price > 0)) return json(400, { error: "name ו־price חיובי" });
+    return json(201, { id: products.length + 1, name: data.name, price: data.price });
+  }
+  return json(404, { error: "not found" });
+}
+```
+<ol><li><strong>‏<code>event.queryStringParameters.category</code></strong> זרק <code>TypeError</code> כש־<code>queryStringParameters</code> הוא <code>null</code>. Lambda שזורקת ← API Gateway מחזיר 502. ‏<code>?.</code>.</li><li><strong>‏<code>body: products</code></strong> הוא מערך, לא מחרוזת. ה־proxy של API Gateway מצפה למחרוזת; JSON.stringify.</li><li><strong>base64 לא פוענח.</strong> כשהלקוח שולח גוף בינארי או עם קידוד מסוים, API Gateway מעביר אותו ב־base64 ומסמן <code>isBase64Encoded</code>. ‏<code>JSON.parse</code> על base64 נכשל, ולכן 400.</li></ol>
+@mistakes
+<ul><li>לעטוף את כל ה־handler ב־try/catch שמחזיר 500. ה־502 נעלם, אבל הבאג (<code>null</code>) נשאר, ועכשיו כל GET בלי query מחזיר 500.</li><li>לפענח base64 תמיד. גוף רגיל (<code>isBase64Encoded: false</code>) נשבר.</li><li>לשכוח את ה־<code>Content-Type</code> בתשובות של שגיאה. הלקוח מקבל טקסט, ו־<code>res.json()</code> בצד שלו נכשל.</li></ul>
+
+@@ P26.3-E103 | 4 | מיזוג values שמשנה את ברירות המחדל 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>‏<code>mergeValues(base, override)</code> ב־<code>26c-cloud/starter/P26.3-E103.ts</code> ממזגת שתי שכבות של values כמו Helm (‏<code>values.yaml</code> ואז <code>values-prod.yaml</code>):</p>
+<ul><li>אובייקט רגיל מתמזג לעומק עם אובייקט שכבר שם. מערך, מחרוזת, מספר ← מחליפים לגמרי.</li><li>‏<code>null</code> ב־override ← מוחק את המפתח.</li><li>לא משנים את <code>base</code> ולא את <code>override</code>; מחזירים אובייקט חדש.</li></ul>
+<p>התלונות: אחרי שמכינים את values של prod, גם values של staging (מאותו base) מקבלים 3 replicas; ‏<code>env</code> ב־prod מכיל גם את המשתנים של dev וגם של prod; ו־<code>resources: null</code> ב־prod משאיר <code>resources: null</code> במקום למחוק. מצא ותקן.</p>
+```term
+% npm run check P26.3-E103
+```
+@hint1
+<p>קרא ל־<code>mergeValues(base, prod)</code> ואז הדפס את <code>base</code>. מה השתנה בו?</p>
+@hint2
+<p>‏<code>typeof []</code> הוא <code>"object"</code>, ולכן <code>Array.isArray</code> נבדק לפני "אובייקט רגיל". ותוצאה חדשה מתחילה מעותק, לא מ־<code>base</code> עצמו.</p>
+@solution
+```ts save=solutions/P26.3-E103.ts
+// P26.3-E103: מיזוג values כמו Helm — מתוקן
+type Values = Record<string, unknown>;
+const isPlain = (x: unknown): x is Values => typeof x === "object" && x !== null && !Array.isArray(x);
+const clone = (x: unknown): unknown => (Array.isArray(x) ? x.map(clone) : isPlain(x) ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, clone(v)])) : x);
+
+export function mergeValues(base: Values, override: Values): Values {
+  const out = clone(base) as Values;
+  for (const [key, value] of Object.entries(override)) {
+    if (value === null) delete out[key];
+    else if (isPlain(value) && isPlain(out[key])) out[key] = mergeValues(out[key] as Values, value);
+    else out[key] = clone(value);
+  }
+  return out;
+}
+```
+<ol><li><strong>‏<code>const out = base</code></strong> הוא אותו אובייקט. המיזוג כתב לתוך ה־base, ולכן המיזוג הבא (staging) התחיל מ־values של prod. מתחילים מעותק עמוק, ומעתיקים גם ערכים מה־override.</li><li><strong>מערך טופל כמו אובייקט.</strong> ‏<code>typeof []</code> הוא <code>"object"</code>, ולכן המערכים מוזגו לפי אינדקס. ב־Helm מערך מחליף לגמרי: <code>Array.isArray</code> לפני הבדיקה של אובייקט.</li><li><strong>‏<code>null</code> הוצב כערך.</strong> ב־Helm ‏<code>null</code> מוחק את המפתח מה־defaults. ‏<code>delete out[key]</code>.</li></ol>
+@mistakes
+<ul><li>‏<code>{ ...base, ...override }</code>. זה מיזוג שטחי: ‏<code>image: { tag }</code> ב־prod מוחק את <code>image.repository</code> מה־base.</li><li>‏<code>structuredClone(base)</code> ואז מיזוג שמציב ערכים מה־override כמו שהם. התוצאה עדיין חולקת מערכים ואובייקטים עם ה־override.</li><li>להחליף את <code>null</code> ב־<code>undefined</code>. המפתח עדיין קיים, ו־<code>{{ if .Values.resources }}</code> ב־template מתנהג אחרת מבלי מפתח.</li></ul>
