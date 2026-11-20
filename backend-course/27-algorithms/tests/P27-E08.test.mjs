@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../../tools/load.mjs";
-import { fastEnough } from "./_perf.mjs";
+import { fastEnough, seeded } from "./_perf.mjs";
 
 const { groupAnagrams } = await load(import.meta.url, "P27-E08.ts");
 
@@ -17,6 +17,13 @@ test("בלי הבדל בין אותיות גדולות לקטנות; מילים 
   assert.deepEqual(groupAnagrams(["Tea", "eat", "ate", "tea"]), [["Tea", "eat", "ate", "tea"]]);
   assert.deepEqual(groupAnagrams(["ab", "aab", "ba"]), [["ab", "ba"], ["aab"]], "אותן אותיות, כמות שונה — לא אותה קבוצה");
   assert.deepEqual(groupAnagrams([]), []);
+});
+test("30,000 מילים שונות (הרבה קבוצות) — מהר", () => {
+  const rnd = seeded(8);
+  const words = Array.from({ length: 30_000 }, () => Array.from({ length: 7 }, () => String.fromCharCode(97 + Math.floor(rnd() * 26))).join(""));
+  const groups = fastEnough(() => groupAnagrams(words), 1000, "groupAnagrams על 30,000 מילים עם אלפי קבוצות (חיפוש קבוצה בלולאה? השתמש ב־Map לפי המפתח)");
+  assert.equal(groups.flat().length, 30_000);
+  assert.ok(groups.length > 20_000);
 });
 test("30,000 מילים — מהר", () => {
   const words = Array.from({ length: 30_000 }, (_, i) => `w${i % 1000}x${Math.floor(i / 1000)}`);
