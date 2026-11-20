@@ -1,9 +1,15 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
 import { load } from "../../tools/load.mjs";
 import { queueSandbox } from "../../tools/aws.mjs";
 import { sleep } from "../../tools/mq.mjs";
+
+// טיימרים שנשארו פתוחים בקוד שלך היו משאירים את הבדיקה רצה לנצח — בסוף הקובץ סוגרים אותם בכוח
+const realSetInterval = globalThis.setInterval;
+const timers = [];
+globalThis.setInterval = (...a) => { const id = realSetInterval(...a); timers.push(id); return id; };
+after(() => { for (const id of timers) clearInterval(id); });
 
 const { withVisibilityHeartbeat } = await load(import.meta.url, "P26.5-E67.ts");
 

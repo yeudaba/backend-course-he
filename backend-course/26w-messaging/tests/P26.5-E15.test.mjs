@@ -34,3 +34,9 @@ test("כישלון באמצע ← שום דבר לא נשמר, כולל הסימ
   assert.equal((await db.rows("SELECT count(*)::int AS n FROM processed_events"))[0].n, 0, "הסימון נשאר — וה־retry ידלג על תשלום שלא קרה");
   assert.equal((await db.rows("SELECT count(*)::int AS n FROM payments"))[0].n, 0);
 });
+test("הזמנה שלא קיימת ← שגיאה, ושום תשלום לא נשמר", async (t) => {
+  const db = await sandbox(t, import.meta.url, "events.sql");
+  const pool = db.pool(3);
+  await assert.rejects(handlePaymentEvent(pool, { ...ev, eventId: "pay-ghost", orderId: 999 }));
+  assert.deepEqual(await db.rows("SELECT event_id FROM payments WHERE event_id = 'pay-ghost'"), [], "ה־INSERT בוטל (ROLLBACK)");
+});

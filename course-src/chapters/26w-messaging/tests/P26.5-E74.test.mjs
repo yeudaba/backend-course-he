@@ -33,3 +33,9 @@ test("ברירת מחדל 200,000", async (t) => {
   assert.equal(await sendClaimCheck({ s3, sqs }, { bucket, queueUrl }, { x: "a".repeat(199_000) }), "inline");
   assert.equal(await sendClaimCheck({ s3, sqs }, { bucket, queueUrl }, { x: "a".repeat(200_000) }), "s3");
 });
+test("בדיוק limitBytes — עדיין inline", async (t) => {
+  const { sqs, queueUrl } = await queueSandbox(t);
+  const { s3, bucket } = await bucketSandbox(t);
+  const exact = { x: "a".repeat(100 - Buffer.byteLength(JSON.stringify({ x: "" }))) };
+  assert.equal(await sendClaimCheck({ s3, sqs }, { bucket, queueUrl }, exact, 100), "inline");
+});
