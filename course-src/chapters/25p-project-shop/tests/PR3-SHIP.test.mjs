@@ -28,7 +28,7 @@ test("Docker", () => {
   assert.ok([db.volumes].flat().some((v) => String(v).endsWith(":/var/lib/postgresql")), "volume ב־/var/lib/postgresql (PostgreSQL 18)");
   const api = services.find((s) => s.build && s.ports);
   assert.ok(api, "compose: שירות של ה־API (build + ports)");
-  assert.ok(Object.values(api.depends_on ?? {}).some((d) => d?.condition), "ה־API מחכה עם condition (מסד healthy / migrations הסתיימו)");
+  assert.ok(Object.values(api.depends_on ?? {}).some((d) => /service_(healthy|completed_successfully)/.test(d?.condition ?? "")), "ה־API מחכה עם condition: service_healthy (מסד) או service_completed_successfully (migrations) — service_started לא מחכה שהמסד יהיה מוכן");
 });
 
 test("CI", () => {
@@ -64,7 +64,7 @@ test("דף ההדגמה", () => {
   const js = walk(path.join(dir, "web")).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(f, "utf8")).join("\n");
   assert.match(js, /fetch\(/, "fetch ל־API");
   assert.match(js, /\/products/, "מציג מוצרים");
-  assert.match(js, /Idempotency-Key/i, "הזמנה עם Idempotency-Key — לחיצה כפולה לא יוצרת שתי הזמנות");
+  assert.match(js, /\/orders["'`]\s*,[^;]{0,300}Idempotency-Key/i, "הזמנה (POST /orders) עם Idempotency-Key — לחיצה כפולה לא יוצרת שתי הזמנות");
 });
 
 test("הבדיקות של הפרויקט", () => {
