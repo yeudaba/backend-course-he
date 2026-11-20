@@ -74,6 +74,7 @@ test("גוף לא תקין ← 400; גדול מ־1MB ← 413; יותר מ־maxBa
   assert.equal((await call("POST", "/v1/events", { events: [] }, h)).status, 400);
   assert.equal((await call("POST", "/v1/events", { nope: 1 }, h)).status, 400);
   assert.equal((await call("POST", "/v1/events", { events: Array.from({ length: 11 }, () => ev()) }, h)).status, 400);
+  assert.equal((await call("POST", "/v1/events", { events: Array.from({ length: 10 }, () => ev()) }, h)).status, 202, "בדיוק maxBatch — מותר");
   assert.equal((await call("POST", "/v1/events", { events: [ev({ props: { a: "x".repeat(1_100_000) } })] }, h)).status, 413);
 });
 test("202 רק אחרי ש־Kafka אישר; Kafka לא זמין ← 503", async (t) => {
