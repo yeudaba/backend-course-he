@@ -36,3 +36,6 @@ test("shard שנכשל — תשובה חלקית", async () => {
   assert.deepEqual(r.failed, ["a", "c"]);
   await assert.rejects(queryAllShards([shard("a", [], { fail: true }), shard("b", [], { fail: true })], 10));
 });
+test("בלי shards — תשובה ריקה, לא שגיאה", async () => {
+  assert.deepEqual(await queryAllShards([], 5), { items: [], failed: [] });
+});

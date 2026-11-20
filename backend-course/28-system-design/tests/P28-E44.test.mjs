@@ -26,3 +26,9 @@ test("אין בקשות תקינות", () => {
   assert.deepEqual(trafficFromLogs(["{", "null", "5"]), { total: 0, skipped: 3, minutes: 0, avgPerMinute: 0, peakPerMinute: 0, peakFactor: 0 });
   assert.deepEqual(trafficFromLogs([]), { total: 0, skipped: 0, minutes: 0, avgPerMinute: 0, peakPerMinute: 0, peakFactor: 0 });
 });
+test("peakFactor מעוגל לספרה אחת", () => {
+  const lines = ["10:00:01", "10:00:02", "10:00:03", "10:01:00", "10:02:00", "10:02:01", "10:02:02"].map((t) => at(`2026-03-01T${t}Z`));
+  const r = trafficFromLogs(lines);
+  assert.equal(r.avgPerMinute, 2.3);
+  assert.equal(r.peakFactor, 1.3, "3 / 2.333 = 1.2857 ← 1.3");
+});
