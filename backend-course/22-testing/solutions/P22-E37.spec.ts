@@ -26,6 +26,13 @@ test("אותו sku מצטבר, עד 10", () => {
   assert.equal(cart.count, 10);
 });
 
+test("הוספה חוזרת — המחיר מתעדכן לאחרון", () => {
+  const cart = new Cart();
+  cart.add("mug", 4990, 1);
+  cart.add("mug", 3990, 1);
+  assert.equal(cart.totalAgorot(), 2 * 3990);
+});
+
 test("מתנה במחיר 0", () => {
   const cart = new Cart();
   cart.add("gift", 0, 2);
