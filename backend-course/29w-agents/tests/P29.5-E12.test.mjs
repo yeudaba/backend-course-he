@@ -20,6 +20,12 @@ test("span לכל קריאה למודל: טוקנים, cache ועלות", async 
   ]);
   assert.ok(m.every((s) => typeof s.ms === "number" && s.model === "claude-opus-5-5"));
 });
+test("עלות מעוגלת ל־6 ספרות", async () => {
+  const tr = createTracer();
+  const { client } = fakeClaude(() => message("ok", { usage: { input_tokens: 1, output_tokens: 0, cache_read_input_tokens: 1 } }));
+  await tr.wrapClient(client).messages.create({ model: "claude-opus-5-5", max_tokens: 10, messages: [{ role: "user", content: "a" }] });
+  assert.equal(tr.spans.find((s) => s.kind === "model").costUsd, 0.000004, "4.2 מיליוניות דולר ← 0.000004");
+});
 test("tools: זמן ושגיאות; summary", async () => {
   const tr = createTracer();
   const ok = tr.wrapTool("get_order", async (i) => `order ${i.id}`);
