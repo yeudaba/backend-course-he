@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { sandbox } from "../../tools/sql.mjs";
 
 const FILE = "P28.5-E27.sql";
@@ -12,7 +13,7 @@ test("P28.5-E27: סיכום יומי (עמודות, שורות וסדר)", async
   const rows = norm(got);
   assert.deepEqual(rows.map((r) => r[2]), [3, 3, 4], "users — משתמשים שונים (COUNT(DISTINCT user_id)), לא צפיות");
   assert.equal(rows[1][3], "/cart", "2 בנובמבר: /cart ו־/checkout עם 2 צפיות כל אחד — בתיקו לפי שם הנתיב");
-  assert.deepEqual(rows, norm(await db.expectedRows(FILE)));
+  assert.ok(isDeepStrictEqual(rows, norm(await db.expectedRows(FILE))), "התוצאה שונה מהפתרון (עמודות views, ‏top_path_views או הסדר)");
 });
 test("P28.5-E27: יום עם צפייה אחת, ונתיב שמוביל ביום אחר", async (t) => {
   const db = await sandbox(t, import.meta.url, "views-days.sql");

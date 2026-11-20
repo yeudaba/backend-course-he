@@ -1,11 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { duck } from "./_duck.mjs";
+import { duck, sameAsSolution } from "./_duck.mjs";
 
 test("דוח קטגוריות — זהה לפתרון", async (t) => {
-  const d = await duck(t);
-  const got = await d.fileRows("P28.5-E15.sql");
-  assert.deepEqual(got, await d.expectedRows("P28.5-E15.sql"));
+  await sameAsSolution("P28.5-E15.sql");
 });
 test("שפיות: 4 קטגוריות, והאחוזים מסתכמים ל־100", async (t) => {
   const d = await duck(t);

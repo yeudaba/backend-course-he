@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { duck } from "./_duck.mjs";
+import { duck, sameAsSolution } from "./_duck.mjs";
 
 test("הכנסה יומית — זהה לפתרון", async (t) => {
   const d = await duck(t);
   const got = await d.fileRows("P28.5-E76.sql");
   assert.deepEqual(Object.keys(got[0] ?? {}), ["day", "revenue", "running", "vs_prev_pct"]);
-  assert.deepEqual(got, await d.expectedRows("P28.5-E76.sql"));
+  await sameAsSolution("P28.5-E76.sql");
 });
 test("שפיות: 31 ימים, NULL ביום הראשון, running = סכום", async (t) => {
   const d = await duck(t);
