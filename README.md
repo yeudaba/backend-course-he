@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **197** | **3440** | **1938** | **1676** |
+| **42** | **197** | **3446** | **1944** | **1690** |
 
 ## מה שונה כאן
 
@@ -54,9 +54,9 @@
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 0](backend-course/00-setup/index.html) | הכנה: המחשב, VS Code והרצה ראשונה | 5 | 8 | — | ✔ |
 | [פרק 1](backend-course/01-values-variables/index.html) | ערכים ומשתנים <sub>(רענון)</sub> | 3 | 65 | 39 | ✔ |
-| [פרק 2](backend-course/02-operators-strings/index.html) | פעולות ומחרוזות <sub>(רענון)</sub> | 4 | 81 | 45 | ✔ |
-| [פרק 3](backend-course/03-conditions/index.html) | תנאים <sub>(רענון)</sub> | 4 | 81 | 45 | ✔ |
-| [פרק 4](backend-course/04-loops/index.html) | לולאות <sub>(רענון)</sub> | 4 | 80 | 44 | ✔ |
+| [פרק 2](backend-course/02-operators-strings/index.html) | פעולות ומחרוזות <sub>(רענון)</sub> | 4 | 83 | 47 | ✔ |
+| [פרק 3](backend-course/03-conditions/index.html) | תנאים <sub>(רענון)</sub> | 4 | 83 | 47 | ✔ |
+| [פרק 4](backend-course/04-loops/index.html) | לולאות <sub>(רענון)</sub> | 4 | 82 | 46 | ✔ |
 | [פרק 5](backend-course/05-functions/index.html) | פונקציות <sub>(רענון)</sub> | 4 | 81 | 45 | ✔ |
 | [פרק 6](backend-course/06-arrays/index.html) | מערכים <sub>(רענון)</sub> | 4 | 81 | 45 | ✔ |
 | [פרק 7](backend-course/07-objects/index.html) | אובייקטים <sub>(רענון)</sub> | 4 | 86 | 48 | ✔ |
