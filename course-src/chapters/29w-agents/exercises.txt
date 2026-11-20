@@ -3897,3 +3897,72 @@ export function toolsDiff(before: Tool[], after: Tool[]) {
 <p>ב־CI: אם יש משהו ב־<code>added</code> או ב־<code>description</code> — העדכון לא נכנס בלי שבן אדם קרא את הטקסט החדש.</p>
 @mistakes
 <ul><li>להשוות רק שמות — התקיפה של E45 משנה תיאור של כלי קיים, בלי להוסיף כלום.</li></ul>
+
+@@ P29.5-E101 | 4 | קיצור היסטוריה שמחזיר 400 🤖 | 20 | שיעור 4
+@lesson 4
+@part 1
+@task
+<p>סוכן ארוך צובר היסטוריה, ולפני כל קריאה מקצרים אותה. ‏<code>trimHistory(messages, maxChars)</code> ב־<code>29w-agents/starter/P29.5-E101.ts</code> (גודל הודעה = <code>JSON.stringify(m).length</code>):</p>
+<ul><li>ההודעה הראשונה (המשימה) נשארת תמיד. מוחקים את <strong>הישנות</strong> אחריה, אחת־אחת, עד שהסכום ≤ <code>maxChars</code> (או שנשארו רק הראשונה והאחרונה).</li><li>אחרי המחיקה, ההודעה שמיד אחרי הראשונה חייבת להיות של <code>assistant</code>. אם היא של <code>user</code> (למשל עם <code>tool_result</code> שה־<code>tool_use</code> שלו נמחק) — מוחקים גם אותה, וחוזר חלילה.</li><li>את המערך שהתקבל לא משנים.</li></ul>
+<p>התלונות: אחרי קיצור, הסוכן "שוכח" מה הוא עשה הרגע וחוזר על אותה פעולה; ה־API מחזיר 400 על <code>tool_result</code> בלי <code>tool_use</code>; וה־trace (שמחזיק את אותו מערך) מראה היסטוריה חסרה. מצא ותקן.</p>
+```term
+% npm run check P29.5-E101
+```
+@hint1
+<p>‏<code>pop()</code> מוחק מאיפה? ואחרי המחיקה, הדפס את <code>role</code> ו־<code>type</code> של הבלוקים בהודעה השנייה.</p>
+@hint2
+<p>עבוד על עותק (<code>[...messages]</code>). מוחקים עם <code>splice(1, 1)</code>. ובסוף לולאה: כל עוד <code>out[1]?.role === "user"</code> ויש אחריה עוד הודעות — <code>splice(1, 1)</code>.</p>
+@solution
+```ts save=solutions/P29.5-E101.ts
+// P29.5-E101: קיצור היסטוריה — מתוקן
+type Block = { type: string; [k: string]: unknown };
+export type Message = { role: "user" | "assistant"; content: string | Block[] };
+
+const size = (ms: Message[]) => ms.reduce((s, m) => s + JSON.stringify(m).length, 0);
+
+export function trimHistory(messages: Message[], maxChars: number): Message[] {
+  const out = [...messages];
+  while (size(out) > maxChars && out.length > 2) out.splice(1, 1);
+  while (out.length > 2 && out[1].role === "user") out.splice(1, 1);
+  return out;
+}
+```
+<ol><li><strong>‏<code>pop()</code> מחק את ההודעות החדשות.</strong> אלה בדיוק מה שהסוכן צריך כדי להמשיך: התשובה האחרונה של כלי. מוחקים את הישנות, מיד אחרי המשימה (<code>splice(1, 1)</code>).</li><li><strong>‏<code>tool_result</code> יתום.</strong> כשמוחקים את הודעת ה־assistant עם ה־<code>tool_use</code>, הודעת ה־user שאחריה מצביעה על id שלא קיים, וה־API מחזיר 400. מוחקים עד שההודעה השנייה היא של assistant.</li><li><strong>‏<code>const out = messages</code></strong> שינה את המערך של ה־caller, ושם גם ה־trace שמר אותו. מעתיקים לפני שמוחקים.</li></ol>
+@mistakes
+<ul><li>למחוק גם את ההודעה הראשונה. הסוכן ממשיך לעבוד, בלי לדעת מה היעד.</li><li>לחתוך הודעה באמצע (טקסט חלקי). זה חוסך מקום, אבל בלוק tool_use חתוך הוא JSON שבור.</li><li>לחשב גודל לפי <code>messages.length</code>. עשר הודעות קצרות ועוד תוצאת כלי אחת של 300KB נחשבות אותו דבר.</li></ul>
+
+@@ P29.5-E102 | 4 | סיכום trace שמסתיר את הבעיה 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>‏<code>summarizeTrace(spans)</code> ב־<code>29w-agents/starter/P29.5-E102.ts</code> מסכמת trace של ריצת סוכן. כל span הוא <code>{ kind: "model", costUsd, ms }</code> או <code>{ kind: "tool", name, ms, isError }</code>. התוצאה:</p>
+<ul><li><code>steps</code> — כמה קריאות למודל. ‏<code>toolCalls</code> — כמה כלים. ‏<code>toolErrors</code> — כמה כלים עם <code>isError: true</code>.</li><li><code>costUsd</code> — סכום העלויות, מעוגל ל־6 ספרות.</li><li><code>slowestTool</code> — השם של הכלי האיטי ביותר (<code>null</code> אם לא היו כלים). ‏<code>spans</code> לא משתנה.</li></ul>
+<p>בדשבורד: ‏<code>toolCalls</code> תמיד גדול מהמספר האמיתי; העלות מוצגת כמו <code>0.035600000000000006</code>; "הכלי האיטי ביותר" הוא בדרך כלל דווקא המהיר, ואחרי שמסכמים, ה־trace עצמו מוצג בסדר אחר. מצא ותקן.</p>
+```term
+% npm run check P29.5-E102
+```
+@hint1
+<p>על כמה spans עובר <code>toolCalls</code>? ומה <code>sort</code> עושה למערך שהוא נקרא עליו?</p>
+@hint2
+<p>‏<code>filter((s) =&gt; s.kind === "tool")</code> פעם אחת, ומשם הכול. ‏<code>Math.round(x * 1e6) / 1e6</code>. ולמקסימום — <code>reduce</code>, בלי למיין.</p>
+@solution
+```ts save=solutions/P29.5-E102.ts
+// P29.5-E102: סיכום trace — מתוקן
+export type Span = { kind: "model"; costUsd: number; ms: number } | { kind: "tool"; name: string; ms: number; isError: boolean };
+
+export function summarizeTrace(spans: Span[]) {
+  const models = spans.filter((s): s is Extract<Span, { kind: "model" }> => s.kind === "model");
+  const tools = spans.filter((s): s is Extract<Span, { kind: "tool" }> => s.kind === "tool");
+  const slowest = tools.reduce<(typeof tools)[number] | null>((best, t) => (!best || t.ms > best.ms ? t : best), null);
+  return {
+    steps: models.length,
+    toolCalls: tools.length,
+    toolErrors: tools.filter((t) => t.isError).length,
+    costUsd: Math.round(models.reduce((s, m) => s + m.costUsd, 0) * 1e6) / 1e6,
+    slowestTool: slowest?.name ?? null,
+  };
+}
+```
+<ol><li><strong>‏<code>toolCalls: spans.length</code></strong> ספר גם את הקריאות למודל. מסננים לפי <code>kind</code>.</li><li><strong>סכום של שברים עשרוניים</strong> נותן שאריות כמו <code>…000000006</code>. מעגלים לדיוק שהמחירים עצמם מוגדרים בו (6 ספרות).</li><li><strong>‏<code>tools.sort((a, b) =&gt; a.ms - b.ms)[0]</code></strong> הוא המהיר ביותר (מיון עולה), ו־<code>sort</code> גם שינה את מערך ה־spans (‏<code>filter</code> לא נקרא לפניו), ולכן ה־trace הוצג בסדר אחר. מקסימום מוצאים עם <code>reduce</code>, בלי לשנות כלום.</li></ol>
+@mistakes
+<ul><li>‏<code>toFixed(6)</code> לעלות. זו מחרוזת, ובדשבורד אי אפשר לסכם אותה.</li><li>למיין עותק (<code>[...tools].sort</code>) בסדר יורד. זה נכון, אבל O(n log n) בשביל מקסימום אחד.</li><li>לספור <code>toolErrors</code> לפי <code>isError !== undefined</code>. גם <code>false</code> נספר.</li></ul>
