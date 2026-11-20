@@ -3456,3 +3456,289 @@ export function nextBatch<R extends Mark>(rows: R[], watermark: Mark | null, siz
 <ol><li><strong>‏<code>r.updatedAt &gt; watermark.updatedAt</code> בלבד.</strong> שורה עם אותו <code>updatedAt</code> ו־id גבוה יותר, שלא נכנסה לסבב הקודם, נשארה "מאחורי" ה־watermark לתמיד. משווים את הזוג.</li><li><strong>מיון לפי <code>updatedAt</code> בלבד.</strong> בתיקו, הסדר תלוי בסדר הקלט, ואז ה־watermark (שורה אחרונה) לא באמת הגבול של מה שיוצא.</li><li><strong>ה־watermark החדש היה המקסימום של כל השורות</strong>, גם של אלה שלא נכנסו ל־batch. מה שנשאר מעבר ל־size דולג. ה־watermark הוא של מה שיוצא בפועל.</li></ol>
 @mistakes
 <ul><li>‏<code>&gt;=</code> על <code>updatedAt</code>. אין דילוג, אבל השורה האחרונה של כל סבב יוצאת שוב, והדוח סופר אותה פעמיים.</li><li>להמיר את <code>updatedAt</code> ל־<code>Date</code> לפני ההשוואה. ‏Date מאבד את המיקרו־שניות של PostgreSQL, ושתי שורות שונות נראות באותו זמן.</li><li>לשמור את ה־watermark לפני שהקובץ נכתב. נפילה באמצע מדלגת על ה־batch.</li></ul>
+
+@@ P28.5-E102 | 1 | מתי הגוף של generator רץ? | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בלי להריץ: מה ידפיס הקוד הזה, שורה אחרי שורה?</p>
+```ts
+function* steps(): Generator<number> {
+  console.log("A");
+  yield 1;
+  console.log("B");
+  yield 2;
+  console.log("C");
+}
+const g = steps();
+console.log("start");
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+```
+<p>ואחר כך: (1) למה <code>start</code> מודפס לפני <code>A</code>? (2) מתי בדיוק מודפס <code>C</code>, ולמה לא אחרי ה־<code>next()</code> השני? (3) מה ה־<code>value</code> בקריאה השלישית, ולמה אין שם <code>3</code> או <code>"C"</code>?</p>
+@hint1
+<p>‏<code>steps()</code> רק יוצר את ה־generator. כל <code>next()</code> מריץ את הגוף מהמקום שבו הוא עצר <strong>עד ה־<code>yield</code> הבא</strong>, או עד הסוף.</p>
+@hint2
+<p>אין בפונקציה <code>return</code> עם ערך. מה פונקציה רגילה מחזירה כשהיא מגיעה לסוף בלי <code>return</code>?</p>
+@solution
+```ts run
+function* steps(): Generator<number> {
+  console.log("A");
+  yield 1;
+  console.log("B");
+  yield 2;
+  console.log("C");
+}
+const g = steps();
+console.log("start");
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+console.log(g.next());
+```
+```out
+start
+A
+{ value: 1, done: false }
+B
+{ value: 2, done: false }
+C
+{ value: undefined, done: true }
+{ value: undefined, done: true }
+```
+<ol><li><strong>‏<code>start</code> לפני <code>A</code></strong>, כי <code>steps()</code> לא מריץ אף שורה מהגוף. הוא רק מחזיר אובייקט generator שמחכה. השורה הראשונה של הגוף רצה רק ב־<code>next()</code> הראשון.</li><li><strong>‏<code>C</code> מודפס רק ב־<code>next()</code> השלישי.</strong> ה־<code>next()</code> השני ממשיך מאחרי <code>yield 1</code>, מדפיס <code>B</code>, ונעצר ב־<code>yield 2</code>. הקוד שאחרי <code>yield 2</code> מחכה לבקשה הבאה. generator עושה בדיוק את העבודה שביקשו ממנו, ולא שורה אחת יותר.</li><li><strong>‏<code>value: undefined</code>, ‏<code>done: true</code></strong>, כי הגוף הגיע לסוף בלי <code>yield</code> נוסף ובלי <code>return</code>, ולכן הערך הוא <code>undefined</code>, כמו בפונקציה רגילה. <code>"C"</code> רק הודפס, הוא לא הוחזר. מכאן והלאה כל <code>next()</code> מחזיר אותו דבר, כי ה־generator כבר גמר.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>steps()</code> מריץ את הגוף עד ה־<code>yield</code> הראשון. לא: עד <code>next()</code> הראשון לא רצה אף שורה.</li><li>לצפות לשגיאה ב־<code>next()</code> הרביעי. generator שגמר פשוט מחזיר <code>done: true</code> שוב ושוב.</li></ul>
+
+@@ P28.5-E103 | 1 | ‏break, ‏finally ו־generator שנגמר | 10 | שיעור 2
+@lesson 2
+@part 1
+@kind understand
+@task
+<p>בלי להריץ: מה ידפיס הקוד?</p>
+```ts
+function* rows(): Generator<string> {
+  try {
+    yield "r1";
+    yield "r2";
+    yield "r3";
+  } finally {
+    console.log("closed");
+  }
+}
+const g = rows();
+for (const r of g) {
+  console.log(r);
+  if (r === "r1") break;
+}
+for (const r of g) console.log("again", r);
+console.log([...rows()].length);
+```
+<p>(1) למה <code>closed</code> מודפס מיד אחרי <code>r1</code>, ולא בסוף? (2) מישהו ציפה שהלולאה השנייה תמשיך מ־<code>r2</code>. למה היא לא מדפיסה כלום, ולמה אין שגיאה? (3) למה <code>closed</code> מודפס פעם שנייה, ואיפה? (4) בקוד אמיתי, מה היית שם ב־<code>finally</code> של generator שקורא שורות ממסד?</p>
+@hint1
+<p>‏<code>break</code> בתוך <code>for...of</code> קורא ל־<code>g.return()</code>. מה קורה ל־generator ש־<code>return()</code> נקרא עליו?</p>
+@hint2
+<p>‏<code>[...rows()]</code> יוצר generator <strong>חדש</strong> ועובר עליו עד הסוף.</p>
+@solution
+```ts run
+function* rows(): Generator<string> {
+  try {
+    yield "r1";
+    yield "r2";
+    yield "r3";
+  } finally {
+    console.log("closed");
+  }
+}
+const g = rows();
+for (const r of g) {
+  console.log(r);
+  if (r === "r1") break;
+}
+for (const r of g) console.log("again", r);
+console.log([...rows()].length);
+```
+```out
+r1
+closed
+closed
+3
+```
+<ol><li><strong>‏<code>break</code> סוגר את ה־generator.</strong> ‏<code>for...of</code> קורא בשבילך ל־<code>g.return()</code>, והגוף מסתיים במקום שבו עצר (ב־<code>yield "r1"</code>). ‏<code>finally</code> רץ תמיד כשהגוף מסתיים, ולכן <code>closed</code> מודפס עוד לפני הלולאה השנייה.</li><li><strong>אחרי <code>return()</code> ה־generator גמר</strong>, ו־<code>next()</code> מחזיר <code>done: true</code> מיד. הלולאה השנייה מקבלת <code>done: true</code> כבר בסיבוב הראשון, ולכן לא מדפיסה כלום. גם אין שגיאה, כי מבחינת JavaScript זה רצף ריק ותקין. זה הבאג השקט של "עוברים פעמיים על אותו generator": אותו דבר קורה גם בלי <code>break</code>, אחרי שהלולאה הראשונה הגיעה לסוף.</li><li><strong>‏<code>rows()</code> בשורה האחרונה הוא generator חדש</strong>, עם גוף משלו ו־<code>finally</code> משלו. ה־spread עובר עליו עד הסוף, ובסוף הגוף רץ ה־<code>finally</code>. לכן <code>closed</code> מודפס לפני <code>3</code>: ‏<code>console.log</code> רץ רק אחרי שה־spread גמר.</li><li>שחרור משאבים: <code>client.release()</code> לחיבור מה־pool, או סגירת cursor או קובץ. כך גם מי שעוצר באמצע (‏<code>break</code>, ‏<code>return</code>, חריגה בלולאה) לא משאיר חיבור תפוס.</li></ol>
+@mistakes
+<ul><li>לחשוב ש־<code>break</code> רק "משהה" את ה־generator, ושאפשר להמשיך ממנו אחר כך. ‏<code>break</code> סוגר אותו. כדי להמשיך באמצע, קוראים ל־<code>next()</code> ביד.</li><li>לשים את השחרור אחרי הלולאה בתוך הגוף, ולא ב־<code>finally</code>. אחרי <code>break</code> השורה הזו לא רצה אף פעם.</li></ul>
+
+@@ P28.5-E104 | 2 | חתיכות מכל iterable 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>‏<code>inChunks</code> מהשיעור עובד רק על מערך, כי הוא משתמש ב־<code>slice</code>. בקובץ <code>28w-scale/starter/P28.5-E104.ts</code> (יש בו רק הערה) כתוב וייצא גרסה שעובדת על <strong>כל</strong> iterable: מערך, ‏<code>Set</code>, מחרוזת, או generator אחר.</p>
+```ts
+export function chunk<T>(source: Iterable<T>, size: number): Generator<T[]>
+```
+<ul><li>מחזיר מערכים של <code>size</code> איברים לפי הסדר. החתיכה האחרונה יכולה להיות קצרה יותר. מקור ריק ← אף חתיכה.</li><li><strong>עצל:</strong> כדי להחזיר את החתיכה הראשונה, לוקחים מהמקור בדיוק <code>size</code> איברים, לא יותר. הבודק נותן מקור של מיליון איברים וסופר כמה נלקחו.</li><li><code>size</code> קטן מ־1, או לא מספר שלם ← <code>RangeError</code> (מספיק שייזרק ב־<code>next()</code> הראשון).</li></ul>
+```ts
+[...chunk(new Set([1, 2, 3, 4, 5]), 2)]; // [[1, 2], [3, 4], [5]]
+[...chunk("abcd", 3)];                   // [["a", "b", "c"], ["d"]]
+```
+```term
+% npm run check P28.5-E104
+```
+@hint1
+<p>בלי <code>slice</code> ובלי <code>[...source]</code>: לולאת <code>for (const x of source)</code> שאוספת לתוך מערך <code>buf</code>. כש־<code>buf.length === size</code>, עושים <code>yield buf</code> ומתחילים <code>buf</code> חדש.</p>
+@hint2
+<p>אחרי הלולאה: אם נשאר משהו ב־<code>buf</code>, זו החתיכה האחרונה. ואת ה־<code>RangeError</code> בודקים בשורה הראשונה של הגוף, עם <code>Number.isInteger(size)</code>.</p>
+@solution
+```ts save=solutions/P28.5-E104.ts
+// P28.5-E104: חתיכות מכל iterable
+export function* chunk<T>(source: Iterable<T>, size: number): Generator<T[]> {
+  if (!Number.isInteger(size) || size < 1) throw new RangeError(`size חייב להיות מספר שלם חיובי, קיבלתי ${size}`);
+  let buf: T[] = [];
+  for (const x of source) {
+    buf.push(x);
+    if (buf.length === size) {
+      yield buf;
+      buf = [];
+    }
+  }
+  if (buf.length > 0) yield buf;
+}
+```
+<ul><li><strong>‏<code>yield</code> בתוך <code>for...of</code></strong> עוצר את הלולאה באמצע. המקור לא מתבקש לאיבר הבא עד שמישהו יבקש את החתיכה הבאה. לכן החתיכה הראשונה לוקחת בדיוק <code>size</code> איברים, גם ממקור אינסופי.</li><li><strong>‏<code>buf = []</code> ולא <code>buf.length = 0</code>.</strong> המערך שהוחזר שייך עכשיו למי שקיבל אותו. אם מרוקנים אותו במקום, החתיכה שהוא כבר מחזיק מתרוקנת גם אצלו.</li><li>ה־<code>throw</code> נמצא בגוף, ולכן הוא קורה ב־<code>next()</code> הראשון ולא ב־<code>chunk(...)</code> עצמו. זה בסדר: הגוף לא רץ עד שמבקשים ממנו.</li></ul>
+@mistakes
+<ul><li>‏<code>const all = [...source]</code> בהתחלה ואז <code>slice</code>. התוצאה נכונה, אבל זה טוען את כל המקור לזיכרון, ועל מקור אינסופי זה לא נגמר.</li><li>לשכוח את החתיכה האחרונה, הקצרה. 5 איברים בחתיכות של 2 נותנים <code>[[1,2],[3,4]]</code>, וה־<code>5</code> הולך לאיבוד.</li><li>‏<code>buf.length = 0</code> במקום <code>buf = []</code>. כל החתיכות שהוחזרו הופכות לאותו מערך ריק.</li></ul>
+
+@@ P28.5-E105 | 2 | מזהים אינסופיים ו־take 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>28w-scale/starter/P28.5-E105.ts</code> (יש בו רק הערה) כתוב וייצא שתי פונקציות:</p>
+```ts
+export function ids(prefix: string, start?: number): Generator<string>
+export function take<T>(source: Iterable<T>, n: number): T[]
+```
+<ul><li><code>ids</code> — generator אינסופי: <code>"ORD-1"</code>, ‏<code>"ORD-2"</code>, … ‏(<code>start</code> ברירת מחדל 1). ‏<code>ids("INV", 100)</code> ← ‏<code>"INV-100"</code>, ‏<code>"INV-101"</code>, …</li><li><code>take</code> — מערך של <code>n</code> האיברים הראשונים (או פחות, אם המקור קצר יותר).</li><li><code>take</code> לוקח מהמקור <strong>בדיוק</strong> עד <code>n</code> איברים, לא איבר נוסף "כדי לבדוק". ‏<code>n</code> שהוא 0 ← ‏<code>[]</code>, בלי לגעת במקור.</li><li>כשהוא עוצר באמצע, <code>take</code> <strong>סוגר</strong> את המקור, כך שה־<code>finally</code> שלו רץ. הבודק בודק את זה עם generator שיש לו <code>finally</code>.</li></ul>
+```ts
+take(ids("ORD"), 3); // ["ORD-1", "ORD-2", "ORD-3"]
+```
+```term
+% npm run check P28.5-E105
+```
+@hint1
+<p><code>ids</code>: ‏<code>let n = start;</code> ואז לולאת <code>while (true)</code> עם <code>yield</code> של המזהה ו־<code>n++</code>. זה לא נתקע, כי כל <code>yield</code> עוצר.</p>
+@hint2
+<p><code>take</code>: ‏<code>if (n &lt;= 0) return [];</code> ואז <code>for...of</code>: ‏<code>push</code>, ו<strong>אחרי</strong> ה־<code>push</code> בודקים אם הגענו ל־<code>n</code> ועושים <code>break</code>. ‏<code>break</code> סוגר את המקור בשבילך.</p>
+@solution
+```ts save=solutions/P28.5-E105.ts
+// P28.5-E105: מזהים אינסופיים ו־take
+export function* ids(prefix: string, start = 1): Generator<string> {
+  let n = start;
+  while (true) {
+    yield `${prefix}-${n}`;
+    n++;
+  }
+}
+
+export function take<T>(source: Iterable<T>, n: number): T[] {
+  const out: T[] = [];
+  if (n <= 0) return out;
+  for (const x of source) {
+    out.push(x);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+```
+<ul><li><strong>הבדיקה אחרי ה־<code>push</code></strong>: אם בודקים לפני, הלולאה מבקשת איבר נוסף רק כדי לגלות שהיא לא צריכה אותו. ב־<code>ids</code> זה רק חישוב מיותר, אבל במקור שקורא מה־API או מהמסד זו קריאה מיותרת.</li><li><strong>‏<code>break</code> ולא <code>next()</code> ביד</strong>: ‏<code>for...of</code> קורא ל־<code>return()</code> של המקור כשיוצאים באמצע, וה־<code>finally</code> שלו רץ. מי שכותב לולאת <code>next()</code> ביד צריך לזכור לקרוא ל־<code>return()</code> בעצמו.</li><li><code>take</code> הוא פונקציה רגילה ולא generator: הוא מחזיר מערך מוכן. זו הנקודה שבה העצלות נגמרת, ומקבלים ערכים אמיתיים.</li></ul>
+@mistakes
+<ul><li>‏<code>[...ids("ORD")].slice(0, 3)</code>. ה־spread מנסה לאסוף רצף אינסופי, והתהליך נתקע עד שנגמר הזיכרון.</li><li>לבדוק <code>if (out.length &gt;= n) break</code> בתחילת הלולאה. התוצאה נכונה, אבל נלקח איבר אחד יותר מדי, וב־<code>n = 0</code> המקור נפתח בכלל.</li><li>לולאת <code>while</code> עם <code>it.next()</code> בלי <code>it.return()</code> בסוף. ה־<code>finally</code> של המקור לא רץ, וחיבור נשאר פתוח.</li></ul>
+
+@@ P28.5-E106 | 3 | עמודים מה־API, ועצירה מוקדמת 🤖 | 20 | פרק 18, שיעור 2
+@lesson 2
+@part 2
+@task
+<p>API של הזמנות מחזיר עמודים: <code>{ items, next }</code>, כאשר <code>next</code> הוא מספר העמוד הבא, או <code>null</code> בעמוד האחרון. בקובץ <code>28w-scale/starter/P28.5-E106.ts</code> (יש בו רק הערה) כתוב וייצא:</p>
+```ts
+export type Page<T> = { items: T[]; next: number | null };
+export type FetchPage<T> = (page: number) => Promise<Page<T>>;
+export function paginate<T>(fetchPage: FetchPage<T>): AsyncGenerator<T>
+export function findFirst<T>(fetchPage: FetchPage<T>, pred: (item: T) => boolean): Promise<T | undefined>
+```
+<ul><li><code>paginate</code> — ‏<code>async function*</code> שמתחיל מעמוד 1, מחזיר את הפריטים אחד אחד, וממשיך לפי <code>next</code>. מספרי העמודים לא חייבים להיות רצופים (‏<code>next: 7</code> אחרי עמוד 1). עמוד עם <code>items: []</code> הוא לא סוף: הסוף הוא רק <code>next: null</code>.</li><li>עמוד נטען רק כשצריך את הפריט הראשון שלו.</li><li><code>findFirst</code> — עובר על <code>paginate</code> עם <code>for await</code>, ומחזיר את הפריט הראשון שעונה על <code>pred</code> (או <code>undefined</code>). <strong>אחרי שנמצא, לא נטען אף עמוד נוסף.</strong> הבודק סופר את הקריאות ל־<code>fetchPage</code>.</li></ul>
+<p>🔗 <strong>איך זה מתחבר:</strong> ‏pagination מפרק 18 (שיעור 4), כאן מהצד של מי שצורך אותה, ו־<code>for await</code> מפרק 13. והשיעור: ‏<code>async function*</code> מחביא את העמודים, והצרכן קובע את הקצב.</p>
+```term
+% npm run check P28.5-E106
+```
+@hint1
+<p>כמו <code>allOrders</code> בשיעור: ‏<code>let page: number | null = 1;</code> ואז <code>while (page !== null)</code>: ‏<code>await fetchPage(page)</code>, ‏<code>for (const item of res.items) yield item;</code>, ‏<code>page = res.next</code>.</p>
+@hint2
+<p><code>findFirst</code>: לולאת <code>for await</code> על <code>paginate(fetchPage)</code>, ו־<code>return item</code> כש־<code>pred(item)</code>. ‏<code>return</code> מתוך <code>for await</code> סוגר את ה־generator, והוא לא מגיע ל־<code>fetchPage</code> הבא.</p>
+@solution
+```ts save=solutions/P28.5-E106.ts
+// P28.5-E106: עמודים מה־API, ועצירה מוקדמת
+export type Page<T> = { items: T[]; next: number | null };
+export type FetchPage<T> = (page: number) => Promise<Page<T>>;
+
+export async function* paginate<T>(fetchPage: FetchPage<T>): AsyncGenerator<T> {
+  let page: number | null = 1;
+  while (page !== null) {
+    const res: Page<T> = await fetchPage(page);
+    for (const item of res.items) yield item;
+    page = res.next;
+  }
+}
+
+export async function findFirst<T>(fetchPage: FetchPage<T>, pred: (item: T) => boolean): Promise<T | undefined> {
+  for await (const item of paginate(fetchPage)) {
+    if (pred(item)) return item;
+  }
+  return undefined;
+}
+```
+<ul><li><strong>למה זה עוצר בזמן:</strong> ‏<code>paginate</code> נעצר ב־<code>yield item</code>, ולא מגיע ל־<code>fetchPage</code> הבא עד שהלולאה מבקשת עוד פריט. ‏<code>return</code> ב־<code>findFirst</code> סוגר את ה־generator, ולכן הבקשה הזו לא מגיעה אף פעם.</li><li><strong>‏<code>while (page !== null)</code></strong> ולא "עד שמגיע עמוד ריק". API עם סינון בצד השרת מחזיר לפעמים עמוד ריק באמצע.</li><li><strong>‏<code>const res: Page&lt;T&gt;</code></strong>: בלי הטיפוס, TypeScript לא מצליח להסיק את <code>page</code> שמשתנה בתוך הלולאה, ומתלונן על <code>any</code> מרומז.</li></ul>
+@mistakes
+<ul><li>לאסוף את כל העמודים למערך, ורק אחר כך לחפש. זה עובד, אבל כל העמודים נטענים גם כשהפריט נמצא בעמוד הראשון.</li><li>לעצור כש־<code>items.length === 0</code>. ההזמנות שאחרי עמוד ריק באמצע לא מגיעות.</li><li>‏<code>page++</code> במקום <code>page = res.next</code>. זה עובד רק כשהעמודים רצופים, ועם cursor מפרק 18 זה לא עובד בכלל.</li></ul>
+
+@@ P28.5-E107 | 4 | דוח הזמנות ששולמו 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>בקובץ <code>28w-scale/starter/P28.5-E107.ts</code> יש שתי פונקציות. ‏<code>paidOrders(fetchPage)</code> אמור לעבור על כל העמודים (כמו <code>allOrders</code> בשיעור) ולהחזיר רק הזמנות עם <code>paid: true</code>. ‏<code>paidReport(fetchPage)</code> אמור להחזיר <code>{ count, ids }</code> של ההזמנות האלה, וכל עמוד נטען <strong>פעם אחת</strong>.</p>
+<p>הקוד לא עובר קומפילציה. אחרי שתתקן את זה הוא ייכשל בזמן ריצה, ואחרי שתתקן גם את זה הוא יחזיר <code>ids</code> ריק, בלי שום שגיאה. מצא ותקן את שלוש התקלות.</p>
+```term
+% npm run check P28.5-E107
+```
+@hint1
+<p>הבודק מריץ קודם את TypeScript על הקובץ. קרא את השגיאות: שתיים מהן מופיעות בסעיף "טעויות נפוצות" בשיעור.</p>
+@hint2
+<p>התקלה השלישית: כמה פעמים אפשר לעבור על אותו generator? ואם יוצרים generator שני, כמה פעמים נטען כל עמוד?</p>
+@solution
+```ts save=solutions/P28.5-E107.ts
+// P28.5-E107: דוח הזמנות ששולמו — מתוקן
+export type Order = { id: string; paid: boolean };
+export type Page = { items: Order[]; next: number | null };
+type FetchPage = (page: number) => Promise<Page>;
+
+export async function* paidOrders(fetchPage: FetchPage): AsyncGenerator<Order> {
+  let page: number | null = 1;
+  while (page !== null) {
+    const res: Page = await fetchPage(page);
+    for (const o of res.items) {
+      if (o.paid) yield o;
+    }
+    page = res.next;
+  }
+}
+
+export async function paidReport(fetchPage: FetchPage): Promise<{ count: number; ids: string[] }> {
+  const ids: string[] = [];
+  for await (const o of paidOrders(fetchPage)) ids.push(o.id);
+  return { count: ids.length, ids };
+}
+```
+<ol><li><strong>‏<code>yield</code> בתוך החץ של <code>forEach</code></strong> (‏<code>TS1163</code>; ‏Node נכשל כבר בטעינת הקובץ). ‏<code>yield</code> שייך לפונקציה שהוא כתוב בה ישירות, והחץ הוא פונקציה רגילה. החץ לא יכול לעצור את ה־generator שמסביבו. התיקון: ‏<code>for...of</code> רגיל על <code>res.items</code>.</li><li><strong>‏<code>for...of</code> על async generator</strong> (‏<code>TS2488</code>, וב־Node: ‏<code>TypeError: orders is not iterable</code>). async generator מחזיר Promise מכל <code>next()</code>, ולכן רק <code>for await</code> יודע לחכות לו.</li><li><strong>שתי לולאות על אותו generator.</strong> הראשונה מיצתה אותו, והשנייה קיבלה רצף ריק בלי שגיאה. ליצור generator שני (‏<code>paidOrders(fetchPage)</code> פעמיים) מחזיר תוצאה נכונה, אבל טוען כל עמוד פעמיים. התיקון: מעבר אחד שאוסף את <code>ids</code>, ו־<code>count</code> הוא האורך שלו.</li></ol>
+@mistakes
+<ul><li>להחליף את <code>forEach</code> ב־<code>map</code> או ב־<code>filter</code>. גם אלה מקבלים callback, אז <code>yield</code> בתוכם שגוי באותה מידה.</li><li>לתקן את שתי השגיאות הראשונות ולעצור, כי "זה עובר קומפילציה". התקלה השלישית לא זורקת שגיאה, היא רק מחזירה מספרים לא נכונים.</li></ul>
