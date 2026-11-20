@@ -37,3 +37,6 @@ test("replayAll — הזמנה שבורה לא מפילה את השאר", () => 
   assert.deepEqual(r.errors.map((e) => e.orderId), [2]);
   assert.match(r.errors[0].message, /shipped/);
 });
+test("שני אירועים באותו רגע — תקין (רק \"לפני\" אסור)", () => {
+  assert.doesNotThrow(() => replay([created(), { orderId: 1, type: "paid", at: t(9), amountCents: 18900 }]));
+});

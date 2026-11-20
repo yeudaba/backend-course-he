@@ -31,3 +31,6 @@ test("תבניות", () => {
   assert.deepEqual(unignoredRisks("coverage", ["coverage/lcov.info", "a/coverage/x"]), [], "שם בלי / — מקטע בכל עומק");
   assert.deepEqual(unignoredRisks("dist/", ["dist/a.js", "src/dist"]), ["src/dist"], "‏dist/ תופס רק תיקייה, לא קובץ בשם dist");
 });
+test("הערה ב־.gitignore אינה כלל", () => {
+  assert.ok(unignoredRisks("# .env\n", [".env"]).includes(".env"), "שורה שמתחילה ב־# — הערה, לא מסתירה את .env");
+});

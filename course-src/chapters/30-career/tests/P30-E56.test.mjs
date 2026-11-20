@@ -16,3 +16,6 @@ test("כל המקרים", () => {
   assert.deepEqual(headlineIssues("Backend " + "x".repeat(212)), [], "בדיוק 220");
   assert.deepEqual(headlineIssues("Backend ,, | · , Node"), [], "פריטים ריקים לא נספרים");
 });
+test("פריטים ריקים לא נספרים", () => {
+  assert.ok(!headlineIssues("Backend · Node.js · TS · SQL · Redis · Docker · ").includes("too_many_items"), "6 פריטים ו־· בסוף — לא 7");
+});

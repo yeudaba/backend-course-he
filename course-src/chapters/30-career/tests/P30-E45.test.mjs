@@ -28,3 +28,8 @@ test("שדות חסרים לגמרי", () => {
   assert.deepEqual(packageIssues({ ...GOOD, scripts: { start: "x" } }), ["no-test-script"]);
   assert.deepEqual(packageIssues({ ...GOOD, dependencies: { "types-x": "^1", prettier: "^3" } }), ["dev-in-deps:prettier"]);
 });
+test("גרסה של רווחים בלבד — loose", () => {
+  const pkg = structuredClone(GOOD);
+  pkg.dependencies = { ...(pkg.dependencies ?? {}), lodash: "   " };
+  assert.ok(packageIssues(pkg).includes("loose:lodash"));
+});
