@@ -7,7 +7,7 @@ const { wordFrequencies, topWords } = await load(import.meta.url, "P07-E18.js");
 const text = "Node is fast. Node is fun! JS is everywhere, is it?";
 test("wordFrequencies מחזירה Map", () => {
   const m = wordFrequencies(text);
-  assert.ok(m instanceof Map);
+  assert.ok(m instanceof Map, `wordFrequencies צריכה להחזיר Map (new Map()), וקיבלנו ${Array.isArray(m) ? "מערך" : m === null ? "null" : typeof m}`);
   assert.equal(m.get("is"), 4);
   assert.equal(m.get("node"), 2);
   assert.equal(m.get("fast"), 1);
