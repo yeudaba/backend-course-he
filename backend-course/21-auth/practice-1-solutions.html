@@ -454,6 +454,53 @@ export function parseBcrypt(value: string): BcryptParts | null {
 
 </div></details>
   </div>
+<div class="ex" id="P21-E101">
+    <h3>P21-E101 · כל סיסמה נכנסת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה <code>bcrypt.compare</code> מחזירה? ומה ערך האמת של Promise?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בדוק עם איזה מפתח נשמר המשתמש ב־<code>users.set</code>, ומה בדיוק חוזר מ־<code>register</code>. ובהודעות השגיאה של <code>login</code>: מה תוקף לומד מההבדל ביניהן?</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P21-E101: הרשמה וכניסה — מתוקן
+import bcrypt from "bcryptjs";
+
+export interface StoredUser {
+  email: string;
+  passwordHash: string;
+}
+
+const normalize = (email: string) =&gt; email.trim().toLowerCase();
+const BAD_LOGIN = "אימייל או סיסמה שגויים";
+
+export async function register(users: Map&lt;string, StoredUser&gt;, email: string, password: string, rounds = 12) {
+  const key = normalize(email);
+  if (users.has(key)) throw new Error("האימייל כבר רשום");
+  const passwordHash = await bcrypt.hash(password, rounds);
+  users.set(key, { email: key, passwordHash });
+  return { email: key };
+}
+
+export async function login(users: Map&lt;string, StoredUser&gt;, email: string, password: string) {
+  const user = users.get(normalize(email));
+  if (!user) throw new Error(BAD_LOGIN);
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) throw new Error(BAD_LOGIN);
+  return { email: user.email };
+}</code></pre>
+<ol><li><strong>‏<code>bcrypt.compare</code> בלי <code>await</code></strong> מחזירה Promise, ו־Promise הוא תמיד truthy. ‏<code>if (!ok)</code> לא התקיים אף פעם, ולכן כל סיסמה נכנסה.</li><li><strong>‏<code class="mid">return { email, passwordHash }</code></strong> שלח את ה־hash ללקוח. hash הוא לא סיסמה, אבל אפשר לנסות לפצח אותו offline. מחזירים רק שדות ציבוריים.</li><li><strong>שתי הודעות שגיאה שונות</strong> ("אימייל לא קיים" מול "סיסמה שגויה") מספרות לתוקף אילו אימיילים רשומים. אותה הודעה לשני המקרים.</li><li><strong>‏<code>users.set(email, …)</code></strong> שמר לפי האימייל המקורי, <code>Dana@x.com</code>, ואילו <code>login</code> חיפש לפי המנורמל, <code>dana@x.com</code>. שומרים ומחפשים לפי אותו מפתח.</li></ol>
+<p>(יש גם הבדל בזמן: כשהאימייל לא קיים, <code>login</code> חוזרת מהר, בלי <code>compare</code>. בשיעור 4 נראה איך משווים גם את זה.)</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את 1 עם <code>bcrypt.compareSync</code>. זה עובד, אבל חוסם את ה־event loop בכל כניסה (פרק 10).</li><li>‏<code>delete user.passwordHash</code> לפני ההחזרה. זה מוחק את ה־hash גם מהאובייקט שב־<code>users</code>, וכל כניסה אחר כך נכשלת.</li><li>לנרמל רק ב־<code>login</code>. אז שני משתמשים נרשמים עם <code>Dana@x.com</code> ו־<code>dana@x.com</code>.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P21-E39">
     <h3>P21-E39 · שתי הרשמות באותה מילישנייה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>
