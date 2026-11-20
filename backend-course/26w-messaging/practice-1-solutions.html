@@ -465,6 +465,39 @@ export function deliver(model: "queue" | "log", groups: Record&lt;string, string
 
 </div></details>
   </div>
+<div class="ex" id="P26.5-E101">
+    <h3>P26.5-E101 · consumer שמאבד הזמנות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>עקוב אחרי הזמנה שנכשלת בפעם הראשונה ומצליחה בשנייה: מה יש ב־<code>seen</code> אחרי הניסיון הראשון?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מזהה כפילות הוא ה־id של ההודעה, לא התוכן שלה. וסימון "טופל" — רק אחרי שהטיפול הצליח.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P26.5-E101: הודעה אחת, at-least-once — מתוקן
+export type Decision = "ack" | "retry" | "duplicate";
+
+export async function processDelivery(seen: Set&lt;string&gt;, msg: { id: string; body: unknown }, handle: (body: unknown) =&gt; Promise&lt;void&gt;): Promise&lt;Decision&gt; {
+  if (seen.has(msg.id)) return "duplicate";
+  try {
+    await handle(msg.body);
+  } catch {
+    return "retry";
+  }
+  seen.add(msg.id);
+  return "ack";
+}</code></pre>
+<ol><li><strong>‏<code>seen.add</code> לפני <code>handle</code>.</strong> ההודעה סומנה כמטופלת עוד לפני הטיפול. כשהטיפול נכשל והיא חזרה, היא זוהתה כ"כפילות" ונזרקה. זו התנהגות at-most-once. מסמנים אחרי הצלחה.</li><li><strong>זיהוי לפי <code>JSON.stringify(body)</code>.</strong> שתי הזמנות אמיתיות יכולות להיראות זהות. כפילות היא אותה <em>הודעה</em> שנמסרה שוב, ולכן לפי ה־id שלה.</li><li><strong>‏<code>catch</code> החזיר <code>"ack"</code>.</strong> ‏ack אומר ל־broker למחוק את ההודעה. על כישלון — retry (ואחרי מספר ניסיונות, dead letter).</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>להעביר את <code>seen.add</code> לתוך <code>finally</code>. זה מסמן גם כשנכשל, אותו באג.</li><li>לבדוק כפילות לפי <code>body.orderId</code>. זה עובד להזמנות, אבל לא לסוגי אירועים אחרים (עדכון סטטוס של אותה הזמנה הוא אירוע חדש עם אותו orderId).</li><li>‏<code>handle(body)</code> בלי <code>await</code>. השגיאה לא נתפסת ב־try, וכל הודעה מקבלת ack.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P26.5-E41">
     <h3>P26.5-E41 · ‏BullMQ מפרק 26, במילים של היחידה <span class="tag kind understand">🧠 הבנה</span> <span class="tag l2">רמה 2</span></h3>

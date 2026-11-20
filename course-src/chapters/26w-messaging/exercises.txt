@@ -3506,3 +3506,37 @@ export function upcast(e: { type: string; version: number; data: unknown }): V2 
 <p>כשתגיע v3, מוסיפים <code>case 2</code> שמעלה ל־3, ו־v1 עובר דרך שניהם — כל שלב קטן ונבדק לבד. הלוגיקה העסקית מכירה רק את הגרסה האחרונה, וזה מה שמחזיק את הקוד פשוט שנים.</p>
 @mistakes
 <ul><li><code>Math.floor(total * 100)</code> — ‏<code>0.29 * 100</code> הוא <code>28.999999999999996</code>, ויוצא 28.</li><li>להעלות גרסה "לא מוכרת" כאילו היא האחרונה — v3 מהעתיד נקרא לא נכון בשקט.</li></ul>
+
+@@ P26.5-E101 | 4 | consumer שמאבד הזמנות 🤖 | 15 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>processDelivery(seen, msg, handle)</code> ב־<code>26w-messaging/starter/P26.5-E101.ts</code> מטפלת בהודעה אחת מתור עם at-least-once. ‏<code>seen</code> הוא <code>Set</code> של מזהי הודעות שכבר טופלו (בפרודקשן — טבלה). ‏<code>msg</code>: ‏<code>{ id, body }</code>. מחזירה מה לעשות עם ההודעה:</p>
+<ul><li><code>"duplicate"</code> — ה־id כבר טופל: לא קוראים ל־<code>handle</code> (ו־ack).</li><li><code>"ack"</code> — ‏<code>await handle(body)</code> הצליח; רק אז מסמנים את ה־id כמטופל.</li><li><code>"retry"</code> — ‏<code>handle</code> זרק: לא מסמנים, וההודעה תחזור.</li></ul>
+<p>התלונות: הזמנה שנכשלה פעם אחת (ספק התשלומים לא ענה) לא טופלה לעולם; שתי הזמנות שונות עם אותו תוכן (אותו לקוח, אותו מוצר) — השנייה נזרקה; ובלוג רואים "ack" על הזמנות שנכשלו. מצא ותקן.</p>
+```term
+% npm run check P26.5-E101
+```
+@hint1
+<p>עקוב אחרי הזמנה שנכשלת בפעם הראשונה ומצליחה בשנייה: מה יש ב־<code>seen</code> אחרי הניסיון הראשון?</p>
+@hint2
+<p>מזהה כפילות הוא ה־id של ההודעה, לא התוכן שלה. וסימון "טופל" — רק אחרי שהטיפול הצליח.</p>
+@solution
+```ts save=solutions/P26.5-E101.ts
+// P26.5-E101: הודעה אחת, at-least-once — מתוקן
+export type Decision = "ack" | "retry" | "duplicate";
+
+export async function processDelivery(seen: Set<string>, msg: { id: string; body: unknown }, handle: (body: unknown) => Promise<void>): Promise<Decision> {
+  if (seen.has(msg.id)) return "duplicate";
+  try {
+    await handle(msg.body);
+  } catch {
+    return "retry";
+  }
+  seen.add(msg.id);
+  return "ack";
+}
+```
+<ol><li><strong>‏<code>seen.add</code> לפני <code>handle</code>.</strong> ההודעה סומנה כמטופלת עוד לפני הטיפול. כשהטיפול נכשל והיא חזרה, היא זוהתה כ"כפילות" ונזרקה. זו התנהגות at-most-once. מסמנים אחרי הצלחה.</li><li><strong>זיהוי לפי <code>JSON.stringify(body)</code>.</strong> שתי הזמנות אמיתיות יכולות להיראות זהות. כפילות היא אותה <em>הודעה</em> שנמסרה שוב, ולכן לפי ה־id שלה.</li><li><strong>‏<code>catch</code> החזיר <code>"ack"</code>.</strong> ‏ack אומר ל־broker למחוק את ההודעה. על כישלון — retry (ואחרי מספר ניסיונות, dead letter).</li></ol>
+@mistakes
+<ul><li>להעביר את <code>seen.add</code> לתוך <code>finally</code>. זה מסמן גם כשנכשל, אותו באג.</li><li>לבדוק כפילות לפי <code>body.orderId</code>. זה עובד להזמנות, אבל לא לסוגי אירועים אחרים (עדכון סטטוס של אותה הזמנה הוא אירוע חדש עם אותו orderId).</li><li>‏<code>handle(body)</code> בלי <code>await</code>. השגיאה לא נתפסת ב־try, וכל הודעה מקבלת ack.</li></ul>
