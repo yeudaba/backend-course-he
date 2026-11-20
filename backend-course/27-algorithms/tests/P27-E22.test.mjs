@@ -11,6 +11,7 @@ test("הדרך הקצרה — לא הראשונה שנמצאה", () => {
   assert.equal(shortestPath(["S...", "....", "...E"]), 5);
   assert.equal(shortestPath(["S......", ".#####.", ".#...#.", ".#.#.#.", "...#..E"]), 10);
 });
+test("הדרך עוברת בעמודה הראשונה (x = 0)", () => assert.equal(shortestPath([".S", ".#", "E#"]), 3));
 test("אין דרך ← −1 (לא 0)", () => {
   assert.equal(shortestPath(["S#", "#E"]), -1);
   assert.equal(shortestPath(["SE"]), 1);

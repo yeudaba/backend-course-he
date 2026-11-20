@@ -21,6 +21,7 @@ test("topK", () => {
   assert.deepEqual(topK([5, 1, 9, 3, 9, 7], 3), [9, 9, 7]);
   assert.deepEqual(topK([2, 1], 5), [2, 1]);
   assert.deepEqual(topK([], 3), []);
+  assert.deepEqual(topK([4, 2], 0), [], "k = 0 ← מערך ריק");
   assert.deepEqual(topK([1, 2, 3], 0), []);
   function* gen() { for (let i = 0; i < 10; i++) yield i; }
   assert.deepEqual(topK(gen(), 2), [9, 8], "Iterable, לא רק מערך");

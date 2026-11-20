@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sandbox } from "../../tools/sql.mjs";
+import { sandbox, sameAsSolution } from "../../tools/sql.mjs";
 
 test("סכום מצטבר של ששולמו, לכל לקוח", async (t) => {
   const db = await sandbox(t, import.meta.url, "interview.sql");
@@ -17,4 +17,7 @@ test("סכום מצטבר של ששולמו, לכל לקוח", async (t) => {
     [6, 9, "2026-10-09", 249, 288],
     [6, 11, "2026-10-09", 10, 298],
   ]);
+});
+test("נתונים נסתרים (והשורות בסדר פיזי אחר)", async (t) => {
+  await sameAsSolution(t, import.meta.url, "P27-E78.sql", { seed: "interview.sql", base: false });
 });
