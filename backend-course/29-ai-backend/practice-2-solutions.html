@@ -503,6 +503,52 @@ export function toEnum&lt;T extends string&gt;(value: unknown, allowed: readonly
 
 </div></details>
   </div>
+<div class="ex" id="P29-E101">
+    <h3>P29-E101 · פלט מובנה שמפיל את השרת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>מה <code>JSON.parse</code> עושה עם <code>```json\n{...}\n```</code>? ומה בודקים על <code>data</code> לפני שמחזירים אותו?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שלבים: לחלץ טקסט ← <code>JSON.parse</code> בתוך try ← לבדוק כל שדה ← לבנות אובייקט חדש רק עם השדות המותרים.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P29-E101: קריאת פלט מובנה של מודל — מתוקן
+const CATEGORIES = ["billing", "shipping", "other"] as const;
+type Category = (typeof CATEGORIES)[number];
+type Result = { ok: true; value: { category: Category; confidence: number } } | { ok: false; error: string };
+
+function extractJson(text: string): string | null {
+  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  if (fence) return fence[1];
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start &gt;= 0 &amp;&amp; end &gt; start ? text.slice(start, end + 1) : null;
+}
+
+export function parseClassification(text: string): Result {
+  const raw = extractJson(text);
+  if (raw === null) return { ok: false, error: "אין JSON בתשובה" };
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "JSON לא תקין" };
+  }
+  if (!CATEGORIES.includes(data?.category)) return { ok: false, error: `קטגוריה לא מוכרת: ${data?.category}` };
+  if (typeof data.confidence !== "number" || !(data.confidence &gt;= 0 &amp;&amp; data.confidence &lt;= 1)) return { ok: false, error: "confidence לא תקין" };
+  return { ok: true, value: { category: data.category, confidence: data.confidence } };
+}</code></pre>
+<ol><li><strong>‏<code>JSON.parse(text)</code> על כל התשובה.</strong> מודלים עוטפים JSON בגדר או מוסיפים משפט, ו־<code>JSON.parse</code> זורק. מחלצים קודם, ותופסים את השגיאה: ‏<code>{ ok: false }</code> ולא 500.</li><li><strong>בלי בדיקת ערכים.</strong> המודל יכול להמציא קטגוריה (<code>refund</code>) או להחזיר <code>confidence: "high"</code>. רשימה סגורה ובדיקת טווח, כמו כל קלט מבחוץ (בשיעור: zod עושה את זה בשורה).</li><li><strong>‏<code>value: data</code></strong> העביר הלאה כל שדה שהמודל הוסיף, כולל טקסט אישי. בונים אובייקט חדש רק מהשדות שמותרים.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לבקש ב־prompt "החזר רק JSON" ולוותר על החילוץ. זה מקטין את הבעיה, לא מבטל אותה.</li><li>‏<code>confidence &lt;= 1</code> בלי לבדוק שזה מספר. ‏<code>"0.9" &lt;= 1</code> הוא <code>true</code>, ומחרוזת נכנסת למסד.</li><li>‏<code>text.match(/\{.*\}/)</code> בלי הדגל <code>s</code>. JSON על כמה שורות לא נמצא, כי <code>.</code> לא תופס שורה חדשה.</li></ul>
+
+
+</div></details>
+  </div>
   <h2>🔗 חלק 2</h2>
 <div class="ex" id="P29-E54">
     <h3>P29-E54 · אותו Zod, כיוון הפוך <span class="tag kind understand">🧠 הבנה</span> <span class="tag l1">רמה 1</span></h3>

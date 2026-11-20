@@ -3527,3 +3527,89 @@ for (const b of bodies()) assert.deepEqual(lintRequest(b, RULES), []);
 ```
 @mistakes
 <ul><li>לבדוק רק את הבקשה הראשונה — בלולאת כלים, הבקשה השלישית יכולה להיות שונה.</li></ul>
+
+@@ P29-E101 | 4 | פלט מובנה שמפיל את השרת 🤖 | 15 | שיעור 2
+@lesson 2
+@part 1
+@task
+<p>המודל מסווג פניות לשירות לקוחות, ו־<code>parseClassification(text)</code> ב־<code>29-ai-backend/starter/P29-E101.ts</code> קוראת את התשובה שלו:</p>
+<ul><li>ה־JSON יכול להגיע לבד, בתוך גדר <code>```json … ```</code>, או עם משפט לפניו או אחריו. לוקחים את תוכן הגדר אם יש, ואחרת מה־<code>{</code> הראשון עד ה־<code>}</code> האחרון.</li><li>תקין רק אם <code>category</code> הוא <code>billing</code>, ‏<code>shipping</code> או <code>other</code>, ו־<code>confidence</code> הוא מספר בין 0 ל־1.</li><li>מחזירה <code>{ ok: true, value: { category, confidence } }</code> (רק שני השדות), או <code>{ ok: false, error }</code>. לעולם לא זורקת: פלט של מודל הוא קלט לא אמין.</li></ul>
+<p>התלונות: כל תשובה עם גדר מפילה את הבקשה ב־500; קטגוריה <code>"refund"</code>, שאין לה תור, הגיעה ל־DB; ופעם אחת נכנס לרשומה שדה <code>"note"</code> ארוך עם כל המייל של הלקוח. מצא ותקן.</p>
+```term
+% npm run check P29-E101
+```
+@hint1
+<p>מה <code>JSON.parse</code> עושה עם <code>```json\n{...}\n```</code>? ומה בודקים על <code>data</code> לפני שמחזירים אותו?</p>
+@hint2
+<p>שלבים: לחלץ טקסט ← <code>JSON.parse</code> בתוך try ← לבדוק כל שדה ← לבנות אובייקט חדש רק עם השדות המותרים.</p>
+@solution
+```ts save=solutions/P29-E101.ts
+// P29-E101: קריאת פלט מובנה של מודל — מתוקן
+const CATEGORIES = ["billing", "shipping", "other"] as const;
+type Category = (typeof CATEGORIES)[number];
+type Result = { ok: true; value: { category: Category; confidence: number } } | { ok: false; error: string };
+
+function extractJson(text: string): string | null {
+  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  if (fence) return fence[1];
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start >= 0 && end > start ? text.slice(start, end + 1) : null;
+}
+
+export function parseClassification(text: string): Result {
+  const raw = extractJson(text);
+  if (raw === null) return { ok: false, error: "אין JSON בתשובה" };
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "JSON לא תקין" };
+  }
+  if (!CATEGORIES.includes(data?.category)) return { ok: false, error: `קטגוריה לא מוכרת: ${data?.category}` };
+  if (typeof data.confidence !== "number" || !(data.confidence >= 0 && data.confidence <= 1)) return { ok: false, error: "confidence לא תקין" };
+  return { ok: true, value: { category: data.category, confidence: data.confidence } };
+}
+```
+<ol><li><strong>‏<code>JSON.parse(text)</code> על כל התשובה.</strong> מודלים עוטפים JSON בגדר או מוסיפים משפט, ו־<code>JSON.parse</code> זורק. מחלצים קודם, ותופסים את השגיאה: ‏<code>{ ok: false }</code> ולא 500.</li><li><strong>בלי בדיקת ערכים.</strong> המודל יכול להמציא קטגוריה (<code>refund</code>) או להחזיר <code>confidence: "high"</code>. רשימה סגורה ובדיקת טווח, כמו כל קלט מבחוץ (בשיעור: zod עושה את זה בשורה).</li><li><strong>‏<code>value: data</code></strong> העביר הלאה כל שדה שהמודל הוסיף, כולל טקסט אישי. בונים אובייקט חדש רק מהשדות שמותרים.</li></ol>
+@mistakes
+<ul><li>לבקש ב־prompt "החזר רק JSON" ולוותר על החילוץ. זה מקטין את הבעיה, לא מבטל אותה.</li><li>‏<code>confidence &lt;= 1</code> בלי לבדוק שזה מספר. ‏<code>"0.9" &lt;= 1</code> הוא <code>true</code>, ומחרוזת נכנסת למסד.</li><li>‏<code>text.match(/\{.*\}/)</code> בלי הדגל <code>s</code>. JSON על כמה שורות לא נמצא, כי <code>.</code> לא תופס שורה חדשה.</li></ul>
+
+@@ P29-E102 | 4 | eval שמראה 0% על מודל טוב 🤖 | 15 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>‏<code>runEvals(cases, classify)</code> ב־<code>29-ai-backend/starter/P29-E102.ts</code> מריצה חבילת evals קטנה. ‏<code>cases</code>: ‏<code>[{ input, expected }]</code>; ‏<code>classify(input)</code> — אסינכרונית (בפרודקשן: קריאה למודל; בבדיקה: לקוח מדומה). מחזירה:</p>
+<ul><li><code>{ passed, failed, accuracy, failures }</code>. תשובה נכונה = שווה ל־<code>expected</code> אחרי <code>trim</code> ובלי הבדל אותיות.</li><li>‏<code>classify</code> שזורקת — המקרה נכשל, עם <code>got: "ERROR"</code>, וממשיכים לשאר.</li><li><code>accuracy</code> — ‏<code>passed / cases.length</code>, מעוגל ל־2 ספרות (אין מקרים ← 0). ‏<code>failures</code> — ‏<code>[{ input, expected, got }]</code> לפי סדר המקרים.</li></ul>
+<p>התלונות: על לקוח מדומה שעונה נכון תמיד, הדוח מראה 0%; כשקריאה אחת למודל נכשלת (rate limit), כל ההרצה מתרסקת; ועל 3 מתוך 4 נכונים הדוח מראה 3. מצא ותקן.</p>
+```term
+% npm run check P29-E102
+```
+@hint1
+<p>‏<code>console.log(classify(input))</code> בלי <code>await</code>: מה מודפס? ולמה זה אף פעם לא שווה ל־<code>"billing"</code>?</p>
+@hint2
+<p>try/catch סביב כל מקרה, לא סביב הכול. ו־accuracy הוא עוברים חלקי <strong>כל</strong> המקרים, לא חלקי הנכשלים.</p>
+@solution
+```ts save=solutions/P29-E102.ts
+// P29-E102: הרצת evals — מתוקן
+export async function runEvals(cases: { input: string; expected: string }[], classify: (input: string) => Promise<string>) {
+  const norm = (s: string) => s.trim().toLowerCase();
+  let passed = 0;
+  const failures: { input: string; expected: string; got: string }[] = [];
+  for (const c of cases) {
+    let got: string;
+    try {
+      got = await classify(c.input);
+    } catch {
+      got = "ERROR";
+    }
+    if (got !== "ERROR" && norm(got) === norm(c.expected)) passed++;
+    else failures.push({ input: c.input, expected: c.expected, got });
+  }
+  const accuracy = cases.length === 0 ? 0 : Math.round((passed / cases.length) * 100) / 100;
+  return { passed, failed: failures.length, accuracy, failures };
+}
+```
+<ol><li><strong>‏<code>classify</code> בלי <code>await</code>.</strong> התוצאה הייתה Promise, ו־<code>String(promise)</code> הוא <code>"[object Promise]"</code>, שאף פעם לא שווה לתשובה. לכן 0%, גם על מודל מושלם. בדיקה שנכשלת תמיד חשודה בדיוק כמו בדיקה שעוברת תמיד.</li><li><strong>שגיאה אחת עצרה הכול.</strong> ב־evals על מודל אמיתי, כמה קריאות ייכשלו תמיד (rate limit, timeout). כל מקרה בתוך try משלו, והשגיאה נרשמת ככישלון.</li><li><strong>‏<code>passed / failed</code></strong> במקום <code>passed / cases.length</code>: ‏3 נכונים ו־1 שגוי נתנו 3.</li></ol>
+@mistakes
+<ul><li>‏<code>Promise.all</code> על כל המקרים בלי הגבלה. 500 מקרים הם 500 קריאות במקביל, ו־rate limit מכשיל חצי מהם.</li><li>להשוות בלי <code>trim</code>. מודלים מוסיפים לפעמים שורה חדשה, והמקרה "נכשל" בלי סיבה.</li><li>לספור "ERROR" כתשובה רגילה. אם <code>expected</code> הוא במקרה "error", זה נספר כהצלחה.</li></ul>
