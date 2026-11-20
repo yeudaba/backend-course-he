@@ -32,8 +32,10 @@ const STRICT = new Set([
   "balance", // בכל שיעור: חלק 2 ≥ 5, שאלות הבנה בחלק 1 ≥ 4
   "nested-code", // <code> בתוך <code> בדף בנוי
   "table-wrap", // <table> בלי <div class="table-wrap">
+  "missing-field", // חסר @hint1, ‏@hint2 או @mistakes (HANDOFF 7.9)
+  "understand-explained", // פתרון של שאלת הבנה בלי משפט שמסביר למה (HANDOFF 7.9)
 ]);
-// אזהרה בלבד: ‏missing-field, ‏understand-explained, ‏code-test, ‏level4
+// אזהרה בלבד: ‏code-test, ‏level4
 const flag = (rule, msg) => (STRICT.has(rule) ? problems.push(`[${rule}] ${msg}`) : warnings.push({ rule, msg: `[${rule}] ${msg}` }));
 let runCount = 0;
 let currentOutDir = null;
