@@ -3208,3 +3208,77 @@ export function percentiles(latencies: number[], ps: number[]) {
 <p>למה לא ממוצע: 99 בקשות של 20ms ובקשה אחת של 5 שניות — ממוצע 70ms ("בסדר"), ‏p99 — 5 שניות. ואחד מכל מאה לקוחות מחכה 5 שניות. ‏p95/p99 הם מה שמשתמשים מרגישים, ועליהם שמים התראות.</p>
 @mistakes
 <ul><li>‏<code>latencies.sort()</code> — ממיין כמחרוזות (‏E32), ומשנה את המערך של מי שקרא.</li><li>‏<code>Math.floor</code> — ‏p100 יוצא מחוץ למערך, ו־p50 של 2 ערכים לוקח את השני.</li></ul>
+
+@@ P27-E103 | 4 | דוח שעובד בבדיקות ונתקע בפרודקשן 🤖 | 20 | שיעור 1
+@lesson 1
+@part 1
+@task
+<p>‏<code>topSpenders(customers, orders, minTotal)</code> ב־<code>27-algorithms/starter/P27-E103.ts</code> מחזירה את הלקוחות שהוציאו <strong>לפחות</strong> <code>minTotal</code>: ‏<code>[{ name, total }]</code>, מהסכום הגבוה לנמוך, ובשוויון — לפי שם (א״ב). ‏<code>customers</code>: ‏<code>{ id, name }</code>; ‏<code>orders</code>: ‏<code>{ customerId, total }</code>.</p>
+<p>בבדיקות (20 לקוחות) הכול עבר. בפרודקשן (5,000 לקוחות ו־50,000 הזמנות) הדוח לוקח שניות ארוכות. ובנוסף: לקוח שהוציא <em>בדיוק</em> את הסף חסר, ולקוחות עם אותו סכום מופיעים כל פעם בסדר אחר. מצא ותקן.</p>
+```term
+% npm run check P27-E103
+```
+@hint1
+<p>כמה פעמים הלולאה הפנימית רצה, בסך הכול? (כמה לקוחות × כמה הזמנות?)</p>
+@hint2
+<p>מעבר אחד על ההזמנות, עם <code>Map</code> של <code>customerId ← total</code>, ואז מעבר אחד על הלקוחות. ‏"לפחות" הוא <code>&gt;=</code>. ובמיון: <code>|| a.name.localeCompare(b.name)</code>.</p>
+@solution
+```ts save=solutions/P27-E103.ts
+// P27-E103: הלקוחות שהוציאו הכי הרבה — O(n + m)
+export function topSpenders(customers: { id: number; name: string }[], orders: { customerId: number; total: number }[], minTotal: number) {
+  const totals = new Map<number, number>();
+  for (const o of orders) totals.set(o.customerId, (totals.get(o.customerId) ?? 0) + o.total);
+  const result: { name: string; total: number }[] = [];
+  for (const c of customers) {
+    const total = totals.get(c.id) ?? 0;
+    if (total >= minTotal) result.push({ name: c.name, total });
+  }
+  return result.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+```
+<ol><li><strong>‏<code>filter</code> על כל ההזמנות, בתוך לולאה על הלקוחות:</strong> 5,000 × 50,000 = 250 מיליון בדיקות. זה O(n·m). ‏Map שנבנה פעם אחת מחליף את החיפוש ב־O(1), והכול יחד הוא O(n + m) (ועוד המיון).</li><li><strong>‏<code>&gt; minTotal</code></strong> דילג על מי שהוציא בדיוק את הסף. "לפחות" הוא <code>&gt;=</code>.</li><li><strong>מיון בלי שובר שוויון.</strong> לקוחות עם אותו סכום יצאו בסדר של הקלט, ולכן הדוח "קפץ". קריטריון שני (שם) נותן סדר יציב.</li></ol>
+@mistakes
+<ul><li>‏<code>orders.find</code> במקום <code>filter</code>. זה עדיין סורק את כל ההזמנות לכל לקוח, וגם מחזיר רק את ההזמנה הראשונה.</li><li>לבנות את ה־Map בתוך הלולאה על הלקוחות. אותה סיבוכיות, רק במקום אחר.</li><li>להשוות כסף בלי לשים לב לשברים: ‏<code>0.1 + 0.2 &gt;= 0.3</code> הוא <code>false</code>. בפרודקשן סוכמים באגורות (מספרים שלמים).</li></ul>
+
+@@ P27-E104 | 4 | cursor שמדלג על הזמנות 🤖 | 20 | שיעור 5
+@lesson 5
+@part 1
+@task
+<p>שאלת ראיון: "איך עושים עימוד ל־feed שמשתנה כל הזמן?" — תשובה מהפרויקט. ב־<code>27-algorithms/starter/P27-E104.ts</code>:</p>
+<ul><li><code>encodeCursor({ createdAt, id })</code> ← מחרוזת base64url של ה־JSON (בטוחה בכתובת: רק אותיות, ספרות, <code>-</code> ו־<code>_</code>).</li><li><code>decodeCursor(s)</code> ← האובייקט, או <code>null</code> אם המחרוזת לא תקינה מכל סיבה (לא base64, לא JSON, חסרים שדות). לעולם לא זורקת.</li><li><code>pageAfter(items, cursor, limit)</code> — ‏<code>items</code> ממוינים מהחדש לישן (<code>createdAt</code> יורד, ובתיקו <code>id</code> יורד). מחזירה <code>{ items, nextCursor }</code>: עד <code>limit</code> פריטים <strong>אחרי</strong> ה־cursor באותו סדר (‏<code>null</code> ← מההתחלה), ו־<code>nextCursor</code> של האחרון אם נשארו עוד, אחרת <code>null</code>.</li></ul>
+<p>התלונות: כתובת עם cursor נשברת לפעמים (<code>+</code> ו־<code>/</code> בכתובת); cursor משובש מחזיר 500; והזמנות שנוצרו באותה שנייה, שנפלו על הגבול בין עמודים, לא מופיעות באף עמוד. מצא ותקן.</p>
+```term
+% npm run check P27-E104
+```
+@hint1
+<p>‏<code>Buffer.from(s).toString("base64")</code> מול <code>"base64url"</code>. ‏<code>JSON.parse</code> על זבל — מה הוא עושה?</p>
+@hint2
+<p>"אחרי" בסדר של שני שדות: <code>createdAt</code> קטן יותר, <strong>או</strong> אותו <code>createdAt</code> ו־<code>id</code> קטן יותר.</p>
+@solution
+```ts save=solutions/P27-E104.ts
+// P27-E104: עימוד עם cursor — מתוקן
+export type Cursor = { createdAt: string; id: number };
+
+export function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: c.createdAt, id: c.id })).toString("base64url");
+}
+
+export function decodeCursor(s: string): Cursor | null {
+  try {
+    const v = JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+    return typeof v?.createdAt === "string" && Number.isInteger(v?.id) ? { createdAt: v.createdAt, id: v.id } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function pageAfter<T extends Cursor>(items: T[], cursor: Cursor | null, limit: number) {
+  const after = cursor ? items.filter((i) => i.createdAt < cursor.createdAt || (i.createdAt === cursor.createdAt && i.id < cursor.id)) : items;
+  const page = after.slice(0, limit);
+  const last = page.at(-1);
+  return { items: page, nextCursor: after.length > limit && last ? encodeCursor(last) : null };
+}
+```
+<ol><li><strong>‏<code>"base64"</code></strong> מייצר <code>+</code>, ‏<code>/</code> ו־<code>=</code>. בכתובת, <code>+</code> נקרא כרווח ו־<code>/</code> מתבלבל עם הנתיב. ‏<code>base64url</code> משתמש ב־<code>-</code> ו־<code>_</code>, בלי ריפוד.</li><li><strong>‏<code>JSON.parse</code> בלי try.</strong> cursor מגיע מהלקוח, ולכן הוא קלט לא אמין. זבל ← <code>null</code> (ה־route מחזיר 400), לא חריגה (500).</li><li><strong>‏<code>i.createdAt &lt; cursor.createdAt</code> בלבד.</strong> פריטים עם אותו <code>createdAt</code> ו־id קטן יותר נשארו "מאחורי" ה־cursor, ולא הופיעו באף עמוד. ההשוואה היא על הזוג.</li></ol>
+@mistakes
+<ul><li>עימוד עם <code>offset</code>. הזמנה חדשה בראש הרשימה מזיזה הכול באחד, ופריט מופיע פעמיים בשני עמודים.</li><li>‏<code>&lt;=</code> על ה־id. הפריט של ה־cursor עצמו חוזר בעמוד הבא.</li><li>להחזיר <code>nextCursor</code> תמיד כשהעמוד מלא. כשבדיוק <code>limit</code> פריטים נשארו, הלקוח מבקש עמוד ריק.</li></ul>
