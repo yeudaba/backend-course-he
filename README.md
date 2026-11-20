@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **197** | **3383** | **1877** | **1656** |
+| **42** | **197** | **3383** | **1880** | **1662** |
 
 ## מה שונה כאן
 
@@ -164,7 +164,7 @@
 | [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 85 | 47 | ✔ |
 | [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 80 | 44 | ✔ |
 | [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 80 | 44 | ✔ |
-| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 82 | 43 | ✔ |
+| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 82 | 46 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>

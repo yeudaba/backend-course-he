@@ -21,7 +21,7 @@ ${copyStep("28w-scale")}
 <p><strong>✔ בדיקה:</strong> <code>cd ~/dev/backend-course && npm install && npm run check P28.5-E15</code> ← הבודק טוען 60,000 הזמנות מ־<code>files/orders.parquet</code> ל־DuckDB, ונכשל על הקובץ הריק שלך.</p>`,
   goals: [
     "למדוד נכון: percentiles במקום ממוצע, histograms שמתאחדים, בדיקת עומס, וחוק Little לתכנון קיבולת.",
-    "Node.js תחת עומס: מה חוסם את ה־event loop, thread pool מול worker threads, ומוניטור lag.",
+    "Node.js תחת עומס: מה חוסם את ה־event loop, thread pool מול worker threads, מוניטור lag, ו־generators לעבודה בחתיכות.",
     "נתונים גדולים בזרם: streams, NDJSON, backpressure, הכנסה מרוכזת ודגימה.",
     "OLTP מול OLAP: אחסון עמודתי, Parquet ו־DuckDB, partitions, ועלות שאילתה במחסני נתונים (BigQuery, Snowflake, Databricks).",
     "לחבר הכול: data lake מצטבר מ־PostgreSQL, ו־API אנליטי שעומד ב־SLO.",
@@ -30,7 +30,7 @@ ${copyStep("28w-scale")}
 <p>"נפחי נתונים גדולים ותעבורה גבוהה" — כך מסתיימות הרבה מודעות דרושים, והן מתכוונות לשני דברים. הראשון: שרת שמקבל אלפי בקשות בשנייה, ושבו בקשה אחת שחוסמת את ה־event loop עוצרת את כולם; שם לא שואלים "זה עובד?" אלא "מה ה־p99, ומה יקרה בשיא?". השני: טבלאות של מיליארדי שורות, שאילתות אנליטיות שסורקות אותן, ו־BigQuery, Snowflake או Databricks שמחייבים לפי כל בית שנסרק. בפרק 28 תכננת מערכות על הלוח; ביחידה הזו תמדוד, תמצא צווארי בקבוק, ותעבוד עם נתונים בצורה שבה עובדים איתם בקנה מידה — עמודות, partitions, streams — עם DuckDB שרץ אצלך בתוך Node.</p>`,
   lessons: [
     { file: "lesson-01-measure.html", title: "למדוד: percentiles, histograms ובדיקת עומס", minutes: 45 },
-    { file: "lesson-02-event-loop.html", title: "Node.js תחת עומס: event loop, thread pool ו־workers", minutes: 45 },
+    { file: "lesson-02-event-loop.html", title: "Node.js תחת עומס: event loop, thread pool ו־workers", minutes: 65 },
     { file: "lesson-03-streams.html", title: "נתונים גדולים בזרם", minutes: 40 },
     { file: "lesson-04-columnar.html", title: "עמודות: Parquet, DuckDB ומחסני נתונים", minutes: 55 },
     { file: "lesson-05-pipeline.html", title: "מ־PostgreSQL ל־data lake ובחזרה ל־API", minutes: 45 },
@@ -43,6 +43,8 @@ ${copyStep("28w-scale")}
     ["Little's law", "חוק לִיטֶל", "בתהליך בממוצע = קצב × זמן"],
     ["Event loop lag", "אִיוֶונְט לוּפּ לַאג", "כמה זמן callback מחכה לתורו — מדד לחסימה"],
     ["Worker thread", "וֶורְקֶר תְ'רֶד", "thread נוסף עם JavaScript משלו, לעבודת CPU"],
+    ["Generator", "גֶ׳נֶרֵייטוֹר", "פונקציה עם function* שנעצרת בכל yield וממשיכה ב־next() — מחשבת ערך רק כשמבקשים"],
+    ["Async generator", "אֵייסִינְק גֶ׳נֶרֵייטוֹר", "async function* — generator עם await בפנים; עוברים עליו ב־for await (עמודים, זרמים)"],
     ["Backpressure", "בֶּקְפְּרֶשֶׁר", "מנגנון שמאט את מי שמייצר נתונים כשמי שצורך לא עומד בקצב"],
     ["NDJSON", "אֶן־דִי־ג׳ייסון", "אובייקט JSON בכל שורה — פורמט נוח לזרמים ולקבצים ענקיים"],
     ["OLTP / OLAP", "אוֹ־אֶל־טִי־פִּי / אוֹ־לַאפּ", "עבודה טרנזקציונית (שורות בודדות) / אנליטית (סריקות גדולות)"],
@@ -58,6 +60,7 @@ ${copyStep("28w-scale")}
 <li>להסביר למה ממוצע מטעה, לחשב p50/p95/p99, ולמה אי אפשר למצע p99 בין שרתים.</li>
 <li>להריץ בדיקת עומס, ולתכנן כמה instances וחיבורי מסד צריך לשיא.</li>
 <li>לזהות קוד שחוסם את ה־event loop, ולבחור בין API אסינכרוני ל־worker threads.</li>
+<li>לכתוב generator (‏<code>function*</code>, ‏<code>yield</code>) ו־async generator עם <code>for await</code>, ולהסביר מה עושים <code>next()</code> ו־<code>break</code>.</li>
 <li>לעבד קובץ ענק בזרם, בזיכרון קבוע — כולל שורות ותווים שנחתכים בין chunks.</li>
 <li>להסביר OLTP מול OLAP, אחסון עמודתי ו־partitions, ולהעריך כמה בתים שאילתה תסרוק.</li>
 <li>לכתוב SQL אנליטי ב־DuckDB על Parquet.</li>
