@@ -4,6 +4,7 @@
 //         npm run check PR2 -- --dir ~/dev/tasks-api   (פרויקט שנמצא בתיקייה משלו)
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -36,9 +37,15 @@ console.log(`בודק ${files.length} קובצי בדיקה עבור ${id}${proj
 const reporter = path.join(root, "tools", "reporter.mjs");
 const major = Number(process.versions.node.split(".")[0]);
 const tsFlags = major < 23 ? ["--experimental-strip-types", "--no-warnings"] : [];
+// המדווח כותב לכאן "load-fail" אם קובץ לא נטען בכלל (אז אין "מה ציפינו ומה קיבלנו")
+const statusFile = path.join(os.tmpdir(), `course-check-${process.pid}.txt`);
 const r = spawnSync(process.execPath, [...tsFlags, "--test", `--test-reporter=${reporter}`, ...files], {
   stdio: "inherit",
-  env: { ...process.env, CHECK_TARGET: "starter", ...(projectDir ? { CHECK_DIR: projectDir } : {}) },
+  env: { ...process.env, CHECK_TARGET: "starter", CHECK_STATUS_FILE: statusFile, ...(projectDir ? { CHECK_DIR: projectDir } : {}) },
 });
-console.log(r.status === 0 ? "\n✔ כל הבדיקות עברו. כל הכבוד!" : "\n✘ יש בדיקות שנכשלו. קרא את ההודעה מעל: מה ציפינו ומה קיבלנו.");
+const loadFail = fs.existsSync(statusFile);
+fs.rmSync(statusFile, { force: true });
+if (r.status === 0) console.log("\n✔ כל הבדיקות עברו. כל הכבוד!");
+else if (loadFail) console.log("\n✘ יש קובץ שלא נטען, ולכן הבדיקות שלו לא רצו. תקן את השגיאה שמוצגת מעל (⚠️) והרץ שוב.");
+else console.log("\n✘ יש בדיקות שנכשלו. קרא את ההודעה מעל: מה ציפינו ומה קיבלנו.");
 process.exit(r.status ?? 1);
