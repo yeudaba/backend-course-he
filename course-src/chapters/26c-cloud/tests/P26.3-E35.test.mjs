@@ -25,3 +25,4 @@ test("downtimeMinutesPerYear", () => {
   assert.equal(downtimeMinutesPerYear(0.99), 5256);
   assert.equal(downtimeMinutesPerYear(1), 0);
 });
+test("nines מעגל למטה", () => assert.equal(nines(0.997), 2, "‎-log10(0.003) = 2.52 ← 2"));

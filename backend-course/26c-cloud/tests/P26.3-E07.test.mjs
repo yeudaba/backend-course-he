@@ -32,6 +32,8 @@ test("סוג או גודל לא מותרים ← שגיאה, בלי כתובת",
   await assert.rejects(createUploadUrl(s3, bucket, { ...req, contentType: "text/html" }), "HTML שמועלה ל־bucket ציבורי = XSS");
   await assert.rejects(createUploadUrl(s3, bucket, { ...req, size: 6 * 1024 * 1024 }));
   await assert.rejects(createUploadUrl(s3, bucket, { ...req, size: 0 }));
+  await assert.rejects(createUploadUrl(s3, bucket, { ...req, userId: 0 }), undefined, "userId 0 — לא תקין");
+  await createUploadUrl(s3, bucket, { ...req, size: 5 * 1024 * 1024 }); // בדיוק 5MB — מותר
 });
 test("שם קובץ מסוכן לא בורח מהתיקייה", async (t) => {
   const { s3, bucket } = await bucketSandbox(t);

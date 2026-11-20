@@ -29,3 +29,6 @@ test("POST /orders — לא תקין", async () => {
     assert.ok(r.body.error, body);
   }
 });
+test("qty 1 ו־productId 1 — הגבול התחתון תקין", async () => {
+  assert.equal((await call({ httpMethod: "POST", path: "/orders", body: '{"productId":1,"qty":1}' })).status, 202);
+});

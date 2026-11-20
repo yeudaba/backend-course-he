@@ -31,6 +31,8 @@ test("תנאים תלויים", () => {
     const v = good(); v.ingress.host = host;
     assert.deepEqual(paths(v), ["ingress.host"], host);
   }
+  const ok2 = good(); ok2.autoscaling = { enabled: true, minReplicas: 2, maxReplicas: 2 };
+  assert.deepEqual(validateValues(ok2), [], "minReplicas 2 ו־maxReplicas שווה לו — תקין");
   const a = good(); a.autoscaling = { enabled: true, minReplicas: 1, maxReplicas: 5 };
   assert.deepEqual(paths(a), ["autoscaling.minReplicas"]);
   const b = good(); b.autoscaling = { enabled: true, minReplicas: 6, maxReplicas: 5 };

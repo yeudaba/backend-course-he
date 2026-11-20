@@ -39,3 +39,9 @@ test("ברירות מחדל: sleep אמיתי, 3 ניסיונות חוזרים",
   assert.equal(f.calls(), 4);
   assert.ok(Date.now() - start < 2000);
 });
+test("full jitter מעוגל למטה (Math.floor)", async () => {
+  const waits = [];
+  const f = flaky([err("SlowDown", 503)]);
+  await withAwsRetry(f.fn, { sleep: async (ms) => { waits.push(ms); }, random: () => 0.999 });
+  assert.deepEqual(waits, [99], "0.999 × 100 = 99.9 ← 99");
+});
