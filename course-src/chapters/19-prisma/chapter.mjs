@@ -39,7 +39,7 @@ ${copyStep("19-prisma")}
   lessons: [
     { file: "lesson-01-setup.html", title: "ORM, Prisma והחיבור הראשון", minutes: 40 },
     { file: "lesson-02-schema.html", title: "Schema, קשרים ו־migrations", minutes: 45 },
-    { file: "lesson-03-queries.html", title: "שאילתות, transactions ושגיאות", minutes: 50 },
+    { file: "lesson-03-queries.html", title: "שאילתות, transactions ושגיאות", minutes: 60 },
     { file: "lesson-04-project.html", title: "פרויקט 2 עובר ל־PostgreSQL", minutes: 60, note: "🤖 PR2-DB" },
   ],
   glossary: [

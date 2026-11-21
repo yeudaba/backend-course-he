@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 19</a> ‹ שיעור 3</div>
   <h1>שיעור 3 — שאילתות, transactions ושגיאות</h1>
-  <p class="subtitle">⏱ ~50 דקות</p>
+  <p class="subtitle">⏱ ~60 דקות</p>
   <div class="box goal">
     <span class="box-title">🎯 בשיעור הזה</span>
     <ul>
@@ -18,6 +18,7 @@
       <li>סינון, <code>select</code>/<code>include</code>, מיון ו־pagination.</li>
       <li>עדכונים אטומיים, transactions, ושגיאות (P2002, P2025).</li>
       <li>SQL ישיר — בבטחה.</li>
+      <li><code>upsert</code>, ‏<code>aggregate</code>, ‏<code>_count</code>, ‏<code>findUniqueOrThrow</code> וטיפוסי הקלט של Prisma.</li>
     </ul>
   </div>
 
@@ -123,9 +124,80 @@ const order = await prisma.$transaction(async (tx) =&gt; {
   GROUP BY c.name`;</code></pre>
   <p>דוחות עם GROUP BY על כמה טבלאות, חלונות, CTE — ב־SQL זה פשוט יותר. <code>$queryRaw</code> עם <strong>template literal</strong> (הגרש ההפוך) הופך כל <code>${...}</code> לפרמטר — בטוח מ־injection. <code>$queryRawUnsafe("..." + x)</code> — לא בטוח, ולא צריך כמעט אף פעם.</p>
 
+  <h2 id="more">7. עוד כמה כלים: upsert, ‏aggregate, ‏_count</h2>
+<span class="file-label">19-prisma/files/play/more.ts</span>
+<pre><code class="lang-ts">import { config } from "dotenv";
+import { PrismaClient, Prisma } from "../generated/prisma/client.ts";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+config({ path: "../../.env", quiet: true }); // SHOP_DATABASE_URL — כמו prisma.config.ts
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.SHOP_DATABASE_URL, options: "-c timezone=UTC" }) });
+
+// upsert — "צור, ואם כבר קיים — עדכן". where חייב להיות שדה ייחודי
+const tag = await prisma.tag.upsert({
+  where: { name: "organic" },
+  create: { name: "organic" },
+  update: {},
+});
+const again = await prisma.tag.upsert({ where: { name: "organic" }, create: { name: "organic" }, update: {} });
+console.log(tag.id === again.id, await prisma.tag.count({ where: { name: "organic" } }));
+
+// aggregate — צבירות על כל השורות שמתאימות, בלי להביא אותן
+const stats = await prisma.product.aggregate({
+  where: { isActive: true },
+  _count: true,
+  _avg: { price: true },
+  _max: { price: true },
+});
+console.log(stats);
+
+// _count של קשר — כמה מוצרים בכל קטגוריה, בתוך select
+const categories = await prisma.category.findMany({
+  select: { name: true, _count: { select: { products: true } } },
+  orderBy: { id: "asc" },
+});
+console.log(categories);
+
+// findUniqueOrThrow — כמו findUnique, אבל זורק P2025 במקום null
+try {
+  await prisma.product.findUniqueOrThrow({ where: { id: 999 } });
+} catch (err) {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) console.log(err.code);
+}
+
+// where שנבנה בהדרגה — עם הטיפוס ש־Prisma מייצר לכל מודל
+const where: Prisma.ProductWhereInput = { isActive: true };
+const maxPrice: number | undefined = 100;
+if (maxPrice !== undefined) where.price = { lte: maxPrice };
+console.log(await prisma.product.count({ where }));
+await prisma.$disconnect();</code></pre>
+<pre class="terminal"><span class="prompt">% </span>cd 19-prisma/files &amp;&amp; node play/more.ts
+true 1
+{
+  _count: 11,
+  _avg: { price: 154.7818181818181818 },
+  _max: { price: 649 }
+}
+[
+  { name: 'beans', _count: { products: 3 } },
+  { name: 'grinders', _count: { products: 2 } },
+  { name: 'brewing', _count: { products: 4 } },
+  { name: 'accessories', _count: { products: 3 } },
+  { name: 'gift cards', _count: { products: 0 } }
+]
+P2025
+6</pre>
+  <ul>
+    <li><strong><code>upsert</code></strong> — <code class="mid">INSERT ... ON CONFLICT DO UPDATE</code> של Prisma. הקריאה השנייה לא יצרה תגית נוספת (<code>true 1</code>): היא מצאה את הקיימת לפי <code>where</code>, והריצה את <code>update</code> (כאן ריק — לא משנים כלום). הכלי ל־seed שאפשר להריץ שוב ושוב.</li>
+    <li><strong><code>aggregate</code></strong> — <code>COUNT</code>, ‏<code>AVG</code>, ‏<code>MAX</code>... במסד, ושורה אחת חוזרת. <code>_avg</code> ו־<code>_max</code> של שדה <code>Decimal</code> חוזרים כ־<code>Decimal</code> (שיעור 2), לכן <code>Number(stats._avg.price)</code> לפני חשבון. (צבירה לכל קבוצה — <code>groupBy</code>, בשיעור 4.)</li>
+    <li><strong><code>_count</code></strong> בתוך <code>select</code> (או <code>include</code>) — כמה רשומות קשורות לכל שורה, בלי להביא אותן. "gift cards" עם 0 — כמו <code>LEFT JOIN</code> ו־<code>COUNT</code> בפרק 17.</li>
+    <li><strong><code>findUniqueOrThrow</code></strong> (וגם <code>findFirstOrThrow</code>) — כשאין רשומה, זורק <code>P2025</code> במקום להחזיר <code>null</code>. נוח כשאחרי זה ממילא מתרגמים ל־404 (סעיף 4).</li>
+    <li><strong>טיפוסי הקלט:</strong> לכל מודל Prisma מייצר טיפוסים כמו <code>Prisma.ProductWhereInput</code>, ‏<code class="mid">Prisma.ProductOrderByWithRelationInput</code> ו־<code class="mid">Prisma.ProductUncheckedUpdateInput</code> (עדכון עם <code>categoryId</code> ישירות) — כדי לבנות <code>where</code>/<code>orderBy</code>/<code>data</code> בהדרגה, כמו כאן.</li>
+  </ul>
+
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>28 שאלות</strong>: חלק 1 — 20 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 8 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>32 שאלות</strong>: חלק 1 — 22 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 10 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-3.html">← לתרגול של שיעור 3</a></p>
   </div>
 

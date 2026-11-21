@@ -511,7 +511,7 @@ export async function cancelOrder(prisma: PrismaClient, orderId: number) {
 <div class="ex" id="P19-E16">
     <h3>P19-E16 · נתוני דשבורד 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p><code>count</code>, <code class="mid">aggregate({ _avg: { price: true } })</code>, ו־<code>_count</code> של קשר: <code class="long">category.findMany({ select: { name: true, _count: { select: { products: true } } } })</code>.</p>
+<p>שלושה כלים מסעיף 7 בשיעור: <code>count</code> עם <code>where</code> לכל מספר, <code>aggregate</code> לממוצע (והוא מחזיר <code>Decimal</code>!), ו־<code>_count</code> של קשר ל־byCategory (שכולל גם קטגוריות ריקות).</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
@@ -584,6 +584,47 @@ export async function setProductTags(prisma: PrismaClient, productId: number, na
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>למחוק את התגיות הישנות ואז ליצור — מחוץ ל־transaction: כישלון באמצע משאיר את המוצר בלי תגיות בכלל.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E19">
+    <h3>P19-E19 · seed שאפשר להריץ שוב 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code>upsert</code> (שיעור 3, סעיף 7) לכל דבר שיש לו שדה ייחודי — קטגוריה לפי name, לקוח לפי email.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>למוצר אין שדה ייחודי חוץ מ־id, ולכן אין לו upsert. <code>findFirst</code> לפי שם וקטגוריה (שיעור 3, סעיף 1), ו־create רק אם אין.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E19
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+const PRODUCTS = [
+  { name: "Cold Brew Bottle 1L", price: 59.9, stock: 20 },
+  { name: "Cold Brew Filter Bags", price: 34.9, stock: 100 },
+];
+
+export async function seedDemoData(prisma: PrismaClient) {
+  const category = await prisma.category.upsert({ where: { name: "cold brew" }, create: { name: "cold brew" }, update: {} });
+  for (const p of PRODUCTS) {
+    const existing = await prisma.product.findFirst({ where: { name: p.name, categoryId: category.id } });
+    if (!existing) await prisma.product.create({ data: { ...p, categoryId: category.id } });
+  }
+  const customer = await prisma.customer.upsert({
+    where: { email: "demo@example.com" },
+    create: { email: "demo@example.com", fullName: "Demo User", city: "Tel Aviv", joinedOn: new Date("2026-01-01") },
+    update: {},
+  });
+  return { categoryId: category.id, customerId: customer.id };
+}</code></pre>
+<p>seed שאפשר להריץ שוב ("idempotent") חוסך המון כאב: אפשר להריץ אותו בכל הפעלה של סביבת פיתוח, בלי "קודם תמחק".</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>create</code> לכל דבר — הרצה שנייה נכשלת על unique (או יוצרת מוצרים כפולים).</li></ul>
 
 
 </div></details>
@@ -694,6 +735,36 @@ export async function transferStock(prisma: PrismaClient, fromProductId: number,
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לשנות רק את הסדר (קודם להוריד) — מסתיר את הבאג במקרה הזה, אבל הפעולה עדיין לא בתוך ה־transaction.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E39">
+    <h3>P19-E39 · מ־pg ל־Prisma: מלאי נמוך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שמות השדות בקוד: <code>isActive</code>, לא <code>is_active</code>. "קטן מ־" — <code>{ lt: below }</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>מיון לפי שני שדות — מערך של אובייקטים ב־<code>orderBy</code>, כמו בדוגמה בסעיף 1 של השיעור.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E39: מ־pg ל־Prisma — מלאי נמוך
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export async function lowStock(prisma: PrismaClient, below: number) {
+  return prisma.product.findMany({
+    where: { isActive: true, stock: { lt: below } },
+    select: { id: true, name: true, stock: true },
+    orderBy: [{ stock: "asc" }, { id: "asc" }],
+  });
+}</code></pre>
+<p>אותה שאילתה, אבל הערך <code>below</code> נשלח כפרמטר בלי שכתבת <code>$1</code>, והתוצאה מוקלדת.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">orderBy: { stock: "asc", id: "asc" }</code> (אובייקט אחד עם שני שדות) — Prisma דוחה: כל אובייקט ב־orderBy הוא שדה אחד, והסדר נקבע ע״י המערך.</li></ul>
 
 
 </div></details>
@@ -1036,6 +1107,85 @@ export class PrismaCategoryRepository implements CategoryRepository {
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לבדוק קודם אם השם קיים (<code>findUnique</code>) ורק אחר כך ליצור — שתי בקשות במקביל עוברות את הבדיקה, ואחת מהן נכשלת ב־P2002 בכל זאת. האילוץ במסד הוא הבדיקה האמיתית (פרק 18).</li><li><code class="mid">catch (err) { throw new ConflictError(...) }</code> בלי לבדוק את הקוד — כל תקלה במסד הופכת ל"כבר קיימת".</li><li><code class="mid">include: { products: true }</code> ואז <code>.length</code> — טוען את כל המוצרים רק כדי לספור אותם.</li><li><code class="mid">constructor(private prisma: PrismaClient)</code> — ‏Node נכשל ב־<code class="mid">ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX</code>.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E47">
+    <h3>P19-E47 · אותה שאילתה — ב־pg וב־Prisma 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>ב־pg — SQL עם <code>$1</code>, ו־<code>rows</code>. ב־Prisma — <code>findMany</code> עם <code>select</code> ו־<code>orderBy</code> של מערך (P19-E39).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שים לב לשמות: ב־pg העמודה <code>is_active</code>; ב־Prisma השדה <code>isActive</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E47: אותה שאילתה — ב־pg וב־Prisma
+import type { Pool } from "pg";
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+type Row = { id: number; name: string; stock: number };
+
+export async function cheapWithPg(pool: Pool, max: number): Promise&lt;Row[]&gt; {
+  const { rows } = await pool.query(
+    "SELECT id, name, stock FROM products WHERE is_active AND price &lt; $1 ORDER BY price, id",
+    [max],
+  );
+  return rows;
+}
+
+export async function cheapWithPrisma(prisma: PrismaClient, max: number): Promise&lt;Row[]&gt; {
+  return prisma.product.findMany({
+    where: { isActive: true, price: { lt: max } },
+    select: { id: true, name: true, stock: true },
+    orderBy: [{ price: "asc" }, { id: "asc" }],
+  });
+}</code></pre>
+<p>בחרתי עמודות שאין בהן <code>numeric</code> בכוונה: ב־pg <code>price</code> היה מגיע כמחרוזת, וב־Prisma כ־<code>Decimal</code> — שתי "צורות" שונות לאותו ערך (שיעור 2).</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>ב־pg בלי <code>id</code> כשובר שוויון — שני מוצרים באותו מחיר עלולים לחזור בסדר שונה מ־Prisma.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P19-E64">
+    <h3>P19-E64 · ‏Zod לפי המודל, ואז create 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p><code class="mid">email: z.email().transform((e) =&gt; e.toLowerCase())</code>, ‏<code class="mid">city: z.string().trim().min(1).nullable().default(null)</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>ב־<code>create</code>: <code class="mid">joinedOn: new Date(`${input.joinedOn}T00:00:00Z`)</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P19-E64: Zod לפי המודל, ואז create
+import { z } from "zod";
+import type { PrismaClient } from "../files/generated/prisma/client.ts";
+
+export const CustomerInput = z.object({
+  fullName: z.string().trim().min(1),
+  email: z.email().transform((e) =&gt; e.toLowerCase()),
+  city: z.string().trim().min(1).nullable().default(null),
+  joinedOn: z.iso.date(),
+});
+
+export async function createCustomer(prisma: PrismaClient, body: unknown) {
+  const input = CustomerInput.parse(body);
+  const c = await prisma.customer.create({
+    data: { ...input, joinedOn: new Date(`${input.joinedOn}T00:00:00Z`) },
+  });
+  return { id: c.id, fullName: c.fullName, email: c.email, city: c.city, joinedOn: c.joinedOn.toISOString().slice(0, 10) };
+}</code></pre>
+<p>Zod מגן על "מה הלקוח של ה־API שלח" (400 עם הסבר), והמסד מגן על "מה מותר לשמור" (NOT NULL, ‏UNIQUE). שתי השכבות — לשני דברים שונים, כמו ב־P17-E40.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code class="mid">prisma.customer.create({ data: body })</code> — ישירות מהבקשה: הלקוח יכול לשלוח <code>id</code> או <code>isVip</code> ולקבוע אותם בעצמו (mass assignment, ‏OWASP — פרק 21).</li></ul>
 
 
 </div></details>

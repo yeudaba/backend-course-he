@@ -5,6 +5,7 @@
       <li>סינון, `select`/`include`, מיון ו־pagination.</li>
       <li>עדכונים אטומיים, transactions, ושגיאות (P2002, P2025).</li>
       <li>SQL ישיר — בבטחה.</li>
+      <li>`upsert`, ‏`aggregate`, ‏`_count`, ‏`findUniqueOrThrow` וטיפוסי הקלט של Prisma.</li>
     </ul>
   </div>
 
@@ -121,6 +122,80 @@ const rows = await prisma.$queryRaw<{ category: string; revenue: number }[]>`
   GROUP BY c.name`;
 ```
   <p>דוחות עם GROUP BY על כמה טבלאות, חלונות, CTE — ב־SQL זה פשוט יותר. `$queryRaw` עם <strong>template literal</strong> (הגרש ההפוך) הופך כל `${...}` לפרמטר — בטוח מ־injection. `$queryRawUnsafe("..." + x)` — לא בטוח, ולא צריך כמעט אף פעם.</p>
+
+  <h2 id="more">7. עוד כמה כלים: upsert, ‏aggregate, ‏_count</h2>
+```ts file=19-prisma/files/play/more.ts
+import { config } from "dotenv";
+import { PrismaClient, Prisma } from "../generated/prisma/client.ts";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+config({ path: "../../.env", quiet: true }); // SHOP_DATABASE_URL — כמו prisma.config.ts
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.SHOP_DATABASE_URL, options: "-c timezone=UTC" }) });
+
+// upsert — "צור, ואם כבר קיים — עדכן". where חייב להיות שדה ייחודי
+const tag = await prisma.tag.upsert({
+  where: { name: "organic" },
+  create: { name: "organic" },
+  update: {},
+});
+const again = await prisma.tag.upsert({ where: { name: "organic" }, create: { name: "organic" }, update: {} });
+console.log(tag.id === again.id, await prisma.tag.count({ where: { name: "organic" } }));
+
+// aggregate — צבירות על כל השורות שמתאימות, בלי להביא אותן
+const stats = await prisma.product.aggregate({
+  where: { isActive: true },
+  _count: true,
+  _avg: { price: true },
+  _max: { price: true },
+});
+console.log(stats);
+
+// _count של קשר — כמה מוצרים בכל קטגוריה, בתוך select
+const categories = await prisma.category.findMany({
+  select: { name: true, _count: { select: { products: true } } },
+  orderBy: { id: "asc" },
+});
+console.log(categories);
+
+// findUniqueOrThrow — כמו findUnique, אבל זורק P2025 במקום null
+try {
+  await prisma.product.findUniqueOrThrow({ where: { id: 999 } });
+} catch (err) {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) console.log(err.code);
+}
+
+// where שנבנה בהדרגה — עם הטיפוס ש־Prisma מייצר לכל מודל
+const where: Prisma.ProductWhereInput = { isActive: true };
+const maxPrice: number | undefined = 100;
+if (maxPrice !== undefined) where.price = { lte: maxPrice };
+console.log(await prisma.product.count({ where }));
+await prisma.$disconnect();
+```
+```term
+% cd 19-prisma/files && node play/more.ts
+true 1
+{
+  _count: 11,
+  _avg: { price: 154.7818181818181818 },
+  _max: { price: 649 }
+}
+[
+  { name: 'beans', _count: { products: 3 } },
+  { name: 'grinders', _count: { products: 2 } },
+  { name: 'brewing', _count: { products: 4 } },
+  { name: 'accessories', _count: { products: 3 } },
+  { name: 'gift cards', _count: { products: 0 } }
+]
+P2025
+6
+```
+  <ul>
+    <li><strong>`upsert`</strong> — `INSERT ... ON CONFLICT DO UPDATE` של Prisma. הקריאה השנייה לא יצרה תגית נוספת (`true 1`): היא מצאה את הקיימת לפי `where`, והריצה את `update` (כאן ריק — לא משנים כלום). הכלי ל־seed שאפשר להריץ שוב ושוב.</li>
+    <li><strong>`aggregate`</strong> — `COUNT`, ‏`AVG`, ‏`MAX`... במסד, ושורה אחת חוזרת. `_avg` ו־`_max` של שדה `Decimal` חוזרים כ־`Decimal` (שיעור 2), לכן `Number(stats._avg.price)` לפני חשבון. (צבירה לכל קבוצה — `groupBy`, בשיעור 4.)</li>
+    <li><strong>`_count`</strong> בתוך `select` (או `include`) — כמה רשומות קשורות לכל שורה, בלי להביא אותן. "gift cards" עם 0 — כמו `LEFT JOIN` ו־`COUNT` בפרק 17.</li>
+    <li><strong>`findUniqueOrThrow`</strong> (וגם `findFirstOrThrow`) — כשאין רשומה, זורק `P2025` במקום להחזיר `null`. נוח כשאחרי זה ממילא מתרגמים ל־404 (סעיף 4).</li>
+    <li><strong>טיפוסי הקלט:</strong> לכל מודל Prisma מייצר טיפוסים כמו `Prisma.ProductWhereInput`, ‏`Prisma.ProductOrderByWithRelationInput` ו־`Prisma.ProductUncheckedUpdateInput` (עדכון עם `categoryId` ישירות) — כדי לבנות `where`/`orderBy`/`data` בהדרגה, כמו כאן.</li>
+  </ul>
 
   <div class="box practice">
     <span class="box-title">✍️ עכשיו בדף התרגילים</span>
