@@ -53,6 +53,7 @@ ROLLBACK
     <span class="box-title">💡 ACID במשפט לכל אות</span>
     <p><strong>A</strong>tomicity — הכול או כלום. <strong>C</strong>onsistency — אחרי ה־commit כל האילוצים מתקיימים. <strong>I</strong>solation — transactions במקביל לא "רואים" חצאי עבודה אחד של השני (שיעור 2). <strong>D</strong>urability — אחרי ש־COMMIT חזר, הנתונים שרדו גם אם החשמל ייפול עכשיו. שאלת ראיון קלאסית.</p>
   </div>
+  <p>ושלוש פונקציות זמן שתפגוש בתרגול: <code>now()</code> (שראית כ־<code>DEFAULT</code> בפרק 16) — ושם נוסף לאותה פונקציה, <code>transaction_timestamp()</code>; <code>clock_timestamp()</code> — השעה בדיוק ברגע שהשורה מחושבת; ו־<code>pg_sleep(0.2)</code> — מחכה 0.2 שנייה (לניסויים). מה ההבדל בין <code>now()</code> ל־<code>clock_timestamp()</code> בתוך transaction? בדוק ב־P18-E31.</p>
   <p>וגם בטעויות שלך: לפני <code>UPDATE</code>/<code>DELETE</code> מסוכן ב־psql, <code>BEGIN;</code> — מריצים, בודקים עם SELECT, ואם משהו לא נראה טוב — <code>ROLLBACK;</code>.</p>
 
   <h2>3. מ־Node: הספרייה pg</h2>
@@ -81,7 +82,9 @@ export async function transfer(fromId, toId, amount) {
     <tr><th>חלק</th><th>למה</th></tr>
     <tr><td><code>pg.Pool</code></td><td>מאגר חיבורים פתוחים. פתיחת חיבור למסד יקרה (עשרות ms) — ה־pool ממחזר אותם בין בקשות</td></tr>
     <tr><td><code>pool.connect()</code></td><td>"השאל" חיבור אחד. <strong>חובה</strong> ל־transaction: <code>pool.query()</code> יכול לשלוח כל פקודה בחיבור אחר, ו־BEGIN בחיבור אחד לא משפיע על חיבור אחר</td></tr>
-    <tr><td><code>$1, $2</code></td><td>פרמטרים. <strong>לעולם</strong> לא `<code> </code>... WHERE id = ${id}<code> </code>` — זו SQL injection (פרק 21). pg שולח את הערכים בנפרד מהשאילתה</td></tr>
+    <tr><td><code>$1, $2</code></td><td>פרמטרים. <strong>לעולם</strong> לא `<code> </code>... WHERE id = ${id}<code> </code>` — זו SQL injection (פרק 16, P16-E53). pg שולח את הערכים בנפרד מהשאילתה</td></tr>
+    <tr><td><code class="mid">const { rows, rowCount } = await client.query(...)</code></td><td>התוצאה: <code>rows</code> — מערך של אובייקטים, אחד לכל שורה (<code class="mid">[{ id: 1, balance: "1000.00" }]</code>; ‏numeric מגיע כמחרוזת). <code>rowCount</code> — כמה שורות הפקודה החזירה או שינתה: <code>UPDATE ... WHERE id = $1</code> עם id שלא קיים ← <code>0</code>, בלי שגיאה</td></tr>
+    <tr><td><code>Pool</code>, <code>PoolClient</code></td><td>הטיפוסים ב־TypeScript: <code class="mid">import type { Pool, PoolClient } from "pg"</code>. ‏<code>pool.connect()</code> מחזיר <code>PoolClient</code> — חיבור אחד שיש לו <code>query</code> וגם <code>release</code>. פונקציה שעובדת בתוך transaction של מישהו אחר מקבלת <code>client: PoolClient</code>, לא את ה־pool</td></tr>
     <tr><td><code>finally { release() }</code></td><td>חיבור שלא שוחרר "דולף". אחרי 10 דליפות (ברירת המחדל של ה־pool) — כל בקשה חדשה מחכה לנצח</td></tr>
   </table></div>
   <div class="box warn">

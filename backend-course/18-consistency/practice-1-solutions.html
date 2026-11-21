@@ -359,59 +359,6 @@ export async function transfer(pool: Pool, fromId: number, toId: number, amount:
 
 </div></details>
   </div>
-<div class="ex typed" id="P18-E26">
-    <h3>P18-E26 · withTransaction — עוזר שכותבים פעם אחת 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>ה־import: <code class="mid">import type { Pool, PoolClient } from "pg";</code>. גוף <code>withTransaction</code> הוא בדיוק הדפוס מ־P18-E07. ההבדל היחיד: במקום שלוש שאילתות באמצע, ‏<code class="mid">const result = await fn(client);</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p><code>transferAll</code> מחזירה את מה ש־<code>withTransaction</code> מחזירה: <code class="long">return withTransaction(pool, async (client) =&gt; { ...; return amount; });</code>. בתוך ה־callback, כל <code>throw</code> מגיע ל־catch של <code>withTransaction</code>, ומשם ל־ROLLBACK. ‏יעד לא קיים: ‏<code>rowCount === 0</code> אחרי ה־UPDATE שלו. ‏<code>balance</code> מגיע מ־<code>pg</code> כמחרוזת (‏<code>numeric</code>), ולכן <code>Number(...)</code>.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P18-E26: withTransaction — עוזר שכותבים פעם אחת
-import type { Pool, PoolClient } from "pg";
-
-export async function withTransaction&lt;T&gt;(pool: Pool, fn: (client: PoolClient) =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await fn(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export async function transferAll(pool: Pool, fromId: number, toId: number): Promise&lt;number&gt; {
-  return withTransaction(pool, async (client) =&gt; {
-    const { rows } = await client.query("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE", [fromId]);
-    if (rows.length === 0) throw new Error(`חשבון לא קיים: ${fromId}`);
-    const amount = Number(rows[0].balance);
-    if (amount === 0) throw new Error("אין מה להעביר");
-    await client.query("UPDATE accounts SET balance = 0 WHERE id = $1", [fromId]);
-    const to = await client.query("UPDATE accounts SET balance = balance + $1 WHERE id = $2", [amount, toId]);
-    if (to.rowCount === 0) throw new Error(`חשבון לא קיים: ${toId}`);
-    await client.query("INSERT INTO transfers (from_id, to_id, amount) VALUES ($1, $2, $3)", [fromId, toId, amount]);
-    return amount;
-  });
-}</code></pre>
-<p>עכשיו <code>transferAll</code> מכילה רק את מה שמיוחד לה. אין בה <code>BEGIN</code>, ‏<code>ROLLBACK</code> או <code>release</code>, ולכן גם אין איפה לשכוח אותם. כל פונקציה עתידית שצריכה transaction תקבל את אותה התנהגות נכונה בחינם. זה בדיוק מה ש־Prisma נותן ב־<code class="mid">$transaction(async (tx) =&gt; ...)</code> (פרק 19).</p>
-<p>ה־<code>&lt;T&gt;</code> (generic, פרק 11) מעביר את הטיפוס של מה ש־<code>fn</code> מחזירה הלאה. ‏<code class="mid">withTransaction(pool, async () =&gt; 5)</code> היא <code>Promise&lt;number&gt;</code>, ו־TypeScript יודע את זה בלי שתכתוב.</p>
-<p>שגיאה ב"יעד לא קיים" מגיעה <em>אחרי</em> שכבר איפסנו את המקור. בלי transaction הכסף היה נעלם. כאן ה־ROLLBACK מחזיר הכול.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>ב־catch לבלוע את השגיאה (<code>return null</code>) — מי שקרא חושב שהכול הצליח.</li><li><code>client.release()</code> בסוף ה־try ולא ב־finally — כל שגיאה משאירה חיבור תפוס, ואחרי כמה שגיאות ה־pool נתקע.</li><li><code>fn(client)</code> בלי <code>await</code> — ‏COMMIT רץ לפני שהשאילתות של <code>fn</code> הסתיימו, ושגיאה שלהן כבר לא תגיע ל־catch.</li><li>לקרוא ל־<code>pool.query</code> בתוך <code>fn</code> במקום ל־<code>client.query</code> — השאילתה רצה בחיבור אחר, מחוץ ל־transaction.</li></ul>
-
-
-</div></details>
-  </div>
 <div class="ex" id="P18-E34">
     <h3>P18-E34 · סגירת חשבון ב־transaction 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -526,6 +473,36 @@ export async function payMany(pool: Pool, fromId: number, payments: { toId: numb
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>להתעלם מ־<code>rowCount</code> — UPDATE של חשבון שלא קיים "מצליח" עם 0 שורות, והכסף יורד מ־Avi לשום מקום (עד ש־FK של transfers עוצר — אם יש).</li><li><code>payments.map(async ...)</code> במקום לולאה — כל הפקודות נשלחות "ביחד", וקשה לדעת מה נכשל ומתי (P18-E39).</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex typed" id="P18-E82">
+    <h3>P18-E82 · שינוי שם — ו־rowCount 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>איך יודעים אם UPDATE מצא שורה? ‏<code>UPDATE</code> על id שלא קיים לא זורק שגיאה. התשובה בטבלה של סעיף 3 בשיעור (מה <code>client.query</code> מחזירה).</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p><code class="mid">const { rowCount } = await pool.query(..., [name, id]);</code> — ואז השוואה ל־1.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P18-E82: שינוי שם בעל החשבון
+import type { Pool } from "pg";
+
+export async function renameOwner(pool: Pool, id: number, owner: string): Promise&lt;boolean&gt; {
+  const name = owner.trim();
+  if (!name) throw new Error("שם ריק");
+  const { rowCount } = await pool.query("UPDATE accounts SET owner = $1 WHERE id = $2", [name, id]);
+  return rowCount === 1;
+}</code></pre>
+<p>UPDATE שלא מצא אף שורה הוא לא שגיאה מבחינת המסד — הוא פשוט עדכן 0 שורות (<code>UPDATE 0</code> ב־psql). לכן הקוד שלך שואל את <code>rowCount</code>. זה בדיוק מה שה־API צריך כדי להחזיר 404 במקום 200 (פרק 15).</p>
+<p>ו־<code>O'Brien</code>? עם פרמטר הגרש הוא סתם תו. בשרשור (<code>`... owner = '${name}'`</code>) הוא היה סוגר את המחרוזת ומפיל את השאילתה — ובמקרה הגרוע, injection.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>return true</code> אחרי ה־await — גם כשהחשבון לא קיים.</li><li>לבדוק "ריק" לפני trim — <code>"   "</code> עובר ונשמר שם של רווחים.</li><li>להשוות <code>rowCount &gt; 0</code> — עובד כאן (id הוא מפתח ראשי), אבל <code>=== 1</code> אומר בדיוק מה מצפים.</li></ul>
 
 
 </div></details>

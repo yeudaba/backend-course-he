@@ -44,6 +44,7 @@ ROLLBACK
     <span class="box-title">💡 ACID במשפט לכל אות</span>
     <p><strong>A</strong>tomicity — הכול או כלום. <strong>C</strong>onsistency — אחרי ה־commit כל האילוצים מתקיימים. <strong>I</strong>solation — transactions במקביל לא "רואים" חצאי עבודה אחד של השני (שיעור 2). <strong>D</strong>urability — אחרי ש־COMMIT חזר, הנתונים שרדו גם אם החשמל ייפול עכשיו. שאלת ראיון קלאסית.</p>
   </div>
+  <p>ושלוש פונקציות זמן שתפגוש בתרגול: `now()` (שראית כ־`DEFAULT` בפרק 16) — ושם נוסף לאותה פונקציה, `transaction_timestamp()`; `clock_timestamp()` — השעה בדיוק ברגע שהשורה מחושבת; ו־`pg_sleep(0.2)` — מחכה 0.2 שנייה (לניסויים). מה ההבדל בין `now()` ל־`clock_timestamp()` בתוך transaction? בדוק ב־P18-E31.</p>
   <p>וגם בטעויות שלך: לפני `UPDATE`/`DELETE` מסוכן ב־psql, `BEGIN;` — מריצים, בודקים עם SELECT, ואם משהו לא נראה טוב — `ROLLBACK;`.</p>
 
   <h2>3. מ־Node: הספרייה pg</h2>
@@ -73,7 +74,9 @@ export async function transfer(fromId, toId, amount) {
     <tr><th>חלק</th><th>למה</th></tr>
     <tr><td>`pg.Pool`</td><td>מאגר חיבורים פתוחים. פתיחת חיבור למסד יקרה (עשרות ms) — ה־pool ממחזר אותם בין בקשות</td></tr>
     <tr><td>`pool.connect()`</td><td>"השאל" חיבור אחד. <strong>חובה</strong> ל־transaction: `pool.query()` יכול לשלוח כל פקודה בחיבור אחר, ו־BEGIN בחיבור אחד לא משפיע על חיבור אחר</td></tr>
-    <tr><td>`$1, $2`</td><td>פרמטרים. <strong>לעולם</strong> לא `` `... WHERE id = ${id}` `` — זו SQL injection (פרק 21). pg שולח את הערכים בנפרד מהשאילתה</td></tr>
+    <tr><td>`$1, $2`</td><td>פרמטרים. <strong>לעולם</strong> לא `` `... WHERE id = ${id}` `` — זו SQL injection (פרק 16, P16-E53). pg שולח את הערכים בנפרד מהשאילתה</td></tr>
+    <tr><td>`const { rows, rowCount } = await client.query(...)`</td><td>התוצאה: `rows` — מערך של אובייקטים, אחד לכל שורה (`[{ id: 1, balance: "1000.00" }]`; ‏numeric מגיע כמחרוזת). `rowCount` — כמה שורות הפקודה החזירה או שינתה: `UPDATE ... WHERE id = $1` עם id שלא קיים ← `0`, בלי שגיאה</td></tr>
+    <tr><td>`Pool`, `PoolClient`</td><td>הטיפוסים ב־TypeScript: `import type { Pool, PoolClient } from "pg"`. ‏`pool.connect()` מחזיר `PoolClient` — חיבור אחד שיש לו `query` וגם `release`. פונקציה שעובדת בתוך transaction של מישהו אחר מקבלת `client: PoolClient`, לא את ה־pool</td></tr>
     <tr><td>`finally { release() }`</td><td>חיבור שלא שוחרר "דולף". אחרי 10 דליפות (ברירת המחדל של ה־pool) — כל בקשה חדשה מחכה לנצח</td></tr>
   </table></div>
   <div class="box warn">
