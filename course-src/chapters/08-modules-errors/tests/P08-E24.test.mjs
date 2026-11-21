@@ -6,7 +6,7 @@ const { bankError, deposit, withdraw, transfer, safeTransfer } = await load(impo
 
 const a = () => ({ id: 1, owner: "דנה", balance: 100 });
 const b = () => ({ id: 2, owner: "עומר", balance: 20 });
-test("bankError", () => { const e = bankError("X", "m"); assert.ok(e instanceof Error); assert.equal(e.code, "X"); assert.equal(e.message, "m"); });
+test("bankError", () => { const e = bankError("X", "m"); assert.ok(e instanceof Error, "bankError צריכה להחזיר new Error(...) עם שדה code — וקיבלנו משהו שאינו Error"); assert.equal(e.code, "X"); assert.equal(e.message, "m"); });
 test("deposit / withdraw", () => {
   const acc = a();
   assert.equal(deposit(acc, 50).balance, 150);

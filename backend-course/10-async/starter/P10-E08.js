@@ -2,7 +2,7 @@
 function legacyGetPrice(code, callback) {
   const prices = { "KB-101": 199, "MS-201": 89 };
   setTimeout(() => {
-    if (code in prices) {
+    if (prices[code] !== undefined) {
       callback(null, prices[code]);
     } else {
       callback(new Error(`אין מחיר ל־${code}`));

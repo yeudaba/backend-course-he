@@ -9,4 +9,8 @@ const failAfter = (ms, m) => new Promise((_, rej) => setTimeout(() => rej(new Er
 test("שורש", async () => { assert.equal(await slowSquareRoot(81), 9); assert.equal(await slowSquareRoot(0, 1), 0); });
 test("שלילי", async () => assert.rejects(slowSquareRoot(-4), { message: "אין שורש למספר שלילי" }));
 test("לא מספר", async () => { await assert.rejects(slowSquareRoot("9"), { message: "לא מספר" }); await assert.rejects(slowSquareRoot(NaN), { message: "לא מספר" }); });
-test("מחכה ms", async () => { const t = Date.now(); await slowSquareRoot(4, 40); assert.ok(Date.now() - t >= 35); });
+test("מחכה ms", async () => {
+  const t = Date.now();
+  await slowSquareRoot(4, 40);
+  assert.ok(Date.now() - t >= 35, `slowSquareRoot(4, 40) הצליחה אחרי ${Date.now() - t}ms — צריך לחכות ms מילישניות (setTimeout) לפני resolve`);
+});

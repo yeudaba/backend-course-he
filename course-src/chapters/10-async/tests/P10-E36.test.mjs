@@ -22,7 +22,10 @@ test("3 טיקים ואז onDone, במרווחים", async () => {
   assert.deepEqual(ev.map((x) => x.e), [1, 2, 3, "done"], "צריך onTick(1), onTick(2), onTick(3), ואז onDone() — פעם אחת");
   assert.ok(ev[0].ms >= 12, `הטיק הראשון הגיע אחרי ${ev[0].ms}ms — גם לפניו מחכים ms`);
   assert.ok(ev[2].ms >= 40, `הטיק השלישי הגיע אחרי ${ev[2].ms}ms — צריך בערך 3 * ms`);
-  assert.ok(ev[3].ms - ev[2].ms < 12, "onDone צריכה לבוא מיד אחרי הטיק האחרון, בלי המתנה נוספת");
+  // יחסי למרווח שנמדד בין הטיקים (ולא סף קבוע), כדי שמחשב איטי לא יכשיל פתרון נכון
+  const tick = ev[2].ms - ev[1].ms;
+  const tail = ev[3].ms - ev[2].ms;
+  assert.ok(tail < Math.max(tick / 2, 8), `onDone הגיעה ${tail}ms אחרי הטיק האחרון (המרווח בין טיקים: ${tick}ms) — היא צריכה לבוא מיד אחרי הטיק האחרון, בלי המתנה נוספת`);
 });
 test("times = 0 — רק onDone, אחרי ms", async () => {
   const { ticker } = await get();

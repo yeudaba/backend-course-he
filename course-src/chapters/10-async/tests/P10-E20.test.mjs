@@ -21,4 +21,4 @@ function call(file) {
 }
 test("תקין", async () => { const f = path.join(dir, "s.json"); fs.writeFileSync(f, '{"lang":"he"}'); const r = await call(f); assert.equal(r.n, 1); assert.deepEqual(r.data, { theme: "light", lang: "he" }); });
 test("קובץ חסר — callback אחד עם שגיאה, בלי קריסה", async () => { const r = await call(path.join(dir, "none.json")); assert.equal(r.crashed, undefined); assert.equal(r.n, 1); assert.equal(r.err.code, "ENOENT"); });
-test("JSON פגום — callback עם שגיאה", async () => { const f = path.join(dir, "bad.json"); fs.writeFileSync(f, "{x"); const r = await call(f); assert.equal(r.crashed, undefined); assert.equal(r.n, 1); assert.ok(r.err instanceof SyntaxError); });
+test("JSON פגום — callback עם שגיאה", async () => { const f = path.join(dir, "bad.json"); fs.writeFileSync(f, "{x"); const r = await call(f); assert.equal(r.crashed, undefined); assert.equal(r.n, 1); assert.ok(r.err instanceof SyntaxError, `על JSON פגום ה־callback צריך לקבל את השגיאה של JSON.parse (SyntaxError) כפרמטר הראשון, וקיבל: ${String(r.err)}`); });

@@ -1,6 +1,6 @@
 // P07-E06: יצירת מוצר
 function createProduct(name, price, stock = 0) {
-  return { name: name.trim(), price, stock, inStock: stock > 0 };
+  return { name: name.trim(), price: price, stock: stock, inStock: stock > 0 };
 }
 
 function describeProduct(product) {
