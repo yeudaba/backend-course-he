@@ -52,7 +52,49 @@ priority — Invalid option: expected one of "low"|"medium"|"high"
     <tr><td>`z.array(z.string()).max(5)`</td><td>מערך</td></tr>
     <tr><td>`.optional()` · `.nullable()` · `.default(x)`</td><td>שדה לא חובה / יכול להיות null / ערך אם חסר</td></tr>
     <tr><td>`schema.partial()`</td><td>אותה סכמה, כל השדות לא חובה — מושלם ל־PATCH</td></tr>
+    <tr><td>`z.strictObject({...})`</td><td>כמו `z.object`, אבל שדה שלא בסכמה ← שגיאה (`unrecognized_keys`) במקום מחיקה</td></tr>
   </table></div>
+
+  <h3>כללים משלך ושינוי צורה: `refine`, ‏`transform`, ‏`pipe`</h3>
+  <p>לפעמים הכלל לא נמצא בטבלה: "מחיר מינימום לא גדול מהמקסימום", "לפחות שדה אחד ב־PATCH". ‏`.refine(fn, { message, path })` מוסיף בדיקה משלך: ‏`fn` מקבלת את הערך (אחרי שאר הבדיקות) ומחזירה `true` אם הוא תקין. ‏`.transform(fn)` <strong>משנה</strong> את הערך, ו־`.pipe(סכמה)` מעביר את התוצאה לסכמה נוספת — "קודם נקה, אחר כך בדוק":</p>
+```ts run
+import { z } from "zod";
+
+const range = z
+  .object({ minPrice: z.number().min(0), maxPrice: z.number().min(0) })
+  .refine((r) => r.minPrice <= r.maxPrice, { message: "minPrice גדול מ־maxPrice", path: ["minPrice"] });
+const bad = range.safeParse({ minPrice: 50, maxPrice: 10 });
+console.log(bad.error?.issues[0].path, bad.error?.issues[0].message);
+
+const tags = z.string().transform((s) => s.split(",").map((t) => t.trim()).filter((t) => t !== ""));
+console.log(tags.parse(" קפה, תה ,,שוקו"));
+
+const sku = z
+  .string()
+  .transform((s) => s.replaceAll(" ", "").toUpperCase())
+  .pipe(z.string().regex(/^[A-Z]{3}-\d{3}$/, "מק״ט לא תקין"));
+console.log(sku.parse(" abc-123 "), sku.safeParse("abc").error?.issues[0].message);
+
+const update = z
+  .strictObject({ title: z.string().trim().min(1), done: z.boolean() })
+  .partial()
+  .refine((u) => Object.keys(u).length > 0, { message: "צריך לפחות שדה אחד" });
+console.log(update.safeParse({}).error?.issues[0].message);
+console.log(update.safeParse({ done: true }).success, update.safeParse({ isAdmin: true }).error?.issues[0].code);
+```
+```out
+[ 'minPrice' ] minPrice גדול מ־maxPrice
+[ 'קפה', 'תה', 'שוקו' ]
+ABC-123 מק״ט לא תקין
+צריך לפחות שדה אחד
+true unrecognized_keys
+```
+  <ul>
+    <li>`refine` רץ רק אם כל שאר הבדיקות עברו — לכן בתוך `fn` הערך כבר בטוח מהטיפוס הנכון. ‏`path` קובע ליד איזה שדה תופיע ההודעה.</li>
+    <li>`transform` משנה גם את הטיפוס: `tags` מקבלת מחרוזת ומחזירה מערך (`z.infer` יודע את זה). אחרי `transform` אי אפשר לשרשר `.regex` — לכן `pipe` לסכמה חדשה.</li>
+    <li>לניקוי פשוט יש קיצורים בלי `transform`: `z.string().trim()`, ‏`.toLowerCase()`, ‏`.toUpperCase()` — הם משנים את הערך ואחר כך אפשר להמשיך לשרשר בדיקות.</li>
+    <li>`strictObject(...).partial()` — סכמה טובה ל־PATCH: כל שדה לא חובה, ושדה לא מוכר נדחה. ה־`refine` שאחריה מוסיף "לפחות שדה אחד".</li>
+  </ul>
 
   <h2>2. query: הכול מגיע כמחרוזת</h2>
   <p>ב־`?page=2`, הערך הוא `"2"`. `z.number()` יכשיל אותו. `z.coerce.number()` ממיר קודם:</p>

@@ -20,7 +20,7 @@
 
 | פרקים ופרויקטים | שיעורים | תרגילים | בדיקות אוטומטיות | דוגמאות שרצות באימות |
 |:-:|:-:|:-:|:-:|:-:|
-| **42** | **197** | **3447** | **1945** | **1695** |
+| **42** | **197** | **3450** | **1948** | **1712** |
 
 ## מה שונה כאן
 
@@ -162,9 +162,9 @@
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
 | [פרק 11](backend-course/11-typescript/index.html) | TypeScript בסיסי | 4 | 85 | 47 | ✔ |
-| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 80 | 44 | ✔ |
+| [פרק 12](backend-course/12-design/index.html) | מודלים ותכנון קוד | 4 | 81 | 45 | ✔ |
 | [פרק 13](backend-course/13-node-npm/index.html) | Node.js ו־npm | 4 | 81 | 45 | ✔ |
-| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 84 | 48 | ✔ |
+| [פרק 14](backend-course/14-http/index.html) | HTTP ורשת בסיסית | 4 | 85 | 49 | ✔ |
 
 <details>
 <summary><b>כל השיעורים בחטיבה</b></summary>
@@ -203,7 +203,7 @@
 
 | פרק | נושא | שיעורים | תרגילים | בדיקות | מצב |
 |---|---|:-:|:-:|:-:|:-:|
-| [פרק 15](backend-course/15-express/index.html) | Express ו־REST | 4 | 81 | 45 | ✔ |
+| [פרק 15](backend-course/15-express/index.html) | Express ו־REST | 4 | 82 | 46 | ✔ |
 | [פרויקט 2](backend-course/15p-project-tasks/index.html) | API לניהול משימות — שלב א׳: בזיכרון | 6 | — | 5 | ✔ |
 | [יחידה 15.5](backend-course/15w-web-bridge/index.html) | גישור: HTML, CSS ו־fetch | 4 | 83 | 47 | ✔ |
 | [פרק 16](backend-course/16-sql/index.html) | SQL מהיסוד | 4 | 81 | 45 | ✔ |

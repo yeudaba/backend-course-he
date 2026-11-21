@@ -102,7 +102,40 @@ export function logger(req: Request, res: Response, next: NextFunction) {
   });
   next();
 }</code></pre>
-  <p>הטריק: כשה־middleware רץ, התשובה עוד לא קיימת. לכן נרשמים לאירוע <code>finish</code> של <code>res</code> (פרק 10 — אירועים) ומדפיסים כשהתשובה נשלחה. כך נראים יומנים בכל שרת אמיתי: <code>GET /tasks?page=2 200 4ms</code>.</p>
+  <p>הטריק: כשה־middleware רץ, התשובה עוד לא קיימת. לכן נרשמים לאירוע <code>finish</code> של <code>res</code> ומדפיסים כשהתשובה נשלחה. כך נראים יומנים בכל שרת אמיתי: <code>GET /tasks?page=2 200 4ms</code>.</p>
+  <div class="box tip">
+    <span class="box-title">💡 אירועים, <code>performance.now</code> ו־<code>clearTimeout</code></span>
+    <p>הרבה אובייקטים ב־Node "פולטים אירועים": ‏<code>res</code> פולט <code>finish</code> כשהתשובה נשלחה ו־<code>close</code> כשהחיבור נסגר, ו־<code>process</code> פולט <code>SIGINT</code> (פרק 13, שיעור 2). ‏<code>obj.on("שם", fn)</code> רושם callback שיופעל <strong>בכל פעם</strong> שהאירוע קורה, ו־<code>obj.once</code> — רק בפעם הראשונה. מבפנים, אובייקט כזה הוא <code>EventEmitter</code>:</p>
+<pre><code class="lang-ts">import { EventEmitter } from "node:events";
+
+const order = new EventEmitter();
+order.on("paid", (amount: number) =&gt; console.log("שולם:", amount));
+order.once("paid", () =&gt; console.log("תשלום ראשון!"));
+order.emit("paid", 120);
+order.emit("paid", 80);
+
+const start = performance.now();
+const timer = setTimeout(() =&gt; console.log("לא יודפס"), 1000);
+clearTimeout(timer);
+console.log(performance.now() - start &lt; 1000);</code></pre>
+<pre class="terminal">שולם: 120
+תשלום ראשון!
+שולם: 80
+true</pre>
+    <p><code>performance.now()</code> — מספר המילישניות מאז שהתהליך עלה, עם שבר. מתאים למדידת משך (<code>end - start</code>), לא לתאריך. ‏<code>setTimeout</code> מחזיר "טיימר", ו־<code>clearTimeout(timer)</code> מבטל אותו לפני שהוא רץ — למשל timeout לבקשה שכבר הסתיימה בזמן.</p>
+  </div>
+
+  <h3><code>res.locals</code>: להעביר נתונים מ־middleware ל־route</h3>
+  <p>middleware שבודק משהו (מפתח API, משתמש מחובר, מזהה בקשה) צריך למסור את התוצאה ל־handler. בשביל זה יש <code>res.locals</code> — אובייקט ריק שנוצר לכל בקשה מחדש, וחי עד שהתשובה נשלחה:</p>
+<pre><code class="lang-ts">app.use((req, res, next) =&gt; {
+  res.locals.requestId = req.get("x-request-id") ?? crypto.randomUUID();
+  next();
+});
+
+app.get("/whoami", (req, res) =&gt; {
+  res.json({ requestId: res.locals.requestId });
+});</code></pre>
+  <p>(<code>crypto.randomUUID()</code> — אותה פונקציה מ־<code>node:crypto</code> בפרק 13, שיעור 4, זמינה גם בלי import.) למה לא <code>req.requestId = …</code>? ל־<code>req</code> יש טיפוס קבוע, ו־TypeScript לא יודע על השדה החדש. ‏<code>res.locals</code> מוגדר כ"כל שדה מותר", ולא דורס שום דבר של Express. בשיעור 4 נשמור בו גם את ה־query אחרי בדיקה.</p>
 
   <h2>3. שגיאות: מקום אחד לכולן</h2>
   <p>middleware עם <strong>ארבעה</strong> פרמטרים הוא error handler. Express מזהה אותו לפי מספר הפרמטרים — גם אם לא משתמשים ב־<code>next</code>, חובה לכתוב אותו.</p>
@@ -139,7 +172,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 <span class="file-label">src/app.ts</span>
 <pre><code class="lang-ts">app.use(express.json());
 app.use(logger);
-app.use("/tasks", tasksRouter);   // כל ה־routes
+app.use("/tasks", tasksRouter);   // כל ה־routes של /tasks (Router — שיעור 3)
 app.use(notFound);                // אחרי כל ה־routes
 app.use(errorHandler);            // אחרון</code></pre>
   <p>מעכשיו, בתוך route, כדי להחזיר שגיאה פשוט זורקים: <code class="long">throw new HttpError(404, "TASK_NOT_FOUND", "המשימה לא נמצאה")</code>. אין צורך ב־try/catch בכל route.</p>
@@ -154,7 +187,7 @@ app.use(errorHandler);            // אחרון</code></pre>
 
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>20 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>21 שאלות</strong>: חלק 1 — 15 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-2.html">← לתרגול של שיעור 2</a></p>
   </div>
 

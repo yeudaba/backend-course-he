@@ -56,5 +56,14 @@ test("createTask: POST עם JSON ו־Content-Type", async () => {
 test("createTask: תשובה שאינה ok ← שגיאה עם ההודעה מהשרת", async () => {
   const { createTask } = await mod();
   await assert.rejects(createTask("http://x", "", fakeFetch(400, { error: { code: "VALIDATION_ERROR", message: "title חובה" } }).fn), { message: "title חובה" });
-  await assert.rejects(createTask("http://x", "a", fakeFetch(500, {}).fn), /500/, "בלי error.message — לפחות HTTP 500");
+  // תשובת 500 עם גוף {} — אין error.message. ההודעה מציגה מה נזרק, בלי stack ארוך
+  await assert.rejects(
+    createTask("http://x", "a", fakeFetch(500, {}).fn),
+    (err) => {
+      const got = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      assert.ok(err instanceof Error && /HTTP 500/.test(err.message), `תשובה 500 עם גוף {} (בלי error.message) ← צריך לזרוק Error עם "HTTP 500". נזרק: ${got}`);
+      return true;
+    },
+    "תשובה 500 עם גוף {} ← createTask צריכה לזרוק",
+  );
 });

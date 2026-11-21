@@ -61,7 +61,45 @@ priority — Invalid option: expected one of "low"|"medium"|"high"</pre>
     <tr><td><code>z.array(z.string()).max(5)</code></td><td>מערך</td></tr>
     <tr><td><code>.optional()</code> · <code>.nullable()</code> · <code>.default(x)</code></td><td>שדה לא חובה / יכול להיות null / ערך אם חסר</td></tr>
     <tr><td><code>schema.partial()</code></td><td>אותה סכמה, כל השדות לא חובה — מושלם ל־PATCH</td></tr>
+    <tr><td><code>z.strictObject({...})</code></td><td>כמו <code>z.object</code>, אבל שדה שלא בסכמה ← שגיאה (<code>unrecognized_keys</code>) במקום מחיקה</td></tr>
   </table></div>
+
+  <h3>כללים משלך ושינוי צורה: <code>refine</code>, ‏<code>transform</code>, ‏<code>pipe</code></h3>
+  <p>לפעמים הכלל לא נמצא בטבלה: "מחיר מינימום לא גדול מהמקסימום", "לפחות שדה אחד ב־PATCH". ‏<code class="mid">.refine(fn, { message, path })</code> מוסיף בדיקה משלך: ‏<code>fn</code> מקבלת את הערך (אחרי שאר הבדיקות) ומחזירה <code>true</code> אם הוא תקין. ‏<code>.transform(fn)</code> <strong>משנה</strong> את הערך, ו־<code>.pipe(סכמה)</code> מעביר את התוצאה לסכמה נוספת — "קודם נקה, אחר כך בדוק":</p>
+<pre><code class="lang-ts">import { z } from "zod";
+
+const range = z
+  .object({ minPrice: z.number().min(0), maxPrice: z.number().min(0) })
+  .refine((r) =&gt; r.minPrice &lt;= r.maxPrice, { message: "minPrice גדול מ־maxPrice", path: ["minPrice"] });
+const bad = range.safeParse({ minPrice: 50, maxPrice: 10 });
+console.log(bad.error?.issues[0].path, bad.error?.issues[0].message);
+
+const tags = z.string().transform((s) =&gt; s.split(",").map((t) =&gt; t.trim()).filter((t) =&gt; t !== ""));
+console.log(tags.parse(" קפה, תה ,,שוקו"));
+
+const sku = z
+  .string()
+  .transform((s) =&gt; s.replaceAll(" ", "").toUpperCase())
+  .pipe(z.string().regex(/^[A-Z]{3}-\d{3}$/, "מק״ט לא תקין"));
+console.log(sku.parse(" abc-123 "), sku.safeParse("abc").error?.issues[0].message);
+
+const update = z
+  .strictObject({ title: z.string().trim().min(1), done: z.boolean() })
+  .partial()
+  .refine((u) =&gt; Object.keys(u).length &gt; 0, { message: "צריך לפחות שדה אחד" });
+console.log(update.safeParse({}).error?.issues[0].message);
+console.log(update.safeParse({ done: true }).success, update.safeParse({ isAdmin: true }).error?.issues[0].code);</code></pre>
+<pre class="terminal">[ 'minPrice' ] minPrice גדול מ־maxPrice
+[ 'קפה', 'תה', 'שוקו' ]
+ABC-123 מק״ט לא תקין
+צריך לפחות שדה אחד
+true unrecognized_keys</pre>
+  <ul>
+    <li><code>refine</code> רץ רק אם כל שאר הבדיקות עברו — לכן בתוך <code>fn</code> הערך כבר בטוח מהטיפוס הנכון. ‏<code>path</code> קובע ליד איזה שדה תופיע ההודעה.</li>
+    <li><code>transform</code> משנה גם את הטיפוס: <code>tags</code> מקבלת מחרוזת ומחזירה מערך (<code>z.infer</code> יודע את זה). אחרי <code>transform</code> אי אפשר לשרשר <code>.regex</code> — לכן <code>pipe</code> לסכמה חדשה.</li>
+    <li>לניקוי פשוט יש קיצורים בלי <code>transform</code>: <code>z.string().trim()</code>, ‏<code>.toLowerCase()</code>, ‏<code>.toUpperCase()</code> — הם משנים את הערך ואחר כך אפשר להמשיך לשרשר בדיקות.</li>
+    <li><code class="mid">strictObject(...).partial()</code> — סכמה טובה ל־PATCH: כל שדה לא חובה, ושדה לא מוכר נדחה. ה־<code>refine</code> שאחריה מוסיף "לפחות שדה אחד".</li>
+  </ul>
 
   <h2>2. query: הכול מגיע כמחרוזת</h2>
   <p>ב־<code>?page=2</code>, הערך הוא <code>"2"</code>. <code>z.number()</code> יכשיל אותו. <code>z.coerce.number()</code> ממיר קודם:</p>
@@ -122,7 +160,7 @@ export function validateBody(schema: ZodType) {
 
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>20 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>22 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 8 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-4.html">← לתרגול של שיעור 4</a></p>
   </div>
 

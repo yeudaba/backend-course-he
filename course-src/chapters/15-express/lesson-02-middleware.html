@@ -94,7 +94,46 @@ export function logger(req: Request, res: Response, next: NextFunction) {
   next();
 }
 ```
-  <p>הטריק: כשה־middleware רץ, התשובה עוד לא קיימת. לכן נרשמים לאירוע `finish` של `res` (פרק 10 — אירועים) ומדפיסים כשהתשובה נשלחה. כך נראים יומנים בכל שרת אמיתי: `GET /tasks?page=2 200 4ms`.</p>
+  <p>הטריק: כשה־middleware רץ, התשובה עוד לא קיימת. לכן נרשמים לאירוע `finish` של `res` ומדפיסים כשהתשובה נשלחה. כך נראים יומנים בכל שרת אמיתי: `GET /tasks?page=2 200 4ms`.</p>
+  <div class="box tip">
+    <span class="box-title">💡 אירועים, `performance.now` ו־`clearTimeout`</span>
+    <p>הרבה אובייקטים ב־Node "פולטים אירועים": ‏`res` פולט `finish` כשהתשובה נשלחה ו־`close` כשהחיבור נסגר, ו־`process` פולט `SIGINT` (פרק 13, שיעור 2). ‏`obj.on("שם", fn)` רושם callback שיופעל <strong>בכל פעם</strong> שהאירוע קורה, ו־`obj.once` — רק בפעם הראשונה. מבפנים, אובייקט כזה הוא `EventEmitter`:</p>
+```ts run
+import { EventEmitter } from "node:events";
+
+const order = new EventEmitter();
+order.on("paid", (amount: number) => console.log("שולם:", amount));
+order.once("paid", () => console.log("תשלום ראשון!"));
+order.emit("paid", 120);
+order.emit("paid", 80);
+
+const start = performance.now();
+const timer = setTimeout(() => console.log("לא יודפס"), 1000);
+clearTimeout(timer);
+console.log(performance.now() - start < 1000);
+```
+```out
+שולם: 120
+תשלום ראשון!
+שולם: 80
+true
+```
+    <p>`performance.now()` — מספר המילישניות מאז שהתהליך עלה, עם שבר. מתאים למדידת משך (`end - start`), לא לתאריך. ‏`setTimeout` מחזיר "טיימר", ו־`clearTimeout(timer)` מבטל אותו לפני שהוא רץ — למשל timeout לבקשה שכבר הסתיימה בזמן.</p>
+  </div>
+
+  <h3>`res.locals`: להעביר נתונים מ־middleware ל־route</h3>
+  <p>middleware שבודק משהו (מפתח API, משתמש מחובר, מזהה בקשה) צריך למסור את התוצאה ל־handler. בשביל זה יש `res.locals` — אובייקט ריק שנוצר לכל בקשה מחדש, וחי עד שהתשובה נשלחה:</p>
+```ts
+app.use((req, res, next) => {
+  res.locals.requestId = req.get("x-request-id") ?? crypto.randomUUID();
+  next();
+});
+
+app.get("/whoami", (req, res) => {
+  res.json({ requestId: res.locals.requestId });
+});
+```
+  <p>(`crypto.randomUUID()` — אותה פונקציה מ־`node:crypto` בפרק 13, שיעור 4, זמינה גם בלי import.) למה לא `req.requestId = …`? ל־`req` יש טיפוס קבוע, ו־TypeScript לא יודע על השדה החדש. ‏`res.locals` מוגדר כ"כל שדה מותר", ולא דורס שום דבר של Express. בשיעור 4 נשמור בו גם את ה־query אחרי בדיקה.</p>
 
   <h2>3. שגיאות: מקום אחד לכולן</h2>
   <p>middleware עם <strong>ארבעה</strong> פרמטרים הוא error handler. Express מזהה אותו לפי מספר הפרמטרים — גם אם לא משתמשים ב־`next`, חובה לכתוב אותו.</p>
@@ -132,7 +171,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 ```ts file=src/app.ts
 app.use(express.json());
 app.use(logger);
-app.use("/tasks", tasksRouter);   // כל ה־routes
+app.use("/tasks", tasksRouter);   // כל ה־routes של /tasks (Router — שיעור 3)
 app.use(notFound);                // אחרי כל ה־routes
 app.use(errorHandler);            // אחרון
 ```

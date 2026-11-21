@@ -1,6 +1,8 @@
 // שלב 1. הסכמות והטיפוסים של משימה (הפירוט בדף "שלב 1")
 import { z } from "zod";
 
+// as const — "הרשימה הזו לא תשתנה": הטיפוס הוא בדיוק "todo" | "in_progress" | "done" ולא סתם string[].
+// כך z.enum(STATUSES) יודע את הערכים, ו־(typeof STATUSES)[number] למטה הוא ה־union שלהם ("איבר כלשהו ברשימה").
 export const STATUSES = ["todo", "in_progress", "done"] as const;
 export const PRIORITIES = ["low", "medium", "high"] as const;
 export const SORTS = ["createdAt", "-createdAt", "dueDate", "-dueDate", "priority", "-priority"] as const;

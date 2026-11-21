@@ -208,6 +208,7 @@ export class FakeElement {
     this.disabled = false;
     this.hidden = false;
     this.innerHTMLUsed = false;
+    this.style = {}; // el.style.width = "auto" וכדומה — נשמר, לא מצויר
     this.classList = new FakeClassList(this);
     this.dataset = new Proxy({}, {
       get: (t, k) => this.attrs[`data-${String(k).replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}`],

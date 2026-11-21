@@ -245,7 +245,7 @@ console.log(JSON.stringify(parseRequest(raw)));</code></pre>
 <div class="ex" id="P14-E14">
     <h3>P14-E14 · לבנות תשובה גולמית 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
-<p><code>Buffer.byteLength("שלום")</code> הוא 8, לא 4 — כל אות עברית היא 2 בתים ב־UTF-8.</p>
+<p><code>Content-Length</code> בבתים, לא בתווים — סעיף 1 בשיעור. בדוק את עצמך על גוף עם עברית: <code>"שלום"</code> הוא 4 תווים, וכמה בתים?</p>
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
@@ -287,48 +287,6 @@ Content-Length: 24
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li><code>payload.length</code> — סופר תווים, לא בתים. עם עברית הלקוח יחתוך את הגוף באמצע.</li></ul>
-
-
-</div></details>
-  </div>
-<div class="ex" id="P14-E20">
-    <h3>P14-E20 · שרת עם שלושה באגים 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p><code>res.writeHead</code> לא שולח את התשובה — רק <code>res.end</code>.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>בדוק כל ענף: מה ה־status, האם יש Content-Type, והאם יש <code>end</code>.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-js">// P14-E20: מתוקן
-import http from "node:http";
-
-const JSON_TYPE = { "Content-Type": "application/json; charset=utf-8" };
-
-export function createServer() {
-  return http.createServer((req, res) =&gt; {
-    if (req.url === "/health") {
-      res.writeHead(200, JSON_TYPE);
-      res.end(JSON.stringify({ ok: true }));
-    } else if (req.url === "/users") {
-      res.writeHead(200, JSON_TYPE);
-      res.end(JSON.stringify([{ id: 1, name: "דנה" }]));
-    } else if (req.url === "/old-users") {
-      res.writeHead(301, { Location: "/users" });
-      res.end();
-    } else {
-      res.writeHead(404, JSON_TYPE);
-      res.end(JSON.stringify({ error: "לא נמצא" }));
-    }
-  });
-}</code></pre>
-<p>באג 2 הוא הכי מסוכן: בקשות תקועות לא נראות בשום יומן שגיאות — רק החיבורים מצטברים עד שהשרת נחנק.</p>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>לתקן את 3 על ידי בדיקה בצד הלקוח (<code>if (data.error)</code>) — ה־status הוא החוזה, ושאר הכלים (ניטור, cache, retry) מסתכלים רק עליו.</li></ul>
 
 
 </div></details>
@@ -535,6 +493,39 @@ application/json</pre>
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
 <ul><li>לקחת את ה־q הגבוה מבין <strong>כל</strong> הרשומות שמתאימות — אז <code>*/*</code> (q=1) "מבטל" את <code>application/json;q=0</code>.</li><li><code>q &gt;= bestQ</code> — בשוויון מנצח האחרון, לא המועדף.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P14-E85">
+    <h3>P14-E85 · תשובת JSON גולמית עם שלוש תקלות 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l4">רמה 4</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>הקובץ מדפיס את התשובה עם <code>JSON.stringify</code>, כך שרואים כל <code>\r</code> ו־<code>\n</code>. השווה תו־תו לדוגמה שבמשימה: איפה כל שורה נגמרת, איפה השורה הריקה, ומה המספר ב־<code>Content-Length</code>?</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>שתי תקלות הן בשורה של ה־<code>return</code>: המפריד בין השורות, ומה שבין ה־headers לגוף. השלישית — <code>length</code> של מחרוזת עם עברית.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-js">// P14-E85: תשובת JSON גולמית — מתוקן
+export const STATUS_TEXT = { 200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request", 404: "Not Found" };
+
+export function jsonResponse(status, data) {
+  const first = `HTTP/1.1 ${status} ${STATUS_TEXT[status]}`;
+  if (status === 204) return `${first}\r\n\r\n`;
+  const body = JSON.stringify(data);
+  const lines = [first, "Content-Type: application/json; charset=utf-8", `Content-Length: ${Buffer.byteLength(body)}`];
+  return lines.join("\r\n") + "\r\n\r\n" + body;
+}
+
+console.log(JSON.stringify(jsonResponse(201, { id: 3, name: "מסך" })));</code></pre>
+<pre class="terminal">"HTTP/1.1 201 Created\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 24\r\n\r\n{\"id\":3,\"name\":\"מסך\"}"</pre>
+<ol><li><strong><code>join("\n")</code> ← <code>join("\r\n")</code>.</strong> ב־HTTP/1.1 כל שורה בכותרות מסתיימת ב־CR LF. חלק מהלקוחות סלחניים, אבל אחרים לא מזהים את סוף השורה.</li><li><strong>חסרה השורה הריקה.</strong> ‏<code>"\r\n"</code> אחד רק מסיים את השורה האחרונה של ה־headers. השורה הריקה היא <code>"\r\n"</code> נוסף, ובלעדיה הלקוח חושב שהגוף הוא עוד header.</li><li><strong><code>body.length</code> ← <code>Buffer.byteLength(body)</code>.</strong> ‏<code>length</code> סופר תווים, ו־<code>"מסך"</code> הוא 3 תווים אבל 6 בתים. עם אורך קצר מדי, הלקוח קורא רק חלק מהגוף.</li></ol>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לתקן את <code>Content-Length</code> על ידי ספירה ידנית של אותיות עבריות פעמיים — נשבר באימוג'י (4 בתים) ובתווים אחרים. ‏<code>Buffer.byteLength</code> סופר נכון כל תו.</li><li>להוסיף <code>Content-Length: 0</code> ל־204 — המשימה מבקשת בלי headers, ותשובה בלי גוף לא צריכה אותו.</li></ul>
 
 
 </div></details>

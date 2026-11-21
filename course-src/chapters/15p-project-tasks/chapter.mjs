@@ -13,8 +13,8 @@ ${copyStep("15p-project-tasks")}
 ${verifyNode}
 <p><strong>✔ הבודק:</strong> הפרויקט יגור בתיקייה משלו (<code>~/dev/tasks-api</code>), עם Git משלו. כדי לבדוק אותו, מתיקיית הקורס:</p>
 <pre class="terminal"><span class="prompt">% </span>cd ~/dev/backend-course
-<span class="prompt">% </span>npm run check PR2 -- --dir ~/dev/tasks-api</pre>
-<p>(ה־<code>--</code> אומר ל־npm "מה שאחריי — לבודק, לא לך".)</p>`,
+<span class="prompt">% </span>npm run check PR2 -- --dir ~/dev/tasks-api --upto 15p</pre>
+<p>(ה־<code>--</code> אומר ל־npm "מה שאחריי — לבודק, לא לך". ‏<code>--upto 15p</code> — רק הבודקים של פרויקט 2 עד היחידה הזו. פרויקט 2 ממשיך לגדול עד פרק 25, ובלי <code>--upto</code> היו רצים גם הבודקים של השלבים הבאים — מסד, NestJS, Docker — ונכשלים, כי עוד לא הגעת אליהם.)</p>`,
   goals: [
     "לבנות API שלם מאפס, בפרויקט נפרד עם Git ו־GitHub מהיום הראשון.",
     "לחלק לשכבות: schema ← routes ← service ← repository.",
