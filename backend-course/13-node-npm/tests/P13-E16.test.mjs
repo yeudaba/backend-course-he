@@ -9,8 +9,15 @@ import { load } from "../../tools/load.mjs";
 const { configFor } = await load(import.meta.url, "P13-E16.mjs");
 const tmpdir = () => fs.mkdtempSync(path.join(os.tmpdir(), "p13-"));
 
-test("development ברירת מחדל", () => assert.deepEqual(configFor({}), { env: "development", databaseUrl: "postgres://localhost:5432/app_dev", logLevel: "debug", cors: "*" }));
-test("test עם דריסה", () => assert.deepEqual(configFor({ NODE_ENV: "test", LOG_LEVEL: "warn" }), { env: "test", databaseUrl: "postgres://localhost:5432/app_test", logLevel: "warn", cors: "*" }));
+test("development ברירת מחדל", () => assert.deepEqual(configFor({}), { env: "development", databaseUrl: "postgres://localhost:5432/app_dev", logLevel: "debug", cors: "*" }, "configFor({})"));
+test("test עם דריסה", () => {
+  assert.deepEqual(configFor({ NODE_ENV: "test" }), { env: "test", databaseUrl: "postgres://localhost:5432/app_test", logLevel: "error", cors: "*" }, 'configFor({ NODE_ENV: "test" })');
+  assert.deepEqual(configFor({ NODE_ENV: "test", LOG_LEVEL: "warn" }), { env: "test", databaseUrl: "postgres://localhost:5432/app_test", logLevel: "warn", cors: "*" }, 'configFor({ NODE_ENV: "test", LOG_LEVEL: "warn" }) — LOG_LEVEL דורס את logLevel גם ב־test');
+});
+test("דריסה ב־development", () => {
+  const env = { DATABASE_URL: "postgres://db:5432/x", LOG_LEVEL: "info", CORS_ORIGIN: "http://localhost:5500" };
+  assert.deepEqual(configFor(env), { env: "development", databaseUrl: "postgres://db:5432/x", logLevel: "info", cors: "http://localhost:5500" }, `configFor(${JSON.stringify(env)}) — כל משתנה מפורש דורס את ברירת המחדל`);
+});
 test("production", () => {
   assert.throws(() => configFor({ NODE_ENV: "production" }), { message: "DATABASE_URL חובה ב־production" });
   assert.throws(() => configFor({ NODE_ENV: "production", DATABASE_URL: "x" }), { message: "CORS_ORIGIN חובה ב־production" });
