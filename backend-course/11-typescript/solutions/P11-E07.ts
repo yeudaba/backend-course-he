@@ -8,8 +8,8 @@ export function cleanTags(input: string, max = 5): string[] {
     .slice(0, max);
 }
 
-export function chunk<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
+export function chunk(arr: number[], size: number): number[][] {
+  const result: number[][] = [];
   for (let i = 0; i < arr.length; i += size) {
     result.push(arr.slice(i, i + size));
   }
