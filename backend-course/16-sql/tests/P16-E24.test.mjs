@@ -2,8 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sandbox } from "../../tools/sql.mjs";
 
-const ok = (db, sql) => db.query(sql);
-const bad = (db, sql, msg) => assert.rejects(db.query(sql), undefined, msg);
+// שורה תקינה — המסד חייב לקבל אותה
+async function ok(db, sql) {
+  try {
+    await db.query(sql);
+  } catch (err) {
+    assert.fail(`המסד סירב לשורה תקינה: ${err.message}\nהפקודה: ${sql}`);
+  }
+}
+// שורה שעוברת על חוק — המסד חייב לסרב לה (אילוץ CHECK / UNIQUE / NOT NULL)
+async function bad(db, sql, what) {
+  let accepted = false;
+  try {
+    await db.query(sql);
+    accepted = true;
+  } catch {
+    // סירב — כמו שצריך
+  }
+  if (accepted) assert.fail(`המסד קיבל ${what} — ציפינו שיסרב. חסר אילוץ (CHECK, ‏UNIQUE או NOT NULL) שאוכף את החוק הזה.\nהפקודה: ${sql}`);
+}
 const insert = (cols, vals) => `INSERT INTO coupons (${cols}) VALUES (${vals})`;
 
 test("קופונים", async (t) => {
@@ -16,10 +33,10 @@ test("קופונים", async (t) => {
   assert.deepEqual(row, { id: 3, uses: 0, max_uses: null });
 
   await bad(db, insert(C, "'WELCOME10', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "code כפול");
-  await bad(db, insert(C, "'welcome', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "אותיות קטנות");
-  await bad(db, insert(C, "'ABC', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "3 תווים");
-  await bad(db, insert(C, "'ABCDEFGHIJKLMNOPQRSTU', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "21 תווים");
-  await bad(db, insert(C, "'SAVE-10', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "מקף");
+  await bad(db, insert(C, "'welcome', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "code באותיות קטנות");
+  await bad(db, insert(C, "'ABC', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "code של 3 תווים");
+  await bad(db, insert(C, "'ABCDEFGHIJKLMNOPQRSTU', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "code של 21 תווים");
+  await bad(db, insert(C, "'SAVE-10', 5, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "code עם מקף");
   await bad(db, insert(C, "'BOTH10', 10, 10, '2026-01-01', '2026-12-31', NULL, 0"), "גם אחוז וגם סכום");
   await bad(db, insert(C, "'NONE10', NULL, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "בלי הנחה בכלל");
   await bad(db, insert(C, "'PCT91', 91, NULL, '2026-01-01', '2026-12-31', NULL, 0"), "91%");

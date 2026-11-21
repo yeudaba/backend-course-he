@@ -4,6 +4,7 @@
       <li>NULL: "לא ידוע" — ואיך הוא שובר השוואות.</li>
       <li>`IS NULL`, `COALESCE`.</li>
       <li>צבירות: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`.</li>
+      <li>`CASE` (גם בתוך ORDER BY), ספירה עם תנאי — `COUNT(*) FILTER (WHERE ...)`, ועוד כמה כלים קטנים.</li>
     </ul>
   </div>
 
@@ -97,6 +98,97 @@ FROM customers;
     <span class="box-title">💡 numeric לכסף</span>
     <p>שים לב ש־`price` הוא `numeric(10, 2)` — מספר עשרוני מדויק. ב־JavaScript, `0.1 + 0.2` הוא `0.30000000000000004` (פרק 2); ב־numeric זה תמיד `0.3`. לכן כסף במסד — numeric, לעולם לא `real`/`float`.</p>
   </div>
+
+  <h2 id="case">3. CASE, ‏FILTER ועוד כמה כלים</h2>
+  <p>`CASE` הוא ה־`if / else if` (או ה־`switch` מפרק 3) של SQL — ביטוי שמחזיר ערך. יש לו שתי צורות: עם תנאים (`CASE WHEN ... THEN ...`), וקצרה — השוואה של ערך אחד לכמה אפשרויות (`CASE category WHEN 'beans' THEN ...`). הראשון שמתאים מנצח, ובלי `ELSE` מה שלא התאים מקבל NULL:</p>
+```sql run db=16-sql/files/shop.sql
+SELECT name, price,
+       CASE
+         WHEN price < 50  THEN 'cheap'
+         WHEN price < 150 THEN 'regular'
+         ELSE 'premium'
+       END AS tier,
+       CASE category WHEN 'beans' THEN 'coffee' WHEN 'brewing' THEN 'coffee' ELSE 'gear' END AS kind
+FROM products
+WHERE is_active AND stock > 0
+ORDER BY price
+LIMIT 5;
+```
+```out
+          name          | price |  tier   |  kind
+------------------------+-------+---------+--------
+ Grinder Cleaning Brush | 19.90 | cheap   | gear
+ Paper Filters (100)    | 24.90 | cheap   | gear
+ Brazil Beans 250g      | 29.90 | cheap   | coffee
+ Ceramic Mug            | 39.00 | cheap   | gear
+ Ethiopia Beans 1kg     | 89.90 | regular | coffee
+(5 rows)
+```
+  <p><strong>CASE בתוך ORDER BY</strong> — מיון בסדר שאתה קובע (לא אלפביתי): כל ערך מקבל מספר, וממיינים לפי המספר.</p>
+```sql run db=16-sql/files/shop.sql
+SELECT name, category
+FROM products
+WHERE is_active AND stock = 0
+ORDER BY CASE category WHEN 'brewing' THEN 1 WHEN 'beans' THEN 2 ELSE 3 END, name;
+```
+```out
+        name        | category
+--------------------+----------
+ V60 Ceramic        | brewing
+ Colombia Beans 1kg | beans
+(2 rows)
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ כינוי מ־SELECT — רק לבד ב־ORDER BY</span>
+    <p>`ORDER BY region` עובד (כינוי מ־SELECT, סעיף 5 בשיעור 2). אבל כינוי <strong>בתוך ביטוי</strong> ב־ORDER BY — לא:</p>
+```sql run db=16-sql/files/shop.sql stderr
+SELECT full_name, CASE WHEN city IN ('Tel Aviv', 'Ramat Gan') THEN 'center' ELSE 'other' END AS region
+FROM customers
+ORDER BY CASE region WHEN 'center' THEN 1 ELSE 2 END;
+```
+```out
+ERROR:  column "region" does not exist
+LINE 3: ORDER BY CASE region WHEN 'center' THEN 1 ELSE 2 END;
+                      ^
+```
+    <p>הפתרון: לכתוב ב־CASE של ה־ORDER BY את העמודה המקורית (`CASE WHEN city IN (...) THEN 1 ELSE 2 END`), או לבחור ב־SELECT מספר ולמיין לפיו.</p>
+  </div>
+  <p><strong>ספירה עם תנאי — `FILTER`.</strong> WHERE מסנן את כל השאילתה. ומה אם רוצים בשורה אחת גם "כמה מוצרים יש" וגם "כמה מהם אזלו"? `FILTER (WHERE ...)` אחרי פונקציית צבירה מסנן <strong>רק לה</strong>:</p>
+```sql run db=16-sql/files/shop.sql
+SELECT COUNT(*) AS products,
+       COUNT(*) FILTER (WHERE stock = 0)     AS out_of_stock,
+       COUNT(*) FILTER (WHERE NOT is_active) AS inactive,
+       SUM(stock) FILTER (WHERE is_active)   AS active_units
+FROM products;
+```
+```out
+ products | out_of_stock | inactive | active_units
+----------+--------------+----------+--------------
+       14 |            3 |        2 |          660
+(1 row)
+```
+  <p>ועוד כמה כלים קטנים שתפגוש בתרגול:</p>
+  <div class="table-wrap"><table>
+    <tr><th>כלי</th><th>מה עושה</th></tr>
+    <tr><td>`ORDER BY city NULLS FIRST`</td><td>איפה NULL במיון. ברירת המחדל ב־PostgreSQL: NULL "גדול מכולם" — בסוף בסדר עולה, ובהתחלה ב־`DESC`. `NULLS FIRST` / `NULLS LAST` קובעים במפורש</td></tr>
+    <tr><td>`GREATEST(a, b, ...)` · `LEAST(...)`</td><td>הגדול / הקטן מבין כמה ערכים <strong>באותה שורה</strong> (כמו `Math.max`). `GREATEST(20 - stock, 0)` — "כמה חסר עד 20, ולא פחות מ־0". (MAX הוא צבירה על הרבה שורות — משהו אחר)</td></tr>
+    <tr><td>`ORDER BY 3 DESC, 1`</td><td>מיון לפי <strong>מספר העמודה</strong> ב־SELECT (3 = השלישית). קצר, אבל נשבר בשקט כשמוסיפים עמודה — בקוד אמיתי עדיף שם</td></tr>
+  </table></div>
+```sql run db=16-sql/files/shop.sql
+SELECT name, stock, GREATEST(20 - stock, 0) AS to_order
+FROM products
+WHERE category = 'brewing'
+ORDER BY 3 DESC, 1;
+```
+```out
+       name       | stock | to_order
+------------------+-------+----------
+ V60 Ceramic      |     0 |       20
+ Gooseneck Kettle |     7 |       13
+ Moka Pot 6 Cups  |    12 |        8
+ French Press 1L  |    25 |        0
+(4 rows)
+```
 
   <div class="box practice">
     <span class="box-title">✍️ עכשיו בדף התרגילים</span>

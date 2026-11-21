@@ -3,7 +3,8 @@
     <ul>
       <li>`CREATE TABLE`: טיפוסים, מפתח ראשי ואילוצים.</li>
       <li>`INSERT` (עם `RETURNING`), `UPDATE`, `DELETE`.</li>
-      <li>`ALTER TABLE` ו־`DROP TABLE`.</li>
+      <li>`ALTER TABLE` (כולל `SET NOT NULL`) ו־`DROP TABLE`.</li>
+      <li>CHECK על כמה עמודות, CHECK עם NULL, ו־regex באילוץ.</li>
     </ul>
   </div>
 
@@ -33,12 +34,41 @@ CREATE TABLE
   </table></div>
   <div class="table-wrap"><table>
     <tr><th>אילוץ</th><th>אומר</th></tr>
-    <tr><td>`PRIMARY KEY`</td><td>מזהה ייחודי, לא NULL. `GENERATED ALWAYS AS IDENTITY` — המסד ממספר בעצמו (1, 2, 3...)</td></tr>
+    <tr><td>`PRIMARY KEY`</td><td>מזהה ייחודי, לא NULL — כלומר `UNIQUE` + `NOT NULL`, ורק אחד כזה בטבלה. `GENERATED ALWAYS AS IDENTITY` — המסד ממספר בעצמו (1, 2, 3...), ומספר שנמחק (או ש־INSERT שנכשל "שרף") לא חוזר: "חורים" ברצף הם תקינים</td></tr>
     <tr><td>`NOT NULL`</td><td>חובה</td></tr>
     <tr><td>`DEFAULT x`</td><td>ערך כשלא נשלח</td></tr>
     <tr><td>`UNIQUE`</td><td>אין שתי שורות עם אותו ערך (אימייל)</td></tr>
     <tr><td>`CHECK (...)`</td><td>כל תנאי: `price > 0`</td></tr>
   </table></div>
+  <h3 id="check">CHECK על כמה עמודות, CHECK עם NULL ו־regex</h3>
+```sql run stderr continue
+CREATE TABLE shipments (
+  id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tracking     text CHECK (tracking ~ '^[A-Z]{2}[0-9]{6}$'),
+  weight_kg    numeric(6, 2) CHECK (weight_kg > 0),
+  sent_on      date NOT NULL DEFAULT CURRENT_DATE,
+  delivered_on date,
+  CHECK (delivered_on >= sent_on)
+);
+INSERT INTO shipments (tracking, weight_kg) VALUES ('IL123456', NULL);
+INSERT INTO shipments (tracking, sent_on) VALUES ('il123456', '2026-05-01');
+INSERT INTO shipments (sent_on, delivered_on) VALUES ('2026-05-01', '2026-04-30');
+```
+```out
+CREATE TABLE
+INSERT 0 1
+ERROR:  new row for relation "shipments" violates check constraint "shipments_tracking_check"
+DETAIL:  Failing row contains (2, il123456, null, 2026-05-01, null).
+ERROR:  new row for relation "shipments" violates check constraint "shipments_check"
+DETAIL:  Failing row contains (3, null, null, 2026-05-01, 2026-04-30).
+```
+  <ul>
+    <li><strong>אילוץ על כמה עמודות</strong> נכתב בסוף הטבלה, אחרי העמודות, כשורה משלו: `CHECK (delivered_on >= sent_on)`.</li>
+    <li><strong>CHECK עם NULL עובר.</strong> `weight_kg > 0` כש־weight_kg הוא NULL נותן NULL — ו־CHECK נכשל רק על `false`. לכן "לא חובה, אבל אם יש — חיובי" זה פשוט `CHECK (weight_kg > 0)` בלי NOT NULL. (ההפך מ־WHERE, שמחזיר רק `true` — שיעור 3.)</li>
+    <li>`~` — התאמה ל־regex (כמו `test` ב־JavaScript, פרק 8 שיעור 5). `'^[A-Z]{2}[0-9]{6}$'` — בדיוק 2 אותיות גדולות ו־6 ספרות.</li>
+    <li>`CURRENT_DATE` — התאריך של היום (לפי השעון של המסד). כאן כברירת מחדל.</li>
+    <li>`num_nonnulls(a, b, ...)` — כמה מהערכים אינם NULL. "בדיוק אחד מ־a ו־b": `CHECK (num_nonnulls(a, b) = 1)`.</li>
+  </ul>
   <p>זו "שכבת ההגנה האחרונה": גם אם יש באג בקוד, או מישהו מריץ SQL ידנית — המסד לא יסכים לנתונים לא תקינים. Zod בגבול ה־API + אילוצים במסד = שתי שכבות.</p>
 
   <h2>2. INSERT</h2>
@@ -134,6 +164,27 @@ ALTER TABLE
  Dana Levi   | 050-1111111  | f
  Yossi Cohen |              | f
 (2 rows)
+```
+  <p>ועוד שינויים נפוצים: `ALTER TABLE customers ALTER COLUMN city SET NOT NULL` — מעכשיו חובה. זה נכשל אם כבר יש בעמודה NULL, ולכן קודם ממלאים (`UPDATE ... WHERE city IS NULL`), ורק אז SET NOT NULL. ו־`upper(text)` / `lower(text)` — אותיות גדולות / קטנות, למשל כדי למלא עמודה חדשה מעמודה קיימת:</p>
+```sql run db=16-sql/files/shop.sql stderr continue
+ALTER TABLE customers ALTER COLUMN phone SET NOT NULL;
+UPDATE customers SET city = upper(city) WHERE city IS NOT NULL;
+UPDATE customers SET city = 'UNKNOWN' WHERE city IS NULL;
+ALTER TABLE customers ALTER COLUMN city SET NOT NULL;
+SELECT full_name, city FROM customers ORDER BY id LIMIT 4;
+```
+```out
+ERROR:  column "phone" of relation "customers" contains null values
+UPDATE 10
+UPDATE 2
+ALTER TABLE
+  full_name  |   city
+-------------+-----------
+ Dana Levi   | TEL AVIV
+ Yossi Cohen | HAIFA
+ Noa Mizrahi | JERUSALEM
+ Avi Peretz  | UNKNOWN
+(4 rows)
 ```
   <p>`DROP TABLE tasks;` — מוחק טבלה עם כל הנתונים. `DROP TABLE IF EXISTS` — בלי שגיאה אם לא קיימת (כמו בקובץ `shop.sql`).</p>
   <div class="box tip">

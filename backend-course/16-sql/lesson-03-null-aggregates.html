@@ -3,20 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NULL וצבירות — פרק 16</title>
+<title>NULL, צבירות ו־CASE — פרק 16</title>
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 16</a> ‹ שיעור 3</div>
-  <h1>שיעור 3 — NULL וצבירות</h1>
-  <p class="subtitle">⏱ ~35 דקות</p>
+  <h1>שיעור 3 — NULL, צבירות ו־CASE</h1>
+  <p class="subtitle">⏱ ~50 דקות</p>
   <div class="box goal">
     <span class="box-title">🎯 בשיעור הזה</span>
     <ul>
       <li>NULL: "לא ידוע" — ואיך הוא שובר השוואות.</li>
       <li><code>IS NULL</code>, <code>COALESCE</code>.</li>
       <li>צבירות: <code>COUNT</code>, <code>SUM</code>, <code>AVG</code>, <code>MIN</code>, <code>MAX</code>.</li>
+      <li><code>CASE</code> (גם בתוך ORDER BY), ספירה עם תנאי — <code class="mid">COUNT(*) FILTER (WHERE ...)</code>, ועוד כמה כלים קטנים.</li>
     </ul>
   </div>
 
@@ -91,9 +92,80 @@ FROM customers;</code></pre>
     <p>שים לב ש־<code>price</code> הוא <code>numeric(10, 2)</code> — מספר עשרוני מדויק. ב־JavaScript, <code>0.1 + 0.2</code> הוא <code>0.30000000000000004</code> (פרק 2); ב־numeric זה תמיד <code>0.3</code>. לכן כסף במסד — numeric, לעולם לא <code>real</code>/<code>float</code>.</p>
   </div>
 
+  <h2 id="case">3. CASE, ‏FILTER ועוד כמה כלים</h2>
+  <p><code>CASE</code> הוא ה־<code>if / else if</code> (או ה־<code>switch</code> מפרק 3) של SQL — ביטוי שמחזיר ערך. יש לו שתי צורות: עם תנאים (<code>CASE WHEN ... THEN ...</code>), וקצרה — השוואה של ערך אחד לכמה אפשרויות (<code class="mid">CASE category WHEN 'beans' THEN ...</code>). הראשון שמתאים מנצח, ובלי <code>ELSE</code> מה שלא התאים מקבל NULL:</p>
+<pre><code class="lang-sql">SELECT name, price,
+       CASE
+         WHEN price &lt; 50  THEN 'cheap'
+         WHEN price &lt; 150 THEN 'regular'
+         ELSE 'premium'
+       END AS tier,
+       CASE category WHEN 'beans' THEN 'coffee' WHEN 'brewing' THEN 'coffee' ELSE 'gear' END AS kind
+FROM products
+WHERE is_active AND stock &gt; 0
+ORDER BY price
+LIMIT 5;</code></pre>
+<pre class="terminal">          name          | price |  tier   |  kind
+------------------------+-------+---------+--------
+ Grinder Cleaning Brush | 19.90 | cheap   | gear
+ Paper Filters (100)    | 24.90 | cheap   | gear
+ Brazil Beans 250g      | 29.90 | cheap   | coffee
+ Ceramic Mug            | 39.00 | cheap   | gear
+ Ethiopia Beans 1kg     | 89.90 | regular | coffee
+(5 rows)</pre>
+  <p><strong>CASE בתוך ORDER BY</strong> — מיון בסדר שאתה קובע (לא אלפביתי): כל ערך מקבל מספר, וממיינים לפי המספר.</p>
+<pre><code class="lang-sql">SELECT name, category
+FROM products
+WHERE is_active AND stock = 0
+ORDER BY CASE category WHEN 'brewing' THEN 1 WHEN 'beans' THEN 2 ELSE 3 END, name;</code></pre>
+<pre class="terminal">        name        | category
+--------------------+----------
+ V60 Ceramic        | brewing
+ Colombia Beans 1kg | beans
+(2 rows)</pre>
+  <div class="box warn">
+    <span class="box-title">⚠️ כינוי מ־SELECT — רק לבד ב־ORDER BY</span>
+    <p><code>ORDER BY region</code> עובד (כינוי מ־SELECT, סעיף 5 בשיעור 2). אבל כינוי <strong>בתוך ביטוי</strong> ב־ORDER BY — לא:</p>
+<pre><code class="lang-sql">SELECT full_name, CASE WHEN city IN ('Tel Aviv', 'Ramat Gan') THEN 'center' ELSE 'other' END AS region
+FROM customers
+ORDER BY CASE region WHEN 'center' THEN 1 ELSE 2 END;</code></pre>
+<pre class="terminal">ERROR:  column "region" does not exist
+LINE 3: ORDER BY CASE region WHEN 'center' THEN 1 ELSE 2 END;
+                      ^</pre>
+    <p>הפתרון: לכתוב ב־CASE של ה־ORDER BY את העמודה המקורית (<code class="mid">CASE WHEN city IN (...) THEN 1 ELSE 2 END</code>), או לבחור ב־SELECT מספר ולמיין לפיו.</p>
+  </div>
+  <p><strong>ספירה עם תנאי — <code>FILTER</code>.</strong> WHERE מסנן את כל השאילתה. ומה אם רוצים בשורה אחת גם "כמה מוצרים יש" וגם "כמה מהם אזלו"? <code>FILTER (WHERE ...)</code> אחרי פונקציית צבירה מסנן <strong>רק לה</strong>:</p>
+<pre><code class="lang-sql">SELECT COUNT(*) AS products,
+       COUNT(*) FILTER (WHERE stock = 0)     AS out_of_stock,
+       COUNT(*) FILTER (WHERE NOT is_active) AS inactive,
+       SUM(stock) FILTER (WHERE is_active)   AS active_units
+FROM products;</code></pre>
+<pre class="terminal"> products | out_of_stock | inactive | active_units
+----------+--------------+----------+--------------
+       14 |            3 |        2 |          660
+(1 row)</pre>
+  <p>ועוד כמה כלים קטנים שתפגוש בתרגול:</p>
+  <div class="table-wrap"><table>
+    <tr><th>כלי</th><th>מה עושה</th></tr>
+    <tr><td><code>ORDER BY city NULLS FIRST</code></td><td>איפה NULL במיון. ברירת המחדל ב־PostgreSQL: NULL "גדול מכולם" — בסוף בסדר עולה, ובהתחלה ב־<code>DESC</code>. <code>NULLS FIRST</code> / <code>NULLS LAST</code> קובעים במפורש</td></tr>
+    <tr><td><code>GREATEST(a, b, ...)</code> · <code>LEAST(...)</code></td><td>הגדול / הקטן מבין כמה ערכים <strong>באותה שורה</strong> (כמו <code>Math.max</code>). <code>GREATEST(20 - stock, 0)</code> — "כמה חסר עד 20, ולא פחות מ־0". (MAX הוא צבירה על הרבה שורות — משהו אחר)</td></tr>
+    <tr><td><code>ORDER BY 3 DESC, 1</code></td><td>מיון לפי <strong>מספר העמודה</strong> ב־SELECT (3 = השלישית). קצר, אבל נשבר בשקט כשמוסיפים עמודה — בקוד אמיתי עדיף שם</td></tr>
+  </table></div>
+<pre><code class="lang-sql">SELECT name, stock, GREATEST(20 - stock, 0) AS to_order
+FROM products
+WHERE category = 'brewing'
+ORDER BY 3 DESC, 1;</code></pre>
+<pre class="terminal">       name       | stock | to_order
+------------------+-------+----------
+ V60 Ceramic      |     0 |       20
+ Gooseneck Kettle |     7 |       13
+ Moka Pot 6 Cups  |    12 |        8
+ French Press 1L  |    25 |        0
+(4 rows)</pre>
+
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>20 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>22 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 8 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-3.html">← לתרגול של שיעור 3</a></p>
   </div>
 

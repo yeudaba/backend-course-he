@@ -8,7 +8,7 @@ export default {
   checker: true,
   database: true,
   time: "5 מפגשים",
-  expectedExercises: 81,
+  expectedExercises: 82,
   install: `<p><strong>מה מתקינים עכשיו:</strong> שרת PostgreSQL, תוסף ל־VS Code, ומסד לקורס.</p>
 <h3>1. שרת PostgreSQL</h3>
 <p><strong>קודם בדוק אם כבר יש לך:</strong> ב־Terminal, <code>ls /Library/PostgreSQL /Applications | grep -i postgres</code>. אם מופיע <code>PostgreSQL 18</code> (או גרסה אחרת) — כבר הותקן בעבר (מהאתר של EDB, עם pgAdmin). <strong>אל תתקין Postgres.app בנוסף</strong> — שניהם ירצו את פורט 5432. דלג לסעיף "יש לי כבר PostgreSQL".</p>
@@ -41,8 +41,8 @@ ${copyStep("16-sql")}
   lessons: [
     { file: "lesson-01-intro.html", title: "מסד נתונים, טבלאות ו־psql", minutes: 30 },
     { file: "lesson-02-select.html", title: "SELECT: לשלוף, לסנן, למיין", minutes: 45 },
-    { file: "lesson-03-null-aggregates.html", title: "NULL וצבירות", minutes: 35 },
-    { file: "lesson-04-ddl-dml.html", title: "יצירת טבלאות ושינוי נתונים", minutes: 45 },
+    { file: "lesson-03-null-aggregates.html", title: "NULL, צבירות ו־CASE", minutes: 50 },
+    { file: "lesson-04-ddl-dml.html", title: "יצירת טבלאות ושינוי נתונים", minutes: 55 },
   ],
   glossary: [
     ["Database", "דָאטָה־בֵּייס", "מסד נתונים — תוכנה ששומרת נתונים בצורה בטוחה ומאפשרת לשאול עליהם"],
