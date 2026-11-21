@@ -19,5 +19,5 @@ test("formatDue", async () => {
     ["2026-03-26", "2026-03-28", "באיחור של 2 ימים"],
   ];
   for (const [due, today, want] of cases) assert.equal(f(due, today), want, `formatDue(${JSON.stringify(due)}, "${today}")`);
-  assert.equal(f(undefined, "2026-01-01"), "בלי תאריך");
+  assert.equal(f(undefined, "2026-01-01"), "בלי תאריך", 'formatDue(undefined, "2026-01-01") — גם תאריך חסר (undefined) הוא "בלי תאריך"');
 });
