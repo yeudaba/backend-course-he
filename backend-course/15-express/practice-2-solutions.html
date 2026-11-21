@@ -283,6 +283,70 @@ const server = app.listen(0, async () =&gt; {
 
 </div></details>
   </div>
+<div class="ex" id="P15-E08">
+    <h3>P15-E08 · יצירה ומחיקה 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>אל תשכח <code>app.use(express.json())</code>. ואם הגוף לא נשלח בכלל — <code>req.body</code> הוא <code>undefined</code>.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>JSON שבור: <code class="mid">app.use((err, req, res, next) =&gt; ...)</code> בסוף, עם <code class="mid">err.type === "entity.parse.failed"</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P15-E08
+import express, { type Request, type Response, type NextFunction } from "express";
+
+export function createApp() {
+  const app = express();
+  app.use(express.json());
+  const products: { id: number; name: string; price: number }[] = [];
+  let nextId = 1;
+
+  app.get("/products", (req, res) =&gt; {
+    res.json(products);
+  });
+
+  app.post("/products", (req, res) =&gt; {
+    const { name, price } = req.body ?? {};
+    if (typeof name !== "string" || name.trim() === "" || typeof price !== "number" || !(price &gt; 0)) {
+      res.status(400).json({ error: "name (מחרוזת) ו־price (מספר חיובי) חובה" });
+      return;
+    }
+    const product = { id: nextId++, name: name.trim(), price };
+    products.push(product);
+    res.status(201).location(`/products/${product.id}`).json(product);
+  });
+
+  app.delete("/products/:id", (req, res) =&gt; {
+    const index = products.findIndex((p) =&gt; p.id === Number(req.params.id));
+    if (index === -1) {
+      res.status(404).json({ error: "המוצר לא נמצא" });
+      return;
+    }
+    products.splice(index, 1);
+    res.sendStatus(204);
+  });
+
+  app.use((err: { type?: string }, req: Request, res: Response, next: NextFunction) =&gt; {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "JSON לא תקין" });
+      return;
+    }
+    next(err);
+  });
+
+  return app;
+}</code></pre>
+<p>שים לב: ה־products וה־nextId נוצרים <em>בתוך</em> <code>createApp</code>, כך שכל אפליקציה (וכל בדיקה) מתחילה נקייה. משתנה ברמת הקובץ היה משותף לכולם.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li><code>!price</code> כבדיקה — מחרוזת <code>"5"</code> עוברת, ו־0 נדחה מסיבה לא ברורה. בדוק טיפוס במפורש.</li></ul>
+
+
+</div></details>
+  </div>
 <div class="ex" id="P15-E09">
     <h3>P15-E09 · middleware לוג 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -472,7 +536,7 @@ export function createApp() {
 
 </div></details>
     <details><summary>💡 רמז 2</summary><div>
-<p>header חייב להיקבע <em>לפני</em> שהתשובה נשלחת. אפשר לקבוע אותו מיד בהתחלה... או: <code>res.on("finish")</code> מאוחר מדי.</p>
+<p>header חייב להיקבע <em>לפני</em> שהתשובה נשלחת, אבל אחרי שה־handler סיים לעבוד. ‏<code>res.on("finish")</code> מאוחר מדי, ובתחילת הבקשה — מוקדם מדי (תמיד <code>"0ms"</code>). הרגע הנכון הוא בתוך <code>res.json</code>, רגע לפני השליחה: אפשר להחליף את <code>res.json</code> בפונקציה משלך שקובעת את ה־header וקוראת למקורית. כדי שהמקורית לא תאבד את ה־<code>this</code> שלה — <code>bind</code> (פרק 12, שיעור 1, סעיף 5).</p>
 
 </div></details>
     <details><summary>✅ פתרון</summary><div>
@@ -510,11 +574,13 @@ export function createApp() {
 
   return app;
 }</code></pre>
-<p>בעיה 3 קלאסית: header אחרי <code>finish</code> זורק, ו־header אחרי <code>next()</code> מגיע מאוחר אם ה־handler כבר ענה. הפתרון כאן עוטף את <code>res.json</code>, כך שה־header נקבע ברגע האחרון <em>לפני</em> השליחה. (ספריות כמו <code>response-time</code> משתמשות ב־<code>on-headers</code> לאותה מטרה.)</p>
+<p>בעיה 3 קלאסית: header אחרי <code>finish</code> זורק, ו־header אחרי <code>next()</code> מגיע מאוחר אם ה־handler כבר ענה. הפתרון כאן עוטף את <code>res.json</code>, כך שה־header נקבע ברגע האחרון <em>לפני</em> השליחה.</p>
+<p>למה <code>res.json.bind(res)</code>? ‏<code>res.json</code> היא מתודה שמשתמשת ב־<code>this</code> (התשובה עצמה). אם שומרים אותה בלי <code>bind</code> (<code class="mid">const originalJson = res.json</code>) וקוראים <code>originalJson(body)</code>, זו "מתודה מנותקת" — ה־<code>this</code> בפנים הוא <code>undefined</code>, ו־Express קורס (פרק 12, שיעור 1, סעיף 5). ‏<code>bind(res)</code> מחזירה עותק שה־<code>this</code> שלו קבוע ל־<code>res</code>. אחר כך <code>res.json = …</code> מחליף את המתודה <strong>רק בתשובה הזו</strong>: כל קריאה ל־<code>res.json</code> ב־handler מגיעה קודם לפונקציה שלנו.</p>
+<p>(ספריות כמו <code>response-time</code> משתמשות ב־<code>on-headers</code> לאותה מטרה.)</p>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li>להוסיף <code>if (!res.headersSent)</code> — משתיק את השגיאה, אבל ה־header עדיין חסר.</li></ul>
+<ul><li>להוסיף <code>if (!res.headersSent)</code> — משתיק את השגיאה, אבל ה־header עדיין חסר.</li><li>לקבוע את ה־header מיד בתחילת ה־middleware — הוא תמיד מופיע, אבל תמיד <code>"0ms"</code>: הוא נמדד לפני שה־handler עבד.</li><li><code class="mid">const originalJson = res.json;</code> בלי <code>bind</code> — ‏<code>TypeError</code> בתוך Express, כי ה־<code>this</code> הלך לאיבוד.</li></ul>
 
 
 </div></details>
