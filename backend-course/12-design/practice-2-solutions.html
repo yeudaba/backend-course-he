@@ -281,75 +281,6 @@ console.log(toHttp(new ValidationError("email", "לא תקין")), new NotFoundE
 
 </div></details>
   </div>
-<div class="ex" id="P12-E10">
-    <h3>P12-E10 · חוזה Logger 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
-    <details><summary>💡 רמז 1</summary><div>
-<p>PrefixLogger הוא הרכבה: "יש לו" Logger.</p>
-
-</div></details>
-    <details><summary>💡 רמז 2</summary><div>
-<p>processOrders מקבל <code>Logger</code> — לא MemoryLogger. כך עובד עם כל מימוש.</p>
-
-</div></details>
-    <details><summary>✅ פתרון</summary><div>
-<pre><code class="lang-ts">// P12-E10
-export interface Logger {
-  info(msg: string): void;
-  error(msg: string): void;
-}
-
-export class MemoryLogger implements Logger {
-  #lines: string[] = [];
-  info(msg: string): void {
-    this.#lines.push(`INFO: ${msg}`);
-  }
-  error(msg: string): void {
-    this.#lines.push(`ERROR: ${msg}`);
-  }
-  get lines(): string[] {
-    return [...this.#lines];
-  }
-}
-
-export class PrefixLogger implements Logger {
-  #inner: Logger;
-  #prefix: string;
-  constructor(inner: Logger, prefix: string) {
-    this.#inner = inner;
-    this.#prefix = prefix;
-  }
-  info(msg: string): void {
-    this.#inner.info(`${this.#prefix} ${msg}`);
-  }
-  error(msg: string): void {
-    this.#inner.error(`${this.#prefix} ${msg}`);
-  }
-}
-
-export function processOrders(ids: number[], logger: Logger): number {
-  let ok = 0;
-  for (const id of ids) {
-    if (id &gt; 0) {
-      logger.info(`order ${id} ok`);
-      ok++;
-    } else {
-      logger.error(`order ${id} invalid`);
-    }
-  }
-  return ok;
-}
-
-const mem = new MemoryLogger();
-console.log(processOrders([1, -2], new PrefixLogger(mem, "[orders]")), mem.lines);</code></pre>
-<pre class="terminal">1 [ 'INFO: [orders] order 1 ok', 'ERROR: [orders] order -2 invalid' ]</pre>
-
-</div></details>
-    <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code class="mid">PrefixLogger extends MemoryLogger</code> — ירושה במקום הרכבה; אז הוא עובד רק עם MemoryLogger.</li></ul>
-
-
-</div></details>
-  </div>
 <div class="ex" id="P12-E14">
     <h3>P12-E14 · הגבלת קצב עם שעון מוזרק 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l3">רמה 3</span></h3>
     <details><summary>💡 רמז 1</summary><div>
@@ -725,7 +656,76 @@ NotifyError: השליחה ל־רון נכשלה 1 Error: מספר חסום</pre>
 
 </div></details>
     <details><summary>⚠️ טעויות נפוצות</summary><div>
-<ul><li><code class="mid">class Notifier extends SmsSender</code> — ואז אי אפשר להחליף שולח בלי לשנות את המחלקה.</li><li>לבלוע את השגיאה ולהמשיך — המשתמש חושב שכולם קיבלו הודעה.</li></ul>
+<ul><li><code>if (u.phone === undefined)</code> בלבד — משתמש עם <code>phone: ""</code> "מקבל" הודעה למספר ריק. <code>if (!u.phone)</code> תופס את שניהם.</li><li><code class="mid">class Notifier extends SmsSender</code> — ואז אי אפשר להחליף שולח בלי לשנות את המחלקה.</li><li>לבלוע את השגיאה ולהמשיך — המשתמש חושב שכולם קיבלו הודעה.</li></ul>
+
+
+</div></details>
+  </div>
+<div class="ex" id="P12-E81">
+    <h3>P12-E81 · ממיר מטבעות — הרכבה ושגיאה משלך 🤖 <span class="tag kind code">💻 כתיבת קוד 🤖</span> <span class="tag l2">רמה 2</span></h3>
+    <details><summary>💡 רמז 1</summary><div>
+<p>שתי המתודות צריכות את אותו דבר: "תן לי שער תקין או זרוק". זו מתודה פרטית קטנה אחת (<code>#rate(currency)</code>) ששתיהן קוראות לה.</p>
+
+</div></details>
+    <details><summary>💡 רמז 2</summary><div>
+<p>בשגיאה: <code>super(...)</code> עם ההודעה, ואז <code>this.name = ...</code> ו־<code>this.currency = ...</code> — כמו <code>NotifyError</code> ב־E48. ועיגול ל־2 ספרות — <code>Math.round(x * 100) / 100</code>.</p>
+
+</div></details>
+    <details><summary>✅ פתרון</summary><div>
+<pre><code class="lang-ts">// P12-E81: ממיר מטבעות — הרכבה ושגיאה משלך
+export type RateSource = { rateOf(currency: string): number | undefined };
+
+export class UnknownCurrencyError extends Error {
+  readonly currency: string;
+  constructor(currency: string) {
+    super(`מטבע לא מוכר: ${currency}`);
+    this.name = new.target.name;
+    this.currency = currency;
+  }
+}
+
+const round2 = (x: number): number =&gt; Math.round(x * 100) / 100;
+
+export class Converter {
+  #source: RateSource;
+
+  constructor(source: RateSource) {
+    this.#source = source;
+  }
+
+  #rate(currency: string): number {
+    const rate = this.#source.rateOf(currency);
+    if (rate === undefined || rate &lt;= 0) {
+      throw new UnknownCurrencyError(currency);
+    }
+    return rate;
+  }
+
+  toIls(amount: number, currency: string): number {
+    if (currency === "ILS") return amount;
+    return round2(amount * this.#rate(currency));
+  }
+
+  fromIls(amountIls: number, currency: string): number {
+    if (currency === "ILS") return amountIls;
+    return round2(amountIls / this.#rate(currency));
+  }
+}
+
+const c = new Converter({ rateOf: (cur) =&gt; (cur === "USD" ? 3.7 : undefined) });
+console.log(c.toIls(10, "USD"), c.fromIls(10, "USD"), c.toIls(5, "ILS"));
+try {
+  c.toIls(1, "JPY");
+} catch (err) {
+  if (err instanceof UnknownCurrencyError) console.log(String(err), err.currency);
+}</code></pre>
+<pre class="terminal">37 2.7 5
+UnknownCurrencyError: מטבע לא מוכר: JPY JPY</pre>
+<p><code>Converter</code> לא יודע מאיפה השערים מגיעים — מקובץ, מ־API או ממספרים קבועים בבדיקה. הוא <em>מקבל</em> מקור (הרכבה, "יש לו"). לכן הבודק יכול להעביר מקור מזויף עם שערים אחרים, ולספור כמה פעמים שאלו אותו. ‏<code>UnknownCurrencyError</code> נותנת למי שתופס גם סוג (<code>instanceof</code>) וגם את המטבע (<code>err.currency</code>), בלי לפרק את ההודעה.</p>
+
+</div></details>
+    <details><summary>⚠️ טעויות נפוצות</summary><div>
+<ul><li>לכתוב את השערים בתוך המחלקה (<code>const RATES = { USD: 3.7 }</code>) — אז אי אפשר להחליף מקור, והבודק עם שער אחר ייכשל.</li><li>לבדוק רק <code>undefined</code> — שער 0 נותן ב־<code>fromIls</code> את <code>Infinity</code>.</li><li>לשאול את המקור גם על <code>"ILS"</code> — מקור אמיתי לא בהכרח מכיר את המטבע המקומי.</li></ul>
 
 
 </div></details>

@@ -29,8 +29,10 @@ test("שולח רק למי שיש טלפון, לפי הסדר", async () => {
   const { Notifier } = await get();
   const s = fakeSender();
   const n = new Notifier(s);
-  assert.equal(n.notifyAll([{ name: "דנה", phone: "050" }, { name: "עומר" }, { name: "נועה", phone: "052" }, { name: "רון", phone: "" }], "שלום"), 2);
-  assert.deepEqual(s.sent, [["050", "שלום"], ["052", "שלום"]]);
+  assert.equal(n.notifyAll([{ name: "דנה", phone: "050" }, { name: "עומר" }, { name: "נועה", phone: "052" }], "שלום"), 2, "דנה (050), עומר (בלי phone), נועה (052) ← צריך לשלוח ל־2");
+  assert.deepEqual(s.sent, [["050", "שלום"], ["052", "שלום"]], "נשלח רק למי שיש לו טלפון, לפי הסדר");
+  assert.equal(n.notifyAll([{ name: "רון", phone: "" }, { name: "גל", phone: "053" }], "שלום"), 1, `רון עם phone: "" (מחרוזת ריקה) — גם הוא "בלי טלפון", מדלגים עליו`);
+  assert.deepEqual(s.sent.slice(2), [["053", "שלום"]], `phone: "" — לא שולחים אליו`);
   assert.equal(n.notifyAll([], "x"), 0);
   assert.deepEqual(Object.keys(n), [], "השולח צריך להיות בשדה פרטי (#)");
 });
