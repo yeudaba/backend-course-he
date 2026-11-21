@@ -66,6 +66,92 @@ console.log(url.hostname, url.pathname, url.searchParams.get("currency"), url.po
 shop.example.com /products/7 ILS (ברירת מחדל)
 ```
 
+  <h3 id="url-api">`URL` ו־`URLSearchParams`: לקרוא כתובת</h3>
+  <p>`new URL(text)` מפרק כתובת לחלקים. ‏`url.searchParams` הוא אובייקט מסוג `URLSearchParams` — "רשימת הפרמטרים" של ה־query, שכבר מפוענחת (`%D7%A7…` ← עברית, ‏`+` ← רווח):</p>
+```js run
+const url = new URL("https://shop.example.com:8443/search?q=%D7%A7%D7%A4%D7%94+%D7%A9%D7%97%D7%95%D7%A8&tag=new&tag=sale");
+console.log(url.protocol, url.host, url.hostname, url.port);
+console.log(url.pathname, url.search);
+console.log(url.searchParams.get("q"), url.searchParams.get("missing"));
+console.log(url.searchParams.get("tag"), url.searchParams.getAll("tag"));
+for (const [key, value] of url.searchParams) {
+  console.log(key, "=", value);
+}
+console.log(Object.fromEntries(url.searchParams));
+```
+```out
+https: shop.example.com:8443 shop.example.com 8443
+/search ?q=%D7%A7%D7%A4%D7%94+%D7%A9%D7%97%D7%95%D7%A8&tag=new&tag=sale
+קפה שחור null
+new [ 'new', 'sale' ]
+q = קפה שחור
+tag = new
+tag = sale
+{ q: 'קפה שחור', tag: 'sale' }
+```
+  <p>שים לב: `protocol` כולל את הנקודתיים (`"https:"`); ‏`host` כולל את הפורט ו־`hostname` לא; ‏`get` של מפתח שחוזר נותן רק את הראשון, ו־`getAll` את כולם. ‏`Object.fromEntries` (פרק 7, שיעור 3) הופך את הפרמטרים לאובייקט רגיל — אבל ממפתח שחוזר נשאר רק ערך אחד (האחרון).</p>
+
+  <h3>לשנות ולבנות כתובת</h3>
+```js run
+const url = new URL("https://shop.example.com/products?page=2&debug=1");
+url.searchParams.set("page", "3");
+url.searchParams.delete("debug");
+url.searchParams.append("tag", "קפה & חלב");
+console.log(url.href);
+
+const params = new URLSearchParams();
+params.append("q", "תה ירוק");
+params.append("maxPrice", "50");
+console.log(params.toString());
+```
+```out
+https://shop.example.com/products?page=3&tag=%D7%A7%D7%A4%D7%94+%26+%D7%97%D7%9C%D7%91
+q=%D7%AA%D7%94+%D7%99%D7%A8%D7%95%D7%A7&maxPrice=50
+```
+  <div class="table-wrap"><table>
+    <tr><th>מתודה</th><th>מה היא עושה</th></tr>
+    <tr><td>`get(key)` / `getAll(key)`</td><td>הערך הראשון (או `null`) / מערך של כל הערכים</td></tr>
+    <tr><td>`has(key)`</td><td>האם הפרמטר קיים</td></tr>
+    <tr><td>`set(key, value)`</td><td>קובע ערך אחד: מחליף את כל הקיימים, או מוסיף בסוף</td></tr>
+    <tr><td>`append(key, value)`</td><td>מוסיף עוד ערך, גם אם המפתח כבר קיים (`tag=a&tag=b`)</td></tr>
+    <tr><td>`delete(key)`</td><td>מוחק את כל הערכים של המפתח</td></tr>
+    <tr><td>`toString()`</td><td>ה־query מקודד, בלי `?`. ‏`url.href` — הכתובת המלאה אחרי השינויים</td></tr>
+  </table></div>
+  <p>הערכים תמיד מחרוזות: `set("page", 3)` שומר `"3"`. ‏`new URLSearchParams()` עובד גם בלי URL — כשרוצים רק לבנות query string. הקידוד נעשה לבד: רווח ← `+`, ‏`&` ← `%26` (אחרת הוא היה נראה כמו תחילת פרמטר חדש).</p>
+
+  <h3>כתובת יחסית: `new URL(path, base)`</h3>
+  <p>לנתיב בלבד (`/orders/5`) אין פרוטוקול ו־host, ו־`new URL("/orders/5")` זורק `Invalid URL`. נותנים כתובת בסיס כפרמטר שני, ו־URL משלים ממנה את מה שחסר:</p>
+```js run
+console.log(new URL("/orders/5?x=1", "http://localhost:3000").href);
+console.log(new URL("https://api.test/a", "http://localhost:3000").href);
+const tricky = new URL("//orders/5", "http://localhost:3000");
+console.log(tricky.host, tricky.pathname);
+```
+```out
+http://localhost:3000/orders/5?x=1
+https://api.test/a
+orders /5
+```
+  <div class="box warn">
+    <span class="box-title">⚠️ נתיב שמתחיל ב־`//`</span>
+    <p>`//orders/5` הוא בעיני URL "כתובת בלי פרוטוקול": ‏`orders` נהיה ה־host, והנתיב שנשאר הוא רק `/5`. כשהקלט הוא נתיב שעלול להכיל `//` (למשל `req.url` מלקוח רשלני), מפרקים אותו בעצמך: `path.split("?")[0]`.</p>
+  </div>
+
+  <h3>`encodeURIComponent` ו־`decodeURIComponent`</h3>
+  <p>כשבונים חלק של כתובת בעצמך (למשל שם בתוך הנתיב), מקודדים אותו. ‏`encodeURIComponent` מקודד <strong>כל</strong> תו שיש לו משמעות בכתובת (`/`, ‏`?`, ‏`&`, רווח, עברית), ו־`decodeURIComponent` מחזיר:</p>
+```js run
+const name = "קפה/תה & חלב";
+console.log(`/products/${encodeURIComponent(name)}`);
+console.log(decodeURIComponent("%D7%A1%D7%9C"));
+console.log(new URL("http://x/files/a%2Fb").pathname.split("/"));
+```
+```out
+/products/%D7%A7%D7%A4%D7%94%2F%D7%AA%D7%94%20%26%20%D7%97%D7%9C%D7%91
+סל
+[ '', 'files', 'a%2Fb' ]
+```
+  <p>`pathname` <strong>לא</strong> מפוענח: ‏`%2F` נשאר כמו שהוא, ולכן קודם מפרקים לפי `/` ורק אחר כך מפענחים כל חלק. (‏`searchParams`, לעומת זאת, כבר מפוענח.)</p>
+
   <h2>3. Methods</h2>
   <div class="table-wrap"><table>
     <tr><th>Method</th><th>משמעות</th><th>דוגמה</th><th>גוף?</th><th>בטוח לחזור?</th></tr>
@@ -82,7 +168,7 @@ shop.example.com /products/7 ILS (ברירת מחדל)
     <tr><th>טווח</th><th>משמעות</th><th>הנפוצים</th></tr>
     <tr><td>2xx</td><td>הצליח</td><td>`200 OK` · `201 Created` (נוצר משהו) · `204 No Content` (הצליח, אין גוף — למשל אחרי מחיקה)</td></tr>
     <tr><td>3xx</td><td>הפניה</td><td>`301` (עבר לצמיתות) · `304 Not Modified` (cache)</td></tr>
-    <tr><td>4xx</td><td><strong>הלקוח</strong> טעה</td><td>`400 Bad Request` (קלט לא תקין) · `401 Unauthorized` (לא מחובר) · `403 Forbidden` (מחובר, אבל אסור) · `404 Not Found` · `409 Conflict` (התנגשות — למשל אימייל תפוס) · `422` (תקין מבנית, לא עובר חוקים) · `429 Too Many Requests`</td></tr>
+    <tr><td>4xx</td><td><strong>הלקוח</strong> טעה</td><td>`400 Bad Request` (קלט לא תקין) · `401 Unauthorized` (לא מחובר) · `403 Forbidden` (מחובר, אבל אסור) · `404 Not Found` · `409 Conflict` (התנגשות — למשל אימייל תפוס) · `415 Unsupported Media Type` (הגוף בפורמט שהשרת לא מקבל — למשל לא JSON) · `422` (תקין מבנית, לא עובר חוקים) · `429 Too Many Requests`</td></tr>
     <tr><td>5xx</td><td><strong>השרת</strong> נכשל</td><td>`500 Internal Server Error` (באג) · `502/503/504` (שירות לא זמין / timeout)</td></tr>
   </table></div>
   <div class="box tip">

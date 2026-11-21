@@ -7,7 +7,7 @@ export default {
   part: "חטיבה ב׳ — TypeScript ו־Node.js",
   checker: true,
   time: "4 מפגשים",
-  expectedExercises: 84,
+  expectedExercises: 85,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+, VS Code, Google Chrome (פרק 0).</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>
