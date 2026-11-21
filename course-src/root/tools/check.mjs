@@ -39,16 +39,35 @@ if (upto !== undefined) {
 }
 // קובץ בדיקה יכול להצהיר בשורה משלו שהוא שייך ליחידה אחרת מהתיקייה שבה הוא נמצא: "// @unit 15w"
 // (למשל PR2-WEB, שיושב עם הפרויקט ב־15p אבל נלמד ביחידה 15.5)
+// פרויקט Nest (nest-cli.json או @nestjs/core ב־package.json — פרק 20 והלאה): בודקים שמסומנים "// @express"
+// בודקים את גרסת ה־Express של הפרויקט (src/app.ts, ‏createApp) — לא מריצים אותם, ואומרים למה
+const isNest = (() => {
+  if (!projectDir) return false;
+  if (fs.existsSync(path.join(projectDir, "nest-cli.json"))) return true;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8"));
+    return Boolean(pkg.dependencies?.["@nestjs/core"] ?? pkg.devDependencies?.["@nestjs/core"]);
+  } catch {
+    return false;
+  }
+})();
 const files = [];
+const skipped = [];
 units.forEach((d, i) => {
   const t = path.join(root, d, "tests");
   for (const f of fs.readdirSync(t)) {
     if (!((f.startsWith(id + "-") || f.startsWith(id + ".test")) && f.endsWith(".test.mjs"))) continue;
-    const declared = /^\/\/ @unit (\S+)/m.exec(fs.readFileSync(path.join(t, f), "utf8").slice(0, 500))?.[1];
+    const head = fs.readFileSync(path.join(t, f), "utf8").slice(0, 500);
+    const declared = /^\/\/ @unit (\S+)/m.exec(head)?.[1];
     const at = declared && unitIndex(declared) !== -1 ? unitIndex(declared) : i;
-    if (at <= last) files.push(path.join(t, f));
+    if (at > last) continue;
+    if (isNest && /^\/\/ @express\b/m.test(head)) skipped.push(f.replace(".test.mjs", ""));
+    else files.push(path.join(t, f));
   }
 });
+if (skipped.length) {
+  console.log(`פרויקט Nest (מצאנו nest-cli.json או @nestjs/core): ${skipped.join(", ")} בודקים את גרסת ה־Express של הפרויקט (src/app.ts) — לא מריצים אותם כאן. את ה־API ב־Nest בודק PR2-NEST (פרק 20).\n`);
+}
 if (!files.length) {
   console.log(`לא נמצאו בדיקות אוטומטיות ל־${id}.`);
   console.log("ייתכן שלתרגיל הזה אין בודק (תרגילי הסבר וניבוי), או שתיקיית הפרק עוד לא הועתקה ל־~/dev/backend-course.");

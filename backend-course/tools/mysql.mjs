@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
-import { assertSameRows, parseVariants } from "./rows.mjs";
+import { assertSameRows, parseVariantsInfo, variantLabel } from "./rows.mjs";
 
 export const mysqlUrl = process.env.COURSE_MYSQL_URL || "mysql://root:course@localhost:3306";
 
@@ -98,8 +98,8 @@ export async function sameAsSolution(t, testUrl, file, { seed = "shop.sql", chan
   const sets = [{ label: `על הנתונים של ${seed}`, sql: "" }];
   const vfile = chapterPath(testUrl, "files", seed.replace(/\.sql$/, ".variants.sql"));
   if (variants && fs.existsSync(vfile)) {
-    const vs = parseVariants(fs.readFileSync(vfile, "utf8"));
-    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql }));
+    const vs = parseVariantsInfo(fs.readFileSync(vfile, "utf8"));
+    vs.forEach(({ sql, about }, i) => sets.push({ label: variantLabel(i, vs.length, about), sql }));
   }
   for (const [label, sql] of changes) sets.push({ label, sql });
   for (const set of sets) {

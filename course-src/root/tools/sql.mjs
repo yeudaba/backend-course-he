@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import pg from "pg";
-import { assertSameRows, parseVariants, splitSql } from "./rows.mjs";
+import { assertSameRows, orderByColumns, parseVariantsInfo, splitSql, variantLabel } from "./rows.mjs";
 
 // מספרים גדולים ו־numeric ← number; DATE ← מחרוזת "2026-11-01" (בלי הפתעות של אזור זמן)
 pg.types.setTypeParser(20, Number);
@@ -133,15 +133,17 @@ export async function sameAsSolution(t, testUrl, file, { seed, changes = [], var
   const sets = base ? [{ label: seed ? `על הנתונים של ${seed}` : "", sql: "" }] : [];
   const vfile = seed && chapterPath(testUrl, "files", seed.replace(/\.sql$/, ".variants.sql"));
   if (variants && vfile && fs.existsSync(vfile)) {
-    const vs = parseVariants(fs.readFileSync(vfile, "utf8"));
-    vs.forEach((sql, i) => sets.push({ label: `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${vs.length})`, sql, shuffle: doShuffle }));
+    const vs = parseVariantsInfo(fs.readFileSync(vfile, "utf8"));
+    vs.forEach(({ sql, about }, i) => sets.push({ label: variantLabel(i, vs.length, about), sql, shuffle: doShuffle }));
   }
   for (const [label, sql] of changes) sets.push({ label, sql, shuffle: doShuffle });
 
-  const run = async (text, set, mode) => {
+  const run = async (text, set, mode, planner) => {
     const db = await sandbox(t, testUrl, seed);
     if (set.sql) await db.query(set.sql);
     if (mode !== undefined) await shuffle(db.client, db.schema, mode);
+    // תוכנית ביצוע אחרת (בלי hash) — סדר אחר בין שורות שהן תיקו ב־ORDER BY
+    if (planner) await db.query("SET enable_hashagg = off; SET enable_hashjoin = off");
     let res = resultOf(await db.client.query(text));
     if (after) {
       await db.query(after);
@@ -166,13 +168,17 @@ export async function sameAsSolution(t, testUrl, file, { seed, changes = [], var
       assert.fail(`${set.label}: השאילתה שלך נכשלה — ${err.message}`);
     }
     const exp = await run(solutionText, set, mode);
-    // אם הפתרון עצמו מחזיר סדר אחר כשהשורות זזות — הסדר לא מוגדר בשאלה, ולא בודקים אותו
+    // שורות שהן תיקו ב־ORDER BY של הפתרון — כל סדר ביניהן מתקבל (orderKeys).
+    // ואם ה־ORDER BY הוא ביטוי שלא מזהים: אם הפתרון עצמו מחזיר סדר אחר כשהשורות זזות או בתוכנית ביצוע אחרת —
+    // הסדר לא מוגדר בשאלה, ולא בודקים אותו
+    const orderKeys = orderByColumns(solutionText, exp.columns);
     let ordered = true;
-    if (rowsKey(got.rows) !== rowsKey(exp.rows)) {
+    if (!orderKeys && rowsKey(got.rows) !== rowsKey(exp.rows)) {
       const exp2 = await run(solutionText, set, mode === 0 ? 1 : 0);
       ordered = rowsKey(exp2.rows) === rowsKey(exp.rows);
+      if (ordered) ordered = rowsKey((await run(solutionText, set, mode, true)).rows) === rowsKey(exp.rows);
     }
-    assertSameRows(got.rows, exp.rows, set.label, { gotColumns: got.columns, expectedColumns: exp.columns, ordered });
+    assertSameRows(got.rows, exp.rows, set.label, { gotColumns: got.columns, expectedColumns: exp.columns, ordered, orderKeys });
   }
 }
 const rowsKey = (rows) => JSON.stringify(rows);

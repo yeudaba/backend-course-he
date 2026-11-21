@@ -41,6 +41,10 @@ export async function load(testUrl, file, hint = {}) {
     if (missing) {
       const base = full.slice(0, full.length - shown.length) || path.dirname(full);
       const rel = (p) => path.relative(base, p.startsWith("file:") ? fileURLToPath(p) : p) || path.basename(p);
+      // Prisma Client לא נמצא בגיט — מייצרים אותו מה־schema (פרק 19)
+      if (/[\\/]generated[\\/]prisma[\\/]/.test(missing[1])) {
+        throw hebrewError(`${rel(missing[2])} מייבא את ${rel(missing[1])}, שלא נמצא — זה Prisma Client, שנוצר מה־schema ולא נשמר בגיט. הרץ בתיקיית הפרויקט: npx prisma generate (פרק 19, שיעור 1)`);
+      }
       throw hebrewError(`${rel(missing[2])} מייבא את ${rel(missing[1])}, שלא נמצא — צור את הקובץ או תקן את שורת ה־import (שים לב לסיומת: ‎.js או ‎.ts)`);
     }
     throw err;

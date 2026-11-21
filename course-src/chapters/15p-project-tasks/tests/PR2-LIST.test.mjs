@@ -1,3 +1,4 @@
+// @express — בודק את גרסת ה־Express (src/app.ts). על פרויקט Nest (פרק 20) npm run check מדלג עליו
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load, listen, api } from "../../tools/load.mjs";

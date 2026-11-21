@@ -21,8 +21,10 @@ function multisetDiff(a, b) {
   return left; // אינדקסים ב־a שאין להם זוג ב־b
 }
 
-// מחזיר null אם השורות זהות, אחרת רמז בשורה אחת. ordered=false ← הסדר לא נבדק
-export function rowsHint(got, expected, { gotColumns, expectedColumns, ordered = true } = {}) {
+// מחזיר null אם השורות זהות, אחרת רמז בשורה אחת. ordered=false ← הסדר לא נבדק.
+// orderKeys — העמודות שלפיהן הפתרון ממיין (מ־ORDER BY שלו): שורות עם אותם ערכים בעמודות האלה הן תיקו,
+// והסדר ביניהן לא מוגדר — כל סדר שלהן מתקבל
+export function rowsHint(got, expected, { gotColumns, expectedColumns, ordered = true, orderKeys } = {}) {
   const expCols = expectedColumns ?? Object.keys(expected[0] ?? got[0] ?? {});
   const gotCols = gotColumns ?? (got.length ? Object.keys(got[0]) : expCols);
   if (!isDeepStrictEqual(gotCols, expCols)) {
@@ -38,7 +40,13 @@ export function rowsHint(got, expected, { gotColumns, expectedColumns, ordered =
   const missing = multisetDiff(e, g);
   if (!extra.length && !missing.length) {
     if (!ordered) return null;
-    const i = g.findIndex((k, j) => k !== e[j]);
+    let i = g.findIndex((k, j) => k !== e[j]);
+    if (orderKeys?.length && orderKeys.every((c) => expCols.includes(c))) {
+      const gk = got.map((r) => key(r, orderKeys));
+      const ek = expected.map((r) => key(r, orderKeys));
+      i = gk.findIndex((k, j) => k !== ek[j]);
+      if (i === -1) return null;
+    }
     return `כל השורות נכונות, אבל הסדר שלהן שגוי — החל משורה ${i + 1} (קיבלנו שם ${showRow(got[i], expCols)}). בדוק את ORDER BY`;
   }
   // אותו מספר שורות, ורק עמודה אחת או שתיים שונות באותה שורה ← כנראה חישוב שגוי בעמודה
@@ -111,6 +119,67 @@ export function splitSql(text) {
 
 // קובץ variants: קטעים שמתחילים בשורה "-- @variant" (מה שלפני הקטע הראשון — הערות)
 export function parseVariants(text) {
-  const parts = text.split(/^--\s*@variant.*$/m).slice(1);
-  return parts.map((p) => p.trim()).filter(Boolean);
+  return parseVariantsInfo(text).map((v) => v.sql);
+}
+
+// כמו parseVariants, עם התיאור שבשורת "-- @variant <תיאור>" (מוצג ללומד כשהקטע נכשל)
+export function parseVariantsInfo(text) {
+  const out = [];
+  const re = /^--\s*@variant(.*)$/gm;
+  const heads = [...text.matchAll(re)];
+  heads.forEach((m, i) => {
+    const start = m.index + m[0].length;
+    const end = i + 1 < heads.length ? heads[i + 1].index : text.length;
+    const sql = text.slice(start, end).trim();
+    if (sql) out.push({ sql, about: m[1].trim() });
+  });
+  return out;
+}
+
+// הלשונית של קטע נסתר: "בדיקה נסתרת 1 מתוך 3 — <תיאור>"
+export function variantLabel(i, n, about) {
+  return `על נתונים נוספים שהבודק מוסיף (בדיקה נסתרת ${i + 1} מתוך ${n}${about ? `: ${about}` : ""})`;
+}
+
+// העמודות שלפיהן ממיינת הפקודה האחרונה (ORDER BY ברמה העליונה), כשכל פריט הוא שם עמודה בתוצאה,
+// ‏alias.עמודה או מספר עמודה. אחרת (ביטוי) — null
+export function orderByColumns(sqlText, columns) {
+  const stmt = splitSql(sqlText).at(-1) ?? "";
+  // בלי מחרוזות: מחליפים ב־'' כדי שמילים בתוכן לא יבלבלו
+  const plain = stmt.replace(/'(?:[^']|'')*'/g, "''");
+  let depth = 0;
+  let pos = -1;
+  const upper = plain.toUpperCase();
+  for (let i = 0; i < plain.length; i++) {
+    const c = plain[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if (depth === 0 && /^ORDER\s+BY\b/.test(upper.slice(i, i + 20)) && !/\w/.test(plain[i - 1] ?? " ")) pos = i;
+  }
+  if (pos === -1) return null;
+  let rest = plain.slice(pos).replace(/^ORDER\s+BY\s+/i, "");
+  rest = rest.split(/\b(?:LIMIT|OFFSET|FETCH|FOR)\b/i)[0];
+  const items = [];
+  let cur = "";
+  depth = 0;
+  for (const c of rest) {
+    if (c === "(") depth++;
+    if (c === ")") depth--;
+    if (c === "," && depth === 0) { items.push(cur); cur = ""; } else cur += c;
+  }
+  items.push(cur);
+  const cols = [];
+  for (let item of items) {
+    item = item.trim().replace(/\s+NULLS\s+(FIRST|LAST)$/i, "").replace(/\s+(ASC|DESC)$/i, "").trim();
+    if (/^\d+$/.test(item)) {
+      const c = columns[Number(item) - 1];
+      if (!c) return null;
+      cols.push(c);
+      continue;
+    }
+    const m = /^(?:"?\w+"?\.)?"?(\w+)"?$/.exec(item);
+    if (!m || !columns.includes(m[1])) return null;
+    cols.push(m[1]);
+  }
+  return cols.length ? cols : null;
 }
