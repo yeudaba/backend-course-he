@@ -10,13 +10,14 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ שיעור 3</div>
   <h1>שיעור 3 — Dependency injection, guards ו־filters</h1>
-  <p class="subtitle">⏱ ~50 דקות</p>
+  <p class="subtitle">⏱ ~70 דקות</p>
   <div class="box goal">
     <span class="box-title">🎯 בשיעור הזה</span>
     <ul>
       <li>custom providers ו־injection tokens.</li>
       <li>modules שמייבאים ומייצאים.</li>
       <li>guards, interceptors, exception filters — ומחזור החיים של בקשה.</li>
+      <li>רישום גלובלי מתוך module (<code>APP_INTERCEPTOR</code>, ‏<code>APP_FILTER</code>, ‏<code>APP_PIPE</code>), ‏<code>useFactory</code> עם <code>inject</code>, ו־<code>setGlobalPrefix</code>.</li>
     </ul>
   </div>
 
@@ -112,9 +113,112 @@ export class HttpExceptionFilter implements ExceptionFilter {
 // שימוש: app.useGlobalFilters(new HttpExceptionFilter())</code></pre>
   <p><code>ExecutionContext</code> / <code>ArgumentsHost</code> — עטיפה כללית (Nest תומך גם ב־GraphQL ו־WebSockets); <code>switchToHttp()</code> נותן את <code>req</code>/<code>res</code> הרגילים של Express.</p>
 
+  <h2 id="interceptors">4. Interceptors</h2>
+  <p>interceptor עוטף את ה־handler: קוד <strong>לפני</strong> שהוא רץ, וקוד <strong>אחרי</strong> — על התשובה שהוא החזיר. זה המקום למדידת זמן, לוג, עטיפת תשובה או cache.</p>
+<span class="file-label">src/common/timing.interceptor.ts</span>
+<pre><code class="lang-ts">import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import type { Response } from "express";
+import { Observable, map, tap } from "rxjs";
+
+@Injectable()
+export class TimingInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;unknown&gt; {
+    const started = performance.now();                       // לפני ה־handler
+    const res = context.switchToHttp().getResponse&lt;Response&gt;();
+    return next.handle().pipe(                               // next.handle() — מריץ את ה־handler
+      tap(() =&gt; res.setHeader("X-Response-Time", `${Math.round(performance.now() - started)}ms`)), // אחרי — רק מסתכל
+      map((data) =&gt; ({ data })),                             // אחרי — מחליף את התשובה
+    );
+  }
+}</code></pre>
+  <ul>
+    <li><code>next.handle()</code> מריץ את ה־handler ומחזיר <strong>Observable</strong> (מספריית <code>rxjs</code>, שמגיעה עם Nest) — "Promise שיכול להחזיר כמה ערכים". כאן הוא מחזיר ערך אחד: מה שה־handler החזיר.</li>
+    <li><code>.pipe(...)</code> מרכיב פעולות על הערך: <code>tap(fn)</code> — מריץ את fn ולא משנה כלום (לוג, header); <code>map(fn)</code> — מחליף את הערך במה ש־fn מחזירה (כמו <code>map</code> של מערך, פרק 6).</li>
+    <li>לא קוראים ל־<code>next.handle()</code>? ה־handler לא רץ בכלל. <code>return of(value)</code> (גם מ־<code>rxjs</code>) מחזיר תשובה מוכנה — כך בונים cache:</li>
+  </ul>
+<span class="file-label">src/common/cache.interceptor.ts</span>
+<pre><code class="lang-ts">import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import { Observable, of, tap } from "rxjs";
+
+@Injectable()
+export class CacheInterceptor implements NestInterceptor {
+  #cache = new Map&lt;string, unknown&gt;();
+  intercept(context: ExecutionContext, next: CallHandler): Observable&lt;unknown&gt; {
+    const url = context.switchToHttp().getRequest&lt;{ url: string }&gt;().url;
+    if (this.#cache.has(url)) return of(this.#cache.get(url));   // בלי next.handle() — ה־handler לא רץ
+    return next.handle().pipe(tap((data) =&gt; this.#cache.set(url, data)));
+  }
+}
+// שימוש: @UseInterceptors(CacheInterceptor) מעל controller או מתודה</code></pre>
+
+  <h2 id="global">5. גלובלי מתוך module: ‏APP_INTERCEPTOR, ‏APP_FILTER, ‏APP_PIPE</h2>
+  <p><code class="mid">app.useGlobalFilters(new X())</code> ב־<code>main.ts</code> עובד, אבל ה־filter נוצר ב־<code>new</code> — בלי DI, ובלי שהבדיקות (שבונות את ה־module, לא את <code>main.ts</code>) יראו אותו. הדרך של Nest: providers עם tokens מיוחדים מ־<code>@nestjs/core</code>:</p>
+<span class="file-label">src/app.module.ts</span>
+<pre><code class="lang-ts">import { BadRequestException, Module, ValidationPipe } from "@nestjs/common";
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { OrdersController } from "./orders/orders.controller";
+import { TimingInterceptor } from "./common/timing.interceptor";
+import { ErrorFilter } from "./common/error.filter";
+import { CONFIG, GREETING, type Config } from "./config";
+
+@Module({
+  controllers: [OrdersController],
+  providers: [
+    { provide: CONFIG, useValue: { shopName: "Beans &amp; Co" } },
+    // useFactory עם inject: Nest מזריק את CONFIG כפרמטר הראשון של הפונקציה
+    { provide: GREETING, useFactory: (config: Config) =&gt; `ברוכים הבאים ל־${config.shopName}`, inject: [CONFIG] },
+    // גלובליים, אבל מתוך module — כך גם להם יש DI (ו־Test.createTestingModule מקבל אותם)
+    { provide: APP_INTERCEPTOR, useClass: TimingInterceptor },
+    { provide: APP_FILTER, useClass: ErrorFilter },
+    {
+      provide: APP_PIPE,
+      useFactory: () =&gt;
+        new ValidationPipe({
+          whitelist: true,
+          transform: true,
+          // exceptionFactory: מה לזרוק כשהבדיקה נכשלה. errors — מערך ValidationError (שדה + constraints)
+          exceptionFactory: (errors) =&gt; new BadRequestException(errors.map((e) =&gt; `${e.property}: ${Object.values(e.constraints ?? {}).join(", ")}`)),
+        }),
+    },
+  ],
+})
+export class AppModule {}</code></pre>
+<span class="file-label">src/common/error.filter.ts</span>
+<pre><code class="lang-ts">@Catch(HttpException)
+export class ErrorFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse&lt;Response&gt;();
+    const body = exception.getResponse();                    // מה שנזרק: מחרוזת, או אובייקט כמו { message: [...] }
+    const details = typeof body === "object" &amp;&amp; Array.isArray((body as { message?: unknown }).message) ? (body as { message: string[] }).message : undefined;
+    res.status(exception.getStatus()).json({ error: { code: exception.getStatus() === 400 ? "VALIDATION_ERROR" : "ERROR", message: exception.message, details } });
+  }
+}</code></pre>
+<span class="file-label">src/main.ts</span>
+<pre><code class="lang-ts">const app = await NestFactory.create(AppModule);
+app.setGlobalPrefix("api");                                  // כל ה־routes תחת /api
+await app.listen(process.env.PORT ?? 3000);</code></pre>
+<pre class="terminal"><span class="prompt">% </span>curl -si localhost:3000/api/orders/hello
+HTTP/1.1 200 OK
+X-Response-Time: 0ms
+{"data":"ברוכים הבאים ל־Beans &amp; Co"}
+<span class="prompt">% </span>curl -s -X POST localhost:3000/api/orders -H "Content-Type: application/json" -d '{"email":"x","shipping":"courier","items":[]}'
+{"error":{"code":"VALIDATION_ERROR","message":"Bad Request Exception","details":["email: email must be an email","items: items must contain at least 1 elements"]}}
+<span class="prompt">% </span>curl -s localhost:3000/api/orders/slow
+{"data":{"calls":1}}
+<span class="prompt">% </span>curl -s localhost:3000/api/orders/slow
+{"data":{"calls":1}}</pre>
+  <p>(פלט אמיתי; מ־<code>curl -si</code> הוצגו רק ה־status, ה־header והגוף.) מה רואים:</p>
+  <ul>
+    <li><code>useFactory</code> + <code>inject</code> — ה־GREETING נבנה מ־CONFIG. הסדר ב־<code>inject</code> הוא סדר הפרמטרים של הפונקציה.</li>
+    <li><code>exceptionFactory</code> קבע את ההודעות (<code>email: ...</code>), ו־<code>exception.getResponse()</code> ב־filter החזיר את האובייקט שנזרק — עם המערך ב־<code>message</code>. ‏<code>exception.message</code> הוא רק הכותרת ("Bad Request Exception").</li>
+    <li>בקריאה השנייה ל־<code>/slow</code> ה־handler לא רץ (<code>calls</code> נשאר 1): ה־CacheInterceptor החזיר <code>of(...)</code>. וה־<code>{ data }</code>? ה־TimingInterceptor הגלובלי עוטף מבחוץ — גם תשובה מה־cache.</li>
+    <li><code>setGlobalPrefix("api")</code> — ה־controller כתוב עם <code>"orders"</code>, והכתובת היא <code>/api/orders</code>.</li>
+  </ul>
+  <p>וגם guard גלובלי: <code class="mid">{ provide: APP_GUARD, useClass: ApiKeyGuard }</code> — אותו רעיון.</p>
+
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>23 שאלות</strong>: חלק 1 — 17 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>24 שאלות</strong>: חלק 1 — 18 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-3.html">← לתרגול של שיעור 3</a></p>
   </div>
 

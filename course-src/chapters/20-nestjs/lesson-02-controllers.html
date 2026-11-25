@@ -108,6 +108,61 @@ app.useGlobalPipes(new ValidationPipe({
   </div>
   <p>ול־PATCH: `export class UpdateProductDto extends PartialType(CreateProductDto) {}` (מ־`@nestjs/swagger`) — כל השדות הופכים לאופציונליים, עם אותם חוקים.</p>
 
+  <h3 id="validators">decorators נפוצים של class-validator</h3>
+  <div class="table-wrap"><table>
+    <tr><th>decorator</th><th>בודק</th><th>כמו ב־Zod (פרק 15)</th></tr>
+    <tr><td>`@IsString()` · `@IsInt()` · `@IsNumber()` · `@IsBoolean()`</td><td>הטיפוס</td><td>`z.string()` · `z.int()`...</td></tr>
+    <tr><td>`@Length(2, 80)` · `@MinLength(8)` · `@MaxLength(80)`</td><td>אורך מחרוזת</td><td>`.min()` / `.max()`</td></tr>
+    <tr><td>`@Min(0)` · `@Max(100)`</td><td>טווח מספר</td><td>`.min()` / `.max()`</td></tr>
+    <tr><td>`@IsEmail()` · `@IsUrl()` · `@IsUUID()` · `@IsDateString()`</td><td>פורמט ידוע</td><td>`z.email()` · `z.url()` · `z.iso.date()`</td></tr>
+    <tr><td>`@IsIn(["pickup", "courier"])`</td><td>אחד מרשימה</td><td>`z.enum([...])`</td></tr>
+    <tr><td>`@Matches(/^[A-Z0-9]{4,12}$/, { message: "..." })`</td><td>regex (פרק 8, שיעור 5), עם הודעה משלך</td><td>`.regex()`</td></tr>
+    <tr><td>`@IsOptional()`</td><td>חסר (או null) ← שאר הבדיקות על השדה לא רצות</td><td>`.optional()`</td></tr>
+    <tr><td>`@IsArray()` · `@ArrayMinSize(1)` · `@ArrayMaxSize(20)`</td><td>מערך, וכמה איברים</td><td>`z.array().min().max()`</td></tr>
+    <tr><td>`{ each: true }` (בכל decorator)</td><td>הבדיקה על <strong>כל איבר</strong> במערך: `@IsString({ each: true })`</td><td>`z.array(z.string())`</td></tr>
+    <tr><td>`@ValidateNested({ each: true })` + `@Type(() => ItemDto)`</td><td>אובייקט (או מערך אובייקטים) עם DTO משלו</td><td>`z.array(z.object({...}))`</td></tr>
+  </table></div>
+  <p>הרשימה המלאה — ב־<a href="https://github.com/typestack/class-validator#validation-decorators" target="_blank">התיעוד של class-validator</a>. DTO מקונן — הזמנה עם פריטים:</p>
+```ts file=src/orders/dto/create-order.dto.ts
+import { Type } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUrl, Matches, Min, MinLength, ValidateNested } from "class-validator";
+
+export class OrderItemDto {
+  @IsInt() @Min(1)
+  productId: number;
+
+  @IsInt() @Min(1)
+  quantity: number;
+}
+
+export class CreateOrderDto {
+  @IsEmail()
+  email: string;
+
+  @IsIn(["pickup", "courier"])
+  shipping: string;
+
+  @IsOptional() @Matches(/^[A-Z0-9]{4,12}$/, { message: "coupon: אותיות גדולות וספרות, 4–12" })
+  coupon?: string;
+
+  @IsOptional() @IsUrl()
+  website?: string;
+
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items: OrderItemDto[];
+
+  @IsOptional() @IsString({ each: true }) @MinLength(2, { each: true })
+  tags?: string[];
+}
+```
+```term
+% curl -s -X POST localhost:3000/orders -H "Content-Type: application/json" -d '{"email":"dana@example","shipping":"drone","coupon":"save-10","items":[{"productId":1,"quantity":0}],"tags":["a"]}'
+{"message":["email must be an email","shipping must be one of the following values: pickup, courier","coupon: אותיות גדולות וספרות, 4–12","items.0.quantity must not be less than 1","each value in tags must be longer than or equal to 2 characters"],"error":"Bad Request","statusCode":400}
+```
+  <p>(פלט אמיתי, עם `ValidationPipe` מסעיף 2.) שים לב ל־`items.0.quantity` — הנתיב לשדה בתוך המערך. <strong>בלי `@ValidateNested` ו־`@Type` הפריטים לא נבדקים בכלל:</strong> אותה בקשה עם `"quantity": 0` עוברת, ו־`dto.items[0]` הוא `Object` רגיל ולא `OrderItemDto` (בדקנו). `@Type` אומר ל־class-transformer מאיזה class ליצור כל איבר, ו־`@ValidateNested` אומר ל־class-validator להיכנס פנימה.</p>
+
   <h2>3. Exceptions</h2>
   <div class="table-wrap"><table>
     <tr><th>זורקים</th><th>status</th></tr>

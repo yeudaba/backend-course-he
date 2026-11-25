@@ -10,7 +10,7 @@ export default {
   prismaProjects: ["solutions/tasks-api"],
   nestProjects: ["solutions/tasks-api"],
   time: "5 מפגשים",
-  expectedExercises: 85,
+  expectedExercises: 86,
   install: `<p><strong>מה צריך שכבר יהיה מותקן:</strong> Node.js 24+, VS Code, פרויקט 2 בשלב ב׳ (Prisma).</p>
 <p><strong>מה מתקינים עכשיו:</strong></p>
 <ul>
@@ -31,9 +31,9 @@ ${copyStep("20-nestjs")}
 <p>ב־Express בנית בעצמך את המבנה: שכבות, הזרקת תלויות ידנית ב־<code>createApp</code>, middleware לבדיקת קלט, error handler. בפרויקט עם 5 מפתחים ו־30 מודולים, כל אחד יבנה את זה אחרת. <strong>NestJS</strong> נותן מבנה קבוע: איפה כל דבר גר, איך תלויות מוזרקות, איך בודקים קלט ואיך מטפלים בשגיאות. הוא הפך לסטנדרט בהרבה חברות שעובדות עם Node ו־TypeScript, והוא מופיע בחלק גדול ממשרות ה־Backend. החדשות הטובות: כל מה שלמדת ב־Express — עדיין שם, מתחת.</p>`,
   lessons: [
     { file: "lesson-01-architecture.html", title: "Modules, controllers ו־providers", minutes: 40 },
-    { file: "lesson-02-controllers.html", title: "Controllers, DTOs ו־validation", minutes: 45 },
-    { file: "lesson-03-di.html", title: "Dependency injection, guards ו־filters", minutes: 50 },
-    { file: "lesson-04-project.html", title: "Swagger, בדיקות ופרויקט 2 ב־Nest", minutes: 60, note: "🤖 PR2-NEST" },
+    { file: "lesson-02-controllers.html", title: "Controllers, DTOs ו־validation", minutes: 55 },
+    { file: "lesson-03-di.html", title: "Dependency injection, guards ו־filters", minutes: 70 },
+    { file: "lesson-04-project.html", title: "Swagger, בדיקות ופרויקט 2 ב־Nest", minutes: 90, note: "🤖 PR2-NEST" },
   ],
   glossary: [
     ["NestJS", "נֶסְט", "Framework לשרתי Node ב־TypeScript, עם מבנה קבוע ו־DI"],

@@ -4,6 +4,7 @@
       <li>custom providers ו־injection tokens.</li>
       <li>modules שמייבאים ומייצאים.</li>
       <li>guards, interceptors, exception filters — ומחזור החיים של בקשה.</li>
+      <li>רישום גלובלי מתוך module (`APP_INTERCEPTOR`, ‏`APP_FILTER`, ‏`APP_PIPE`), ‏`useFactory` עם `inject`, ו־`setGlobalPrefix`.</li>
     </ul>
   </div>
 
@@ -106,6 +107,116 @@ export class HttpExceptionFilter implements ExceptionFilter {
 // שימוש: app.useGlobalFilters(new HttpExceptionFilter())
 ```
   <p>`ExecutionContext` / `ArgumentsHost` — עטיפה כללית (Nest תומך גם ב־GraphQL ו־WebSockets); `switchToHttp()` נותן את `req`/`res` הרגילים של Express.</p>
+
+  <h2 id="interceptors">4. Interceptors</h2>
+  <p>interceptor עוטף את ה־handler: קוד <strong>לפני</strong> שהוא רץ, וקוד <strong>אחרי</strong> — על התשובה שהוא החזיר. זה המקום למדידת זמן, לוג, עטיפת תשובה או cache.</p>
+```ts file=src/common/timing.interceptor.ts
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import type { Response } from "express";
+import { Observable, map, tap } from "rxjs";
+
+@Injectable()
+export class TimingInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const started = performance.now();                       // לפני ה־handler
+    const res = context.switchToHttp().getResponse<Response>();
+    return next.handle().pipe(                               // next.handle() — מריץ את ה־handler
+      tap(() => res.setHeader("X-Response-Time", `${Math.round(performance.now() - started)}ms`)), // אחרי — רק מסתכל
+      map((data) => ({ data })),                             // אחרי — מחליף את התשובה
+    );
+  }
+}
+```
+  <ul>
+    <li>`next.handle()` מריץ את ה־handler ומחזיר <strong>Observable</strong> (מספריית `rxjs`, שמגיעה עם Nest) — "Promise שיכול להחזיר כמה ערכים". כאן הוא מחזיר ערך אחד: מה שה־handler החזיר.</li>
+    <li>`.pipe(...)` מרכיב פעולות על הערך: `tap(fn)` — מריץ את fn ולא משנה כלום (לוג, header); `map(fn)` — מחליף את הערך במה ש־fn מחזירה (כמו `map` של מערך, פרק 6).</li>
+    <li>לא קוראים ל־`next.handle()`? ה־handler לא רץ בכלל. `return of(value)` (גם מ־`rxjs`) מחזיר תשובה מוכנה — כך בונים cache:</li>
+  </ul>
+```ts file=src/common/cache.interceptor.ts
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import { Observable, of, tap } from "rxjs";
+
+@Injectable()
+export class CacheInterceptor implements NestInterceptor {
+  #cache = new Map<string, unknown>();
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const url = context.switchToHttp().getRequest<{ url: string }>().url;
+    if (this.#cache.has(url)) return of(this.#cache.get(url));   // בלי next.handle() — ה־handler לא רץ
+    return next.handle().pipe(tap((data) => this.#cache.set(url, data)));
+  }
+}
+// שימוש: @UseInterceptors(CacheInterceptor) מעל controller או מתודה
+```
+
+  <h2 id="global">5. גלובלי מתוך module: ‏APP_INTERCEPTOR, ‏APP_FILTER, ‏APP_PIPE</h2>
+  <p>`app.useGlobalFilters(new X())` ב־`main.ts` עובד, אבל ה־filter נוצר ב־`new` — בלי DI, ובלי שהבדיקות (שבונות את ה־module, לא את `main.ts`) יראו אותו. הדרך של Nest: providers עם tokens מיוחדים מ־`@nestjs/core`:</p>
+```ts file=src/app.module.ts
+import { BadRequestException, Module, ValidationPipe } from "@nestjs/common";
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { OrdersController } from "./orders/orders.controller";
+import { TimingInterceptor } from "./common/timing.interceptor";
+import { ErrorFilter } from "./common/error.filter";
+import { CONFIG, GREETING, type Config } from "./config";
+
+@Module({
+  controllers: [OrdersController],
+  providers: [
+    { provide: CONFIG, useValue: { shopName: "Beans & Co" } },
+    // useFactory עם inject: Nest מזריק את CONFIG כפרמטר הראשון של הפונקציה
+    { provide: GREETING, useFactory: (config: Config) => `ברוכים הבאים ל־${config.shopName}`, inject: [CONFIG] },
+    // גלובליים, אבל מתוך module — כך גם להם יש DI (ו־Test.createTestingModule מקבל אותם)
+    { provide: APP_INTERCEPTOR, useClass: TimingInterceptor },
+    { provide: APP_FILTER, useClass: ErrorFilter },
+    {
+      provide: APP_PIPE,
+      useFactory: () =>
+        new ValidationPipe({
+          whitelist: true,
+          transform: true,
+          // exceptionFactory: מה לזרוק כשהבדיקה נכשלה. errors — מערך ValidationError (שדה + constraints)
+          exceptionFactory: (errors) => new BadRequestException(errors.map((e) => `${e.property}: ${Object.values(e.constraints ?? {}).join(", ")}`)),
+        }),
+    },
+  ],
+})
+export class AppModule {}
+```
+```ts file=src/common/error.filter.ts
+@Catch(HttpException)
+export class ErrorFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse<Response>();
+    const body = exception.getResponse();                    // מה שנזרק: מחרוזת, או אובייקט כמו { message: [...] }
+    const details = typeof body === "object" && Array.isArray((body as { message?: unknown }).message) ? (body as { message: string[] }).message : undefined;
+    res.status(exception.getStatus()).json({ error: { code: exception.getStatus() === 400 ? "VALIDATION_ERROR" : "ERROR", message: exception.message, details } });
+  }
+}
+```
+```ts file=src/main.ts
+const app = await NestFactory.create(AppModule);
+app.setGlobalPrefix("api");                                  // כל ה־routes תחת /api
+await app.listen(process.env.PORT ?? 3000);
+```
+```term
+% curl -si localhost:3000/api/orders/hello
+HTTP/1.1 200 OK
+X-Response-Time: 0ms
+{"data":"ברוכים הבאים ל־Beans & Co"}
+% curl -s -X POST localhost:3000/api/orders -H "Content-Type: application/json" -d '{"email":"x","shipping":"courier","items":[]}'
+{"error":{"code":"VALIDATION_ERROR","message":"Bad Request Exception","details":["email: email must be an email","items: items must contain at least 1 elements"]}}
+% curl -s localhost:3000/api/orders/slow
+{"data":{"calls":1}}
+% curl -s localhost:3000/api/orders/slow
+{"data":{"calls":1}}
+```
+  <p>(פלט אמיתי; מ־`curl -si` הוצגו רק ה־status, ה־header והגוף.) מה רואים:</p>
+  <ul>
+    <li>`useFactory` + `inject` — ה־GREETING נבנה מ־CONFIG. הסדר ב־`inject` הוא סדר הפרמטרים של הפונקציה.</li>
+    <li>`exceptionFactory` קבע את ההודעות (`email: ...`), ו־`exception.getResponse()` ב־filter החזיר את האובייקט שנזרק — עם המערך ב־`message`. ‏`exception.message` הוא רק הכותרת ("Bad Request Exception").</li>
+    <li>בקריאה השנייה ל־`/slow` ה־handler לא רץ (`calls` נשאר 1): ה־CacheInterceptor החזיר `of(...)`. וה־`{ data }`? ה־TimingInterceptor הגלובלי עוטף מבחוץ — גם תשובה מה־cache.</li>
+    <li>`setGlobalPrefix("api")` — ה־controller כתוב עם `"orders"`, והכתובת היא `/api/orders`.</li>
+  </ul>
+  <p>וגם guard גלובלי: `{ provide: APP_GUARD, useClass: ApiKeyGuard }` — אותו רעיון.</p>
 
   <div class="box practice">
     <span class="box-title">✍️ עכשיו בדף התרגילים</span>

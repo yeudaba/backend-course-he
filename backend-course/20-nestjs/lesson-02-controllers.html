@@ -10,7 +10,7 @@
 <main>
   <div class="crumbs"><a href="../README.html">דף הבית</a> ‹ <a href="index.html">פרק 20</a> ‹ שיעור 2</div>
   <h1>שיעור 2 — Controllers, DTOs ו־validation</h1>
-  <p class="subtitle">⏱ ~45 דקות</p>
+  <p class="subtitle">⏱ ~55 דקות</p>
   <div class="box goal">
     <span class="box-title">🎯 בשיעור הזה</span>
     <ul>
@@ -115,6 +115,58 @@ export class CreateProductDto {
   </div>
   <p>ול־PATCH: <code class="long">export class UpdateProductDto extends PartialType(CreateProductDto) {}</code> (מ־<code>@nestjs/swagger</code>) — כל השדות הופכים לאופציונליים, עם אותם חוקים.</p>
 
+  <h3 id="validators">decorators נפוצים של class-validator</h3>
+  <div class="table-wrap"><table>
+    <tr><th>decorator</th><th>בודק</th><th>כמו ב־Zod (פרק 15)</th></tr>
+    <tr><td><code>@IsString()</code> · <code>@IsInt()</code> · <code>@IsNumber()</code> · <code>@IsBoolean()</code></td><td>הטיפוס</td><td><code>z.string()</code> · <code>z.int()</code>...</td></tr>
+    <tr><td><code>@Length(2, 80)</code> · <code>@MinLength(8)</code> · <code>@MaxLength(80)</code></td><td>אורך מחרוזת</td><td><code>.min()</code> / <code>.max()</code></td></tr>
+    <tr><td><code>@Min(0)</code> · <code>@Max(100)</code></td><td>טווח מספר</td><td><code>.min()</code> / <code>.max()</code></td></tr>
+    <tr><td><code>@IsEmail()</code> · <code>@IsUrl()</code> · <code>@IsUUID()</code> · <code>@IsDateString()</code></td><td>פורמט ידוע</td><td><code>z.email()</code> · <code>z.url()</code> · <code>z.iso.date()</code></td></tr>
+    <tr><td><code class="mid">@IsIn(["pickup", "courier"])</code></td><td>אחד מרשימה</td><td><code>z.enum([...])</code></td></tr>
+    <tr><td><code class="mid">@Matches(/^[A-Z0-9]{4,12}$/, { message: "..." })</code></td><td>regex (פרק 8, שיעור 5), עם הודעה משלך</td><td><code>.regex()</code></td></tr>
+    <tr><td><code>@IsOptional()</code></td><td>חסר (או null) ← שאר הבדיקות על השדה לא רצות</td><td><code>.optional()</code></td></tr>
+    <tr><td><code>@IsArray()</code> · <code>@ArrayMinSize(1)</code> · <code>@ArrayMaxSize(20)</code></td><td>מערך, וכמה איברים</td><td><code>z.array().min().max()</code></td></tr>
+    <tr><td><code>{ each: true }</code> (בכל decorator)</td><td>הבדיקה על <strong>כל איבר</strong> במערך: <code>@IsString({ each: true })</code></td><td><code>z.array(z.string())</code></td></tr>
+    <tr><td><code class="mid">@ValidateNested({ each: true })</code> + <code>@Type(() =&gt; ItemDto)</code></td><td>אובייקט (או מערך אובייקטים) עם DTO משלו</td><td><code>z.array(z.object({...}))</code></td></tr>
+  </table></div>
+  <p>הרשימה המלאה — ב־<a href="https://github.com/typestack/class-validator#validation-decorators" target="_blank">התיעוד של class-validator</a>. DTO מקונן — הזמנה עם פריטים:</p>
+<span class="file-label">src/orders/dto/create-order.dto.ts</span>
+<pre><code class="lang-ts">import { Type } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUrl, Matches, Min, MinLength, ValidateNested } from "class-validator";
+
+export class OrderItemDto {
+  @IsInt() @Min(1)
+  productId: number;
+
+  @IsInt() @Min(1)
+  quantity: number;
+}
+
+export class CreateOrderDto {
+  @IsEmail()
+  email: string;
+
+  @IsIn(["pickup", "courier"])
+  shipping: string;
+
+  @IsOptional() @Matches(/^[A-Z0-9]{4,12}$/, { message: "coupon: אותיות גדולות וספרות, 4–12" })
+  coupon?: string;
+
+  @IsOptional() @IsUrl()
+  website?: string;
+
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() =&gt; OrderItemDto)
+  items: OrderItemDto[];
+
+  @IsOptional() @IsString({ each: true }) @MinLength(2, { each: true })
+  tags?: string[];
+}</code></pre>
+<pre class="terminal"><span class="prompt">% </span>curl -s -X POST localhost:3000/orders -H "Content-Type: application/json" -d '{"email":"dana@example","shipping":"drone","coupon":"save-10","items":[{"productId":1,"quantity":0}],"tags":["a"]}'
+{"message":["email must be an email","shipping must be one of the following values: pickup, courier","coupon: אותיות גדולות וספרות, 4–12","items.0.quantity must not be less than 1","each value in tags must be longer than or equal to 2 characters"],"error":"Bad Request","statusCode":400}</pre>
+  <p>(פלט אמיתי, עם <code>ValidationPipe</code> מסעיף 2.) שים לב ל־<code>items.0.quantity</code> — הנתיב לשדה בתוך המערך. <strong>בלי <code>@ValidateNested</code> ו־<code>@Type</code> הפריטים לא נבדקים בכלל:</strong> אותה בקשה עם <code>"quantity": 0</code> עוברת, ו־<code>dto.items[0]</code> הוא <code>Object</code> רגיל ולא <code>OrderItemDto</code> (בדקנו). <code>@Type</code> אומר ל־class-transformer מאיזה class ליצור כל איבר, ו־<code>@ValidateNested</code> אומר ל־class-validator להיכנס פנימה.</p>
+
   <h2>3. Exceptions</h2>
   <div class="table-wrap"><table>
     <tr><th>זורקים</th><th>status</th></tr>
@@ -130,7 +182,7 @@ export class CreateProductDto {
 
   <div class="box practice">
     <span class="box-title">✍️ סיימת את השיעור? עכשיו תרגול</span>
-    <p><strong>20 שאלות</strong>: חלק 1 — 14 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
+    <p><strong>21 שאלות</strong>: חלק 1 — 15 שאלות על השיעור הזה (הבנה + כתיבת קוד). חלק 2 — 6 שאלות שמשלבות אותו עם מה שלמדת קודם.</p>
     <p><a href="practice-2.html">← לתרגול של שיעור 2</a></p>
   </div>
 
